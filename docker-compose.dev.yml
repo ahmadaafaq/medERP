@@ -1,0 +1,33 @@
+version: '3.9'
+
+services:
+  postgres:
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: unicampus
+      POSTGRES_PASSWORD: unicampus_secret
+      POSTGRES_DB: unicampus_erp
+
+  redis:
+    ports:
+      - '6379:6379'
+
+  backend:
+    build:
+      target: development
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: npm run start:dev
+    environment:
+      NODE_ENV: development
+
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+    environment:
+      NODE_ENV: development
