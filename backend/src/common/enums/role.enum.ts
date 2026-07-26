@@ -11,6 +11,7 @@
 export enum UserRole {
   SUPER_ADMIN   = 'SUPER_ADMIN',    // Platform-level: manages all tenants
   COLLEGE_ADMIN = 'COLLEGE_ADMIN',  // College-level: full college management
+  ADMIN         = 'COLLEGE_ADMIN',  // Alias for COLLEGE_ADMIN
   HOD           = 'HOD',            // Department head: dept management + approvals
   FACULTY       = 'FACULTY',        // Teaching staff: attendance, logbook verify
   CLERK         = 'CLERK',          // Data entry: attendance import, marks entry

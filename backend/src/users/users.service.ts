@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import * as bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcrypt';
 import {
   CreateStudentDto, CreateFacultyDto,
   UpdateStudentDto, UpdateFacultyDto, BulkCreateStudentsDto,
