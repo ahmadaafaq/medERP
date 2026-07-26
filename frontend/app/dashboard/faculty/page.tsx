@@ -1,6 +1,7 @@
 'use client';
 import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
+import AttendanceMarkerGrid from '../../../components/AttendanceMarkerGrid';
 
 export default function FacultyDashboard() {
   return (
@@ -26,6 +27,8 @@ export default function FacultyDashboard() {
               <span className="text-xs text-slate-500">Casual / Earned Leave</span>
             </div>
           </div>
+
+          <AttendanceMarkerGrid />
 
           <div className="glass-card p-6 space-y-4">
             <h3 className="text-sm font-extrabold text-white tracking-tight uppercase">Logbook Verification Queue</h3>

@@ -1,8 +1,14 @@
 'use client';
+import { useState } from 'react';
 import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
+import LogbookSubmitModal from '../../../components/LogbookSubmitModal';
+import FeeReceiptModal from '../../../components/FeeReceiptModal';
 
 export default function StudentDashboard() {
+  const [isLogbookModalOpen, setIsLogbookModalOpen] = useState(false);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen bg-[#0F172A]">
       <Sidebar role="student" />
@@ -27,15 +33,27 @@ export default function StudentDashboard() {
               <span className="text-xs text-slate-500">Semester 6</span>
             </div>
             <div className="glass-card p-4 space-y-1">
-              <span className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Fee Balance</span>
-              <p className="text-2xl font-extrabold text-amber-400">₹0.00</p>
-              <span className="text-xs text-emerald-400">All receipts cleared</span>
+              <span className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Fee Receipts</span>
+              <button
+                onClick={() => setIsReceiptModalOpen(true)}
+                className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow"
+              >
+                🖨 View Fee Receipt
+              </button>
             </div>
           </div>
 
           {/* Logbook Activity Tracker */}
           <div className="glass-card p-6 space-y-4">
-            <h3 className="text-sm font-extrabold text-white tracking-tight uppercase">Recent Clinical Logbook Submissions</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-white tracking-tight uppercase">Recent Clinical Logbook Submissions</h3>
+              <button
+                onClick={() => setIsLogbookModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow transition-all"
+              >
+                + Submit New Entry
+              </button>
+            </div>
             <div className="divide-y divide-slate-800 text-xs">
               <div className="py-3 flex items-center justify-between">
                 <div>
@@ -59,6 +77,16 @@ export default function StudentDashboard() {
           </div>
         </main>
       </div>
+
+      <LogbookSubmitModal
+        isOpen={isLogbookModalOpen}
+        onClose={() => setIsLogbookModalOpen(false)}
+      />
+
+      <FeeReceiptModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+      />
     </div>
   );
 }
