@@ -15,6 +15,11 @@ export class LogbookController {
     return this.logbookService.createEntry(tenantSlug, dto);
   }
 
+  @Get('activity-types')
+  async getActivityTypes(@Tenant() tenantSlug: string) {
+    return this.logbookService.getActivityTypes(tenantSlug);
+  }
+
   @Get('student/:rollno')
   async getStudentEntries(@Tenant() tenantSlug: string, @Param('rollno') rollno: string) {
     return this.logbookService.getStudentEntries(tenantSlug, rollno);

@@ -4,6 +4,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { UserRole } from '../../common/enums/role.enum';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'john.doe@srms.ac.in' })
@@ -95,8 +96,8 @@ export class CreateFacultyDto {
   @MinLength(8)
   password: string;
 
-  @ApiProperty({ enum: [UserRole.FACULTY, UserRole.HOD, UserRole.CLERK] })
-  @IsEnum([UserRole.FACULTY, UserRole.HOD, UserRole.CLERK])
+  @ApiProperty({ enum: UserRole })
+  @IsEnum(UserRole)
   role: UserRole;
 
   @ApiPropertyOptional()
@@ -118,6 +119,36 @@ export class CreateFacultyDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subjectId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  experience?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  staffType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  photoUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class BulkCreateStudentsDto {
@@ -127,3 +158,57 @@ export class BulkCreateStudentsDto {
 
 export class UpdateStudentDto extends PartialType(CreateStudentDto) {}
 export class UpdateFacultyDto extends PartialType(CreateFacultyDto) {}
+
+export class GetStudentsQueryDto extends PaginationDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batchId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  tenant?: string;
+}
+
+export class GetFacultyQueryDto extends PaginationDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  staffType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  isActive?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  tenant?: string;
+}

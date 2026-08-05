@@ -13,6 +13,10 @@ import { LibraryModule } from './library/library.module';
 import { LogbookModule } from './logbook/logbook.module';
 import { FilesModule } from './files/files.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CollegeMasterModule } from './college-master/college-master.module';
+import { StudentMasterModule } from './student-master/student-master.module';
+import { AdminMasterModule } from './admin-master/admin-master.module';
+import { TimetableModule } from './timetable/timetable.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import configuration from './config/configuration';
 import { validationSchema } from './config/joi.validation';
@@ -37,6 +41,10 @@ import { validationSchema } from './config/joi.validation';
     LogbookModule,
     FilesModule,
     AnalyticsModule,
+    CollegeMasterModule,
+    StudentMasterModule,
+    AdminMasterModule,
+    TimetableModule,
   ],
 })
 export class AppModule implements NestModule {

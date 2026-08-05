@@ -32,7 +32,76 @@ export class AttendanceController {
     @Body() dto: CreateSessionDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.attendanceService.createSession(tenantSlug, dto, user.sub, user.role);
+    return this.attendanceService.createSession(
+      tenantSlug,
+      dto,
+      user?.sub ?? null,
+      user?.role ?? UserRole.ADMIN,
+    );
+  }
+
+  // ─── Get User Scope (Department & Role Access) ────────────────────────────
+  @Get('user-scope')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
+  @ApiOperation({ summary: 'Get current user role and department access scope' })
+  getUserScope(
+    @TenantSlug() tenantSlug: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.attendanceService.getUserScope(tenantSlug, user.sub, user.role);
+  }
+
+  // ─── Get Timetable Slots for Attendance Marking ────────────────────────────
+  @Get('timetable-slots')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
+  @ApiOperation({ summary: 'Get scheduled timetable slots for a date & batch with attendance status' })
+  getTimetableSlots(
+    @TenantSlug() tenantSlug: string,
+    @Query('batchId') batchId?: string,
+    @Query('sessionDate') sessionDate?: string,
+    @Query('departmentId') departmentId?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    return this.attendanceService.getTimetableSlotsForDate(
+      tenantSlug,
+      batchId,
+      sessionDate,
+      departmentId,
+      user?.sub,
+      user?.role,
+    );
+  }
+
+  // ─── Find Active Session Records ───────────────────────────────────────────
+  @Get('active-session')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
+  @ApiOperation({ summary: 'Find existing attendance session and marked records for a subject, batch, date and type' })
+  findActiveSession(
+    @TenantSlug() tenantSlug: string,
+    @Query('subjectId') subjectId: string,
+    @Query('batchId') batchId: string,
+    @Query('sessionDate') sessionDate: string,
+    @Query('sessionType') sessionType?: string,
+  ) {
+    return this.attendanceService.findExistingSessionWithRecords(
+      tenantSlug, subjectId, batchId, sessionDate, sessionType || 'THEORY',
+    );
+  }
+
+  // ─── Weekly Sessions & Conducted Lecture Counters ─────────────────────────
+  @Get('weekly-sessions')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
+  @ApiOperation({ summary: 'Get weekly attendance sessions and lecture/practical conducted counts' })
+  getWeeklySessions(
+    @TenantSlug() tenantSlug: string,
+    @Query('batchId') batchId: string,
+    @Query('fromDate') fromDate: string,
+    @Query('toDate') toDate: string,
+    @Query('subjectId') subjectId?: string,
+  ) {
+    return this.attendanceService.getWeeklySessions(
+      tenantSlug, batchId, fromDate, toDate, subjectId,
+    );
   }
 
   // ─── List Sessions ─────────────────────────────────────────────────────────
@@ -99,6 +168,23 @@ export class AttendanceController {
     );
   }
 
+  // ─── Student Day-to-Day Logs ───────────────────────────────────────────────
+  @Get('students/:studentId/logs')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK, UserRole.STUDENT)
+  @ApiOperation({ summary: 'Get detailed day-to-day attendance log ledger for a student' })
+  getStudentLogs(
+    @TenantSlug() tenantSlug: string,
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.attendanceService.getStudentAttendanceLogs(
+      tenantSlug, studentId, { subjectId, fromDate, toDate, status },
+    );
+  }
+
   // ─── Batch Report ──────────────────────────────────────────────────────────
   @Get('batches/:batchId/report')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
@@ -107,7 +193,22 @@ export class AttendanceController {
     @TenantSlug() tenantSlug: string,
     @Param('batchId', ParseUUIDPipe) batchId: string,
     @Query('subjectId') subjectId?: string,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
   ) {
-    return this.attendanceService.getBatchAttendanceReport(tenantSlug, batchId, subjectId);
+    return this.attendanceService.getBatchAttendanceReport(tenantSlug, batchId, subjectId, fromDate, toDate);
+  }
+
+  // ─── Batch Multi-Subject Matrix Report ─────────────────────────────────────
+  @Get('batches/:batchId/matrix-report')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
+  @ApiOperation({ summary: 'Batch-wise multi-subject matrix attendance report (subject columns + cumulative %)' })
+  getBatchMatrixReport(
+    @TenantSlug() tenantSlug: string,
+    @Param('batchId', ParseUUIDPipe) batchId: string,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+  ) {
+    return this.attendanceService.getBatchMatrixReport(tenantSlug, batchId, fromDate, toDate);
   }
 }

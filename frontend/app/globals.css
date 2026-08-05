@@ -2,29 +2,444 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800;900&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&display=swap');
+
 :root {
-  --font-inter: 'Inter', sans-serif;
+  --font-inter: 'Inter', -apple-system, sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  /* Premium Clinical Light Theme Variables */
+  --bg-main: #F6F8F9;
+  --text-main: #0E2A32;
+  --card-bg: #FFFFFF;
+  --card-border: #DCE3E5;
+
+  --color-bg-canvas: #F6F8F9;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-sunken: #EEF1F3;
+  --color-ink-900: #0E2A32;
+  --color-ink-700: #2E4B52;
+  --color-ink-500: #5C7278;
+  --color-ink-300: #A8B6B9;
+  --color-border: #DCE3E5;
+  --color-border-strong: #B9C4C7;
+
+  --color-primary-900: #0B3B42;
+  --color-primary-700: #124A54;
+  --color-primary-500: #1B6873;
+  --color-primary-100: #DCEEF0;
+
+  --color-accent-brass: #B8863B;
+  --color-accent-brass-light: #F1E4C8;
+
+  --color-success: #2F8A5B;
+  --color-success-tint: #E4F5EC;
+  --color-warning: #C9862B;
+  --color-warning-tint: #FBF0DF;
+  --color-danger: #C7433F;
+  --color-danger-tint: #FBE7E6;
+  --color-info: #2C6E9E;
+  --color-info-tint: #E4F0F9;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --shadow-card: 0 1px 2px rgba(14, 42, 50, 0.04), 0 4px 12px rgba(14, 42, 50, 0.06);
+  --shadow-modal: 0 8px 24px rgba(14, 42, 50, 0.14), 0 2px 6px rgba(14, 42, 50, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(27, 104, 115, 0.20);
+}
+
+.dark {
+  /* Premium Clinical Dark Theme Variables */
+  --bg-main: #0B1E24;
+  --text-main: #E2ECEE;
+  --card-bg: #0E2A32;
+  --card-border: #234850;
+
+  --color-bg-canvas: #0B1E24;
+  --color-bg-surface: #0E2A32;
+  --color-bg-sunken: #09191E;
+  --color-ink-900: #E2ECEE;
+  --color-ink-700: #B2C4C7;
+  --color-ink-500: #7C9498;
+  --color-ink-300: #4B6266;
+  --color-border: #234850;
+  --color-border-strong: #335F69;
+
+  --color-primary-900: #082126;
+  --color-primary-700: #175F6B;
+  --color-primary-500: #228292;
+  --color-primary-100: #123C44;
+
+  --color-accent-brass: #D4A35B;
+  --color-accent-brass-light: #4A3E26;
+
+  --color-success: #3ab779;
+  --color-success-tint: #143d2c;
+  --color-warning: #e49f3e;
+  --color-warning-tint: #40321a;
+  --color-danger: #e65c58;
+  --color-danger-tint: #461f1e;
+  --color-info: #4da5e6;
+  --color-info-tint: #1b3447;
 }
 
 body {
   font-family: var(--font-inter);
+  background-color: var(--color-bg-canvas);
+  color: var(--color-ink-900);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Scrollbar customization for clean UI */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-canvas);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-300);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-500);
+}
+
+/* Premium Clinical UI Component Styles */
+.premium-title-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-ink-900);
+}
+
+.glass-card {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-card-hover:hover {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 4px 20px rgba(18, 74, 84, 0.08);
+}
+
+/* Forms and Labels */
+.premium-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-ink-700);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.premium-input {
+  height: 40px;
+  background-color: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--color-ink-900);
+  width: 100%;
+  transition: all 0.15s ease-in-out;
+}
+
+.premium-input:focus {
+  outline: none;
+  background-color: var(--color-bg-surface);
+  border-color: var(--color-primary-700);
+  box-shadow: var(--shadow-focus);
+}
+
+.premium-input::placeholder {
+  color: var(--color-ink-500);
+}
+
+/* Datatable & Premium Table Styling — White Tbody Theme */
+.premium-table-wrapper, .datatable-wrapper {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  background-color: #ffffff;
+}
+
+.premium-table, .datatable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  background-color: #ffffff;
+}
+
+.premium-table thead, .datatable thead {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 2px solid #cbd5e1;
+}
+
+.premium-table th, .datatable th {
+  background-color: #f1f5f9;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 14px 16px;
+  border-bottom: 2px solid #cbd5e1;
+  white-space: nowrap;
+}
+
+.premium-table tbody, .datatable tbody {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.premium-table td, .datatable td {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #0f172a;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.premium-table tbody tr, .datatable tbody tr {
+  background-color: #ffffff !important;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.premium-table tbody tr:nth-child(even), .datatable tbody tr:nth-child(even) {
+  background-color: #f8fafc !important;
+}
+
+.premium-table tbody tr:hover, .datatable tbody tr:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* Buttons */
+.premium-btn-primary {
+  height: 40px;
+  padding: 0 16px;
+  background-color: var(--color-primary-700);
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.premium-btn-primary:hover {
+  background-color: var(--color-primary-900);
+}
+.premium-btn-primary:focus {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.premium-btn-secondary {
+  height: 40px;
+  padding: 0 16px;
+  background-color: transparent;
+  border: 1px solid var(--color-primary-700);
+  color: var(--color-primary-700);
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.premium-btn-secondary:hover {
+  background-color: var(--color-primary-100);
+}
+
+.premium-btn-accent {
+  height: 40px;
+  padding: 0 16px;
+  background-color: var(--color-accent-brass);
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.premium-btn-accent:hover {
+  opacity: 0.9;
+}
+
+.premium-btn-danger {
+  height: 40px;
+  padding: 0 16px;
+  background-color: var(--color-danger);
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.premium-btn-danger:hover {
+  opacity: 0.9;
+}
+
+/* Badges */
+.premium-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* Premium Non-Fading High-Contrast Buttons */
+button {
+  opacity: 1 !important;
+  font-weight: 700;
+}
+
+button:disabled {
+  opacity: 0.65 !important;
+  cursor: not-allowed;
+}
+
+/* Global Theme Colors for Smooth Day & Night Modes */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
   background-color: #0F172A;
   color: #F8FAFC;
 }
 
-.glass-card {
-  background: rgba(30, 41, 59, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+html:not(.dark) body {
+  background-color: #F8FAFC;
+  color: #0F172A;
 }
 
-.glass-card-hover {
-  transition: all 0.2s ease-in-out;
+/* ─────────────────────────────────────────────────────────────────────────────
+   GLOBAL THEME ADAPTATION FOR FORM INPUTS, DROPDOWNS, CALENDARS & BUTTONS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Day Mode Input & Select Defaults */
+input, select, textarea, .theme-input, .theme-select {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
 }
 
-.glass-card-hover:hover {
-  transform: translateY(-2px);
-  border-color: rgba(99, 102, 241, 0.4);
-  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.15);
+/* Day Mode Calendar Picker */
+input[type="date"], input[type="time"], input[type="datetime-local"] {
+  color-scheme: light;
+}
+
+/* Day Mode Dropdown Options */
+select option {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+}
+
+/* Night Mode Input & Select Defaults */
+html.dark input, 
+html.dark select, 
+html.dark textarea,
+html.dark .theme-input, 
+html.dark .theme-select {
+  background-color: #090D16 !important;
+  color: #F8FAFC !important;
+  border-color: #334155 !important;
+}
+
+/* Night Mode Calendar Picker */
+html.dark input[type="date"], 
+html.dark input[type="time"], 
+html.dark input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+/* Night Mode Dropdown Options */
+html.dark select option {
+  background-color: #0F172A !important;
+  color: #F8FAFC !important;
+}
+
+/* Ensure placeholder text contrast */
+input::placeholder, textarea::placeholder {
+  color: #94A3B8 !important;
+}
+html.dark input::placeholder, html.dark textarea::placeholder {
+  color: #64748B !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DAY MODE OVERRIDE FOR HARDCODED DARK BACKGROUNDS (bg-[#1E293B], bg-[#0F172A])
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Apply bg-[#1E293B] ONLY in Dark Mode. In Day Mode, use white bg and black text! */
+html:not(.dark) [class*="bg-[#1E293B]"],
+html:not(.dark) [class*="bg-[#0F172A]"],
+html:not(.dark) [class*="bg-slate-900"],
+html:not(.dark) [class*="bg-slate-950"] {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: #E2E8F0 !important;
+}
+
+html:not(.dark) [class*="bg-[#1E293B]"] h1,
+html:not(.dark) [class*="bg-[#1E293B]"] h2,
+html:not(.dark) [class*="bg-[#1E293B]"] h3,
+html:not(.dark) [class*="bg-[#1E293B]"] h4,
+html:not(.dark) [class*="bg-[#1E293B]"] p,
+html:not(.dark) [class*="bg-[#1E293B]"] span,
+html:not(.dark) [class*="bg-[#1E293B]"] div,
+html:not(.dark) [class*="bg-[#0F172A]"] h1,
+html:not(.dark) [class*="bg-[#0F172A]"] h2,
+html:not(.dark) [class*="bg-[#0F172A]"] h3,
+html:not(.dark) [class*="bg-[#0F172A]"] h4,
+html:not(.dark) [class*="bg-[#0F172A]"] p,
+html:not(.dark) [class*="bg-[#0F172A]"] span,
+html:not(.dark) [class*="bg-[#0F172A]"] div {
+  color: #0F172A;
+}
+
+html:not(.dark) [class*="bg-[#1E293B]"] .text-white,
+html:not(.dark) [class*="bg-[#0F172A]"] .text-white {
+  color: #0F172A !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SPECIFIC CLASS OVERRIDE FOR .bg-indigo-950\/40 (rgb(95 100 219))
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.bg-indigo-950\/40, 
+[class*="bg-indigo-950"] {
+  background-color: rgb(95, 100, 219) !important;
+  color: #FFFFFF !important;
+}
+
+.bg-indigo-950\/40 th,
+[class*="bg-indigo-950"] th {
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
 }

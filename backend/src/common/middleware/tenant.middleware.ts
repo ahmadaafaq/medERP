@@ -34,7 +34,9 @@ export class TenantMiddleware implements NestMiddleware {
     const parts = host.split('.');
     let slug: string | null = null;
 
-    if (parts.length >= 3) {
+    const isIP = /^[0-9.]+$/.test(host) || host.includes(':') || host === 'localhost';
+
+    if (!isIP && parts.length >= 3) {
       // subdomain.domain.tld
       const subdomain = parts[0];
       if (subdomain !== 'www' && subdomain !== 'api') {
@@ -53,10 +55,21 @@ export class TenantMiddleware implements NestMiddleware {
       if (match) slug = match[1];
     }
 
+    // Check for query param fallback as well
+    if (!slug && req.query.tenant) {
+      slug = req.query.tenant as string;
+    }
+
     // Super-admin routes don't require a tenant
     if (!slug) {
       next();
       return;
+    }
+
+    // Normalize slug to lowercase and resolve 'srms' to 'srms-ims'
+    slug = slug.toLowerCase();
+    if (slug === 'srms') {
+      slug = 'srms-ims';
     }
 
     // Look up tenant in the public schema

@@ -209,13 +209,13 @@ export class UsersService {
   // ═══════════════════════════════════════════════════════════════
 
   async getFaculty(tenantSlug: string, pagination: PaginationDto, filters: {
-    search?: string; departmentId?: string; role?: UserRole;
+    search?: string; departmentId?: string; role?: UserRole; staffType?: string; isActive?: string;
   } = {}) {
     const schema = `tenant_${tenantSlug}`;
     const { page = 1, limit = 20 } = pagination;
     const offset = (page - 1) * limit;
 
-    const conditions: string[] = ['f.is_active = true'];
+    const conditions: string[] = ['1=1'];
     const params: any[] = [];
     let i = 1;
 
@@ -232,18 +232,27 @@ export class UsersService {
       conditions.push(`u.role = $${i++}`);
       params.push(filters.role);
     }
+    if (filters.staffType) {
+      conditions.push(`f.staff_type = $${i++}`);
+      params.push(filters.staffType);
+    }
+    if (filters.isActive !== undefined) {
+      conditions.push(`f.is_active = $${i++}`);
+      params.push(filters.isActive === 'true');
+    }
 
     const where = `WHERE ${conditions.join(' AND ')}`;
 
     const [rows, countRows] = await Promise.all([
       this.ds.query(
         `SELECT f.id, f.emp_id, f.name, f.designation, f.photo_url,
-                f.phone, f.department_id,
-                u.email, u.role, u.is_active,
-                d.name AS department_name
+                f.phone, f.department_id, f.subject_id, f.gender, f.experience, f.staff_type, f.is_active,
+                u.email, u.role, u.is_active as user_active,
+                d.name AS department_name, s.name AS subject_name
          FROM "${schema}".faculty f
          JOIN "${schema}".users u ON u.id = f.user_id
          LEFT JOIN "${schema}".departments d ON d.id = f.department_id
+         LEFT JOIN "${schema}".subjects s ON s.id = f.subject_id
          ${where}
          ORDER BY f.name ASC
          LIMIT $${i} OFFSET $${i + 1}`,
@@ -252,6 +261,8 @@ export class UsersService {
       this.ds.query(
         `SELECT COUNT(*) FROM "${schema}".faculty f
          JOIN "${schema}".users u ON u.id = f.user_id
+         LEFT JOIN "${schema}".departments d ON d.id = f.department_id
+         LEFT JOIN "${schema}".subjects s ON s.id = f.subject_id
          ${where}`,
         params,
       ),
@@ -263,16 +274,22 @@ export class UsersService {
   async getFacultyById(tenantSlug: string, id: string) {
     const schema = `tenant_${tenantSlug}`;
     const rows = await this.ds.query(
-      `SELECT f.*, u.email, u.role, u.is_active, u.last_login_at,
-              d.name AS department_name
+      `SELECT f.*, u.email, u.role, u.is_active as user_active, u.last_login_at,
+              d.name AS department_name, s.name AS subject_name
        FROM "${schema}".faculty f
        JOIN "${schema}".users u ON u.id = f.user_id
        LEFT JOIN "${schema}".departments d ON d.id = f.department_id
+       LEFT JOIN "${schema}".subjects s ON s.id = f.subject_id
        WHERE f.id = $1`,
       [id],
     );
     if (!rows[0]) throw new NotFoundException('Faculty not found');
     return rows[0];
+  }
+
+  private isUUID(str?: string | null): boolean {
+    if (!str) return false;
+    return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str);
   }
 
   async createFaculty(tenantSlug: string, dto: CreateFacultyDto) {
@@ -292,46 +309,89 @@ export class UsersService {
 
     const hash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
+    // Map role safely (handle ADMIN alias -> COLLEGE_ADMIN)
+    let role: UserRole = dto.role || UserRole.FACULTY;
+    if ((dto.role as any) === 'ADMIN') role = UserRole.COLLEGE_ADMIN;
+
     const userRows = await this.ds.query(
-      `INSERT INTO "${schema}".users (email, password_hash, role, must_change_password)
-       VALUES ($1,$2,$3,true) RETURNING id`,
-      [dto.email.toLowerCase(), hash, dto.role],
+      `INSERT INTO "${schema}".users (email, password_hash, role, must_change_password, is_active)
+       VALUES ($1,$2,$3,true,COALESCE($4, true)) RETURNING id`,
+      [dto.email.toLowerCase(), hash, role, dto.isActive ?? true],
     );
     const userId = userRows[0].id;
 
+    const validDeptId = this.isUUID(dto.departmentId) ? dto.departmentId : null;
+    const validSubjectId = this.isUUID(dto.subjectId) ? dto.subjectId : null;
+
     const facultyRows = await this.ds.query(
       `INSERT INTO "${schema}".faculty
-         (user_id, emp_id, name, department_id, designation, qualification, phone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+         (user_id, emp_id, name, department_id, subject_id, designation, qualification, phone, gender, experience, staff_type, photo_url, is_active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, true))
        RETURNING id, emp_id, name`,
       [
         userId, dto.empId, dto.name,
-        dto.departmentId ?? null, dto.designation ?? null,
-        dto.qualification ?? null, dto.phone ?? null,
+        validDeptId, validSubjectId, dto.designation || null,
+        dto.qualification || null, dto.phone || null,
+        dto.gender || null, dto.experience || null,
+        dto.staffType || 'Faculty', dto.photoUrl || null,
+        dto.isActive ?? true,
       ],
     );
 
-    this.logger.log(`Faculty created: ${dto.empId} [${dto.role}] in tenant ${tenantSlug}`);
-    return { ...facultyRows[0], email: dto.email, role: dto.role };
+    this.logger.log(`Faculty created: ${dto.empId} [${role}] in tenant ${tenantSlug}`);
+    return { ...facultyRows[0], email: dto.email, role };
   }
 
   async updateFaculty(tenantSlug: string, id: string, dto: UpdateFacultyDto) {
     const schema = `tenant_${tenantSlug}`;
-    await this.getFacultyById(tenantSlug, id);
+    const faculty = await this.getFacultyById(tenantSlug, id);
+
+    // Update user record if email, role or password provided
+    if (dto.email || dto.role) {
+      const userUpdates: string[] = [];
+      const userParams: any[] = [];
+      let uIdx = 1;
+
+      if (dto.email) {
+        userUpdates.push(`email = $${uIdx++}`);
+        userParams.push(dto.email.toLowerCase());
+      }
+      if (dto.role) {
+        let roleVal: any = dto.role;
+        if (roleVal === 'ADMIN') roleVal = UserRole.COLLEGE_ADMIN;
+        userUpdates.push(`role = $${uIdx++}`);
+        userParams.push(roleVal);
+      }
+
+      if (userUpdates.length) {
+        userParams.push(faculty.user_id);
+        await this.ds.query(
+          `UPDATE "${schema}".users SET ${userUpdates.join(', ')} WHERE id = $${uIdx}`,
+          userParams,
+        );
+      }
+    }
 
     const sets: string[] = [];
     const params: any[] = [];
     let i = 1;
 
+    const validDeptId = dto.departmentId !== undefined ? (this.isUUID(dto.departmentId) ? dto.departmentId : null) : undefined;
+    const validSubjectId = dto.subjectId !== undefined ? (this.isUUID(dto.subjectId) ? dto.subjectId : null) : undefined;
+
     const map: Record<string, any> = {
       name: dto.name, designation: dto.designation,
       qualification: dto.qualification, phone: dto.phone,
-      departmentId: dto.departmentId,
+      departmentId: validDeptId, subjectId: validSubjectId,
+      gender: dto.gender, experience: dto.experience,
+      staffType: dto.staffType, photoUrl: dto.photoUrl,
     };
     const colMap: Record<string, string> = {
       name: 'name', designation: 'designation',
       qualification: 'qualification', phone: 'phone',
-      departmentId: 'department_id',
+      departmentId: 'department_id', subjectId: 'subject_id',
+      gender: 'gender', experience: 'experience',
+      staffType: 'staff_type', photoUrl: 'photo_url',
     };
 
     for (const [key, val] of Object.entries(map)) {
@@ -341,17 +401,44 @@ export class UsersService {
       }
     }
 
-    if (!sets.length) throw new BadRequestException('No fields to update');
+    if (dto.isActive !== undefined) {
+      sets.push(`is_active=$${i++}`);
+      params.push(dto.isActive);
 
-    sets.push(`updated_at=NOW()`);
-    params.push(id);
+      await this.ds.query(
+        `UPDATE "${schema}".users u SET is_active = $1
+         FROM "${schema}".faculty f WHERE f.user_id = u.id AND f.id = $2`,
+        [dto.isActive, id],
+      );
+    }
 
-    await this.ds.query(
-      `UPDATE "${schema}".faculty SET ${sets.join(', ')} WHERE id=$${i}`,
-      params,
-    );
+    if (!sets.length && dto.isActive === undefined && !dto.email && !dto.role) {
+      throw new BadRequestException('No fields to update');
+    }
+
+    if (sets.length) {
+      sets.push(`updated_at=NOW()`);
+      params.push(id);
+
+      await this.ds.query(
+        `UPDATE "${schema}".faculty SET ${sets.join(', ')} WHERE id=$${i}`,
+        params,
+      );
+    }
 
     return this.getFacultyById(tenantSlug, id);
+  }
+
+  async deleteFaculty(tenantSlug: string, id: string) {
+    const schema = `tenant_${tenantSlug}`;
+    const faculty = await this.getFacultyById(tenantSlug, id);
+
+    // Delete user record (cascades to faculty due to ON DELETE CASCADE)
+    await this.ds.query(
+      `DELETE FROM "${schema}".users WHERE id = $1`,
+      [faculty.user_id],
+    );
+    return { success: true, message: 'Faculty member deleted successfully' };
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -361,10 +448,10 @@ export class UsersService {
   async getDepartments(tenantSlug: string) {
     const schema = `tenant_${tenantSlug}`;
     return this.ds.query(
-      `SELECT d.*, u.name AS hod_name
+      `SELECT d.*, f.name AS hod_name
        FROM "${schema}".departments d
-       LEFT JOIN "${schema}".faculty f ON f.id::text = d.hod_user_id::text
-       LEFT JOIN "${schema}".users u ON u.id = f.user_id
+       LEFT JOIN "${schema}".users u ON u.id = d.hod_user_id
+       LEFT JOIN "${schema}".faculty f ON f.user_id = u.id
        WHERE d.is_active = true
        ORDER BY d.name ASC`,
     );

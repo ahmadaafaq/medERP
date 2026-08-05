@@ -18,17 +18,26 @@ export class LogbookService {
     return res[0];
   }
 
-  async getStudentEntries(tenantSlug: string, rollno: string) {
+  async getActivityTypes(tenantSlug: string) {
     return this.tenantSchemaService.queryInTenant(
       tenantSlug,
-      `SELECT e.*, a.name as activity_name, a.code as activity_code, v.status as verification_status, v.remarks
+      `SELECT id, code, name, category, max_required, activity_type FROM logbook_activity_types ORDER BY name ASC`,
+    );
+  }
+
+  async getStudentEntries(tenantSlug: string, identifier: string) {
+    return this.tenantSchemaService.queryInTenant(
+      tenantSlug,
+      `SELECT e.*, a.name as activity_name, a.code as activity_code, a.category, COALESCE(v.status, 'PENDING') as verification_status, v.remarks
        FROM logbook_entries e
        JOIN students s ON e.student_id = s.id
-       JOIN logbook_activity_types a ON e.activity_type_id = a.id
+       LEFT JOIN logbook_activity_types a ON e.activity_type_id = a.id
        LEFT JOIN logbook_verifications v ON e.id = v.entry_id
-       WHERE s.rollno = $1
+       WHERE LOWER(COALESCE(s.rollno, '')) = LOWER($1)
+          OR LOWER(COALESCE(s.registration_no, '')) = LOWER($1)
+          OR s.id::text = $1
        ORDER BY e.entry_date DESC`,
-      [rollno],
+      [identifier],
     );
   }
 

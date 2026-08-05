@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, QueryRunner } from 'typeorm';
 
@@ -9,19 +9,25 @@ import { DataSource, QueryRunner } from 'typeorm';
  * All tables in the per-tenant schema are identical in structure.
  */
 @Injectable()
-export class TenantSchemaService {
+export class TenantSchemaService implements OnApplicationBootstrap {
   private readonly logger = new Logger(TenantSchemaService.name);
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
+  public resolveTenantSlug(slug?: string): string {
+    const s = slug ? slug.toLowerCase() : 'srms-ims';
+    return (s === 'srms' || s === 'srms-ims') ? 'srms-ims' : s;
+  }
+
   /**
    * Provision a new tenant schema with all required tables.
    * Called during onboarding → college setup wizard.
    */
   async provisionSchema(slug: string): Promise<void> {
-    const schema = `tenant_${slug}`;
+    const resolvedSlug = this.resolveTenantSlug(slug);
+    const schema = `tenant_${resolvedSlug}`;
     this.logger.log(`Provisioning schema: ${schema}`);
 
     const runner: QueryRunner = this.dataSource.createQueryRunner();
@@ -57,7 +63,8 @@ export class TenantSchemaService {
    * Get a query runner scoped to a specific tenant's schema.
    */
   async getTenantRunner(slug: string): Promise<QueryRunner> {
-    const schema = `tenant_${slug}`;
+    const resolvedSlug = this.resolveTenantSlug(slug);
+    const schema = `tenant_${resolvedSlug}`;
     const runner = this.dataSource.createQueryRunner();
     await runner.connect();
     await runner.query(`SET search_path TO "${schema}", public`);
@@ -68,12 +75,403 @@ export class TenantSchemaService {
    * Execute a raw query in a tenant's schema context.
    */
   async queryInTenant<T = any>(slug: string, sql: string, params: any[] = []): Promise<T[]> {
-    const schema = `tenant_${slug}`;
+    const resolvedSlug = this.resolveTenantSlug(slug);
+    const schema = `tenant_${resolvedSlug}`;
     const runner = this.dataSource.createQueryRunner();
     await runner.connect();
     try {
       await runner.query(`SET search_path TO "${schema}", public`);
       return await runner.query(sql, params);
+    } finally {
+      await runner.release();
+    }
+  }
+
+  async onApplicationBootstrap() {
+    this.logger.log('Checking and upgrading tenant schemas if necessary...');
+    try {
+      const tenants = await this.dataSource.query(`SELECT slug FROM public.tenants`);
+      for (const tenant of tenants) {
+        await this.ensureLatestSchema(tenant.slug);
+      }
+      this.logger.log('All tenant schemas successfully verified/upgraded.');
+    } catch (err) {
+      this.logger.error('Failed to run schema validation/upgrades on startup:', err);
+    }
+  }
+
+  async ensureLatestSchema(slug: string): Promise<void> {
+    const resolvedSlug = this.resolveTenantSlug(slug);
+    const schema = `tenant_${resolvedSlug}`;
+    const runner = this.dataSource.createQueryRunner();
+    await runner.connect();
+    try {
+      await runner.query(`SET search_path TO "${schema}", public`);
+      
+      // Alter students table
+      await runner.query(`ALTER TABLE "${schema}".students ALTER COLUMN rollno DROP NOT NULL;`);
+      await runner.query(`ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS registration_no VARCHAR(50) UNIQUE;`);
+      
+      // Create student_admissions
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_admissions (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          college_id UUID,
+          college_name VARCHAR(200),
+          course_id UUID,
+          course_code VARCHAR(50),
+          professional_id VARCHAR(50),
+          professional_phase VARCHAR(100),
+          session_id UUID,
+          academic_session VARCHAR(100),
+          batch_id UUID,
+          batch_code VARCHAR(50),
+          branch_id UUID,
+          residency_type VARCHAR(50),
+          admission_type VARCHAR(50),
+          admission_date DATE,
+          status VARCHAR(50) DEFAULT 'ACTIVE'
+        );
+      `);
+
+      // Create student_academic_details
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_academic_details (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          class_10_board VARCHAR(100),
+          class_10_percentage NUMERIC(5,2),
+          class_12_board VARCHAR(100),
+          class_12_physics NUMERIC(5,2),
+          class_12_chemistry NUMERIC(5,2),
+          class_12_biology NUMERIC(5,2),
+          class_12_english NUMERIC(5,2),
+          class_12_percentage NUMERIC(5,2)
+        );
+      `);
+
+      // Create student_neet_details
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_neet_details (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          neet_roll_no VARCHAR(50),
+          neet_score NUMERIC(6,2),
+          neet_percentile NUMERIC(5,2),
+          neet_air_rank INT,
+          neet_category_rank INT
+        );
+      `);
+
+      // Create student_parents
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_parents (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          father_name VARCHAR(200),
+          father_occupation VARCHAR(100),
+          father_mobile VARCHAR(20),
+          mother_name VARCHAR(200),
+          mother_occupation VARCHAR(100),
+          mother_mobile VARCHAR(20),
+          annual_income NUMERIC(12,2)
+        );
+      `);
+
+      // Create student_addresses
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_addresses (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          permanent_address_1 TEXT,
+          permanent_address_2 TEXT,
+          permanent_city VARCHAR(100),
+          permanent_district VARCHAR(100),
+          permanent_state VARCHAR(100),
+          permanent_pincode VARCHAR(20),
+          same_as_permanent BOOLEAN DEFAULT false
+        );
+      `);
+
+      // Create student_documents
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_documents (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          passport_photo_url TEXT,
+          student_signature_url TEXT,
+          parent_signature_url TEXT,
+          aadhaar_card_url TEXT,
+          class_10_marksheet_url TEXT,
+          class_12_marksheet_url TEXT,
+          neet_score_card_url TEXT
+        );
+      `);
+
+      // Create student_fees
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_fees (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          paid_fees NUMERIC(12,2) DEFAULT 0,
+          pending_fees NUMERIC(12,2) DEFAULT 0,
+          total_fees NUMERIC(12,2) DEFAULT 0
+        );
+      `);
+
+      // Create student_hostel
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_hostel (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          hostel_required BOOLEAN DEFAULT false,
+          hostel_name VARCHAR(100),
+          room_number VARCHAR(50)
+        );
+      `);
+
+      // Create student_transport
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_transport (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          bus_required BOOLEAN DEFAULT false,
+          transport_route VARCHAR(100)
+        );
+      `);
+
+      // Create student_library
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_library (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          library_card_no VARCHAR(50),
+          rfid_tag VARCHAR(50)
+        );
+      `);
+
+      // Create student_medical
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_medical (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          medical_history TEXT,
+          vaccination_status VARCHAR(100),
+          fitness_certificate_url TEXT
+        );
+      `);
+
+      // Create student_bank_accounts
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_bank_accounts (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          bank_name VARCHAR(150),
+          account_number VARCHAR(50),
+          ifsc_code VARCHAR(20)
+        );
+      `);
+
+      // Create student_emergency_contacts
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_emergency_contacts (
+          student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          contact_name VARCHAR(200),
+          relationship VARCHAR(100),
+          phone VARCHAR(20)
+        );
+      `);
+
+      // ── Courses (added in later migration) ───────────────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".courses (
+          id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          code               VARCHAR(30) UNIQUE NOT NULL,
+          name               VARCHAR(200) NOT NULL,
+          degree_level       VARCHAR(50) DEFAULT 'UG',
+          duration_years     INT         DEFAULT 5,
+          professional_phase VARCHAR(100) DEFAULT '1st Professional (Phase I)',
+          is_active          BOOLEAN     DEFAULT true,
+          created_at         TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+      await runner.query(`
+        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS professional_phase VARCHAR(100) DEFAULT '1st Professional (Phase I)';
+      `);
+
+      // ── Academic Sessions (added in later migration) ──────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".academic_sessions (
+          id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          name         VARCHAR(100) NOT NULL,
+          start_date   DATE         NOT NULL,
+          end_date     DATE         NOT NULL,
+          is_current   BOOLEAN      DEFAULT false,
+          is_active    BOOLEAN      DEFAULT true,
+          created_at   TIMESTAMPTZ  DEFAULT NOW()
+        );
+      `);
+
+      // ── Professional Linkers ──────────────────────────────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".professional_linkers (
+          id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          code               VARCHAR(50) NOT NULL,
+          name               VARCHAR(200) NOT NULL,
+          course_cd          VARCHAR(50),
+          professional_phase VARCHAR(100),
+          academic_session   VARCHAR(100),
+          description        TEXT,
+          is_active          BOOLEAN     DEFAULT true,
+          created_at         TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      // ── Topic Master ──────────────────────────────────────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".topics (
+          id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          subject_id   UUID        REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
+          linker_id    UUID        REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL,
+          code         VARCHAR(50) NOT NULL,
+          name         VARCHAR(200) NOT NULL,
+          description  TEXT,
+          hours        INT         DEFAULT 1,
+          is_active    BOOLEAN     DEFAULT true,
+          created_at         TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      // ── Competency Master ─────────────────────────────────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".competencies (
+          id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          subject_id   UUID        REFERENCES "${schema}".subjects(id) ON DELETE SET NULL,
+          topic_id     UUID        REFERENCES "${schema}".topics(id) ON DELETE SET NULL,
+          linker_id    UUID        REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL,
+          code         VARCHAR(50) NOT NULL,
+          description  TEXT        NOT NULL,
+          domain       VARCHAR(50) DEFAULT 'Knowledge',
+          level        VARCHAR(50) DEFAULT 'Knows How',
+          is_core      BOOLEAN     DEFAULT true,
+          is_active    BOOLEAN     DEFAULT true,
+          created_at         TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      // ── Professional Phases ───────────────────────────────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".professional_phases (
+          id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          college_id       VARCHAR(50),
+          course_cd        VARCHAR(50) DEFAULT 'MBBS',
+          name             VARCHAR(200) NOT NULL,
+          phase_order      INT         DEFAULT 1,
+          academic_system  VARCHAR(50) DEFAULT 'professional',
+          is_active        BOOLEAN     DEFAULT true,
+          created_at       TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      // Seed standard NMC phases if professional_phases table is empty
+      const existingPhases = await runner.query(`SELECT id FROM "${schema}".professional_phases LIMIT 1`);
+      if (existingPhases.length === 0) {
+        await runner.query(`
+          INSERT INTO "${schema}".professional_phases (name, phase_order, course_cd, academic_system, is_active) VALUES
+            ('1st Professional MBBS (Phase I)', 1, 'MBBS', 'professional', true),
+            ('2nd Professional MBBS (Phase II)', 2, 'MBBS', 'professional', true),
+            ('3rd Professional MBBS Part I (Phase III-1)', 3, 'MBBS', 'professional', true),
+            ('3rd Professional MBBS Part II (Phase III-2)', 4, 'MBBS', 'professional', true)
+        `);
+      }
+
+      // ── Student Phase Progressions (Promotion History) ────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".student_phase_progressions (
+          id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id       UUID        REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          batch_id         VARCHAR(50),
+          from_phase_id    VARCHAR(50),
+          from_phase_name  VARCHAR(200),
+          to_phase_id      VARCHAR(50),
+          to_phase_name    VARCHAR(200),
+          academic_year    VARCHAR(50),
+          is_active        BOOLEAN     DEFAULT true,
+          promoted_at      TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      // ── Delivery Types Master ──
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".delivery_types (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          code VARCHAR(10) UNIQUE NOT NULL,
+          name VARCHAR(50) NOT NULL,
+          is_active BOOLEAN DEFAULT true NOT NULL
+        );
+      `);
+
+      // Seed standard NMC delivery types
+      const existingDTypes = await runner.query(`SELECT id FROM "${schema}".delivery_types LIMIT 1`);
+      if (existingDTypes.length === 0) {
+        await runner.query(`
+          INSERT INTO "${schema}".delivery_types (code, name) VALUES
+            ('TH', 'Theory'),
+            ('PR', 'Practical'),
+            ('AE', 'AETCOM'),
+            ('PD', 'Pandemic Module'),
+            ('CP', 'Clinical Posting');
+        `);
+      }
+
+      // ── Subject Offerings Junction Table ──
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".subject_offerings (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          subject_id UUID NOT NULL REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
+          prof_id UUID NOT NULL REFERENCES "${schema}".professional_phases(id) ON DELETE CASCADE,
+          dtype_id UUID NOT NULL REFERENCES "${schema}".delivery_types(id) ON DELETE CASCADE,
+          batch_year INTEGER NOT NULL,
+          hours_allotted INTEGER DEFAULT 0 NOT NULL,
+          is_active BOOLEAN DEFAULT true NOT NULL,
+          CONSTRAINT uq_subject_offering UNIQUE (subject_id, prof_id, dtype_id, batch_year)
+        );
+      `);
+
+      // Alter attendance_sessions table to add offering_id column
+      await runner.query(`
+        ALTER TABLE "${schema}".attendance_sessions 
+        ADD COLUMN IF NOT EXISTS offering_id UUID REFERENCES "${schema}".subject_offerings(id) ON DELETE CASCADE;
+      `);
+
+      // Alter subjects table to add is_longitudinal column
+      await runner.query(`
+        ALTER TABLE "${schema}".subjects 
+        ADD COLUMN IF NOT EXISTS is_longitudinal BOOLEAN DEFAULT false;
+      `);
+
+      // Alter topics and competencies to add linker_id column
+      await runner.query(`
+        ALTER TABLE "${schema}".topics 
+        ADD COLUMN IF NOT EXISTS linker_id UUID REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL;
+      `);
+      await runner.query(`
+        ALTER TABLE "${schema}".competencies 
+        ADD COLUMN IF NOT EXISTS linker_id UUID REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL;
+      `);
+
+      // Alter faculty table for Staff Master
+      await runner.query(`
+        ALTER TABLE "${schema}".faculty 
+        ADD COLUMN IF NOT EXISTS subject_id UUID REFERENCES "${schema}".subjects(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS gender VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS experience VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS staff_type VARCHAR(50) DEFAULT 'Faculty';
+      `);
+
+      // Create faculty_subjects table for Subject Linker
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".faculty_subjects (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          faculty_id UUID NOT NULL REFERENCES "${schema}".faculty(id) ON DELETE CASCADE,
+          subject_id UUID NOT NULL REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT uq_faculty_subject UNIQUE (faculty_id, subject_id)
+        );
+      `);
+    } catch (err) {
+      this.logger.error(`Failed to ensure latest schema for ${slug}:`, err);
+      throw err;
     } finally {
       await runner.release();
     }
@@ -122,12 +520,16 @@ export class TenantSchemaService {
         emp_id          VARCHAR(50)  UNIQUE NOT NULL,
         name            VARCHAR(200) NOT NULL,
         department_id   UUID        REFERENCES "${schema}".departments(id),
+        subject_id      UUID        REFERENCES "${schema}".subjects(id) ON DELETE SET NULL,
         designation     VARCHAR(100),
         qualification   TEXT,
         specialization  VARCHAR(200),
         joining_date    DATE,
         photo_url       TEXT,
         phone           VARCHAR(20),
+        gender          VARCHAR(20),
+        experience      VARCHAR(100),
+        staff_type      VARCHAR(50)  DEFAULT 'Faculty',
         is_active       BOOLEAN      DEFAULT true,
         created_at      TIMESTAMPTZ  DEFAULT NOW(),
         updated_at      TIMESTAMPTZ  DEFAULT NOW()
@@ -150,12 +552,30 @@ export class TenantSchemaService {
       )
     `);
 
+    // ── Groups Master (Batch Sub-Groups like A, B, C, D) ───────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".groups_master (
+        id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        code          VARCHAR(50)  NOT NULL,
+        name          VARCHAR(200) NOT NULL,
+        college_id    UUID,
+        course_id     UUID,
+        batch_id      UUID        REFERENCES "${schema}".batches(id) ON DELETE CASCADE,
+        department_id UUID        REFERENCES "${schema}".departments(id) ON DELETE SET NULL,
+        capacity      INT          DEFAULT 50,
+        is_active     BOOLEAN      DEFAULT true,
+        created_at    TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ  DEFAULT NOW()
+      )
+    `);
+
     // ── Students ───────────────────────────────────────────────────────────
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".students (
         id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id           UUID        UNIQUE REFERENCES "${schema}".users(id) ON DELETE CASCADE,
-        rollno            VARCHAR(50)  UNIQUE NOT NULL,
+        rollno            VARCHAR(50)  UNIQUE,
+        registration_no   VARCHAR(50)  UNIQUE NOT NULL,
         name              VARCHAR(200) NOT NULL,
         batch_cd          VARCHAR(20),
         course_cd         VARCHAR(20),
@@ -176,17 +596,212 @@ export class TenantSchemaService {
     await runner.query(`CREATE INDEX IF NOT EXISTS idx_students_dept ON "${schema}".students(department_id)`);
     await runner.query(`CREATE INDEX IF NOT EXISTS idx_students_batch ON "${schema}".students(batch_id)`);
 
+    // Create student_admissions
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_admissions (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        college_id UUID,
+        college_name VARCHAR(200),
+        course_id UUID,
+        course_code VARCHAR(50),
+        professional_id VARCHAR(50),
+        professional_phase VARCHAR(100),
+        session_id UUID,
+        academic_session VARCHAR(100),
+        batch_id UUID,
+        batch_code VARCHAR(50),
+        branch_id UUID,
+        residency_type VARCHAR(50),
+        admission_type VARCHAR(50),
+        admission_date DATE,
+        status VARCHAR(50) DEFAULT 'ACTIVE'
+      );
+    `);
+
+    // Create student_academic_details
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_academic_details (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        class_10_board VARCHAR(100),
+        class_10_percentage NUMERIC(5,2),
+        class_12_board VARCHAR(100),
+        class_12_physics NUMERIC(5,2),
+        class_12_chemistry NUMERIC(5,2),
+        class_12_biology NUMERIC(5,2),
+        class_12_english NUMERIC(5,2),
+        class_12_percentage NUMERIC(5,2)
+      );
+    `);
+
+    // Create student_neet_details
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_neet_details (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        neet_roll_no VARCHAR(50),
+        neet_score NUMERIC(6,2),
+        neet_percentile NUMERIC(5,2),
+        neet_air_rank INT,
+        neet_category_rank INT
+      );
+    `);
+
+    // Create student_parents
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_parents (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        father_name VARCHAR(200),
+        father_occupation VARCHAR(100),
+        father_mobile VARCHAR(20),
+        mother_name VARCHAR(200),
+        mother_occupation VARCHAR(100),
+        mother_mobile VARCHAR(20),
+        annual_income NUMERIC(12,2)
+      );
+    `);
+
+    // Create student_addresses
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_addresses (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        permanent_address_1 TEXT,
+        permanent_address_2 TEXT,
+        permanent_city VARCHAR(100),
+        permanent_district VARCHAR(100),
+        permanent_state VARCHAR(100),
+        permanent_pincode VARCHAR(20),
+        same_as_permanent BOOLEAN DEFAULT false
+      );
+    `);
+
+    // Create student_documents
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_documents (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        passport_photo_url TEXT,
+        student_signature_url TEXT,
+        parent_signature_url TEXT,
+        aadhaar_card_url TEXT,
+        class_10_marksheet_url TEXT,
+        class_12_marksheet_url TEXT,
+        neet_score_card_url TEXT
+      );
+    `);
+
+    // Create student_fees
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_fees (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        paid_fees NUMERIC(12,2) DEFAULT 0,
+        pending_fees NUMERIC(12,2) DEFAULT 0,
+        total_fees NUMERIC(12,2) DEFAULT 0
+      );
+    `);
+
+    // Create student_hostel
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_hostel (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        hostel_required BOOLEAN DEFAULT false,
+        hostel_name VARCHAR(100),
+        room_number VARCHAR(50)
+      );
+    `);
+
+    // Create student_transport
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_transport (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        bus_required BOOLEAN DEFAULT false,
+        transport_route VARCHAR(100)
+      );
+    `);
+
+    // Create student_library
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_library (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        library_card_no VARCHAR(50),
+        rfid_tag VARCHAR(50)
+      );
+    `);
+
+    // Create student_medical
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_medical (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        medical_history TEXT,
+        vaccination_status VARCHAR(100),
+        fitness_certificate_url TEXT
+      );
+    `);
+
+    // Create student_bank_accounts
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_bank_accounts (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        bank_name VARCHAR(150),
+        account_number VARCHAR(50),
+        ifsc_code VARCHAR(20)
+      );
+    `);
+
+    // Create student_emergency_contacts
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_emergency_contacts (
+        student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        contact_name VARCHAR(200),
+        relationship VARCHAR(100),
+        phone VARCHAR(20)
+      );
+    `);
+
     // ── Subjects ───────────────────────────────────────────────────────────
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".subjects (
-        id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        code          VARCHAR(30)  UNIQUE NOT NULL,
-        name          VARCHAR(200) NOT NULL,
-        department_id UUID        REFERENCES "${schema}".departments(id),
-        batch_id      UUID        REFERENCES "${schema}".batches(id),
-        credits       INT          DEFAULT 0,
-        type          VARCHAR(20),
-        is_active     BOOLEAN      DEFAULT true
+        id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        code            VARCHAR(30)  UNIQUE NOT NULL,
+        name            VARCHAR(200) NOT NULL,
+        department_id   UUID        REFERENCES "${schema}".departments(id),
+        batch_id        UUID        REFERENCES "${schema}".batches(id),
+        credits         INT          DEFAULT 0,
+        type            VARCHAR(20),
+        is_longitudinal BOOLEAN      DEFAULT false,
+        is_active       BOOLEAN      DEFAULT true
+    `);
+
+    // ── Faculty Subjects junction ──────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".faculty_subjects (
+        id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        faculty_id  UUID        NOT NULL REFERENCES "${schema}".faculty(id) ON DELETE CASCADE,
+        subject_id  UUID        NOT NULL REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
+        is_active   BOOLEAN      DEFAULT true,
+        created_at  TIMESTAMPTZ  DEFAULT NOW(),
+        CONSTRAINT uq_faculty_subject UNIQUE (faculty_id, subject_id)
+      )
+    `);
+
+    // ── Delivery Types Master ──────────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".delivery_types (
+        id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        code        VARCHAR(10)  UNIQUE NOT NULL,
+        name        VARCHAR(50)  NOT NULL,
+        is_active   BOOLEAN      DEFAULT true NOT NULL
+      )
+    `);
+
+    // ── Subject Offerings Junction ──────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".subject_offerings (
+        id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        subject_id     UUID        NOT NULL REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
+        prof_id        UUID        NOT NULL REFERENCES "${schema}".professional_phases(id) ON DELETE CASCADE,
+        dtype_id       UUID        NOT NULL REFERENCES "${schema}".delivery_types(id) ON DELETE CASCADE,
+        batch_year     INTEGER     NOT NULL,
+        hours_allotted INTEGER     DEFAULT 0 NOT NULL,
+        is_active      BOOLEAN     DEFAULT true NOT NULL,
+        CONSTRAINT uq_subject_offering UNIQUE (subject_id, prof_id, dtype_id, batch_year)
       )
     `);
 
@@ -197,6 +812,7 @@ export class TenantSchemaService {
         faculty_id    UUID        REFERENCES "${schema}".faculty(id),
         subject_id    UUID        REFERENCES "${schema}".subjects(id),
         batch_id      UUID        REFERENCES "${schema}".batches(id),
+        offering_id   UUID        REFERENCES "${schema}".subject_offerings(id) ON DELETE CASCADE,
         session_date  DATE         NOT NULL,
         session_time  TIME,
         session_type  VARCHAR(20),
@@ -332,6 +948,33 @@ export class TenantSchemaService {
       )
     `);
 
+    // ── Question Bank ──────────────────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".question_bank (
+        id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        college_id         UUID,
+        department_id      UUID        REFERENCES "${schema}".departments(id) ON DELETE SET NULL,
+        subject_id         UUID        REFERENCES "${schema}".subjects(id) ON DELETE SET NULL,
+        professional_phase VARCHAR(100),
+        topic              VARCHAR(250),
+        mode               VARCHAR(20)  NOT NULL,
+        question_text      TEXT        NOT NULL,
+        option_a           TEXT,
+        option_b           TEXT,
+        option_c           TEXT,
+        option_d           TEXT,
+        correct_option     VARCHAR(20),
+        difficulty_level   VARCHAR(20)  DEFAULT 'Medium',
+        competency_code    VARCHAR(100),
+        has_sub_questions  BOOLEAN      DEFAULT false,
+        sub_questions      JSONB        DEFAULT '[]'::jsonb,
+        max_marks          NUMERIC(5,2) DEFAULT 1.00,
+        is_active          BOOLEAN      DEFAULT true,
+        created_at         TIMESTAMPTZ  DEFAULT NOW()
+      )
+    `);
+    await runner.query(`ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS topic VARCHAR(250)`);
+
     // ── Timetable Slots ────────────────────────────────────────────────────
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".timetable_slots (
@@ -344,9 +987,12 @@ export class TenantSchemaService {
         start_time      TIME         NOT NULL,
         end_time        TIME         NOT NULL,
         room            VARCHAR(50),
-        slot_type       VARCHAR(20),
+        slot_type       VARCHAR(50),
         effective_from  DATE,
-        effective_until DATE
+        effective_until DATE,
+        group_name      VARCHAR(100),
+        topic           VARCHAR(255),
+        competency_codes VARCHAR(255)
       )
     `);
 
@@ -529,11 +1175,123 @@ export class TenantSchemaService {
       )
     `);
 
+    // ── Courses ────────────────────────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".courses (
+        id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        code               VARCHAR(30) UNIQUE NOT NULL,
+        name               VARCHAR(200) NOT NULL,
+        degree_level       VARCHAR(50) DEFAULT 'UG',
+        duration_years     INT         DEFAULT 5,
+        professional_phase VARCHAR(100) DEFAULT '1st Professional (Phase I)',
+        is_active          BOOLEAN     DEFAULT true,
+        created_at         TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── Academic Sessions ──────────────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".academic_sessions (
+        id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        name         VARCHAR(100) NOT NULL,
+        start_date   DATE         NOT NULL,
+        end_date     DATE         NOT NULL,
+        is_current   BOOLEAN      DEFAULT false,
+        is_active    BOOLEAN      DEFAULT true,
+        created_at   TIMESTAMPTZ  DEFAULT NOW()
+      )
+    `);
+
+    // ── Professional Linkers ───────────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".professional_linkers (
+        id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        code               VARCHAR(50) NOT NULL,
+        name               VARCHAR(200) NOT NULL,
+        course_cd          VARCHAR(50),
+        professional_phase VARCHAR(100),
+        academic_session   VARCHAR(100),
+        description        TEXT,
+        is_active          BOOLEAN     DEFAULT true,
+        created_at         TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── Topic Master ───────────────────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".topics (
+        id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        subject_id   UUID        REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
+        linker_id    UUID        REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL,
+        code         VARCHAR(50) NOT NULL,
+        name         VARCHAR(200) NOT NULL,
+        description  TEXT,
+        hours        INT         DEFAULT 1,
+        is_active    BOOLEAN     DEFAULT true,
+        created_at         TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── Competency Master ──────────────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".competencies (
+        id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        subject_id   UUID        REFERENCES "${schema}".subjects(id) ON DELETE SET NULL,
+        topic_id     UUID        REFERENCES "${schema}".topics(id) ON DELETE SET NULL,
+        linker_id    UUID        REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL,
+        code         VARCHAR(50) NOT NULL,
+        description  TEXT        NOT NULL,
+        domain       VARCHAR(50) DEFAULT 'Knowledge',
+        level        VARCHAR(50) DEFAULT 'Knows How',
+        is_core      BOOLEAN     DEFAULT true,
+        is_active    BOOLEAN     DEFAULT true,
+        created_at         TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── Professional Phases ────────────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".professional_phases (
+        id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        college_id       VARCHAR(50),
+        course_cd        VARCHAR(50) DEFAULT 'MBBS',
+        name             VARCHAR(200) NOT NULL,
+        phase_order      INT         DEFAULT 1,
+        academic_system  VARCHAR(50) DEFAULT 'professional',
+        is_active        BOOLEAN     DEFAULT true,
+        created_at       TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── Student Phase Progressions (Promotion History) ─────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".student_phase_progressions (
+        id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id       UUID        REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        batch_id         VARCHAR(50),
+        from_phase_id    VARCHAR(50),
+        from_phase_name  VARCHAR(200),
+        to_phase_id      VARCHAR(50),
+        to_phase_name    VARCHAR(200),
+        academic_year    VARCHAR(50),
+        is_active        BOOLEAN     DEFAULT true,
+        promoted_at      TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     this.logger.log(`All tables created in schema: ${schema}`);
   }
 
   private async seedDefaultData(runner: QueryRunner, slug: string): Promise<void> {
-    const schema = `tenant_${slug}`;
+    const resolvedSlug = this.resolveTenantSlug(slug);
+    const schema = `tenant_${resolvedSlug}`;
+
+    // Add missing timetable_slots columns if updating existing schemas
+    await runner.query(`
+      ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
+      ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS topic VARCHAR(255);
+      ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS competency_codes VARCHAR(255);
+    `);
 
     // Seed default leave types
     await runner.query(`
@@ -544,6 +1302,29 @@ export class TenantSchemaService {
         ('ML',  'Maternity Leave',       180),
         ('COL', 'Compensatory Off Leave', 0)
       ON CONFLICT DO NOTHING
+    `);
+
+    // Seed default delivery types
+    await runner.query(`
+      INSERT INTO "${schema}".delivery_types (code, name) VALUES
+        ('TH',  'Theory'),
+        ('PR',  'Practical'),
+        ('AE',  'AETCOM'),
+        ('PD',  'Pandemic Module'),
+        ('CP',  'Clinical Posting')
+      ON CONFLICT (code) DO NOTHING
+    `);
+
+    // Seed standard NMC professional phases
+    await runner.query(`
+      INSERT INTO "${schema}".professional_phases (name, phase_order, course_cd, academic_system, is_active)
+      SELECT * FROM (VALUES
+        ('1st Professional MBBS (Phase I)', 1, 'MBBS', 'professional', true),
+        ('2nd Professional MBBS (Phase II)', 2, 'MBBS', 'professional', true),
+        ('3rd Professional MBBS Part I (Phase III-1)', 3, 'MBBS', 'professional', true),
+        ('3rd Professional MBBS Part II (Phase III-2)', 4, 'MBBS', 'professional', true)
+      ) AS tmp (name, phase_order, course_cd, academic_system, is_active)
+      WHERE NOT EXISTS (SELECT 1 FROM "${schema}".professional_phases LIMIT 1)
     `);
 
     this.logger.log(`Default data seeded for schema: ${schema}`);

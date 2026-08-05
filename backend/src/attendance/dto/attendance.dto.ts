@@ -28,6 +28,11 @@ export class AttendanceEntryDto {
 }
 
 export class CreateSessionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  offeringId?: string;
+
   @ApiProperty()
   @IsUUID()
   subjectId: string;

@@ -37,14 +37,20 @@ export class AuthService {
     let schema: string;
 
     if (tenantSlug) {
-      // Tenant-scoped login
+      // Tenant-scoped login: allow email, registration_no, or rollno
       schema = `tenant_${tenantSlug}`;
+      const searchIdentifier = dto.email.toLowerCase().trim();
       const rows = await this.ds.query(
-        `SELECT id, email, password_hash, role, is_active, must_change_password,
-                failed_login_count, locked_until, last_login_at
-         FROM "${schema}".users
-         WHERE email = $1 LIMIT 1`,
-        [dto.email.toLowerCase().trim()],
+        `SELECT u.id, u.email, u.password_hash, u.role, u.is_active, u.must_change_password,
+                u.failed_login_count, u.locked_until, u.last_login_at,
+                s.registration_no, s.rollno
+         FROM "${schema}".users u
+         LEFT JOIN "${schema}".students s ON s.user_id = u.id
+         WHERE LOWER(u.email) = $1
+            OR LOWER(COALESCE(s.registration_no, '')) = $1
+            OR LOWER(COALESCE(s.rollno, '')) = $1
+         LIMIT 1`,
+        [searchIdentifier],
       );
       user = rows[0];
     } else {
@@ -53,7 +59,7 @@ export class AuthService {
         `SELECT id, email, password_hash, role, is_active, must_change_password,
                 failed_login_count, locked_until, last_login_at
          FROM public.super_admins
-         WHERE email = $1 LIMIT 1`,
+         WHERE LOWER(email) = $1 LIMIT 1`,
         [dto.email.toLowerCase().trim()],
       );
       user = rows[0];
@@ -61,7 +67,7 @@ export class AuthService {
     }
 
     if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid email, registration number, or password');
     }
 
     if (!user.is_active) {
@@ -75,10 +81,28 @@ export class AuthService {
     }
 
     // Verify password
-    const isValid = await bcrypt.compare(dto.password, user.password_hash);
+    let isValid = await bcrypt.compare(dto.password, user.password_hash);
+
+    // Fallback: If student logs in using registration_no or rollno as password and bcrypt hash hasn't updated yet
+    if (!isValid && user.role === UserRole.STUDENT) {
+      const regNo = (user.registration_no || '').toLowerCase().trim();
+      const rollNo = (user.rollno || '').toLowerCase().trim();
+      const inputPass = dto.password.toLowerCase().trim();
+
+      if ((regNo && inputPass === regNo) || (rollNo && inputPass === rollNo)) {
+        isValid = true;
+        // Update user.password_hash to bcrypt hash of reg_no
+        const newHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+        await this.ds.query(
+          `UPDATE "${schema}".users SET password_hash = $1 WHERE id = $2`,
+          [newHash, user.id],
+        );
+      }
+    }
+
     if (!isValid) {
       await this.handleFailedLogin(user.id, schema, user.failed_login_count ?? 0);
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid email, registration number, or password');
     }
 
     // Reset failed attempts on success
@@ -301,13 +325,17 @@ export class AuthService {
     if (tenantSlug) {
       if (payload.role === UserRole.STUDENT) {
         const pRows = await this.ds.query(
-          `SELECT id, rollno, name, photo_url, course_cd, batch_cd FROM "${schema}".students WHERE user_id=$1`,
+          `SELECT id, rollno, registration_no, name, photo_url, course_cd, batch_cd FROM "${schema}".students WHERE user_id=$1`,
           [payload.sub],
         );
         profile = pRows[0] ?? null;
       } else if ([UserRole.FACULTY, UserRole.HOD, UserRole.CLERK].includes(payload.role)) {
         const pRows = await this.ds.query(
-          `SELECT id, emp_id, name, photo_url, designation FROM "${schema}".faculty WHERE user_id=$1`,
+          `SELECT f.id, f.emp_id, f.name, f.photo_url, f.designation, f.department_id, f.subject_id,
+                  d.name AS department_name, d.code AS department_code
+           FROM "${schema}".faculty f
+           LEFT JOIN "${schema}".departments d ON d.id = f.department_id
+           WHERE f.user_id=$1`,
           [payload.sub],
         );
         profile = pRows[0] ?? null;

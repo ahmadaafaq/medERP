@@ -4,3 +4,4 @@
 - Maintain schema-per-tenant isolation (`tenant_{slug}`).
 - Maintain dark-mode glassmorphism theme tokens (`primary: #6366F1`, `bg.dark: #0F172A`).
 - Verify backend build using `npm run build` in `backend/` before declaring completing work.
+- Never store in local storage but store in postgres.

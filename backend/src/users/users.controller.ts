@@ -1,12 +1,12 @@
 import {
-  Controller, Get, Post, Put, Patch, Body,
+  Controller, Get, Post, Put, Patch, Delete, Body,
   Param, Query, ParseUUIDPipe, UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import {
   CreateStudentDto, CreateFacultyDto, BulkCreateStudentsDto,
-  UpdateStudentDto, UpdateFacultyDto,
+  UpdateStudentDto, UpdateFacultyDto, GetStudentsQueryDto, GetFacultyQueryDto,
 } from './dto/user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -32,12 +32,13 @@ export class UsersController {
   @ApiQuery({ name: 'departmentId', required: false })
   getStudents(
     @TenantSlug() tenantSlug: string,
-    @Query() pagination: PaginationDto,
-    @Query('search') search?: string,
-    @Query('batchId') batchId?: string,
-    @Query('departmentId') departmentId?: string,
+    @Query() query: GetStudentsQueryDto,
   ) {
-    return this.usersService.getStudents(tenantSlug, pagination, { search, batchId, departmentId });
+    return this.usersService.getStudents(tenantSlug, query, {
+      search: query.search,
+      batchId: query.batchId,
+      departmentId: query.departmentId,
+    });
   }
 
   @Get('students/:id')
@@ -94,19 +95,24 @@ export class UsersController {
 
   // ─── Faculty / HOD / Clerk ────────────────────────────────────
   @Get('faculty')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD)
-  @ApiOperation({ summary: 'List faculty, HODs and clerks' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
+  @ApiOperation({ summary: 'List all faculty/staff members' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
   @ApiQuery({ name: 'role', required: false, enum: UserRole })
+  @ApiQuery({ name: 'staffType', required: false })
+  @ApiQuery({ name: 'isActive', required: false })
   getFaculty(
     @TenantSlug() tenantSlug: string,
-    @Query() pagination: PaginationDto,
-    @Query('search') search?: string,
-    @Query('departmentId') departmentId?: string,
-    @Query('role') role?: UserRole,
+    @Query() query: GetFacultyQueryDto,
   ) {
-    return this.usersService.getFaculty(tenantSlug, pagination, { search, departmentId, role });
+    return this.usersService.getFaculty(tenantSlug, query, {
+      search: query.search,
+      departmentId: query.departmentId,
+      role: query.role as UserRole,
+      staffType: query.staffType,
+      isActive: query.isActive,
+    });
   }
 
   @Get('faculty/:id')
@@ -138,6 +144,16 @@ export class UsersController {
     @Body() dto: UpdateFacultyDto,
   ) {
     return this.usersService.updateFaculty(tenantSlug, id, dto);
+  }
+
+  @Delete('faculty/:id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete faculty profile' })
+  deleteFaculty(
+    @TenantSlug() tenantSlug: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.usersService.deleteFaculty(tenantSlug, id);
   }
 
   // ─── Departments ───────────────────────────────────────────────
