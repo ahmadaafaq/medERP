@@ -43,16 +43,20 @@ export class ExaminationService {
     return res[0];
   }
 
-  async getStudentMarks(tenantSlug: string, rollno: string) {
+  async getStudentMarks(tenantSlug: string, identifier: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     return this.tenantSchemaService.queryInTenant(
-      tenantSlug,
-      `SELECT r.*, p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks
+      slug,
+      `SELECT r.*, p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks, p.type as paper_type, sub.name as subject_name
        FROM student_results r
        JOIN students s ON r.student_id = s.id
        JOIN examination_papers p ON r.paper_id = p.id
-       WHERE s.rollno = $1
+       LEFT JOIN subjects sub ON p.subject_id = sub.id
+       WHERE LOWER(COALESCE(s.rollno, '')) = LOWER($1)
+          OR LOWER(COALESCE(s.registration_no, '')) = LOWER($1)
+          OR s.id::text = $1
        ORDER BY r.created_at DESC`,
-      [rollno],
+      [identifier],
     );
   }
 

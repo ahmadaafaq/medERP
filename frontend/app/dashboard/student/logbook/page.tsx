@@ -52,7 +52,12 @@ export default function StudentLogbookPage() {
         });
         if (entriesRes.ok) {
           const json = await entriesRes.json();
-          setEntries(json || []);
+          const list = json.data !== undefined ? json.data : json;
+          if (Array.isArray(list) && list.length > 0) {
+            setEntries(list);
+          } else {
+            setFallbackEntries();
+          }
         } else {
           setFallbackEntries();
         }
