@@ -82,7 +82,7 @@ export default function MISAttendanceReportsPage() {
         const headers = { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` };
         
         const [batchRes, subRes, profRes] = await Promise.all([
-          fetch(`${API_BASE}/users/batches?tenant=${slug}`, { headers }),
+          fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers }),
           fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }),
           fetch(`${API_BASE}/college-master/professionals?tenant=${slug}`, { headers }),
         ]);
@@ -99,7 +99,9 @@ export default function MISAttendanceReportsPage() {
         if (subRes.ok) {
           const sJson = await subRes.json();
           const sList = sJson.data || sJson;
-          if (Array.isArray(sList)) setSubjects(sList);
+          if (Array.isArray(sList)) {
+            setSubjects(sList);
+          }
         }
 
         if (profRes.ok) {
@@ -133,7 +135,10 @@ export default function MISAttendanceReportsPage() {
         const res = await fetch(url, { headers });
         if (res.ok) {
           const json = await res.json();
-          setMatrixReport(json.data || json || null);
+          const extractedData = json.data !== undefined ? json.data : json;
+          setMatrixReport(extractedData || null);
+        } else {
+          setMatrixReport(null);
         }
       } else {
         let url = `${API_BASE}/attendance/batches/${selectedBatchId}/report?tenant=${slug}`;
@@ -144,11 +149,15 @@ export default function MISAttendanceReportsPage() {
         const res = await fetch(url, { headers });
         if (res.ok) {
           const json = await res.json();
-          setRosterReport(json.data || json || []);
+          const extractedData = json.data !== undefined ? json.data : json;
+          setRosterReport(Array.isArray(extractedData) ? extractedData : []);
+        } else {
+          setRosterReport([]);
         }
       }
     } catch (e) {
       console.error('Failed to fetch MIS report data', e);
+      setRosterReport([]);
     } finally {
       setLoading(false);
     }
@@ -359,9 +368,9 @@ export default function MISAttendanceReportsPage() {
                     onChange={(e) => setSelectedSubjectId(e.target.value)}
                     className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="all">All Subjects Combined</option>
+                    <option value="all" className="bg-slate-900 text-white font-bold">All Subjects Combined</option>
                     {subjects.map((s) => (
-                      <option key={s.id} value={s.id}>[{s.code}] {s.name}</option>
+                      <option key={s.id} value={s.id} className="bg-slate-900 text-white font-bold">[{s.code}] {s.name}</option>
                     ))}
                   </select>
                 </div>

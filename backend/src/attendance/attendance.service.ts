@@ -12,6 +12,20 @@ import { UserRole } from '../common/enums/role.enum';
 
 import { TenantSchemaService } from '../database/tenant-schema.service';
 
+function normalizeDateInput(dStr?: string): string | null {
+  if (!dStr) return null;
+  const trimmed = dStr.trim();
+  if (!trimmed) return null;
+  if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(trimmed)) {
+    const [day, month, year] = trimmed.split(/[-/]/);
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return trimmed;
+}
+
 @Injectable()
 export class AttendanceService {
   private readonly logger = new Logger(AttendanceService.name);
@@ -435,61 +449,173 @@ export class AttendanceService {
   } = {}) {
     const schema = this.getSchema(tenantSlug);
 
-    const conditions = [
-      `(ar.student_id = (SELECT id FROM "${schema}".students WHERE id::text = $1 OR LOWER(COALESCE(rollno,'')) = LOWER($1) OR LOWER(COALESCE(registration_no,'')) = LOWER($1) LIMIT 1) OR ar.student_id::text = $1)`
-    ];
-    const params: any[] = [studentId];
-    let i = 2;
+    let profName = '1st Professional MBBS (Phase I)';
+    let studentBatchId: string | null = null;
+    let resolvedStudentUuid: string | null = null;
 
-    if (filters.subjectId) { conditions.push(`s.subject_id=$${i++}`); params.push(filters.subjectId); }
-    if (filters.fromDate) { conditions.push(`s.session_date>=$${i++}`); params.push(filters.fromDate); }
-    if (filters.toDate) { conditions.push(`s.session_date<=$${i++}`); params.push(filters.toDate); }
+    try {
+      const studentProfRes = await this.ds.query(
+        `SELECT st.id AS student_uuid, sa.professional_phase, sa.batch_id
+         FROM "${schema}".students st
+         LEFT JOIN "${schema}".student_admissions sa ON sa.student_id = st.id
+         WHERE st.id::text = $1 
+            OR LOWER(COALESCE(st.rollno,''))          = LOWER($1) 
+            OR LOWER(COALESCE(st.registration_no,'')) = LOWER($1)
+            OR LOWER(COALESCE(st.name,''))            LIKE '%' || LOWER($1) || '%'
+         LIMIT 1`,
+        [studentId],
+      );
+      if (studentProfRes.length > 0) {
+        resolvedStudentUuid = studentProfRes[0].student_uuid;
+        if (studentProfRes[0].professional_phase) profName = studentProfRes[0].professional_phase;
+        if (studentProfRes[0].batch_id) studentBatchId = studentProfRes[0].batch_id;
+      }
+    } catch (e) {}
 
-    const rows = await this.ds.query(
-      `SELECT
-          sub.id AS subject_id,
-          sub.name AS subject_name,
-          sub.code AS subject_code,
-          COALESCE(prof.name, 'General Phase') AS prof_name,
-          COALESCE(dt.name, s.session_type) AS delivery_type_name,
-          COALESCE(dt.code, s.session_type) AS delivery_type_code,
-          COUNT(ar.id) AS total_classes,
-          COUNT(ar.id) FILTER (WHERE ar.status = 'PRESENT') AS present,
-          COUNT(ar.id) FILTER (WHERE ar.status = 'ABSENT') AS absent,
-          COUNT(ar.id) FILTER (WHERE ar.status = 'LATE') AS late,
-          COUNT(ar.id) FILTER (WHERE ar.status = 'EXCUSED') AS excused,
-          ROUND(
-            (COUNT(ar.id) FILTER (WHERE ar.status IN ('PRESENT','LATE')) * 100.0)
-            / NULLIF(COUNT(ar.id), 0), 2
-          ) AS attendance_percentage
-       FROM "${schema}".attendance_records ar
-       JOIN "${schema}".attendance_sessions s ON s.id = ar.session_id
-       JOIN "${schema}".subjects sub ON sub.id = s.subject_id
-       LEFT JOIN "${schema}".subject_offerings so ON so.id = s.offering_id
-       LEFT JOIN "${schema}".professional_phases prof ON prof.id = so.prof_id
-       LEFT JOIN "${schema}".delivery_types dt ON dt.id = so.dtype_id
-       WHERE ${conditions.join(' AND ')}
-         AND s.is_cancelled = false
-       GROUP BY sub.id, sub.name, sub.code, prof.name, dt.name, dt.code, s.session_type
-       ORDER BY sub.name ASC, prof_name ASC, delivery_type_code ASC`,
-      params,
-    );
+    // ── Step 1: Fetch actual attendance records for this student ──
+    // Match student by UUID, rollno, registration_no, OR direct student_id match
+    const attParams: any[] = [studentId];
+    if (resolvedStudentUuid && resolvedStudentUuid !== studentId) {
+      attParams.push(resolvedStudentUuid);
+    }
 
-    const totalClasses = rows.reduce((acc: number, r: any) => acc + parseInt(r.total_classes), 0);
-    const totalPresent = rows.reduce((acc: number, r: any) => acc + parseInt(r.present), 0);
+    const targetMatchClause = resolvedStudentUuid && resolvedStudentUuid !== studentId
+      ? `(ar.student_id = $1 OR ar.student_id = $2 OR ar.student_id::text = $1 OR ar.student_id::text = $2)`
+      : `(ar.student_id::text = $1 OR ar.student_id IN (
+          SELECT id FROM "${schema}".students 
+          WHERE id::text = $1 
+             OR LOWER(COALESCE(rollno,''))          = LOWER($1) 
+             OR LOWER(COALESCE(registration_no,'')) = LOWER($1)
+        ))`;
+
+    const attConditions = [targetMatchClause, `s.is_cancelled = false`];
+    let ai = attParams.length + 1;
+
+    if (filters.subjectId && filters.subjectId !== 'all') {
+      attConditions.push(`s.subject_id = $${ai++}`);
+      attParams.push(filters.subjectId);
+    }
+    if (filters.fromDate) {
+      attConditions.push(`s.session_date::text >= $${ai++}`);
+      attParams.push(filters.fromDate);
+    }
+    if (filters.toDate) {
+      attConditions.push(`s.session_date::text <= $${ai++}`);
+      attParams.push(filters.toDate);
+    }
+
+    let actualAttRows: any[] = [];
+    try {
+      actualAttRows = await this.ds.query(
+        `SELECT
+            sub.id                                                              AS subject_id,
+            sub.name                                                            AS subject_name,
+            sub.code                                                            AS subject_code,
+            COUNT(ar.id)                                                        AS total_classes,
+            COUNT(ar.id) FILTER (WHERE ar.status = 'PRESENT')                  AS present,
+            COUNT(ar.id) FILTER (WHERE ar.status = 'ABSENT')                   AS absent,
+            COUNT(ar.id) FILTER (WHERE ar.status = 'LATE')                     AS late,
+            COUNT(ar.id) FILTER (WHERE ar.status = 'EXCUSED')                  AS excused,
+            COALESCE(
+              ROUND(
+                (COUNT(ar.id) FILTER (WHERE ar.status IN ('PRESENT','LATE')) * 100.0)
+                / NULLIF(COUNT(ar.id), 0), 2
+              ), 0.00
+            ) AS attendance_percentage
+         FROM "${schema}".attendance_records ar
+         JOIN "${schema}".attendance_sessions s ON s.id = ar.session_id
+         JOIN "${schema}".subjects sub ON sub.id = s.subject_id
+         WHERE ${attConditions.join(' AND ')}
+         GROUP BY sub.id, sub.name, sub.code
+         ORDER BY sub.name ASC`,
+        attParams,
+      );
+    } catch (e) {
+      console.error('[attendance] Error fetching actual attendance rows:', e);
+    }
+
+
+    // ── Step 2: Fetch timetable subjects for this student's batch ──
+    let timetableSubjects: any[] = [];
+    if (studentBatchId) {
+      try {
+        timetableSubjects = await this.ds.query(
+          `SELECT DISTINCT sub.id, sub.name, sub.code
+           FROM "${schema}".timetable_slots ts
+           JOIN "${schema}".subjects sub ON sub.id = ts.subject_id
+           WHERE ts.batch_id = $1 AND ts.subject_id IS NOT NULL
+           ORDER BY sub.name ASC`,
+          [studentBatchId],
+        );
+      } catch (e) {}
+    }
+
+    // ── Step 3: Combine actual attendance rows with timetable subjects ──
+    const subjectResultMap = new Map<string, any>();
+
+    // First add all actual attendance rows (subjects with marked records)
+    for (const r of actualAttRows) {
+      subjectResultMap.set(r.subject_id, {
+        subject_id:            r.subject_id,
+        subject_name:          r.subject_name,
+        subject_code:          r.subject_code,
+        prof_name:             profName,
+        delivery_type_name:    'Theory & Practical',
+        delivery_type_code:    'ALL',
+        total_classes:         parseInt(r.total_classes || 0),
+        present:               parseInt(r.present || 0),
+        absent:                parseInt(r.absent || 0),
+        late:                  parseInt(r.late || 0),
+        excused:               parseInt(r.excused || 0),
+        attendance_percentage: parseFloat(r.attendance_percentage || 0.00),
+      });
+    }
+
+    // Next add any timetable subject that doesn't have attendance records yet
+    for (const ts of timetableSubjects) {
+      if (!subjectResultMap.has(ts.id) && (filters.subjectId === 'all' || !filters.subjectId || filters.subjectId === ts.id)) {
+        // Also check if matched by subject name/code
+        const matchByName = Array.from(subjectResultMap.values()).some(
+          (item) => item.subject_name.toLowerCase() === ts.name.toLowerCase() || item.subject_code.toLowerCase() === ts.code.toLowerCase()
+        );
+        if (!matchByName) {
+          subjectResultMap.set(ts.id, {
+            subject_id:            ts.id,
+            subject_name:          ts.name,
+            subject_code:          ts.code,
+            prof_name:             profName,
+            delivery_type_name:    'Theory & Practical',
+            delivery_type_code:    'ALL',
+            total_classes:         0,
+            present:               0,
+            absent:                0,
+            late:                  0,
+            excused:               0,
+            attendance_percentage: 0.00,
+          });
+        }
+      }
+    }
+
+    const subjects = Array.from(subjectResultMap.values());
+    const totalClasses = subjects.reduce((acc: number, r: any) => acc + r.total_classes, 0);
+    const totalPresent = subjects.reduce((acc: number, r: any) => acc + r.present, 0);
 
     return {
-      subjects: rows,
+      subjects,
+      timetableSubjects: timetableSubjects.length > 0 ? timetableSubjects : actualAttRows.map(a => ({ id: a.subject_id, name: a.subject_name, code: a.subject_code })),
       overall: {
         totalClasses,
         totalPresent,
-        percentage:
-          totalClasses > 0
-            ? parseFloat(((totalPresent / totalClasses) * 100).toFixed(2))
-            : 0,
+        percentage: totalClasses > 0
+          ? parseFloat(((totalPresent / totalClasses) * 100).toFixed(2))
+          : 0.00,
       },
     };
   }
+
+
+
 
   // ─── Get student day-to-day attendance logs ────────────────────────────────
   async getStudentAttendanceLogs(
@@ -558,21 +684,40 @@ export class AttendanceService {
   ) {
     const schema = this.getSchema(tenantSlug);
 
-    const conditions = [`s.batch_id=$1`, `s.is_cancelled=false`];
-    const params: any[] = [batchId];
-    let i = 2;
+    let batchUuid = batchId;
+    let batchCode = batchId;
+    try {
+      const bRows = await this.ds.query(
+        `SELECT id, code FROM "${schema}".batches WHERE id::text = $1 OR code ILIKE $1 LIMIT 1`,
+        [batchId],
+      );
+      if (bRows.length) {
+        batchUuid = bRows[0].id;
+        batchCode = bRows[0].code;
+      }
+    } catch (e) {}
+
+    const normFromDate = normalizeDateInput(fromDate);
+    const normToDate = normalizeDateInput(toDate);
+
+    const conditions = [
+      `(s.batch_id = $1 OR s.batch_id = $2 OR s.batch_id IN (SELECT id::text FROM "${schema}".batches WHERE code ILIKE $1 OR code ILIKE $2 OR id::text = $1))`,
+      `s.is_cancelled = false`
+    ];
+    const params: any[] = [batchUuid, batchCode];
+    let i = 3;
 
     if (subjectId && subjectId !== 'all') {
-      conditions.push(`s.subject_id=$${i++}`);
+      conditions.push(`s.subject_id = $${i++}`);
       params.push(subjectId);
     }
-    if (fromDate) {
+    if (normFromDate) {
       conditions.push(`s.session_date::text >= $${i++}`);
-      params.push(fromDate);
+      params.push(normFromDate);
     }
-    if (toDate) {
+    if (normToDate) {
       conditions.push(`s.session_date::text <= $${i++}`);
-      params.push(toDate);
+      params.push(normToDate);
     }
 
     return this.ds.query(
@@ -601,12 +746,12 @@ export class AttendanceService {
             ) FILTER (WHERE s.id IS NOT NULL AND ar.id IS NOT NULL AND ar.status IS NOT NULL), '[]'
           ) AS subject_sessions
        FROM "${schema}".students st
+       LEFT JOIN "${schema}".student_admissions sa ON sa.student_id = st.id
        LEFT JOIN "${schema}".attendance_sessions s ON ${conditions.join(' AND ')}
        LEFT JOIN "${schema}".attendance_records ar ON ar.session_id = s.id AND ar.student_id = st.id
        LEFT JOIN "${schema}".subjects sub ON sub.id = s.subject_id
-       WHERE (st.batch_id = $1 OR ar.id IS NOT NULL)
+       WHERE (st.batch_id = $1 OR st.batch_id = $2 OR sa.batch_id = $1 OR sa.batch_id = $2 OR sa.batch_code ILIKE $1 OR sa.batch_code ILIKE $2 OR ar.id IS NOT NULL)
        GROUP BY st.id, st.registration_no, st.rollno, st.name
-       HAVING COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END) > 0 OR st.batch_id = $1
        ORDER BY COALESCE(st.registration_no, st.rollno) ASC, st.name ASC`,
       params,
     );
@@ -621,21 +766,40 @@ export class AttendanceService {
   ) {
     const schema = this.getSchema(tenantSlug);
 
+    let batchUuid = batchId;
+    let batchCode = batchId;
+    try {
+      const bRows = await this.ds.query(
+        `SELECT id, code FROM "${schema}".batches WHERE id::text = $1 OR code ILIKE $1 LIMIT 1`,
+        [batchId],
+      );
+      if (bRows.length) {
+        batchUuid = bRows[0].id;
+        batchCode = bRows[0].code;
+      }
+    } catch (e) {}
+
+    const normFromDate = normalizeDateInput(fromDate);
+    const normToDate = normalizeDateInput(toDate);
+
     const subjects = await this.ds.query(
       `SELECT id, name, code FROM "${schema}".subjects ORDER BY code ASC`,
     );
 
-    const sessConditions = [`s.batch_id = $1`, `s.is_cancelled = false`];
-    const params: any[] = [batchId];
-    let i = 2;
+    const sessConditions = [
+      `(s.batch_id = $1 OR s.batch_id = $2 OR s.batch_id IN (SELECT id::text FROM "${schema}".batches WHERE code ILIKE $1 OR code ILIKE $2 OR id::text = $1))`,
+      `s.is_cancelled = false`
+    ];
+    const params: any[] = [batchUuid, batchCode];
+    let i = 3;
 
-    if (fromDate) {
+    if (normFromDate) {
       sessConditions.push(`s.session_date::text >= $${i++}`);
-      params.push(fromDate);
+      params.push(normFromDate);
     }
-    if (toDate) {
+    if (normToDate) {
       sessConditions.push(`s.session_date::text <= $${i++}`);
-      params.push(toDate);
+      params.push(normToDate);
     }
 
     const rows = await this.ds.query(
@@ -652,12 +816,12 @@ export class AttendanceService {
             / NULLIF(COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END), 0), 2
           ) AS attendance_pct
        FROM "${schema}".students st
+       LEFT JOIN "${schema}".student_admissions sa ON sa.student_id = st.id
        LEFT JOIN "${schema}".attendance_sessions s ON ${sessConditions.join(' AND ')}
        LEFT JOIN "${schema}".attendance_records ar ON ar.session_id = s.id AND ar.student_id = st.id
        LEFT JOIN "${schema}".subjects sub ON sub.id = s.subject_id
-       WHERE (st.batch_id = $1 OR ar.id IS NOT NULL)
+       WHERE (st.batch_id = $1 OR st.batch_id = $2 OR sa.batch_id = $1 OR sa.batch_id = $2 OR sa.batch_code ILIKE $1 OR sa.batch_code ILIKE $2 OR ar.id IS NOT NULL)
        GROUP BY st.id, st.registration_no, st.rollno, st.name, s.subject_id, sub.code
-       HAVING COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END) > 0 OR st.batch_id = $1
        ORDER BY COALESCE(st.registration_no, st.rollno) ASC, st.name ASC`,
       params,
     );
