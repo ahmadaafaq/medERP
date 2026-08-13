@@ -272,13 +272,26 @@ export class StudentMasterService {
         throw new BadRequestException(`Registration number ${regNo} already exists.`);
       }
 
-      // 2. Insert into students table
+      // 2. Create matching user record in users table for student login
+      const studentEmail = dto.emailAddress?.trim() || `${regNo.toLowerCase()}@srms.ac.in`;
+      const defaultHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.'; // Hash for Password@123 / regNo
+      const userRows = await runner.query(
+        `INSERT INTO users (email, password_hash, role, onboarding_completed, must_change_password)
+         VALUES ($1, $2, 'STUDENT', true, false)
+         ON CONFLICT (email) DO UPDATE SET is_active = true
+         RETURNING id`,
+        [studentEmail.toLowerCase(), defaultHash],
+      );
+      const userId = userRows[0]?.id;
+
+      // 3. Insert into students table with linked user_id
       const name = `${dto.firstName} ${dto.middleName ? dto.middleName + ' ' : ''}${dto.lastName}`.trim();
       const studentRows = await runner.query(
         `INSERT INTO students (
-           name, rollno, registration_no, is_active, phone, blood_group, photo_url
-         ) VALUES ($1, $2, $3, true, $4, $5, $6) RETURNING id`,
+           user_id, name, rollno, registration_no, is_active, phone, blood_group, photo_url
+         ) VALUES ($1, $2, $3, $4, true, $5, $6, $7) RETURNING id`,
         [
+          userId || null,
           name,
           dto.rollNo || null,
           regNo,

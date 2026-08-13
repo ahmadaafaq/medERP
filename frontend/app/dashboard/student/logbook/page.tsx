@@ -115,64 +115,67 @@ export default function StudentLogbookPage() {
   });
 
   return (
-    <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 transition-colors">
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#4E5969] dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar role="student" />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Student Academic Portal — UG Logbook" />
         <main className="p-6 space-y-6 flex-1">
           {/* Header Action Banner */}
-          <div className="glass-card p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-6 rounded-[22px] bg-gradient-to-r from-[#2D2575] via-[#3E3498] to-[#2D2575] text-white shadow-soft flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-black text-white tracking-tight uppercase">UG Clinical Logbook Tracker</h2>
-              <p className="text-xs text-slate-400">Record procedures, ward rounds, case presentations & faculty sign-offs</p>
+              <span className="text-[10px] font-extrabold text-[#F36C21] uppercase tracking-widest bg-white/10 px-3 py-1 rounded-full border border-white/20">
+                NMC CBME Logbook System
+              </span>
+              <h2 className="text-2xl font-black text-white mt-1">UG Clinical Logbook Tracker</h2>
+              <p className="text-xs text-white/80">Record procedures, ward rounds, case presentations & faculty sign-offs</p>
             </div>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+              className="px-4 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3FE3] text-white text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
             >
               <span>+</span> Submit New UG Entry
             </button>
           </div>
 
           {/* Metric Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="glass-card p-4 space-y-1">
-              <span className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Total Submissions</span>
-              <p className="text-2xl font-black text-white">{totalEntries}</p>
-              <span className="text-[11px] text-slate-400">UG Logbook Entries</span>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+            <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-1">
+              <span className="text-[11px] font-bold uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">Total Submissions</span>
+              <p className="text-3xl font-black text-[#1B1E28] dark:text-white">{totalEntries}</p>
+              <span className="text-[11px] text-[#4E5969] dark:text-slate-400">UG Logbook Entries</span>
             </div>
-            <div className="glass-card p-4 space-y-1">
-              <span className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Verified Entries</span>
-              <p className="text-2xl font-black text-emerald-400">{verifiedCount}</p>
-              <span className="text-[11px] text-emerald-400 font-medium">Faculty Sign-Off Completed</span>
+            <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-1">
+              <span className="text-[11px] font-bold uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">Verified Entries</span>
+              <p className="text-3xl font-black text-[#00C48C]">{verifiedCount}</p>
+              <span className="text-[11px] text-[#00C48C] font-bold">Faculty Sign-Off Completed</span>
             </div>
-            <div className="glass-card p-4 space-y-1">
-              <span className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Pending Verification</span>
-              <p className="text-2xl font-black text-amber-400">{pendingCount}</p>
-              <span className="text-[11px] text-amber-400 font-medium">Awaiting Department Review</span>
+            <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-1">
+              <span className="text-[11px] font-bold uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">Pending Verification</span>
+              <p className="text-3xl font-black text-[#FFB020]">{pendingCount}</p>
+              <span className="text-[11px] text-[#FFB020] font-bold">Awaiting Department Review</span>
             </div>
-            <div className="glass-card p-4 space-y-1">
-              <span className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Competency Completion</span>
-              <p className="text-2xl font-black text-indigo-400">
+            <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-1">
+              <span className="text-[11px] font-bold uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">Competency Completion</span>
+              <p className="text-3xl font-black text-[#5B4BFF]">
                 {totalEntries > 0 ? `${Math.round((verifiedCount / totalEntries) * 100)}%` : '0%'}
               </p>
-              <span className="text-[11px] text-slate-400">NMC UG Competency Progress</span>
+              <span className="text-[11px] text-[#4E5969] dark:text-slate-400">NMC UG Competency Progress</span>
             </div>
           </div>
 
           {/* Logbook Entries Table Card */}
-          <div className="glass-card p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-extrabold uppercase text-white tracking-wider">Logbook Submissions Ledger</h3>
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
+              <h3 className="text-base font-black uppercase text-[#1B1E28] dark:text-white tracking-wider">Logbook Submissions Ledger</h3>
 
               {/* Status Filter Tabs */}
-              <div className="flex items-center gap-1 p-1 bg-slate-900 rounded-lg border border-slate-800 text-xs font-semibold">
+              <div className="flex items-center gap-1 p-1 bg-[#F6F8FC] dark:bg-slate-950 rounded-xl border border-[#E7EAF3] dark:border-slate-800 text-xs font-semibold">
                 {(['ALL', 'VERIFIED', 'PENDING'] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-3 py-1 rounded-md transition-all ${
-                      activeTab === tab ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      activeTab === tab ? 'bg-[#5B4BFF] text-white shadow-md font-bold' : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28]'
                     }`}
                   >
                     {tab === 'ALL' ? 'All Entries' : tab.charAt(0) + tab.slice(1).toLowerCase()}

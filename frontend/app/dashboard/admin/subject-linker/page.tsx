@@ -46,7 +46,7 @@ interface Department {
 }
 
 const API_BASE = 'http://localhost:3001/api/v1';
-const TENANT = 'srms';
+const TENANT = 'srms-ims';
 
 export default function SubjectLinkerPage() {
   const [links, setLinks] = useState<FacultySubjectLink[]>([]);

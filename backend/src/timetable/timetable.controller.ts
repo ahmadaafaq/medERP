@@ -22,14 +22,18 @@ export class TimetableController {
   @ApiQuery({ name: 'departmentId', required: false })
   @ApiQuery({ name: 'batchId', required: false })
   @ApiQuery({ name: 'dayOfWeek', required: false })
+  @ApiQuery({ name: 'facultyId', required: false })
+  @ApiQuery({ name: 'subjectId', required: false })
   async listSlots(
     @TenantSlug() tenantSlug: string,
     @Query('departmentId') departmentId?: string,
     @Query('batchId') batchId?: string,
     @Query('dayOfWeek') dayOfWeek?: string,
+    @Query('facultyId') facultyId?: string,
+    @Query('subjectId') subjectId?: string,
   ) {
     const day = dayOfWeek !== undefined && dayOfWeek !== '' ? parseInt(dayOfWeek, 10) : undefined;
-    const data = await this.timetableService.listSlots(tenantSlug, { departmentId, batchId, dayOfWeek: day });
+    const data = await this.timetableService.listSlots(tenantSlug, { departmentId, batchId, dayOfWeek: day, facultyId, subjectId });
     return { success: true, data };
   }
 

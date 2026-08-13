@@ -174,6 +174,17 @@ export class UsersController {
     return this.usersService.createDepartment(tenantSlug, data);
   }
 
+  // ─── Subjects ──────────────────────────────────────────────────
+  @Get('subjects')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK, UserRole.STUDENT)
+  @ApiOperation({ summary: 'List subjects filtered by department' })
+  getSubjects(
+    @TenantSlug() tenantSlug: string,
+    @Query('departmentId') departmentId?: string,
+  ) {
+    return this.usersService.getSubjects(tenantSlug, departmentId);
+  }
+
   // ─── Batches ───────────────────────────────────────────────────
   @Get('batches')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK, UserRole.STUDENT)

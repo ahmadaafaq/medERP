@@ -1,33 +1,42 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 interface SidebarProps {
-  role: 'student' | 'faculty' | 'admin' | 'warden';
+  role: 'student' | 'faculty' | 'admin' | 'warden' | 'clerk';
 }
 
 export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
+  const [misReportsOpen, setMisReportsOpen] = useState(true);
+
+  useEffect(() => {
+    if (pathname?.startsWith('/dashboard/faculty/reports')) {
+      setMisReportsOpen(true);
+    }
+  }, [pathname]);
 
   const getLinkClass = (href: string) => {
-    const isActive = pathname === href || (href !== '/dashboard/admin' && pathname.startsWith(href));
+    const isRootTab = href === '/dashboard/faculty' || href === '/dashboard/student' || href === '/dashboard/admin' || href === '/dashboard/clerk' || href === '/dashboard/warden';
+    const isActive = isRootTab ? pathname === href : (pathname === href || (!!pathname && pathname.startsWith(href)));
     return isActive
-      ? 'flex items-center gap-2.5 px-3.5 py-2.5 rounded-r-lg font-bold text-indigo-600 dark:text-indigo-400 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-l-[3px] border-indigo-500/90 shadow-[inset_1px_0_0_rgba(99,102,241,0.1)] transition-all group'
-      : 'flex items-center gap-2.5 px-3.5 py-2.5 rounded-r-lg font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 border-l-[3px] border-transparent transition-all group';
+      ? 'flex items-center gap-2.5 px-3.5 py-2.5 rounded-r-xl font-bold text-white bg-white/15 border-l-4 border-[#F36C21] shadow-lg shadow-purple-950/20 backdrop-blur-md transition-all group'
+      : 'flex items-center gap-2.5 px-3.5 py-2.5 rounded-r-xl font-medium text-purple-200/80 hover:text-white hover:bg-white/10 border-l-4 border-transparent transition-all group';
   };
 
   return (
-    <aside className="w-64 bg-gradient-to-b from-slate-50 via-slate-100/90 to-slate-50 dark:from-slate-950 dark:via-[#0b0f19]/90 dark:to-slate-950 border-r border-slate-200/50 dark:border-slate-800/50 p-4 sticky top-0 h-screen overflow-y-auto flex flex-col justify-between shrink-0 transition-colors z-20 shadow-[4px_0_24px_rgba(0,0,0,0.01)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.25)]">
+    <aside className="w-64 bg-[#2D2575] text-white p-4 sticky top-0 h-screen overflow-y-auto flex flex-col justify-between shrink-0 transition-colors z-20 shadow-2xl shadow-purple-950/40 rounded-r-none">
       <div className="space-y-6">
         {/* Brand Header */}
-        <div className="flex items-center gap-3 px-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center font-black text-white text-sm shadow-md shadow-indigo-600/35 border border-indigo-400/20">
+        <div className="flex items-center gap-3 px-2 pt-1 pb-3 border-b border-white/10">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#F36C21] via-orange-500 to-amber-500 flex items-center justify-center font-black text-white text-base shadow-lg shadow-orange-500/30 border border-white/20">
             M
           </div>
           <div>
-            <h1 className="font-black text-xs text-slate-800 dark:text-white tracking-wide uppercase">MedERP Portal</h1>
-            <p className="text-[9px] text-indigo-500 dark:text-indigo-400 font-extrabold uppercase tracking-wider">{role} space</p>
+            <h1 className="font-black text-sm text-white tracking-wide uppercase">MedERP Portal</h1>
+            <p className="text-[10px] text-[#F36C21] font-extrabold uppercase tracking-wider">{role} space</p>
           </div>
         </div>
 
@@ -152,32 +161,161 @@ export default function Sidebar({ role }: SidebarProps) {
                 <span>Teaching Dashboard</span>
               </Link>
 
-              <Link href="/dashboard/admin/attendance-master" className={getLinkClass('/dashboard/admin/attendance-master')}>
+              <Link href="/dashboard/faculty/profile" className={getLinkClass('/dashboard/faculty/profile')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>Faculty Profile</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/students" className={getLinkClass('/dashboard/faculty/students')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0112 20.055a11.952 11.952 0 01-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                </svg>
+                <span>Student Info</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/department-faculty" className={getLinkClass('/dashboard/faculty/department-faculty')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>Department Faculty</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/schedule" className={getLinkClass('/dashboard/faculty/schedule')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Schedule</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/attendance" className={getLinkClass('/dashboard/faculty/attendance')}>
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
                 <span>Attendance Marking</span>
               </Link>
 
-              <Link href="/dashboard/admin/assessment" className={getLinkClass('/dashboard/admin/assessment')}>
+              <Link href="/dashboard/faculty/assessment" className={getLinkClass('/dashboard/faculty/assessment')}>
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span>Assessment & Q-Bank</span>
               </Link>
 
-              <Link href="/dashboard/admin/assessment-marks" className={getLinkClass('/dashboard/admin/assessment-marks')}>
+              <Link href="/dashboard/faculty/marks" className={getLinkClass('/dashboard/faculty/marks')}>
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                <span>Assessment Marks Entry</span>
+                <span>Assessment Marks</span>
               </Link>
 
-              <Link href="/dashboard/admin/ug-logbook/evaluation" className={getLinkClass('/dashboard/admin/ug-logbook/evaluation')}>
+              <Link href="/dashboard/faculty/logbook" className={getLinkClass('/dashboard/faculty/logbook')}>
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
                 <span>UG Logbook Evaluation</span>
+              </Link>
+
+              {/* Expandable MIS Reports Accordion */}
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setMisReportsOpen(!misReportsOpen)}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-r-xl font-bold transition-all group ${
+                    pathname?.startsWith('/dashboard/faculty/reports') || misReportsOpen
+                      ? 'text-white bg-white/15 border-l-4 border-[#F36C21] shadow-lg shadow-purple-950/20'
+                      : 'text-purple-200/80 hover:text-white hover:bg-white/10 border-l-4 border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>MIS Reports</span>
+                  </div>
+                  <span className="w-5 h-5 rounded-md bg-white/20 text-white font-black flex items-center justify-center text-xs shadow-inner">
+                    {misReportsOpen ? '−' : '+'}
+                  </span>
+                </button>
+
+                {misReportsOpen && (
+                  <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-white/10 ml-3">
+                    <Link
+                      href="/dashboard/faculty/reports"
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === '/dashboard/faculty/reports' || pathname === '/dashboard/faculty/reports/attendance'
+                          ? 'font-black text-white bg-[#5B4BFF] shadow-sm'
+                          : 'font-medium text-purple-200/70 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]"></span>
+                      <span>1. Attendance Report</span>
+                    </Link>
+
+                    <Link
+                      href="/dashboard/faculty/reports/logbook"
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === '/dashboard/faculty/reports/logbook'
+                          ? 'font-black text-white bg-[#5B4BFF] shadow-sm'
+                          : 'font-medium text-purple-200/70 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
+                      <span>2. UG LogBook Report</span>
+                    </Link>
+
+                    <Link
+                      href="/dashboard/faculty/reports/theory-result"
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === '/dashboard/faculty/reports/theory-result' || pathname === '/dashboard/faculty/reports/theory'
+                          ? 'font-black text-white bg-[#5B4BFF] shadow-sm'
+                          : 'font-medium text-purple-200/70 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#FFB020]"></span>
+                      <span>3. Theory Result</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : role === 'warden' ? (
+            <>
+              <Link href="/dashboard/warden" className={getLinkClass('/dashboard/warden')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                <span>Hostel Warden Console</span>
+              </Link>
+              <Link href="/dashboard/admin/student-master" className={getLinkClass('/dashboard/admin/student-master')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                </svg>
+                <span>Resident Roster</span>
+              </Link>
+            </>
+          ) : role === 'clerk' ? (
+            <>
+              <Link href="/dashboard/clerk" className={getLinkClass('/dashboard/clerk')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Clerk Data Entry</span>
+              </Link>
+              <Link href="/dashboard/admin/attendance-master" className={getLinkClass('/dashboard/admin/attendance-master')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span>Attendance Entry</span>
+              </Link>
+              <Link href="/dashboard/admin/assessment-marks" className={getLinkClass('/dashboard/admin/assessment-marks')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Marks Entry</span>
               </Link>
             </>
           ) : (
@@ -193,7 +331,7 @@ export default function Sidebar({ role }: SidebarProps) {
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                <span>Time Table</span>
+                <span>Schedule</span>
               </Link>
 
               <Link href="/dashboard/student/schedule" className={getLinkClass('/dashboard/student/schedule')}>

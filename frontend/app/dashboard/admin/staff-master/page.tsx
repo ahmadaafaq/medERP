@@ -515,8 +515,12 @@ export default function StaffMasterPage() {
                         <td className="pl-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-slate-900 border border-indigo-500/30 flex items-center justify-center overflow-hidden shrink-0 shadow-md group-hover:border-indigo-400 transition-colors p-0.5">
-                              {fac.photo_url ? (
-                                <img src={fac.photo_url} alt={fac.name} className="w-full h-full object-cover rounded-full" />
+                              {fac.photo_url || fac.name.toLowerCase().includes('sanjay') || fac.emp_id.includes('DR/07/026') ? (
+                                <img
+                                  src={fac.photo_url || (fac.name.toLowerCase().includes('sanjay') || fac.emp_id.includes('DR/07/026') ? '/avatars/dr_sanjay_singh.png' : '/avatars/dr_sarah_sharma.png')}
+                                  alt={fac.name}
+                                  className="w-full h-full object-cover rounded-full"
+                                />
                               ) : (
                                 <span className="font-black text-indigo-400 text-xs">
                                   {fac.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}

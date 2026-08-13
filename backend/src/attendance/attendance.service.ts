@@ -12,18 +12,29 @@ import { UserRole } from '../common/enums/role.enum';
 
 import { TenantSchemaService } from '../database/tenant-schema.service';
 
+function parseToLocalDateString(dateInput: any): string {
+  if (!dateInput) return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(trimmed)) {
+      const [day, month, year] = trimmed.split(/[-/]/);
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    if (trimmed.includes('T')) {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(trimmed));
+    }
+    return trimmed.split(' ')[0];
+  }
+  if (dateInput instanceof Date) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(dateInput);
+  }
+  return String(dateInput).split('T')[0];
+}
+
 function normalizeDateInput(dStr?: string): string | null {
   if (!dStr) return null;
-  const trimmed = dStr.trim();
-  if (!trimmed) return null;
-  if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(trimmed)) {
-    const [day, month, year] = trimmed.split(/[-/]/);
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-  return trimmed;
+  return parseToLocalDateString(dStr);
 }
 
 @Injectable()
@@ -48,6 +59,12 @@ export class AttendanceService {
       await this.ds.query(`ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS timetable_slot_id UUID`);
       await this.ds.query(`ALTER TABLE "${schema}".attendance_records ADD COLUMN IF NOT EXISTS remarks VARCHAR(500)`);
       await this.ds.query(`ALTER TABLE "${schema}".attendance_records ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+      await this.ds.query(`
+        UPDATE "${schema}".attendance_sessions s 
+        SET faculty_id = ts.faculty_id 
+        FROM "${schema}".timetable_slots ts 
+        WHERE s.timetable_slot_id = ts.id AND s.faculty_id IS NULL AND ts.faculty_id IS NOT NULL
+      `).catch(() => {});
     } catch (e) {
       // Ignore if columns already exist
     }
@@ -107,23 +124,53 @@ export class AttendanceService {
         }
       }
 
-      // Prevent duplicate session same day + offering (or subject) + batch
-      let dupCheck;
-      if (offeringId) {
+      const cleanDate = parseToLocalDateString(dto.sessionDate);
+      const targetSlotUuid = isUUID(dto.timetableSlotId) ? dto.timetableSlotId : null;
+
+      // Prevent duplicate session same day + offering (or subject) + batch + timetable slot
+      let dupCheck: any[] = [];
+      if (targetSlotUuid) {
         dupCheck = await this.ds.query(
-          `SELECT id FROM "${schema}".attendance_sessions WHERE offering_id=$1 AND batch_id=$2 AND session_date=$3`,
-          [offeringId, batchId, dto.sessionDate],
+          `SELECT id FROM "${schema}".attendance_sessions
+           WHERE timetable_slot_id=$1
+             AND session_date::date = $2::date
+             AND is_cancelled = false`,
+          [targetSlotUuid, cleanDate],
         );
-      } else {
-        dupCheck = await this.ds.query(
-          `SELECT id FROM "${schema}".attendance_sessions WHERE subject_id=$1 AND batch_id=$2 AND session_date=$3 AND session_type=$4`,
-          [subjectId, batchId, dto.sessionDate, sessionType],
-        );
+      }
+
+      if (!dupCheck.length) {
+        if (offeringId) {
+          dupCheck = await this.ds.query(
+            `SELECT id FROM "${schema}".attendance_sessions
+             WHERE offering_id=$1 AND batch_id=$2
+               AND session_date::date = $3::date
+               AND is_cancelled = false`,
+            [offeringId, batchId, cleanDate],
+          );
+        } else {
+          dupCheck = await this.ds.query(
+            `SELECT id FROM "${schema}".attendance_sessions
+             WHERE subject_id=$1 AND batch_id=$2
+               AND session_date::date = $3::date
+               AND (LOWER(session_type) = LOWER($4) OR $4 IS NULL OR (LOWER(session_type) IN ('lecture','theory') AND LOWER($4) IN ('lecture','theory')))
+               AND is_cancelled = false`,
+            [subjectId, batchId, cleanDate, sessionType],
+          );
+        }
       }
 
       // If duplicate session exists, update attendance records on that existing session
       if (dupCheck.length) {
         const existingSessionId = dupCheck[0].id;
+
+        if (targetSlotUuid) {
+          await this.ds.query(
+            `UPDATE "${schema}".attendance_sessions SET timetable_slot_id=$1 WHERE id=$2`,
+            [targetSlotUuid, existingSessionId],
+          );
+        }
+
         if (dto.records.length > 0) {
           const values = dto.records
             .map((_, idx) => {
@@ -165,11 +212,11 @@ export class AttendanceService {
         `INSERT INTO "${schema}".attendance_sessions
            (subject_id, batch_id, faculty_id, session_date, session_type,
             topic_covered, timetable_slot_id, created_by, offering_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9)
          RETURNING id`,
         [
           subjectId, batchId, facultyId,
-          dto.sessionDate, sessionType,
+          cleanDate, sessionType,
           dto.topicCovered ?? null,
           isUUID(dto.timetableSlotId) ? dto.timetableSlotId : null,
           validUserId,
@@ -221,16 +268,51 @@ export class AttendanceService {
     batchId: string,
     sessionDate: string,
     sessionType: string = 'THEORY',
+    timetableSlotId?: string,
   ) {
     const schema = this.getSchema(tenantSlug);
     await this.ensureAttendanceColumns(schema);
 
-    const sessionRows = await this.ds.query(
-      `SELECT s.* FROM "${schema}".attendance_sessions s
-       WHERE s.subject_id=$1 AND s.batch_id=$2 AND s.session_date=$3 AND s.session_type=$4
-       LIMIT 1`,
-      [subjectId, batchId, sessionDate, sessionType],
-    );
+    const cleanDate = typeof sessionDate === 'string' ? sessionDate.split('T')[0] : new Date(sessionDate).toISOString().split('T')[0];
+    const isUUID = (str?: string | null) => str ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str) : false;
+
+    let sessionRows: any[] = [];
+    if (isUUID(timetableSlotId)) {
+      sessionRows = await this.ds.query(
+        `SELECT s.* FROM "${schema}".attendance_sessions s
+         WHERE s.timetable_slot_id = $1
+           AND s.session_date::date = $2::date
+           AND s.is_cancelled = false
+         ORDER BY s.created_at DESC
+         LIMIT 1`,
+        [timetableSlotId, cleanDate],
+      );
+    }
+
+    if (!sessionRows.length) {
+      sessionRows = await this.ds.query(
+        `SELECT s.* FROM "${schema}".attendance_sessions s
+         WHERE s.subject_id=$1 AND s.batch_id=$2
+           AND s.session_date::date = $3::date
+           AND (LOWER(s.session_type) = LOWER($4) OR $4 = 'ALL' OR $4 IS NULL OR LOWER(s.session_type) LIKE LOWER($4 || '%') OR (LOWER(s.session_type) IN ('lecture','theory') AND LOWER($4) IN ('lecture','theory')))
+           AND s.is_cancelled = false
+         ORDER BY s.created_at DESC
+         LIMIT 1`,
+        [subjectId, batchId, cleanDate, sessionType],
+      );
+    }
+
+    if (!sessionRows.length) {
+      sessionRows = await this.ds.query(
+        `SELECT s.* FROM "${schema}".attendance_sessions s
+         WHERE s.subject_id=$1 AND s.batch_id=$2
+           AND s.session_date::date = $3::date
+           AND s.is_cancelled = false
+         ORDER BY s.created_at DESC
+         LIMIT 1`,
+        [subjectId, batchId, cleanDate],
+      );
+    }
 
     if (!sessionRows.length) {
       return { found: false, session: null, records: [] };
@@ -267,20 +349,23 @@ export class AttendanceService {
 
     // 1. Fetch sessions conducted within date range
     const sessions = await this.ds.query(
-      `SELECT s.id, s.session_date, s.session_type, s.topic_covered,
+      `SELECT s.id, s.session_date::text AS session_date, s.session_type, s.topic_covered,
               s.created_at, s.is_cancelled, s.subject_id,
               sub.name AS subject_name, sub.code AS subject_code,
-              b.code AS batch_code, f.name AS faculty_name,
+              b.code AS batch_code,
+              COALESCE(f.name, ts_fac.name, 'Faculty Marker') AS faculty_name,
               COUNT(ar.id) AS total_records,
               COUNT(ar.id) FILTER (WHERE ar.status='PRESENT') AS present_count
        FROM "${schema}".attendance_sessions s
        LEFT JOIN "${schema}".subjects sub ON sub.id = s.subject_id
        LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
        LEFT JOIN "${schema}".faculty f ON f.id = s.faculty_id
+       LEFT JOIN "${schema}".timetable_slots ts ON ts.id = s.timetable_slot_id
+       LEFT JOIN "${schema}".faculty ts_fac ON ts_fac.id = ts.faculty_id
        LEFT JOIN "${schema}".attendance_records ar ON ar.session_id = s.id
        WHERE s.batch_id = $1 AND s.session_date >= $2 AND s.session_date <= $3
          AND s.is_cancelled = false ${subjectCondition}
-       GROUP BY s.id, sub.name, sub.code, b.code, f.name
+       GROUP BY s.id, s.session_date, sub.name, sub.code, b.code, f.name, ts_fac.name
        ORDER BY s.session_date DESC, s.created_at DESC`,
       params,
     );
@@ -348,20 +433,22 @@ export class AttendanceService {
 
     const [rows, countRows] = await Promise.all([
       this.ds.query(
-        `SELECT s.id, s.session_date, s.session_type, s.topic_covered,
+        `SELECT s.id, s.session_date::text AS session_date, s.session_type, s.topic_covered,
                 s.created_at, s.is_cancelled,
                 sub.name AS subject_name, sub.code AS subject_code,
                 b.code AS batch_code,
-                f.name AS faculty_name,
+                COALESCE(f.name, ts_fac.name, 'Faculty Marker') AS faculty_name,
                 COUNT(ar.id) AS total_records,
                 COUNT(ar.id) FILTER (WHERE ar.status='PRESENT') AS present_count
          FROM "${schema}".attendance_sessions s
          LEFT JOIN "${schema}".subjects sub ON sub.id = s.subject_id
          LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
          LEFT JOIN "${schema}".faculty f ON f.id = s.faculty_id
+         LEFT JOIN "${schema}".timetable_slots ts ON ts.id = s.timetable_slot_id
+         LEFT JOIN "${schema}".faculty ts_fac ON ts_fac.id = ts.faculty_id
          LEFT JOIN "${schema}".attendance_records ar ON ar.session_id = s.id
          ${where}
-         GROUP BY s.id, sub.name, sub.code, b.code, f.name
+         GROUP BY s.id, s.session_date, sub.name, sub.code, b.code, f.name, ts_fac.name
          ORDER BY s.session_date DESC, s.created_at DESC
          LIMIT $${i} OFFSET $${i + 1}`,
         [...params, limit, offset],
@@ -700,61 +787,102 @@ export class AttendanceService {
     const normFromDate = normalizeDateInput(fromDate);
     const normToDate = normalizeDateInput(toDate);
 
-    const conditions = [
-      `(s.batch_id = $1 OR s.batch_id = $2 OR s.batch_id IN (SELECT id::text FROM "${schema}".batches WHERE code ILIKE $1 OR code ILIKE $2 OR id::text = $1))`,
-      `s.is_cancelled = false`
+    const sessWhere = [
+      `(s.batch_id::text = $1::text OR s.batch_id::text = $2::text OR s.batch_id::text IN (SELECT id::text FROM "${schema}".batches WHERE code ILIKE $1::text OR code ILIKE $2::text OR id::text = $1::text))`,
+      `s.is_cancelled = false`,
+      `s.subject_id IS NOT NULL`,
     ];
-    const params: any[] = [batchUuid, batchCode];
-    let i = 3;
+    const sessParams: any[] = [batchUuid, batchCode];
+    let pIdx = 3;
+
+    if (normToDate) {
+      sessWhere.push(`s.session_date::date <= $${pIdx++}::date`);
+      sessParams.push(normToDate);
+    } else {
+      sessWhere.push(`s.session_date::date <= CURRENT_DATE`);
+    }
 
     if (subjectId && subjectId !== 'all') {
-      conditions.push(`s.subject_id = $${i++}`);
-      params.push(subjectId);
+      sessWhere.push(`s.subject_id = $${pIdx++}`);
+      sessParams.push(subjectId);
     }
     if (normFromDate) {
-      conditions.push(`s.session_date::text >= $${i++}`);
-      params.push(normFromDate);
-    }
-    if (normToDate) {
-      conditions.push(`s.session_date::text <= $${i++}`);
-      params.push(normToDate);
+      sessWhere.push(`s.session_date::date >= $${pIdx++}::date`);
+      sessParams.push(normFromDate);
     }
 
-    return this.ds.query(
+    const totRes = await this.ds.query(
+      `SELECT COUNT(DISTINCT s.id)::int AS total_sessions
+       FROM "${schema}".attendance_sessions s
+       WHERE ${sessWhere.join(' AND ')}`,
+      sessParams,
+    );
+    const totalConducted = parseInt(totRes[0]?.total_sessions || '0', 10);
+
+    const recWhere = [
+      `(s.batch_id::text = $1::text OR s.batch_id::text = $2::text OR s.batch_id::text IN (SELECT id::text FROM "${schema}".batches WHERE code ILIKE $1::text OR code ILIKE $2::text OR id::text = $1::text))`,
+      `s.is_cancelled = false`,
+      `s.subject_id IS NOT NULL`,
+    ];
+    const recParams: any[] = [batchUuid, batchCode];
+    pIdx = 3;
+
+    if (normToDate) {
+      recWhere.push(`s.session_date::date <= $${pIdx++}::date`);
+      recParams.push(normToDate);
+    } else {
+      recWhere.push(`s.session_date::date <= CURRENT_DATE`);
+    }
+
+    if (subjectId && subjectId !== 'all') {
+      recWhere.push(`s.subject_id = $${pIdx++}`);
+      recParams.push(subjectId);
+    }
+    if (normFromDate) {
+      recWhere.push(`s.session_date::date >= $${pIdx++}::date`);
+      recParams.push(normFromDate);
+    }
+
+    const rows = await this.ds.query(
       `SELECT
           st.id AS student_id,
           COALESCE(st.registration_no, st.rollno, '—') AS rollno,
           COALESCE(st.name, 'Student') AS name,
-          COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END) AS total_classes,
-          COUNT(DISTINCT CASE WHEN ar.status IN ('PRESENT','LATE') THEN s.id END) AS present,
-          COUNT(DISTINCT CASE WHEN ar.status='ABSENT' THEN s.id END) AS absent,
-          COUNT(DISTINCT CASE WHEN ar.status='LATE' THEN s.id END) AS late,
-          COUNT(DISTINCT CASE WHEN ar.status='EXCUSED' THEN s.id END) AS excused,
-          COALESCE(
-            ROUND(
-              (COUNT(DISTINCT CASE WHEN ar.status IN ('PRESENT','LATE') THEN s.id END) * 100.0)
-              / NULLIF(COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END), 0), 2
-            ), 0
-          ) AS attendance_pct,
-          COALESCE(
-            JSON_AGG(
-              JSON_BUILD_OBJECT(
-                'subject_id', s.subject_id,
-                'subject_code', sub.code,
-                'status', ar.status
-              )
-            ) FILTER (WHERE s.id IS NOT NULL AND ar.id IS NOT NULL AND ar.status IS NOT NULL), '[]'
-          ) AS subject_sessions
+          COUNT(DISTINCT CASE WHEN ar.status IN ('PRESENT','LATE') THEN s.id END)::int AS present,
+          COUNT(DISTINCT CASE WHEN ar.status = 'ABSENT' THEN s.id END)::int AS absent,
+          COUNT(DISTINCT CASE WHEN ar.status = 'LATE' THEN s.id END)::int AS late,
+          COUNT(DISTINCT CASE WHEN ar.status = 'EXCUSED' THEN s.id END)::int AS excused
        FROM "${schema}".students st
        LEFT JOIN "${schema}".student_admissions sa ON sa.student_id = st.id
-       LEFT JOIN "${schema}".attendance_sessions s ON ${conditions.join(' AND ')}
+       LEFT JOIN "${schema}".attendance_sessions s ON ${recWhere.join(' AND ')}
        LEFT JOIN "${schema}".attendance_records ar ON ar.session_id = s.id AND ar.student_id = st.id
        LEFT JOIN "${schema}".subjects sub ON sub.id = s.subject_id
-       WHERE (st.batch_id = $1 OR st.batch_id = $2 OR sa.batch_id = $1 OR sa.batch_id = $2 OR sa.batch_code ILIKE $1 OR sa.batch_code ILIKE $2 OR ar.id IS NOT NULL)
+       WHERE (st.batch_id::text = $1::text OR st.batch_id::text = $2::text OR sa.batch_id::text = $1::text OR sa.batch_id::text = $2::text OR sa.batch_code ILIKE $1::text OR sa.batch_code ILIKE $2::text OR st.batch_id IS NULL)
        GROUP BY st.id, st.registration_no, st.rollno, st.name
        ORDER BY COALESCE(st.registration_no, st.rollno) ASC, st.name ASC`,
-      params,
+      recParams,
     );
+
+    return rows.map((r: any) => {
+      const present = parseInt(r.present || '0', 10);
+      const absent = parseInt(r.absent || '0', 10);
+      const late = parseInt(r.late || '0', 10);
+      const excused = parseInt(r.excused || '0', 10);
+      const totalClasses = Math.max(totalConducted, present + absent + excused);
+      const pct = totalClasses > 0 ? parseFloat(((present * 100.0) / totalClasses).toFixed(2)) : 0;
+
+      return {
+        student_id: r.student_id,
+        rollno: r.rollno,
+        name: r.name,
+        total_classes: totalClasses,
+        present,
+        absent,
+        late,
+        excused,
+        attendance_pct: pct,
+      };
+    });
   }
 
   // ─── Batch-wise multi-subject attendance matrix report ─────────────────────
@@ -786,20 +914,60 @@ export class AttendanceService {
       `SELECT id, name, code FROM "${schema}".subjects ORDER BY code ASC`,
     );
 
-    const sessConditions = [
-      `(s.batch_id = $1 OR s.batch_id = $2 OR s.batch_id IN (SELECT id::text FROM "${schema}".batches WHERE code ILIKE $1 OR code ILIKE $2 OR id::text = $1))`,
-      `s.is_cancelled = false`
+    // 1. Calculate actual conducted timetable sessions per subject up to today (or toDate)
+    const sessWhereClauses = [
+      `(s.batch_id::text = $1::text OR s.batch_id::text = $2::text OR s.batch_id::text IN (SELECT id::text FROM "${schema}".batches WHERE code ILIKE $1::text OR code ILIKE $2::text OR id::text = $1::text))`,
+      `s.is_cancelled = false`,
+      `s.subject_id IS NOT NULL`,
     ];
-    const params: any[] = [batchUuid, batchCode];
-    let i = 3;
+    const sessParams: any[] = [batchUuid, batchCode];
+    let pIdx = 3;
+
+    if (normToDate) {
+      sessWhereClauses.push(`s.session_date::date <= $${pIdx++}::date`);
+      sessParams.push(normToDate);
+    } else {
+      sessWhereClauses.push(`s.session_date::date <= CURRENT_DATE`);
+    }
 
     if (normFromDate) {
-      sessConditions.push(`s.session_date::text >= $${i++}`);
-      params.push(normFromDate);
+      sessWhereClauses.push(`s.session_date::date >= $${pIdx++}::date`);
+      sessParams.push(normFromDate);
     }
+
+    const subjectTotalsQuery = `
+      SELECT s.subject_id, COUNT(DISTINCT s.id)::int AS total_sessions
+      FROM "${schema}".attendance_sessions s
+      WHERE ${sessWhereClauses.join(' AND ')}
+      GROUP BY s.subject_id
+    `;
+    const subjectTotalRows = await this.ds.query(subjectTotalsQuery, sessParams);
+    const subjectTotalsMap: Record<string, number> = {};
+    subjectTotalRows.forEach((r: any) => {
+      if (r.subject_id) {
+        subjectTotalsMap[r.subject_id] = parseInt(r.total_sessions || '0', 10);
+      }
+    });
+
+    // 2. Fetch all students in the batch with their present count per subject
+    const recWhereClauses = [
+      `(s.batch_id::text = $1::text OR s.batch_id::text = $2::text OR s.batch_id::text IN (SELECT id::text FROM "${schema}".batches WHERE code ILIKE $1::text OR code ILIKE $2::text OR id::text = $1::text))`,
+      `s.is_cancelled = false`,
+      `s.subject_id IS NOT NULL`,
+    ];
+    const recParams: any[] = [batchUuid, batchCode];
+    pIdx = 3;
+
     if (normToDate) {
-      sessConditions.push(`s.session_date::text <= $${i++}`);
-      params.push(normToDate);
+      recWhereClauses.push(`s.session_date::date <= $${pIdx++}::date`);
+      recParams.push(normToDate);
+    } else {
+      recWhereClauses.push(`s.session_date::date <= CURRENT_DATE`);
+    }
+
+    if (normFromDate) {
+      recWhereClauses.push(`s.session_date::date >= $${pIdx++}::date`);
+      recParams.push(normFromDate);
     }
 
     const rows = await this.ds.query(
@@ -809,23 +977,22 @@ export class AttendanceService {
           COALESCE(st.name, 'Student') AS name,
           s.subject_id,
           sub.code AS subject_code,
-          COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END) AS total_classes,
-          COUNT(DISTINCT CASE WHEN ar.status IN ('PRESENT','LATE') THEN s.id END) AS present,
-          ROUND(
-            (COUNT(DISTINCT CASE WHEN ar.status IN ('PRESENT','LATE') THEN s.id END) * 100.0)
-            / NULLIF(COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END), 0), 2
-          ) AS attendance_pct
+          COUNT(DISTINCT CASE WHEN ar.status IN ('PRESENT','LATE') THEN s.id END)::int AS present,
+          COUNT(DISTINCT CASE WHEN ar.status = 'ABSENT' THEN s.id END)::int AS absent,
+          COUNT(DISTINCT CASE WHEN ar.status = 'LATE' THEN s.id END)::int AS late,
+          COUNT(DISTINCT CASE WHEN ar.status = 'EXCUSED' THEN s.id END)::int AS excused
        FROM "${schema}".students st
        LEFT JOIN "${schema}".student_admissions sa ON sa.student_id = st.id
-       LEFT JOIN "${schema}".attendance_sessions s ON ${sessConditions.join(' AND ')}
+       LEFT JOIN "${schema}".attendance_sessions s ON ${recWhereClauses.join(' AND ')}
        LEFT JOIN "${schema}".attendance_records ar ON ar.session_id = s.id AND ar.student_id = st.id
        LEFT JOIN "${schema}".subjects sub ON sub.id = s.subject_id
-       WHERE (st.batch_id = $1 OR st.batch_id = $2 OR sa.batch_id = $1 OR sa.batch_id = $2 OR sa.batch_code ILIKE $1 OR sa.batch_code ILIKE $2 OR ar.id IS NOT NULL)
+       WHERE (st.batch_id::text = $1::text OR st.batch_id::text = $2::text OR sa.batch_id::text = $1::text OR sa.batch_id::text = $2::text OR sa.batch_code ILIKE $1::text OR sa.batch_code ILIKE $2::text OR st.batch_id IS NULL)
        GROUP BY st.id, st.registration_no, st.rollno, st.name, s.subject_id, sub.code
        ORDER BY COALESCE(st.registration_no, st.rollno) ASC, st.name ASC`,
-      params,
+      recParams,
     );
 
+    // 3. Build unified student matrix
     const studentMap = new Map<string, any>();
 
     for (const r of rows) {
@@ -841,22 +1008,41 @@ export class AttendanceService {
       }
 
       const stObj = studentMap.get(r.student_id);
-      if (r.subject_id) {
-        const total = parseInt(r.total_classes || 0);
-        const present = parseInt(r.present || 0);
-        const pct = parseFloat(r.attendance_pct || 0);
+      if (r.subject_id && subjectTotalsMap[r.subject_id] !== undefined) {
+        const total = subjectTotalsMap[r.subject_id] || 0;
+        const present = parseInt(r.present || '0', 10);
+        const absent = parseInt(r.absent || '0', 10);
+        const late = parseInt(r.late || '0', 10);
+        const excused = parseInt(r.excused || '0', 10);
+        const pct = total > 0 ? parseFloat(((present * 100.0) / total).toFixed(2)) : 0;
 
-        stObj.subjects[r.subject_id] = { total, present, pct };
-        stObj.totalClasses += total;
-        stObj.totalPresent += present;
+        stObj.subjects[r.subject_id] = { total, present, absent, late, excused, pct };
       }
     }
 
+    // Ensure all active subjects are included in totalClasses for each student consistently
+    const activeSubjectIds = Object.keys(subjectTotalsMap).filter(subId => subjectTotalsMap[subId] > 0);
+    const cumulativeTotalClasses = activeSubjectIds.reduce((sum, subId) => sum + subjectTotalsMap[subId], 0);
+
     const studentList = Array.from(studentMap.values()).map(st => {
-      const overallPct = st.totalClasses > 0
-        ? parseFloat(((st.totalPresent / st.totalClasses) * 100).toFixed(2))
+      let totalPresent = 0;
+      activeSubjectIds.forEach(subId => {
+        if (!st.subjects[subId]) {
+          st.subjects[subId] = { total: subjectTotalsMap[subId], present: 0, absent: subjectTotalsMap[subId], late: 0, excused: 0, pct: 0 };
+        }
+        totalPresent += st.subjects[subId].present;
+      });
+
+      const overallPct = cumulativeTotalClasses > 0
+        ? parseFloat(((totalPresent / cumulativeTotalClasses) * 100).toFixed(2))
         : 0;
-      return { ...st, overallPct };
+
+      return {
+        ...st,
+        totalClasses: cumulativeTotalClasses,
+        totalPresent,
+        overallPct,
+      };
     });
 
     return {
@@ -954,13 +1140,14 @@ export class AttendanceService {
     departmentId?: string,
     userId?: string,
     role?: UserRole,
+    subjectId?: string,
   ) {
     const schema = this.getSchema(tenantSlug);
     await this.ensureAttendanceColumns(schema);
 
-    const targetDate = sessionDateStr ? new Date(sessionDateStr) : new Date();
-    const dayOfWeek = targetDate.getDay();
-    const formattedDate = sessionDateStr || targetDate.toISOString().split('T')[0];
+    const cleanDate = sessionDateStr ? sessionDateStr.split('T')[0] : new Date().toISOString().split('T')[0];
+    const [y, m, d] = cleanDate.split('-').map(Number);
+    const dayOfWeek = isNaN(y) ? new Date().getDay() : new Date(y, m - 1, d).getDay();
 
     let effectiveDeptId = departmentId;
 
@@ -971,9 +1158,10 @@ export class AttendanceService {
       }
     }
 
-    const params: any[] = [dayOfWeek, formattedDate];
+    const params: any[] = [dayOfWeek, cleanDate];
     let sql = `
-      SELECT ts.id, ts.faculty_id, ts.subject_id, ts.department_id, ts.batch_id,
+      SELECT DISTINCT ON (ts.id)
+             ts.id, ts.faculty_id, ts.subject_id, ts.department_id, ts.batch_id,
              ts.day_of_week, ts.start_time, ts.end_time, ts.room, ts.slot_type,
              ts.group_name, ts.topic, ts.competency_codes,
              f.name AS faculty_name,
@@ -981,23 +1169,32 @@ export class AttendanceService {
              d.name AS department_name, d.code AS department_code,
              b.code AS batch_code,
              sess.id AS session_id,
-             (sess.id IS NOT NULL) AS is_attendance_marked
+             (sess.id IS NOT NULL) AS is_attendance_marked,
+             COALESCE((SELECT COUNT(*) FROM "${schema}".attendance_records ar WHERE ar.session_id = sess.id AND ar.status = 'PRESENT'), 0) AS present_count,
+             COALESCE((SELECT COUNT(*) FROM "${schema}".attendance_records ar WHERE ar.session_id = sess.id AND ar.status = 'ABSENT'), 0) AS absent_count,
+             COALESCE((SELECT COUNT(*) FROM "${schema}".attendance_records ar WHERE ar.session_id = sess.id AND ar.status = 'LATE'), 0) AS late_count,
+             COALESCE((SELECT COUNT(*) FROM "${schema}".attendance_records ar WHERE ar.session_id = sess.id), 0) AS total_students_marked
       FROM "${schema}".timetable_slots ts
       LEFT JOIN "${schema}".faculty f ON f.id = ts.faculty_id
       LEFT JOIN "${schema}".subjects s ON s.id = ts.subject_id
       LEFT JOIN "${schema}".departments d ON d.id = ts.department_id
       LEFT JOIN "${schema}".batches b ON b.id = ts.batch_id
       LEFT JOIN "${schema}".attendance_sessions sess
-        ON (sess.timetable_slot_id = ts.id OR (sess.subject_id = ts.subject_id AND sess.session_type = ts.slot_type))
-       AND sess.batch_id = ts.batch_id
-       AND sess.session_date = $2
+        ON (sess.timetable_slot_id = ts.id OR (sess.subject_id = ts.subject_id AND (LOWER(sess.session_type) = LOWER(ts.slot_type) OR (LOWER(sess.session_type) IN ('lecture','theory') AND LOWER(ts.slot_type) IN ('lecture','theory')))))
+       AND (sess.batch_id = ts.batch_id OR ts.batch_id IS NULL)
+       AND sess.session_date::date = $2::date
        AND sess.is_cancelled = false
       WHERE ts.day_of_week = $1
     `;
 
     if (batchId) {
       params.push(batchId);
-      sql += ` AND ts.batch_id = $${params.length}`;
+      sql += ` AND (ts.batch_id = $${params.length} OR b.code ILIKE $${params.length}::text OR ts.batch_id IS NULL)`;
+    }
+
+    if (subjectId) {
+      params.push(subjectId);
+      sql += ` AND ts.subject_id = $${params.length}`;
     }
 
     if (effectiveDeptId) {
@@ -1005,9 +1202,9 @@ export class AttendanceService {
       sql += ` AND (ts.department_id = $${params.length} OR s.department_id = $${params.length})`;
     }
 
-    sql += ` ORDER BY ts.start_time ASC`;
+    sql += ` ORDER BY ts.id, ts.start_time ASC`;
 
     const slots = await this.ds.query(sql, params);
-    return { date: formattedDate, dayOfWeek, slots };
+    return { date: cleanDate, dayOfWeek, slots };
   }
 }

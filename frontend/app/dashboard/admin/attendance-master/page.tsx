@@ -374,17 +374,21 @@ export default function AttendanceMasterPage() {
       let existingRecordMap: Record<string, { status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'; remarks?: string }> = {};
       if (selectedSubjectId) {
         try {
-          const activeSessUrl = `${API_BASE}/attendance/active-session?tenant=${TENANT}&subjectId=${selectedSubjectId}&batchId=${selectedBatchId}&sessionDate=${sessionDate}&sessionType=${sessionType}`;
+          let activeSessUrl = `${API_BASE}/attendance/active-session?tenant=${TENANT}&subjectId=${selectedSubjectId}&batchId=${selectedBatchId}&sessionDate=${sessionDate}&sessionType=${sessionType}`;
+          if (selectedSlotId) activeSessUrl += `&timetableSlotId=${selectedSlotId}`;
           const sessRes = await fetch(activeSessUrl, { headers });
           if (sessRes.ok) {
             const sessJson = await sessRes.json();
             const data = sessJson.data || sessJson;
             if (data?.found && Array.isArray(data.records)) {
               data.records.forEach((r: any) => {
-                existingRecordMap[r.student_id] = {
-                  status: r.status,
-                  remarks: r.remarks || '',
-                };
+                const stId = r.student_id || r.studentId;
+                if (stId) {
+                  existingRecordMap[stId] = {
+                    status: r.status,
+                    remarks: r.remarks || '',
+                  };
+                }
               });
             }
           }

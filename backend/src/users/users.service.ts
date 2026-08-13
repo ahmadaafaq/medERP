@@ -36,7 +36,7 @@ export class UsersService {
     let i = 1;
 
     if (filters.search) {
-      conditions.push(`(s.name ILIKE $${i} OR s.rollno ILIKE $${i})`);
+      conditions.push(`(s.name ILIKE $${i} OR s.rollno ILIKE $${i} OR s.registration_no ILIKE $${i})`);
       params.push(`%${filters.search}%`);
       i++;
     }
@@ -53,11 +53,13 @@ export class UsersService {
 
     const [rows, countRows] = await Promise.all([
       this.ds.query(
-        `SELECT s.id, s.rollno, s.name, s.photo_url, s.batch_cd, s.course_cd,
-                s.phone, s.admission_year, s.batch_id, s.department_id,
+        `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url,
+                COALESCE(b.code, s.batch_cd, '2025-MBBS') AS batch_cd,
+                s.course_cd, s.phone, s.admission_year, s.batch_id, s.department_id,
                 u.email, u.is_active, u.created_at
          FROM "${schema}".students s
          JOIN "${schema}".users u ON u.id = s.user_id
+         LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
          ${where}
          ORDER BY s.name ASC
          LIMIT $${i} OFFSET $${i + 1}`,
@@ -466,6 +468,25 @@ export class UsersService {
     );
     if (!rows.length) throw new ConflictException(`Department code '${data.code}' already exists`);
     return rows[0];
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SUBJECTS
+  // ═══════════════════════════════════════════════════════════════
+
+  async getSubjects(tenantSlug: string, departmentId?: string) {
+    const schema = `tenant_${tenantSlug}`;
+    const where = departmentId
+      ? `WHERE (s.department_id::text = $1 OR d.code = $1 OR LOWER(d.name) LIKE LOWER('%' || $1 || '%')) AND s.is_active = true`
+      : `WHERE s.is_active = true`;
+    return this.ds.query(
+      `SELECT s.*, d.name AS department_name, d.code AS department_code
+       FROM "${schema}".subjects s
+       LEFT JOIN "${schema}".departments d ON d.id = s.department_id
+       ${where}
+       ORDER BY s.code ASC`,
+      departmentId ? [departmentId] : [],
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════

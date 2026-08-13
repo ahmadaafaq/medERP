@@ -34,7 +34,7 @@ export class TimetableService implements OnModuleInit {
     }
   }
 
-  async listSlots(tenantSlug: string, query: { departmentId?: string; batchId?: string; dayOfWeek?: number }) {
+  async listSlots(tenantSlug: string, query: { departmentId?: string; batchId?: string; dayOfWeek?: number; facultyId?: string; subjectId?: string }) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const params: any[] = [];
     let sql = `
@@ -46,16 +46,26 @@ export class TimetableService implements OnModuleInit {
              d.name AS department_name,
              b.code AS batch_code, b.year AS batch_year
       FROM timetable_slots ts
-      LEFT JOIN faculty f ON f.id = ts.faculty_id
-      LEFT JOIN subjects s ON s.id = ts.subject_id
+      INNER JOIN faculty f ON f.id = ts.faculty_id
+      INNER JOIN subjects s ON s.id = ts.subject_id
       LEFT JOIN departments d ON d.id = ts.department_id
       LEFT JOIN batches b ON b.id = ts.batch_id
       WHERE 1=1
     `;
+
     if (query.departmentId) {
       params.push(query.departmentId);
-      sql += ` AND ts.department_id = $${params.length}`;
+      sql += ` AND (ts.department_id = $${params.length} OR f.department_id = $${params.length} OR s.department_id = $${params.length})`;
     }
+    if (query.facultyId) {
+      params.push(query.facultyId);
+      sql += ` AND (ts.faculty_id = $${params.length} OR f.id = $${params.length})`;
+    }
+    if (query.subjectId) {
+      params.push(query.subjectId);
+      sql += ` AND ts.subject_id = $${params.length}`;
+    }
+
     if (query.batchId) {
       params.push(query.batchId);
       sql += ` AND ts.batch_id = $${params.length}`;
@@ -65,7 +75,43 @@ export class TimetableService implements OnModuleInit {
       sql += ` AND ts.day_of_week = $${params.length}`;
     }
     sql += ` ORDER BY ts.day_of_week ASC, ts.start_time ASC`;
-    return this.tenantSchemaService.queryInTenant(slug, sql, params);
+
+    const slots = await this.tenantSchemaService.queryInTenant(slug, sql, params);
+
+    // Enrich slots with matching competencies details from database competencies table
+    const subjectIds = Array.from(new Set(slots.map((s: any) => s.subject_id).filter(Boolean)));
+    let compMap: Record<string, any[]> = {};
+    if (subjectIds.length > 0) {
+      try {
+        const compRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, subject_id, code, description, domain, level, is_core 
+           FROM competencies 
+           WHERE subject_id = ANY($1::uuid[]) AND is_active = true`,
+          [subjectIds]
+        );
+        for (const comp of compRows) {
+          if (!compMap[comp.subject_id]) compMap[comp.subject_id] = [];
+          compMap[comp.subject_id].push(comp);
+        }
+      } catch (err) {
+        // Continue gracefully if table is missing
+      }
+    }
+
+    return slots.map((slot: any) => {
+      const relatedComps = compMap[slot.subject_id] || [];
+      let matchedComps = relatedComps;
+      if (slot.competency_codes) {
+        const codesArr = String(slot.competency_codes).split(',').map((c: string) => c.trim().toLowerCase());
+        const filtered = relatedComps.filter(c => codesArr.includes(c.code.toLowerCase()));
+        if (filtered.length > 0) matchedComps = filtered;
+      }
+      return {
+        ...slot,
+        competencies_detail: matchedComps,
+      };
+    });
   }
 
   async getStudentSchedule(tenantSlug: string, batchId?: string) {

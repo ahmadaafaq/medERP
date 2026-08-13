@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "node -e \"const fs = require('fs'); if (fs.existsSync('.next')) { try { fs.rmSync('.next', { recursive: true, force: true }); } catch (e) {} }\" && next dev",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

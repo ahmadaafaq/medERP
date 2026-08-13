@@ -6,50 +6,50 @@
 
 :root {
   --font-inter: 'Inter', -apple-system, sans-serif;
-  --font-display: 'Fraunces', Georgia, serif;
-  --font-mono: 'IBM Plex Mono', monospace;
 
-  /* Premium Clinical Light Theme Variables */
-  --bg-main: #F6F8F9;
-  --text-main: #0E2A32;
+  /* Theme.md Brand Design System (Default Light Mode Active) */
+  --bg-main: #F6F8FC;
   --card-bg: #FFFFFF;
-  --card-border: #DCE3E5;
+  --card-border: #E7EAF3;
 
-  --color-bg-canvas: #F6F8F9;
+  --color-bg-canvas: #F6F8FC;
   --color-bg-surface: #FFFFFF;
-  --color-bg-sunken: #EEF1F3;
-  --color-ink-900: #0E2A32;
-  --color-ink-700: #2E4B52;
-  --color-ink-500: #5C7278;
-  --color-ink-300: #A8B6B9;
-  --color-border: #DCE3E5;
-  --color-border-strong: #B9C4C7;
+  --color-bg-sunken: #F1F4F9;
 
-  --color-primary-900: #0B3B42;
-  --color-primary-700: #124A54;
-  --color-primary-500: #1B6873;
-  --color-primary-100: #DCEEF0;
+  --color-brand-purple: #2D2575;
+  --color-brand-primary: #5B4BFF;
+  --color-brand-secondary: #7867FF;
+  --color-brand-accent: #F36C21;
 
-  --color-accent-brass: #B8863B;
-  --color-accent-brass-light: #F1E4C8;
+  --color-ink-900: #1B1E28;
+  --color-ink-700: #4E5969;
+  --color-ink-500: #7B8794;
+  --color-ink-300: #CBD5E1;
+  --color-border: #E7EAF3;
+  --color-border-strong: #D1D5DB;
 
-  --color-success: #2F8A5B;
-  --color-success-tint: #E4F5EC;
-  --color-warning: #C9862B;
-  --color-warning-tint: #FBF0DF;
-  --color-danger: #C7433F;
-  --color-danger-tint: #FBE7E6;
-  --color-info: #2C6E9E;
-  --color-info-tint: #E4F0F9;
+  --color-primary-900: #2D2575;
+  --color-primary-700: #5B4BFF;
+  --color-primary-500: #7867FF;
+  --color-primary-100: #EEF0FF;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-full: 999px;
+  --color-success: #00C48C;
+  --color-success-tint: #E6F9F3;
+  --color-warning: #FFB020;
+  --color-warning-tint: #FFF8E6;
+  --color-danger: #F04438;
+  --color-danger-tint: #FEECEB;
+  --color-info: #5B4BFF;
+  --color-info-tint: #EEF0FF;
 
-  --shadow-card: 0 1px 2px rgba(14, 42, 50, 0.04), 0 4px 12px rgba(14, 42, 50, 0.06);
-  --shadow-modal: 0 8px 24px rgba(14, 42, 50, 0.14), 0 2px 6px rgba(14, 42, 50, 0.08);
-  --shadow-focus: 0 0 0 3px rgba(27, 104, 115, 0.20);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-full: 9999px;
+
+  --shadow-card: 0 4px 20px -2px rgba(45, 37, 117, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+  --shadow-modal: 0 12px 32px rgba(45, 37, 117, 0.16), 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(91, 75, 255, 0.25);
 }
 
 .dark {

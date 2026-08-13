@@ -1339,7 +1339,7 @@ export default function CollegeMasterPage() {
                               <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
                                 <div className="flex items-center gap-1.5">
                                   <span>🏛️</span>
-                                  <span>{colleges.find((c) => c.id === grp.college_id)?.name || grp.college_name || 'SRMS'}</span>
+                                  <span>{colleges.find((c) => c.id === grp.college_id)?.name || grp.college_name || 'srms-ims'}</span>
                                 </div>
                               </td>
                               <td className="p-4 text-indigo-600 dark:text-indigo-300 font-bold font-mono whitespace-nowrap">

@@ -2,6 +2,10 @@ import { IsString, IsNotEmpty, IsNumber, IsOptional, IsArray } from 'class-valid
 
 export class CreateExamPaperDto {
   @IsString()
+  @IsOptional()
+  id?: string;
+
+  @IsString()
   @IsNotEmpty()
   code: string;
 
@@ -30,6 +34,17 @@ export class CreateExamPaperDto {
   @IsString()
   @IsOptional()
   type?: string;
+
+  @IsNumber()
+  @IsOptional()
+  durationMinutes?: number;
+
+  @IsOptional()
+  sections?: any;
+
+  @IsString()
+  @IsOptional()
+  status?: string;
 }
 
 export class SubmitResultDto {
@@ -47,6 +62,21 @@ export class SubmitResultDto {
   @IsNumber()
   @IsOptional()
   attemptNumber?: number;
+
+  @IsOptional()
+  questionMarks?: any;
+
+  @IsOptional()
+  subPartMarks?: any;
+
+  @IsOptional()
+  practicalMark?: number;
+
+  @IsOptional()
+  rollno?: string;
+
+  @IsOptional()
+  studentName?: string;
 }
 
 export class CreateQuestionDto {
@@ -68,7 +98,19 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  topicId?: string;
+
+  @IsString()
+  @IsOptional()
   topic?: string;
+
+  @IsString()
+  @IsOptional()
+  competencyId?: string;
+
+  @IsString()
+  @IsOptional()
+  competencyCode?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -101,10 +143,6 @@ export class CreateQuestionDto {
   @IsString()
   @IsOptional()
   difficultyLevel?: 'Easy' | 'Medium' | 'Hard' | 'Expert';
-
-  @IsString()
-  @IsOptional()
-  competencyCode?: string;
 
   @IsOptional()
   hasSubQuestions?: boolean;

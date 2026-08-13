@@ -118,6 +118,7 @@ export default function AssessmentMasterPage() {
   const [selectedProfPhase, setSelectedProfPhase] = useState<string>(''); // Professional ID from college-master/professionals
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [selectedTopicName, setSelectedTopicName] = useState<string>('');
+  const [selectedCompetencyId, setSelectedCompetencyId] = useState<string>('');
   const [selectedCompetencyCode, setSelectedCompetencyCode] = useState<string>('');
 
   // Mode Switch
@@ -202,22 +203,18 @@ export default function AssessmentMasterPage() {
   // ─── Cascade handlers — each resets all downstream selections ─────────────
   const handleDepartmentChange = (deptId: string) => {
     setSelectedDept(deptId);
-    setSelectedSubject(''); setSelectedCbmeYear(''); setSelectedProfPhase('');
+    setSelectedSubject('');
     setSelectedTopicId(''); setSelectedTopicName(''); setSelectedCompetencyCode('');
   };
   const handleSubjectChange = (subjectId: string) => {
     setSelectedSubject(subjectId);
-    setSelectedCbmeYear(''); setSelectedProfPhase('');
     setSelectedTopicId(''); setSelectedTopicName(''); setSelectedCompetencyCode('');
   };
   const handleCbmeYearChange = (year: string) => {
     setSelectedCbmeYear(year);
-    setSelectedProfPhase('');
-    setSelectedTopicId(''); setSelectedTopicName(''); setSelectedCompetencyCode('');
   };
   const handleProfPhaseChange = (profId: string) => {
     setSelectedProfPhase(profId);
-    setSelectedTopicId(''); setSelectedTopicName(''); setSelectedCompetencyCode('');
   };
   const handleTopicChange = (topicId: string) => {
     setSelectedTopicId(topicId);
@@ -229,9 +226,37 @@ export default function AssessmentMasterPage() {
   };
 
   // ─── Cascade computed lists from Master data ───────────────────────────────
-  const subjectsForDept = useMemo(() =>
-    selectedDept ? allSubjects.filter(s => s.department_id === selectedDept) : []
-  , [allSubjects, selectedDept]);
+  const subjectsForDept = useMemo(() => {
+    if (!selectedDept) return allSubjects;
+    const deptObj = departments.find(d => d.id === selectedDept);
+    if (!deptObj) return allSubjects;
+
+    const deptNameClean = deptObj.name.toLowerCase().replace('department of ', '').trim();
+    const deptCodeClean = deptObj.code.toLowerCase().trim();
+
+    const matches = allSubjects.filter(s => {
+      if (s.department_id === selectedDept) return true;
+      const subjDeptName = ((s as any).department_name || '').toLowerCase();
+      if (subjDeptName && subjDeptName.includes(deptNameClean)) return true;
+
+      const sName = s.name.toLowerCase();
+      const sCode = s.code.toLowerCase();
+      if (deptNameClean && (sName.includes(deptNameClean) || deptNameClean.includes(sName))) return true;
+      if (deptCodeClean && (sCode.includes(deptCodeClean) || deptCodeClean.includes(sCode))) return true;
+      return false;
+    });
+
+    return matches.length > 0 ? matches : allSubjects;
+  }, [allSubjects, selectedDept, departments]);
+
+  useEffect(() => {
+    if (subjectsForDept.length > 0) {
+      const exists = subjectsForDept.some(s => s.id === selectedSubject);
+      if (!exists) {
+        setSelectedSubject(subjectsForDept[0].id);
+      }
+    }
+  }, [subjectsForDept, selectedSubject]);
 
   // CBME Years derived from professional_linkers
   const cbmeYearsList = useMemo(() => {
@@ -243,11 +268,40 @@ export default function AssessmentMasterPage() {
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
   }, [allLinkers]);
 
-  // Topics filtered by subject & topic assignment
+  useEffect(() => {
+    if (cbmeYearsList.length > 0 && !selectedCbmeYear) {
+      setSelectedCbmeYear(cbmeYearsList[0].id);
+    }
+  }, [cbmeYearsList, selectedCbmeYear]);
+
+  useEffect(() => {
+    if (collegeProfessionals.length > 0 && !selectedProfPhase) {
+      setSelectedProfPhase(collegeProfessionals[0].id);
+    }
+  }, [collegeProfessionals, selectedProfPhase]);
+
+  // Topics strictly filtered by subject
   const availableTopics = useMemo(() => {
     if (!selectedSubject) return [];
     return dbTopics.filter(t => (t as any).subject_id === selectedSubject);
   }, [dbTopics, selectedSubject]);
+
+  useEffect(() => {
+    if (availableTopics.length > 0) {
+      const exists = availableTopics.some(t => t.id === selectedTopicId);
+      if (!exists) {
+        const firstT = availableTopics[0];
+        setSelectedTopicId(firstT.id);
+        setSelectedTopicName(firstT.name);
+        const firstComp = dbCompetencies.find(c => c.topic_id === firstT.id);
+        if (firstComp) setSelectedCompetencyCode(firstComp.code);
+      }
+    } else {
+      setSelectedTopicId('');
+      setSelectedTopicName('');
+      setSelectedCompetencyCode('');
+    }
+  }, [availableTopics, selectedTopicId, dbCompetencies]);
 
   const availableCompetencies = useMemo(() =>
     selectedTopicId ? dbCompetencies.filter(c => c.topic_id === selectedTopicId) : []
@@ -271,9 +325,17 @@ export default function AssessmentMasterPage() {
       let url = `${API_BASE}/exams/question-bank?tenant=${slug}&mode=${mode}`;
       if (selectedDept) url += `&departmentId=${selectedDept}`;
       if (selectedSubject) url += `&subjectId=${selectedSubject}`;
-      if (selectedTopicName) url += `&topic=${encodeURIComponent(selectedTopicName)}`;
+      if (selectedTopicId && selectedTopicId !== 'all') {
+        url += `&topicId=${selectedTopicId}`;
+      } else if (selectedTopicName && selectedTopicName !== 'all') {
+        const cleanTopic = selectedTopicName.replace(/^Topic \d+:\s*/i, '').replace(/\[.*\]$/, '').trim();
+        url += `&topic=${encodeURIComponent(cleanTopic)}`;
+      }
       if (selectedCompetencyCode && selectedCompetencyCode !== 'all') {
-        url += `&competencyCode=${encodeURIComponent(selectedCompetencyCode)}`;
+        const cleanCompCode = selectedCompetencyCode.includes(':')
+          ? selectedCompetencyCode.split(':')[0].trim()
+          : selectedCompetencyCode.trim();
+        url += `&competencyCode=${encodeURIComponent(cleanCompCode)}`;
       }
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) {
@@ -333,7 +395,10 @@ export default function AssessmentMasterPage() {
       departmentId: selectedDept || null,
       subjectId: selectedSubject || null,
       professionalPhase: profLabel,
+      topicId: (selectedTopicId && selectedTopicId !== 'all') ? selectedTopicId : null,
       topic: selectedTopicName,
+      competencyId: (selectedCompetencyId && selectedCompetencyId !== 'all') ? selectedCompetencyId : null,
+      competencyCode: selectedCompetencyCode,
       mode: 'MCQ',
       questionText: mcqQuestionText.trim(),
       optionA: optionA.trim(),
@@ -342,19 +407,20 @@ export default function AssessmentMasterPage() {
       optionD: optionD.trim(),
       correctOption,
       difficultyLevel: mcqDifficulty,
-      competencyCode: selectedCompetencyCode,
       maxMarks: Number(mcqMaxMarks) || 1.0,
     } : {
       departmentId: selectedDept || null,
       subjectId: selectedSubject || null,
       professionalPhase: profLabel,
+      topicId: (selectedTopicId && selectedTopicId !== 'all') ? selectedTopicId : null,
       topic: selectedTopicName,
+      competencyId: (selectedCompetencyId && selectedCompetencyId !== 'all') ? selectedCompetencyId : null,
+      competencyCode: selectedCompetencyCode,
       mode: 'DESC',
       questionText: descQuestionText.trim(),
       hasSubQuestions,
       subQuestions: hasSubQuestions ? subQuestions : [],
       difficultyLevel: descDifficulty,
-      competencyCode: selectedCompetencyCode,
       maxMarks: Number(descMaxMarks) || 10.0,
     };
 

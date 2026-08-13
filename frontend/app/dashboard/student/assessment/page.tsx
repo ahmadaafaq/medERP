@@ -156,48 +156,48 @@ export default function StudentAssessmentPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#0F172A] text-slate-100 font-sans">
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#4E5969] dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar role="student" />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Student Assessment & Examination Portal" />
-        <main className="p-6 space-y-6 flex-1 bg-[#0F172A]">
+        <main className="p-6 space-y-6 flex-1">
           
           {/* Header Banner */}
-          <div className="bg-gradient-to-r from-indigo-900/60 via-purple-900/40 to-slate-900 border border-indigo-500/30 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="p-6 rounded-[22px] bg-gradient-to-r from-[#2D2575] via-[#3E3498] to-[#2D2575] text-white shadow-soft flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest bg-indigo-950/80 px-3 py-1 rounded-full border border-indigo-500/30">
+              <span className="text-[10px] font-extrabold text-[#F36C21] uppercase tracking-widest bg-white/10 px-3 py-1 rounded-full border border-white/20">
                 NMC Curriculum Compliance
               </span>
               <h2 className="text-2xl font-black text-white mt-2">
                 UG Medical Assessment & Examination Center
               </h2>
-              <p className="text-xs text-slate-300 mt-1">
+              <p className="text-xs text-white/80 mt-1">
                 View upcoming internal assessments, attempt scheduled online MCQ papers, and track continuous evaluation marks.
               </p>
             </div>
             <button
               onClick={fetchAssessmentData}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold text-xs transition shadow-lg flex items-center gap-2"
+              className="px-4 py-2.5 bg-[#5B4BFF] hover:bg-[#4E3FE3] text-white rounded-xl font-bold text-xs transition shadow-md flex items-center gap-2 cursor-pointer shrink-0"
             >
               🔄 Refresh Ledger
             </button>
           </div>
 
           {/* Active Assessments Table */}
-          <div className="bg-[#1E293B]/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
+            <h3 className="text-base font-black text-[#1B1E28] dark:text-white flex items-center gap-2">
               📝 Scheduled Upcoming Internal Assessments
             </h3>
 
             {loading ? (
-              <div className="text-center py-8 text-slate-400 text-sm">Loading assessment papers...</div>
+              <div className="text-center py-12 text-[#4E5969] dark:text-slate-400 text-xs animate-pulse">Loading assessment papers...</div>
             ) : papers.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 text-sm">No scheduled assessment papers found.</div>
+              <div className="text-center py-12 text-[#4E5969] dark:text-slate-400 text-xs border border-dashed border-[#E7EAF3] dark:border-slate-800 rounded-xl">No scheduled assessment papers found.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-700/80 text-slate-400 uppercase text-[10px] tracking-wider">
+                    <tr className="border-b border-[#E7EAF3] dark:border-slate-800 text-[#4E5969] dark:text-slate-400 uppercase text-[10px] font-bold tracking-wider">
                       <th className="py-3 px-4">Paper Code</th>
                       <th className="py-3 px-4">Assessment Name</th>
                       <th className="py-3 px-4">Subject</th>
@@ -207,19 +207,19 @@ export default function StudentAssessmentPage() {
                       <th className="py-3 px-4 text-center">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800">
+                  <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
                     {papers.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-800/40 transition">
-                        <td className="py-3 px-4 font-bold text-indigo-400">{p.code}</td>
-                        <td className="py-3 px-4 text-white font-medium">{p.name}</td>
-                        <td className="py-3 px-4 text-slate-300">{p.subject_name || 'General MBBS'}</td>
-                        <td className="py-3 px-4 text-white">{p.max_marks}</td>
-                        <td className="py-3 px-4 text-slate-400">{p.passing_marks}</td>
-                        <td className="py-3 px-4 text-slate-300">{p.exam_date || 'Schedule Date'}</td>
-                        <td className="py-3 px-4 text-center">
+                      <tr key={p.id} className="hover:bg-[#F1F4F9]/60 dark:hover:bg-slate-800/40 transition">
+                        <td className="py-3.5 px-4 font-mono font-black text-[#5B4BFF]">{p.code}</td>
+                        <td className="py-3.5 px-4 font-bold text-[#1B1E28] dark:text-white">{p.name}</td>
+                        <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300">{p.subject_name || 'General MBBS'}</td>
+                        <td className="py-3.5 px-4 text-[#1B1E28] dark:text-white font-bold">{p.max_marks}</td>
+                        <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-400">{p.passing_marks}</td>
+                        <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300 font-mono">{p.exam_date || 'Schedule Date'}</td>
+                        <td className="py-3.5 px-4 text-center">
                           <button
                             onClick={() => handleSimulateAttempt(p)}
-                            className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold rounded-lg text-xs shadow-md transition"
+                            className="px-3 py-1.5 bg-[#00C48C] hover:bg-[#00B07E] text-white font-bold rounded-xl text-xs shadow-md transition cursor-pointer"
                           >
                             ✏️ Start Test
                           </button>
@@ -233,50 +233,47 @@ export default function StudentAssessmentPage() {
           </div>
 
           {/* Assessment Score Ledger */}
-          <div className="bg-[#1E293B]/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
+            <h3 className="text-base font-black text-[#1B1E28] dark:text-white flex items-center gap-2">
               🏆 Completed Assessment & Examination Results Ledger
             </h3>
 
             {loading ? (
-              <div className="text-center py-8 text-slate-400 text-sm">Loading examination results...</div>
+              <div className="text-center py-12 text-[#4E5969] dark:text-slate-400 text-xs animate-pulse">Loading examination results...</div>
             ) : results.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 text-sm">No exam marks recorded yet.</div>
+              <div className="text-center py-12 text-[#4E5969] dark:text-slate-400 text-xs border border-dashed border-[#E7EAF3] dark:border-slate-800 rounded-xl">No exam marks recorded yet.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-700/80 text-slate-400 uppercase text-[10px] tracking-wider">
+                    <tr className="border-b border-[#E7EAF3] dark:border-slate-800 text-[#4E5969] dark:text-slate-400 uppercase text-[10px] font-bold tracking-wider">
                       <th className="py-3 px-4">Paper Code</th>
                       <th className="py-3 px-4">Assessment Title</th>
                       <th className="py-3 px-4">Subject</th>
                       <th className="py-3 px-4">Marks Obtained</th>
                       <th className="py-3 px-4">Max Marks</th>
-                      <th className="py-3 px-4">Percentage</th>
-                      <th className="py-3 px-4 text-center">Result Status</th>
+                      <th className="py-3 px-4 text-center">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800">
+                  <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
                     {results.map((r) => {
                       const maxM = r.max_marks || 100;
-                      const pct = ((r.marks_obtained / maxM) * 100).toFixed(1);
                       return (
-                        <tr key={r.id} className="hover:bg-slate-800/40 transition">
-                          <td className="py-3 px-4 font-bold text-purple-400">{r.paper_code || 'EXAM_RES'}</td>
-                          <td className="py-3 px-4 text-white font-medium">{r.paper_name || 'Internal Assessment'}</td>
-                          <td className="py-3 px-4 text-slate-300">{r.subject_name || 'Medical Science'}</td>
-                          <td className="py-3 px-4 font-extrabold text-white">{r.marks_obtained}</td>
-                          <td className="py-3 px-4 text-slate-400">{maxM}</td>
-                          <td className="py-3 px-4 font-bold text-cyan-400">{pct}%</td>
-                          <td className="py-3 px-4 text-center">
+                        <tr key={r.id} className="hover:bg-[#F1F4F9]/60 dark:hover:bg-slate-800/40 transition">
+                          <td className="py-3.5 px-4 font-mono font-black text-[#5B4BFF]">{r.paper_code || 'EXAM_RES'}</td>
+                          <td className="py-3.5 px-4 font-bold text-[#1B1E28] dark:text-white">{r.paper_name || 'Assessment'}</td>
+                          <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300">{r.subject_name || 'Physiology'}</td>
+                          <td className="py-3.5 px-4 font-black text-[#1B1E28] dark:text-white text-sm">{r.marks_obtained}</td>
+                          <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-400">{maxM}</td>
+                          <td className="py-3.5 px-4 text-center">
                             <span
-                              className={`px-2.5 py-1 rounded-full font-extrabold text-[10px] uppercase border ${
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
                                 r.is_pass
-                                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
-                                  : 'bg-red-950/80 text-red-300 border-red-500/40'
+                                  ? 'bg-[#00C48C]/15 text-[#00C48C] border-[#00C48C]/30'
+                                  : 'bg-rose-500/15 text-rose-500 border-rose-500/30'
                               }`}
                             >
-                              {r.is_pass ? 'PASSED (QUALIFIED)' : 'RE-ATTEMPT REQUIRED'}
+                              {r.is_pass ? 'PASSED' : 'FAILED'}
                             </span>
                           </td>
                         </tr>

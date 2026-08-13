@@ -55,21 +55,24 @@ export class AttendanceController {
   @Get('timetable-slots')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
   @ApiOperation({ summary: 'Get scheduled timetable slots for a date & batch with attendance status' })
-  getTimetableSlots(
+  async getTimetableSlots(
     @TenantSlug() tenantSlug: string,
     @Query('batchId') batchId?: string,
+    @Query('subjectId') subjectId?: string,
     @Query('sessionDate') sessionDate?: string,
     @Query('departmentId') departmentId?: string,
     @CurrentUser() user?: JwtPayload,
   ) {
-    return this.attendanceService.getTimetableSlotsForDate(
+    const res = await this.attendanceService.getTimetableSlotsForDate(
       tenantSlug,
       batchId,
       sessionDate,
       departmentId,
       user?.sub,
       user?.role,
+      subjectId,
     );
+    return { success: true, data: res.slots || [], date: res.date, dayOfWeek: res.dayOfWeek };
   }
 
   // ─── Find Active Session Records ───────────────────────────────────────────
@@ -82,9 +85,10 @@ export class AttendanceController {
     @Query('batchId') batchId: string,
     @Query('sessionDate') sessionDate: string,
     @Query('sessionType') sessionType?: string,
+    @Query('timetableSlotId') timetableSlotId?: string,
   ) {
     return this.attendanceService.findExistingSessionWithRecords(
-      tenantSlug, subjectId, batchId, sessionDate, sessionType || 'THEORY',
+      tenantSlug, subjectId, batchId, sessionDate, sessionType || 'THEORY', timetableSlotId,
     );
   }
 
@@ -191,7 +195,7 @@ export class AttendanceController {
   @ApiOperation({ summary: 'Batch-wise attendance report with per-student % breakdown' })
   getBatchReport(
     @TenantSlug() tenantSlug: string,
-    @Param('batchId', ParseUUIDPipe) batchId: string,
+    @Param('batchId') batchId: string,
     @Query('subjectId') subjectId?: string,
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
@@ -205,7 +209,7 @@ export class AttendanceController {
   @ApiOperation({ summary: 'Batch-wise multi-subject matrix attendance report (subject columns + cumulative %)' })
   getBatchMatrixReport(
     @TenantSlug() tenantSlug: string,
-    @Param('batchId', ParseUUIDPipe) batchId: string,
+    @Param('batchId') batchId: string,
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
   ) {

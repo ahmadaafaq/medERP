@@ -77,7 +77,7 @@ interface TimetableSlot {
 }
 
 const API_BASE = 'http://localhost:3001/api/v1';
-const TENANT = 'srms';
+const TENANT = 'srms-ims';
 
 const isUUID = (str?: string) => str ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str) : false;
 
