@@ -939,7 +939,7 @@ export default function FacultyAttendancePage() {
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-orange-50 text-[#F36C21] border border-orange-200/80 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-500/30">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFF4EC] text-[#D9530F] dark:text-[#F36C21] border border-[#F36C21]/40 dark:bg-orange-950/50 shadow-2xs">
                               {card.sessionType || 'Lecture'}
                             </span>
                             <span className="text-[10px] font-bold text-[#7B8794] truncate">
@@ -947,28 +947,28 @@ export default function FacultyAttendancePage() {
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1 text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">
+                          <div className="flex items-center gap-1 text-[11px] text-[#4E5969] dark:text-slate-300 font-bold">
                             <span>🕒</span>
-                            <span>{card.timeSlot}</span>
+                            <span className="font-mono">{card.timeSlot}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Status Footer */}
-                      <div className="mt-4 pt-3 border-t border-[#EEF2F7] dark:border-slate-800 flex items-center justify-between text-xs">
+                      <div className="mt-4 pt-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between text-xs">
                         {isPending ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold bg-[#FFF8E6] text-[#FFB020] border border-[#FFB020]/30">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black bg-[#FFF8E6] text-[#D98200] dark:text-[#FFB020] border border-[#FFB020]/40">
                             <span className="w-1.5 h-1.5 rounded-full bg-[#FFB020] animate-pulse"></span>
                             PENDING
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black bg-[#E6F9F3] text-[#00A876] dark:text-[#00C48C] border border-[#00C48C]/40">
                             <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
                             MARKED ({card.presentCount} P • {card.absentCount} A)
                           </span>
                         )}
 
-                        <span className={`font-black text-[11px] flex items-center gap-1 ${isActive ? 'text-[#5B4BFF]' : 'text-[#F36C21]'}`}>
+                        <span className={`font-black text-[11px] flex items-center gap-1 ${isActive ? 'text-[#5B4BFF] dark:text-indigo-400' : 'text-[#F36C21] dark:text-orange-400'}`}>
                           {isActive ? '✓ Active Roster' : 'Select Session →'}
                         </span>
                       </div>

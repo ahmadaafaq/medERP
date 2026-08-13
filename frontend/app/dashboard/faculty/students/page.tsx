@@ -782,7 +782,7 @@ export default function FacultyStudentsPage() {
                               <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
                                 <div>
                                   <p className="font-extrabold text-white">Human Physiology (PHY101)</p>
-                                  <p className="text-[11px] text-slate-400">Faculty Examiner: Prof. Sarah Sharma / Dr. Sanjay Singh</p>
+                                  <p className="text-[11px] text-slate-400">Faculty Examiner: Department Faculty Member</p>
                                 </div>
                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">PASSED</span>
                               </div>
@@ -918,7 +918,7 @@ export default function FacultyStudentsPage() {
                         <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800 flex items-center justify-between">
                           <div>
                             <p className="font-bold text-white">PY3.1 — 12-Lead ECG Recording & Analysis</p>
-                            <p className="text-[11px] text-slate-400">Signed by: Dr. Sarah Sharma</p>
+                            <p className="text-[11px] text-slate-400">Signed by: Faculty Marker</p>
                           </div>
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">Signed</span>
                         </div>

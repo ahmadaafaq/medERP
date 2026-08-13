@@ -10,29 +10,25 @@ const client = new Client({
 async function main() {
   await client.connect();
 
-  console.log('=== ALL ATTENDANCE SESSIONS (FACULTY CONDUCTED / SCHEDULED SESSIONS) ===');
-  const sess = await client.query(`
-    SELECT ats.id, ats.session_date, ats.session_type, ats.topic_covered, ats.is_cancelled, ats.timetable_slot_id,
-           f.name AS faculty_name, s.name AS subject_name, s.code AS subject_code,
-           ts.day_of_week, ts.start_time, ts.end_time, ts.room, ts.topic AS slot_topic, ts.competency_codes
+  console.log('=== CHECKING ATTENDANCE_SESSIONS DETAILED ===');
+  const attRes = await client.query(`
+    SELECT ats.id, ats.session_date, ats.session_type, ats.topic_covered, ats.timetable_slot_id,
+           f.name AS faculty_name, s.name AS subject_name, s.code AS subject_code
     FROM "tenant_srms-ims".attendance_sessions ats
     LEFT JOIN "tenant_srms-ims".faculty f ON f.id = ats.faculty_id
     LEFT JOIN "tenant_srms-ims".subjects s ON s.id = ats.subject_id
-    LEFT JOIN "tenant_srms-ims".timetable_slots ts ON ts.id = ats.timetable_slot_id
-    ORDER BY ats.session_date DESC
   `);
-  console.table(sess.rows);
+  console.table(attRes.rows);
 
-  console.log('\n=== ALL TIMETABLE SLOTS ===');
-  const slots = await client.query(`
+  console.log('=== CHECKING TIMETABLE_SLOTS FOR ALL FACULTIES ===');
+  const slotsRes = await client.query(`
     SELECT ts.id, ts.day_of_week, ts.start_time, ts.end_time, ts.room, ts.slot_type, ts.topic, ts.competency_codes,
            f.name AS faculty_name, s.name AS subject_name, s.code AS subject_code
     FROM "tenant_srms-ims".timetable_slots ts
     LEFT JOIN "tenant_srms-ims".faculty f ON f.id = ts.faculty_id
     LEFT JOIN "tenant_srms-ims".subjects s ON s.id = ts.subject_id
-    ORDER BY ts.day_of_week, ts.start_time
   `);
-  console.table(slots.rows);
+  console.table(slotsRes.rows);
 
   await client.end();
 }

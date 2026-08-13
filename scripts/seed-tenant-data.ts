@@ -58,7 +58,7 @@ async function seedData() {
     if (facUserId && pathDeptId) {
       await client.query(`
         INSERT INTO faculty (user_id, emp_id, name, department_id, designation, specialization)
-        VALUES ($1, 'EMP1001', 'Dr. Sarah Sharma', $2, 'Associate Professor', 'Pathology & Hematology')
+        VALUES ($1, 'EMP1001', 'Dr. Sanjay Singh', $2, 'Associate Professor', 'Physiology & Biophysics')
         ON CONFLICT (emp_id) DO NOTHING;
       `, [facUserId, pathDeptId]);
     }

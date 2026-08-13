@@ -77,16 +77,7 @@ export default function DepartmentFacultyPage() {
         if (filtered.length > 0) {
           setColleagues(filtered);
         } else {
-          // Authentic default department members
-          if (userDeptName.includes('Anatomy')) {
-            setColleagues([
-              { id: '2', name: 'Dr. Aparna Tyagi', emp_id: 'EMP1002', designation: 'Associate Professor', specialization: 'Human Anatomy & Histology', department_name: 'Department of Anatomy', email: 'aparna.tyagi@srms.edu', phone: '+91 98765 43211', experience: '9 Years' }
-            ]);
-          } else {
-            setColleagues([
-              { id: '1', name: 'Dr. Sarah Sharma', emp_id: 'EMP1001', designation: 'Professor & HOD', specialization: 'Physiology & Biophysics', department_name: 'Department of Physiology', email: 'sarah.sharma@srms.edu', phone: '+91 98765 43210', experience: '12 Years' }
-            ]);
-          }
+          setColleagues([]);
         }
       }
     } catch (err) {

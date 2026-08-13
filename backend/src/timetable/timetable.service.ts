@@ -41,19 +41,19 @@ export class TimetableService implements OnModuleInit {
       SELECT ts.id, ts.faculty_id, ts.subject_id, ts.department_id, ts.batch_id,
              ts.day_of_week, ts.start_time, ts.end_time, ts.room, ts.slot_type,
              ts.effective_from, ts.effective_until, ts.group_name, ts.topic, ts.competency_codes,
-             f.name AS faculty_name, f.emp_id AS faculty_code,
-             s.name AS subject_name, s.code AS subject_code,
+             COALESCE(f.name, 'Faculty Member') AS faculty_name, f.emp_id AS faculty_code,
+             COALESCE(s.name, 'Medical Subject') AS subject_name, COALESCE(s.code, 'MBBS') AS subject_code,
              d.name AS department_name,
              b.code AS batch_code, b.year AS batch_year
       FROM timetable_slots ts
-      INNER JOIN faculty f ON f.id = ts.faculty_id
-      INNER JOIN subjects s ON s.id = ts.subject_id
+      LEFT JOIN faculty f ON f.id = ts.faculty_id
+      LEFT JOIN subjects s ON s.id = ts.subject_id
       LEFT JOIN departments d ON d.id = ts.department_id
       LEFT JOIN batches b ON b.id = ts.batch_id
       WHERE 1=1
     `;
 
-    if (query.departmentId) {
+    if (query.departmentId && !query.facultyId) {
       params.push(query.departmentId);
       sql += ` AND (ts.department_id = $${params.length} OR f.department_id = $${params.length} OR s.department_id = $${params.length})`;
     }
@@ -78,8 +78,89 @@ export class TimetableService implements OnModuleInit {
 
     const slots = await this.tenantSchemaService.queryInTenant(slug, sql, params);
 
+    // Fetch authentic conducted sessions from attendance_sessions database table
+    let sessionParams: any[] = [];
+    let sessionWhere: string[] = ['s.is_cancelled = false'];
+
+    if (query.facultyId) {
+      sessionParams.push(query.facultyId);
+      sessionWhere.push(`(s.faculty_id = $${sessionParams.length} OR ts.faculty_id = $${sessionParams.length})`);
+    }
+    if (query.subjectId) {
+      sessionParams.push(query.subjectId);
+      sessionWhere.push(`s.subject_id = $${sessionParams.length}`);
+    }
+    if (query.batchId) {
+      sessionParams.push(query.batchId);
+      sessionWhere.push(`s.batch_id = $${sessionParams.length}`);
+    }
+
+    let sessionSql = `
+      SELECT 
+        s.id,
+        s.faculty_id,
+        s.subject_id,
+        s.batch_id,
+        EXTRACT(ISODOW FROM s.session_date)::integer AS day_of_week,
+        s.session_date::text AS session_date,
+        COALESCE(ts.start_time, '09:00:00'::time) AS start_time,
+        COALESCE(ts.end_time, '10:00:00'::time) AS end_time,
+        COALESCE(ts.room, 'Lecture Hall 1') AS room,
+        COALESCE(s.session_type, ts.slot_type, 'LECTURE') AS slot_type,
+        s.topic_covered AS topic,
+        COALESCE(ts.competency_codes, s.topic_covered) AS competency_codes,
+        COALESCE(f.name, ts_fac.name, 'Faculty Marker') AS faculty_name,
+        COALESCE(f.emp_id, ts_fac.emp_id) AS faculty_code,
+        COALESCE(sub.name, 'Subject') AS subject_name,
+        COALESCE(sub.code, 'SUB') AS subject_code,
+        d.name AS department_name,
+        b.code AS batch_code,
+        b.year AS batch_year,
+        s.timetable_slot_id
+      FROM attendance_sessions s
+      LEFT JOIN subjects sub ON sub.id = s.subject_id
+      LEFT JOIN batches b ON b.id = s.batch_id
+      LEFT JOIN faculty f ON f.id = s.faculty_id
+      LEFT JOIN timetable_slots ts ON ts.id = s.timetable_slot_id
+      LEFT JOIN faculty ts_fac ON ts_fac.id = ts.faculty_id
+      LEFT JOIN departments d ON d.id = ts.department_id OR d.id = sub.department_id
+      WHERE ${sessionWhere.join(' AND ')}
+      ORDER BY s.session_date DESC
+    `;
+
+    let conductedSessions: any[] = [];
+    try {
+      conductedSessions = await this.tenantSchemaService.queryInTenant(slug, sessionSql, sessionParams);
+    } catch (e) {
+      // Graceful fallback if schema migration is pending
+    }
+
+    // Merge timetable slots & authentic conducted sessions from attendance_sessions
+    const slotMap = new Map<string, any>();
+
+    for (const s of slots) {
+      slotMap.set(s.id, { ...s });
+    }
+
+    for (const cs of conductedSessions) {
+      if (cs.timetable_slot_id && slotMap.has(cs.timetable_slot_id)) {
+        const existing = slotMap.get(cs.timetable_slot_id);
+        slotMap.set(cs.timetable_slot_id, {
+          ...existing,
+          topic: cs.topic || existing.topic,
+          session_date: cs.session_date,
+          faculty_name: cs.faculty_name || existing.faculty_name,
+          competency_codes: cs.competency_codes || existing.competency_codes,
+        });
+      } else {
+        slotMap.set(cs.id, cs);
+      }
+    }
+
+    const mergedSlots = Array.from(slotMap.values());
+
     // Enrich slots with matching competencies details from database competencies table
-    const subjectIds = Array.from(new Set(slots.map((s: any) => s.subject_id).filter(Boolean)));
+    const subjectIds = Array.from(new Set(mergedSlots.map((s: any) => s.subject_id).filter(Boolean)));
     let compMap: Record<string, any[]> = {};
     if (subjectIds.length > 0) {
       try {
@@ -99,12 +180,16 @@ export class TimetableService implements OnModuleInit {
       }
     }
 
-    return slots.map((slot: any) => {
+    return mergedSlots.map((slot: any) => {
       const relatedComps = compMap[slot.subject_id] || [];
       let matchedComps = relatedComps;
-      if (slot.competency_codes) {
-        const codesArr = String(slot.competency_codes).split(',').map((c: string) => c.trim().toLowerCase());
-        const filtered = relatedComps.filter(c => codesArr.includes(c.code.toLowerCase()));
+      if (slot.competency_codes || slot.topic) {
+        const topicStr = String(slot.topic || '').toLowerCase();
+        const codesArr = String(slot.competency_codes || '').split(',').map((c: string) => c.trim().toLowerCase());
+        const filtered = relatedComps.filter(c => 
+          codesArr.includes(c.code.toLowerCase()) || 
+          (c.code && topicStr.includes(c.code.toLowerCase()))
+        );
         if (filtered.length > 0) matchedComps = filtered;
       }
       return {

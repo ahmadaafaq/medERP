@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import { filterCompetenciesForSlot, filterCompetencyCodesString } from '../../../utils/competencyFilter';
 
 interface Department {
   id: string;
@@ -128,7 +129,7 @@ const getCompetenciesForSlot = (
   allDbCompetencies: CompetencyMasterItem[],
   allDbTopics: TopicMasterItem[]
 ) => {
-  const result: { code: string; description: string; topicName?: string }[] = [];
+  const rawResult: { code: string; description: string; topicName?: string }[] = [];
   const addedCodes = new Set<string>();
 
   // Resolve full Topic Name from allDbTopics or slot.topic
@@ -147,32 +148,31 @@ const getCompetenciesForSlot = (
 
   // 1. Explicitly assigned competency codes on slot (Selected competencies)
   if (slot.competency_codes !== undefined && slot.competency_codes !== null) {
-    const rawCodes = slot.competency_codes.split(',').map(c => c.trim()).filter(Boolean);
+    const rawCodesStr = filterCompetencyCodesString(slot.competency_codes, slot.subject_code, slot.subject_name, slot.topic);
+    const rawCodes = rawCodesStr.split(',').map(c => c.trim()).filter(Boolean);
     for (const rawCode of rawCodes) {
       // Clean code e.g. "PY2.1(2024)" -> "PY2.1"
       const cleanCode = rawCode.replace(/\(\d+\)/g, '').trim();
       const dbComp = allDbCompetencies.find(c => 
-        c.code.toLowerCase() === cleanCode.toLowerCase() ||
-        c.code.toLowerCase().includes(cleanCode.toLowerCase()) ||
-        cleanCode.toLowerCase().includes(c.code.toLowerCase())
+        c.code.toLowerCase() === cleanCode.toLowerCase()
       );
       if (dbComp) {
-        result.push({
+        rawResult.push({
           code: dbComp.code,
           description: dbComp.description || 'NMC Medical Curriculum Competency',
           topicName: dbComp.topic_name || dbComp.topic_code,
         });
         addedCodes.add(dbComp.code.toLowerCase());
       } else {
-        result.push({
+        rawResult.push({
           code: cleanCode,
           description: 'NMC Medical Curriculum Competency',
         });
         addedCodes.add(cleanCode.toLowerCase());
       }
     }
-    // Return strictly the selected competencies!
-    return { compList: result, topicFullName };
+    const filteredCompList = filterCompetenciesForSlot(rawResult, slot.subject_code, slot.subject_name, slot.topic);
+    return { compList: filteredCompList, topicFullName };
   }
 
   // 2. Fallback only if competency_codes property was undefined/null (legacy slot)
@@ -186,7 +186,7 @@ const getCompetenciesForSlot = (
 
     for (const comp of topicComps) {
       if (!addedCodes.has(comp.code.toLowerCase())) {
-        result.push({
+        rawResult.push({
           code: comp.code,
           description: comp.description || 'NMC Medical Curriculum Competency',
           topicName: comp.topic_name || comp.topic_code,
@@ -196,7 +196,8 @@ const getCompetenciesForSlot = (
     }
   }
 
-  return { compList: result, topicFullName };
+  const filteredCompList = filterCompetenciesForSlot(rawResult, slot.subject_code, slot.subject_name, slot.topic);
+  return { compList: filteredCompList, topicFullName };
 };
 
 const FixedSlotHoverCard = ({
@@ -222,80 +223,83 @@ const FixedSlotHoverCard = ({
   return (
     <div
       style={{ top: `${topPos}px`, left: `${leftPos}px` }}
-      className="fixed w-80 sm:w-96 p-4 rounded-2xl bg-slate-900/98 border-2 border-indigo-500/60 shadow-2xl backdrop-blur-2xl text-slate-100 z-[9999] pointer-events-none transition-all duration-150 animate-fade-in font-sans"
+      className="fixed w-80 sm:w-96 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-2xl backdrop-blur-2xl text-[#1B1E28] dark:text-slate-100 z-[9999] pointer-events-auto transition-all duration-150 animate-fade-in font-sans overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-indigo-500/30">
-        <div>
-          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-            {slot.slot_type} • {slot.subject_code || 'SUB'}
+      {/* Top Deep Purple Ribbon Header */}
+      <div className="p-3.5 bg-gradient-to-r from-[#2D2575] to-[#3E3498] text-white flex items-center justify-between text-xs font-black force-text-white border-b border-white/10">
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFF4EC] text-[#D9530F] border border-[#F36C21]/40 font-mono">
+            {slot.subject_code || 'SUB'} • {slot.slot_type}
           </span>
-          <h4 className="text-xs font-black text-white mt-1.5 leading-snug">
+          {slot.group_name && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30 truncate">
+              👥 {slot.group_name}
+            </span>
+          )}
+        </div>
+        <span className="font-mono text-white text-xs font-bold shrink-0">
+          🕒 {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
+        </span>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* Topic Name Section */}
+        <div>
+          <h4 className="text-sm font-black text-[#1B1E28] dark:text-white leading-snug">
             {slot.subject_name || 'Subject Session'}
           </h4>
+          <p className="text-xs font-bold text-[#5B4BFF] dark:text-indigo-400 mt-1 flex items-center gap-1.5">
+            <span>📘 Topic:</span>
+            <span>{topicFullName || slot.topic || 'General Class Session'}</span>
+          </p>
         </div>
-        {slot.group_name && (
-          <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 whitespace-nowrap">
-            👥 {slot.group_name}
-          </span>
-        )}
-      </div>
 
-      {/* Topic Name Section */}
-      <div className="py-2.5 border-b border-slate-800 space-y-1">
-        <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-400 uppercase tracking-wider">
-          <span>📘 Topic Name</span>
-        </div>
-        <p className="text-xs font-extrabold text-white leading-snug">
-          {topicFullName || slot.topic || 'General Class Session'}
-        </p>
-      </div>
-
-      {/* Competency List & Description */}
-      <div className="pt-2.5 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-black text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
-            <span>🎯 NMC Competencies & Descriptions</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 text-[9px] font-mono font-bold">
-              {compList.length}
+        {/* Competency List & Description */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-[#F36C21] uppercase tracking-wider flex items-center gap-1.5">
+              <span>🎯 NMC Competencies & Descriptions</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-purple-50 text-purple-700 text-[9px] font-mono font-bold">
+                {compList.length}
+              </span>
             </span>
-          </span>
-        </div>
+          </div>
 
-        {compList.length > 0 ? (
-          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-            {compList.map((comp, idx) => (
-              <div
-                key={idx}
-                className="p-2 rounded-xl bg-slate-950/90 border border-purple-500/30 flex items-start gap-2 text-[11px]"
-              >
-                <span className="shrink-0 px-1.5 py-0.5 rounded bg-purple-900/80 text-purple-200 font-mono font-black text-[10px] border border-purple-500/40">
-                  {comp.code}
-                </span>
-                <div className="space-y-0.5">
-                  <p className="text-slate-100 font-semibold leading-tight text-[10px]">
-                    {comp.description}
-                  </p>
-                  {comp.topicName && (
-                    <span className="text-[9px] text-slate-400 block font-mono">
-                      Topic: {comp.topicName}
-                    </span>
-                  )}
+          {compList.length > 0 ? (
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {compList.map((comp, idx) => (
+                <div
+                  key={idx}
+                  className="p-2.5 rounded-2xl bg-[#F6F8FC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 text-xs flex items-start gap-2"
+                >
+                  <span className="shrink-0 px-2 py-0.5 rounded-md bg-[#5B4BFF]/10 text-[#5B4BFF] dark:text-purple-300 font-mono font-black text-[10px] border border-[#5B4BFF]/20">
+                    {comp.code}
+                  </span>
+                  <div className="space-y-0.5">
+                    <p className="text-[#4E5969] dark:text-slate-300 font-medium leading-snug text-[11px]">
+                      {comp.description}
+                    </p>
+                    {comp.topicName && (
+                      <span className="text-[9px] text-[#7B8794] block font-mono">
+                        Topic: {comp.topicName}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="p-2 rounded-xl bg-slate-950/40 border border-slate-800 text-[10px] text-slate-400 italic">
-            No explicit NMC competency descriptions linked to this session.
-          </div>
-        )}
+              ))}
+            </div>
+          ) : (
+            <div className="p-2.5 rounded-2xl bg-[#F6F8FC] dark:bg-slate-800/40 border border-[#E7EAF3] dark:border-slate-700 text-[11px] text-[#7B8794] italic">
+              No explicit NMC competency descriptions linked to this session.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer Info */}
-      <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-300 font-semibold">
-        <span>👨‍🏫 {slot.faculty_name || 'No Lecturer Assigned'}</span>
-        <span>📍 {slot.room ? `Room ${slot.room}` : 'Main Hall'}</span>
+      <div className="px-4 py-2.5 bg-[#F6F8FC] dark:bg-slate-800/50 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between text-[11px]">
+        <span className="font-black text-[#00C48C]">👨‍🏫 {slot.faculty_name || 'No Lecturer Assigned'}</span>
+        <span className="font-bold text-[#1B1E28] dark:text-slate-200">🏫 {slot.room ? `Room ${slot.room}` : 'Main Hall'}</span>
       </div>
     </div>
   );
@@ -972,43 +976,43 @@ export default function TimetableDesignPage() {
                               setHoveredSlotInfo({ slot: cell, x: rect.left, y: rect.top });
                             }}
                             onMouseLeave={() => setHoveredSlotInfo(null)}
-                            className={`p-2 rounded-xl text-xs flex flex-col justify-between shadow-md hover:scale-[1.02] transition-all h-full border cursor-pointer ${getTeachingModeStyle(cell.slot_type)}`}
+                            className="p-2.5 rounded-[18px] text-xs flex flex-col justify-between shadow-soft hover:scale-[1.02] transition-all h-full border cursor-pointer bg-white dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/60"
                           >
                             <div className="space-y-1">
                               <div className="flex items-center justify-between font-black">
-                                <span className="text-white drop-shadow-sm">{cell.subject_code || 'SUB'}</span>
-                                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-950/70 text-indigo-300">
+                                <span className="text-[#1B1E28] dark:text-white font-extrabold">{cell.subject_code || 'SUB'}</span>
+                                <span className="text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-[#FFF4EC] text-[#D9530F] dark:text-[#F36C21] border border-[#F36C21]/40">
                                   {cell.slot_type}
                                 </span>
                               </div>
                               
-                              <p className="font-extrabold text-[11px] leading-tight text-slate-100 truncate">
+                              <p className="font-black text-[11px] leading-tight text-[#1B1E28] dark:text-white truncate">
                                 {cell.subject_name || cell.topic || cell.slot_type}
                               </p>
 
                               {cell.topic && (
-                                <p className="text-[10px] text-slate-300 italic truncate font-medium">"{cell.topic}"</p>
+                                <p className="text-[10px] text-[#5B4BFF] dark:text-indigo-400 font-semibold truncate">📖 "{cell.topic}"</p>
                               )}
 
                               {cell.competency_codes && (
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   {cell.competency_codes.split(',').map(cCode => (
-                                    <span key={cCode.trim()} className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-500/40">
-                                      🏷️ {cCode.trim()}
+                                    <span key={cCode.trim()} className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900/30">
+                                      🎯 {cCode.trim()}
                                     </span>
                                   ))}
                                 </div>
                               )}
                             </div>
 
-                            <div className="mt-1.5 pt-1.5 border-t border-slate-700/50 flex flex-col gap-0.5 text-[10px] text-slate-300">
-                              <p className="truncate font-semibold flex items-center gap-1">
+                            <div className="mt-1.5 pt-1.5 border-t border-[#E7EAF3] dark:border-slate-800 flex flex-col gap-0.5 text-[10px]">
+                              <p className="truncate font-black text-[#00C48C] flex items-center gap-1">
                                 <span>👨‍🏫</span>
                                 <span>{cell.faculty_name || 'No Lecturer'}</span>
                               </p>
-                              <div className="flex items-center justify-between text-[9px] text-slate-400 mt-0.5">
-                                <span>{cell.room ? `📍 ${cell.room}` : ''}</span>
-                                <span className="font-bold text-purple-300">{cell.group_name ? cell.group_name.slice(0, 10) : ''}</span>
+                              <div className="flex items-center justify-between text-[9px] text-[#7B8794] dark:text-slate-400 mt-0.5">
+                                <span>{cell.room ? `🏫 ${cell.room}` : ''}</span>
+                                <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">{cell.group_name ? cell.group_name.slice(0, 10) : ''}</span>
                               </div>
                             </div>
                           </div>

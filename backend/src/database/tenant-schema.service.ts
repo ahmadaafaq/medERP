@@ -1382,19 +1382,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
     // 4. Faculty (Dr. Sarah Sharma & Dr. Aparna Tyagi)
     try {
-      // 4a. Dr. Sarah Sharma (Physiology)
+      // 4a. Dr. Sanjay Singh (Physiology)
       const facRes1 = await runner.query(`
         INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-        VALUES ('sarah.sharma@srms.edu', $1, 'FACULTY', true, false)
+        VALUES ('sanjay.singh@srms.edu', $1, 'FACULTY', true, false)
         ON CONFLICT (email) DO NOTHING
         RETURNING id;
       `, [defaultPasswordHash]);
 
-      const facUserId1 = facRes1[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sarah.sharma@srms.edu'`))[0]?.id;
+      const facUserId1 = facRes1[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sanjay.singh@srms.edu'`))[0]?.id;
       if (facUserId1) {
         await runner.query(`
           INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
-          VALUES ($1, 'EMP1001', 'Dr. Sarah Sharma', 'Professor & HOD', 'Physiology & Biophysics', '/avatars/dr_sarah_sharma.png')
+          VALUES ($1, 'EMP1001', 'Dr. Sanjay Singh', 'Professor & HOD', 'Physiology & Biophysics', '/avatars/dr_sanjay_singh.png')
           ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
         `, [facUserId1]);
       }

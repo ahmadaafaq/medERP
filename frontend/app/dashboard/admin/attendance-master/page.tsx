@@ -806,41 +806,91 @@ export default function AttendanceMasterPage() {
                     No scheduled timetable slots found for {sessionDate}. Select a subject manually using the filters above.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {timetableSlots.map((slot) => {
                       const isSelected = selectedSlotId === slot.id || (selectedSubjectId === slot.subject_id && sessionType === slot.slot_type);
+                      const startTimeDisplay = slot.start_time?.slice(0, 5) || '09:00';
+                      const endTimeDisplay = slot.end_time?.slice(0, 5) || '10:00';
+
                       return (
                         <div
                           key={slot.id}
                           onClick={() => handleSelectSlot(slot)}
-                          className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                          className={`bg-white dark:bg-slate-900 border rounded-[22px] p-5 cursor-pointer transition-all duration-300 relative overflow-hidden shadow-soft hover:shadow-hover hover:-translate-y-0.5 ${
                             isSelected
-                              ? 'bg-indigo-600/30 border-indigo-500 text-white shadow-lg ring-2 ring-indigo-500/40'
-                              : slot.is_attendance_marked
-                              ? 'bg-emerald-950/30 border-emerald-500/40 text-slate-200 hover:border-emerald-500'
-                              : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:border-cyan-500/60 hover:bg-slate-800'
+                              ? 'ring-2 ring-[#5B4BFF] border-[#5B4BFF] bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/20 dark:from-slate-900 dark:to-indigo-950/40 shadow-xl'
+                              : 'border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/60'
                           }`}
                         >
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[11px] font-black text-cyan-300 font-mono">
-                              🕒 {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
-                            </span>
-                            <span className={`px-2 py-0.5 text-[9px] font-black uppercase rounded-full ${
-                              slot.is_attendance_marked
-                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                            }`}>
-                              {slot.is_attendance_marked ? '🟢 Marked' : '⚡ Pending'}
-                            </span>
+                          {/* Active Ribbon Bar */}
+                          {isSelected && (
+                            <div className="mb-3 -mx-5 -mt-5 px-5 py-1.5 bg-[#2D2575] border-b border-white/10 text-[10px] font-black text-white uppercase tracking-widest flex items-center justify-between force-text-white">
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-[#00C48C] animate-ping"></span>
+                                <span>SELECTED SESSION — MARKING ACTIVE</span>
+                              </span>
+                              <span className="text-[#F36C21]">✓ ACTIVE</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-4">
+                            {/* Time & Date Column (Matching Reference Image) */}
+                            <div className="text-center shrink-0 min-w-[75px]">
+                              <span className="text-base font-black text-[#F36C21] block tracking-tight font-mono">
+                                {startTimeDisplay}
+                              </span>
+                              <span className="text-[10px] font-extrabold text-[#7B8794] uppercase tracking-wider block mt-0.5">
+                                {sessionDate ? new Date(sessionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' }).toUpperCase() : 'TODAY'}
+                              </span>
+                            </div>
+
+                            {/* Vertical Divider */}
+                            <div className="w-px bg-[#E7EAF3] dark:bg-slate-800 self-stretch my-0.5 shrink-0"></div>
+
+                            {/* Slot Details Column */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1 mb-1">
+                                <h4 className="text-sm font-black text-[#1B1E28] dark:text-white truncate">
+                                  {slot.subject_name ? `[${slot.subject_code}] ${slot.subject_name.toUpperCase()}` : 'SUBJECT SESSION'}
+                                </h4>
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFF4EC] text-[#D9530F] dark:text-[#F36C21] border border-[#F36C21]/40 dark:bg-orange-950/50 shadow-2xs">
+                                  {slot.slot_type || 'Lecture'} {slot.topic ? `"${slot.topic}"` : ''}
+                                </span>
+                                <span className="text-[10px] font-bold text-[#7B8794] truncate">
+                                  {slot.room ? `Room ${slot.room}` : ''}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-[11px] text-[#4E5969] dark:text-slate-300 font-bold">
+                                <span className="flex items-center gap-1 font-mono">
+                                  <span>🕒</span>
+                                  <span>{startTimeDisplay} - {endTimeDisplay}</span>
+                                </span>
+                                <span className="text-[#00C48C] font-black">{slot.faculty_name}</span>
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="font-extrabold text-xs text-white truncate">
-                            [{slot.subject_code}] {slot.subject_name}
-                          </div>
+                          {/* Status Footer */}
+                          <div className="mt-4 pt-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between text-xs">
+                            {slot.is_attendance_marked ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black bg-[#E6F9F3] text-[#00A876] dark:text-[#00C48C] border border-[#00C48C]/40">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
+                                MARKED
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black bg-[#FFF8E6] text-[#D98200] dark:text-[#FFB020] border border-[#FFB020]/40">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#FFB020] animate-pulse"></span>
+                                PENDING
+                              </span>
+                            )}
 
-                          <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-800/80">
-                            <span className="font-bold text-slate-300">{slot.slot_type} {slot.room ? `• Room ${slot.room}` : ''}</span>
-                            <span className="text-purple-300 font-semibold">{slot.faculty_name || slot.department_name}</span>
+                            <span className={`font-black text-[11px] flex items-center gap-1 ${isSelected ? 'text-[#5B4BFF] dark:text-indigo-400' : 'text-[#F36C21] dark:text-orange-400'}`}>
+                              {isSelected ? '✓ Active Roster' : 'Select Session →'}
+                            </span>
                           </div>
                         </div>
                       );

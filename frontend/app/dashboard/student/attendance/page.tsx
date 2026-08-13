@@ -234,50 +234,7 @@ export default function StudentAttendancePage() {
     },
   ];
 
-  const getFallbackLogs = (): AttendanceLog[] => [
-    {
-      record_id: '1',
-      status: 'PRESENT',
-      session_id: 's1',
-      session_date: '2026-08-03',
-      start_time: '09:00:00',
-      end_time: '10:00:00',
-      session_type: 'THEORY',
-      topic: 'Hematopathology & Anemia Classification',
-      subject_id: '1',
-      subject_name: 'Systemic Pathology & Microbiology',
-      subject_code: 'PATH301',
-      faculty_name: 'Dr. Sarah Sharma',
-    },
-    {
-      record_id: '2',
-      status: 'PRESENT',
-      session_id: 's2',
-      session_date: '2026-08-01',
-      start_time: '10:00:00',
-      end_time: '12:00:00',
-      session_type: 'PRACTICAL',
-      topic: 'Surgical Knotting & Basic Aseptic Technique',
-      subject_id: '2',
-      subject_name: 'General Surgery & Skills Lab',
-      subject_code: 'SURG302',
-      faculty_name: 'Dr. Sarah Sharma',
-    },
-    {
-      record_id: '3',
-      status: 'PRESENT',
-      session_id: 's3',
-      session_date: '2026-07-31',
-      start_time: '09:00:00',
-      end_time: '10:00:00',
-      session_type: 'THEORY',
-      topic: 'Cellular Injury & Necrosis',
-      subject_id: '1',
-      subject_name: 'Systemic Pathology & Microbiology',
-      subject_code: 'PATH301',
-      faculty_name: 'Dr. Sarah Sharma',
-    },
-  ];
+  const getFallbackLogs = (): AttendanceLog[] => [];
 
   // Fetch Attendance Summary (Per Subject + Overall)
   const fetchSummary = async () => {

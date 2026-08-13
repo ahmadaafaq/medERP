@@ -16,7 +16,7 @@ async function bootstrap() {
     contentSecurityPolicy: false, // Allows Swagger UI inline scripts & CSS
   }));
   app.enableCors({
-    origin: '*',
+    origin: true,
     credentials: true,
   });
 

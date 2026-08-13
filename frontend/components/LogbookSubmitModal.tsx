@@ -11,7 +11,7 @@ export default function LogbookSubmitModal({ isOpen, onClose, onSubmitSuccess }:
   const [activityType, setActivityType] = useState('Ward Rounds');
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
-  const [facultyName, setFacultyName] = useState('Dr. Sarah Sharma');
+  const [facultyName, setFacultyName] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;

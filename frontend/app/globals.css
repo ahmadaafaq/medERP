@@ -397,35 +397,21 @@ html.dark input::placeholder, html.dark textarea::placeholder {
    ───────────────────────────────────────────────────────────────────────────── */
 
 /* Apply bg-[#1E293B] ONLY in Dark Mode. In Day Mode, use white bg and black text! */
-html:not(.dark) [class*="bg-[#1E293B]"],
-html:not(.dark) [class*="bg-[#0F172A]"],
-html:not(.dark) [class*="bg-slate-900"],
-html:not(.dark) [class*="bg-slate-950"] {
-  background-color: #FFFFFF !important;
-  color: #0F172A !important;
-  border-color: #E2E8F0 !important;
+/* Ensure purple headers (#2D2575) and dark banners ALWAYS retain high-contrast white text */
+.bg-brand-purple,
+[class*="bg-[#2D2575]"],
+[class*="from-[#2D2575]"],
+.force-text-white,
+[data-dark-banner="true"] {
+  color: #FFFFFF !important;
 }
 
-html:not(.dark) [class*="bg-[#1E293B]"] h1,
-html:not(.dark) [class*="bg-[#1E293B]"] h2,
-html:not(.dark) [class*="bg-[#1E293B]"] h3,
-html:not(.dark) [class*="bg-[#1E293B]"] h4,
-html:not(.dark) [class*="bg-[#1E293B]"] p,
-html:not(.dark) [class*="bg-[#1E293B]"] span,
-html:not(.dark) [class*="bg-[#1E293B]"] div,
-html:not(.dark) [class*="bg-[#0F172A]"] h1,
-html:not(.dark) [class*="bg-[#0F172A]"] h2,
-html:not(.dark) [class*="bg-[#0F172A]"] h3,
-html:not(.dark) [class*="bg-[#0F172A]"] h4,
-html:not(.dark) [class*="bg-[#0F172A]"] p,
-html:not(.dark) [class*="bg-[#0F172A]"] span,
-html:not(.dark) [class*="bg-[#0F172A]"] div {
-  color: #0F172A;
-}
-
-html:not(.dark) [class*="bg-[#1E293B]"] .text-white,
-html:not(.dark) [class*="bg-[#0F172A]"] .text-white {
-  color: #0F172A !important;
+.bg-brand-purple h1, .bg-brand-purple h2, .bg-brand-purple h3, .bg-brand-purple h4,
+[class*="bg-[#2D2575]"] h1, [class*="bg-[#2D2575]"] h2, [class*="bg-[#2D2575]"] h3, [class*="bg-[#2D2575]"] h4,
+[class*="from-[#2D2575]"] h1, [class*="from-[#2D2575]"] h2, [class*="from-[#2D2575]"] h3, [class*="from-[#2D2575]"] h4,
+.force-text-white h1, .force-text-white h2, .force-text-white h3, .force-text-white h4,
+.force-text-white p, .force-text-white span, .force-text-white div {
+  color: #FFFFFF !important;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -442,4 +428,12 @@ html:not(.dark) [class*="bg-[#0F172A]"] .text-white {
 [class*="bg-indigo-950"] th {
   color: #FFFFFF !important;
   font-weight: 800 !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SPECIFIC CLASS OVERRIDE FOR .text-[#1B1E28] (rgb(247 130 17))
+   ───────────────────────────────────────────────────────────────────────────── */
+.text-\[\#1B1E28\],
+[class*="text-[#1B1E28]"] {
+  color: rgb(247, 130, 17) !important;
 }
