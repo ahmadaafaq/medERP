@@ -31,6 +31,22 @@ const FALLBACK_SRMS_COLLEGES = [
   { colg_cd: '14', colg_name: 'SRMS CRICKET ACADEMY' },
 ];
 
+function parseDotNetDate(dateStr: any): string | null {
+  if (!dateStr) return null;
+  if (typeof dateStr === 'string') {
+    const match = dateStr.match(/\/Date\((\-?\d+)\)\//);
+    if (match) {
+      const timestamp = parseInt(match[1], 10);
+      if (timestamp < 0) return null;
+      const date = new Date(timestamp);
+      return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+    }
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+  }
+  return null;
+}
+
 const DEFAULT_COLLEGE_COURSES: Record<string, Array<{
   code: string;
   name: string;
@@ -276,6 +292,19 @@ export class CollegeMasterService implements OnApplicationBootstrap {
 
   async fetchLiveBranches(colgcd: string, coursecd: string): Promise<any[]> {
     const res = await fetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetBranch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ colgcd: String(colgcd).trim(), coursecd: String(coursecd).trim() }),
+    });
+    if (!res.ok) {
+      throw new Error(`SRMS Portal API error (${res.status})`);
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  async fetchLiveBatches(colgcd: string, coursecd: string): Promise<any[]> {
+    const res = await fetch('https://myportal.srms.ac.in/SRMSERP/OnlineAttend/GetBatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ colgcd: String(colgcd).trim(), coursecd: String(coursecd).trim() }),
@@ -733,14 +762,252 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   // ─── 3. BATCHES ────────────────────────────────────────────────────────────
-  async listBatches(tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
-    const collegeId = await this.getCollegeIdBySlug(slug);
-    const rows = await this.tenantSchemaService.queryInTenant(
-      slug,
-      `SELECT *, course_cd AS course_code FROM batches ORDER BY year DESC, code ASC`,
-    );
-    return rows.map(r => ({ ...r, college_id: collegeId }));
+  async syncExternalBatches(tenantSlugOrCode?: string, targetCourseCd?: string): Promise<any[]> {
+    this.logger.log(`Starting syncExternalBatches from SRMS GetBatch API... target: ${tenantSlugOrCode || 'all'}, course: ${targetCourseCd || 'all'}`);
+    const syncedBatches: any[] = [];
+
+    // 1. Get colleges to process
+    let collegeRows: any[] = [];
+    if (tenantSlugOrCode && tenantSlugOrCode !== 'all') {
+      const slug = await this.resolveTenantSlug(tenantSlugOrCode);
+      collegeRows = await this.ds.query(
+        `SELECT id, code, name, slug FROM public.tenants WHERE slug = $1 OR code = $2 OR id::text = $3`,
+        [slug, tenantSlugOrCode, tenantSlugOrCode],
+      );
+    } else {
+      collegeRows = await this.ds.query(
+        `SELECT id, code, name, slug FROM public.tenants WHERE is_active = true ORDER BY CAST(NULLIF(regexp_replace(code, '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, name ASC`,
+      );
+    }
+
+    if (collegeRows.length === 0) {
+      await this.syncExternalColleges();
+      collegeRows = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`);
+    }
+
+    for (const col of collegeRows) {
+      const cd = String(col.code || '').trim();
+      const slug = col.slug;
+      const schema = `tenant_${slug}`;
+
+      await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
+      await this.ds.query(`CREATE SCHEMA IF NOT EXISTS "${schema}";`).catch(() => {});
+
+      // Ensure batches table exists with all required columns
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".batches (
+          id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          code           VARCHAR(50) NOT NULL,
+          name           VARCHAR(200),
+          year           INT         NOT NULL,
+          batch_cd       VARCHAR(50),
+          course_cd      VARCHAR(50),
+          course_name    VARCHAR(200),
+          colg_cd        VARCHAR(50),
+          department_id  UUID,
+          start_date     DATE,
+          end_date       DATE,
+          curr_bat_cd    VARCHAR(50),
+          is_active      BOOLEAN     DEFAULT true,
+          created_at     TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {});
+
+      await this.ds.query(`
+        ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+        ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+        ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS curr_bat_cd VARCHAR(50);
+        ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS name VARCHAR(200);
+      `).catch(() => {});
+
+      // 2. Fetch courses for this college
+      let courseCds: Array<{ course_cd: string; course_name: string }> = [];
+      if (targetCourseCd) {
+        courseCds = [{ course_cd: String(targetCourseCd).trim(), course_name: '' }];
+      } else {
+        const dbCourses = await this.ds.query(
+          `SELECT course_cd, name FROM "${schema}".courses WHERE course_cd IS NOT NULL ORDER BY course_cd ASC`,
+        ).catch(() => []);
+
+        if (dbCourses.length > 0) {
+          courseCds = dbCourses.map((c: any) => ({ course_cd: String(c.course_cd), course_name: c.name }));
+        } else if (cd) {
+          const apiCourses = await this.fetchLiveCourses(cd).catch(() => []);
+          courseCds = apiCourses.map((c: any) => ({ course_cd: String(c.course_cd), course_name: c.course_name }));
+        }
+      }
+
+      if (courseCds.length === 0 && cd) {
+        courseCds = [{ course_cd: '1', course_name: 'Default Course' }];
+      }
+
+      // 3. For each course, fetch batches from GetBatch API
+      for (const crs of courseCds) {
+        if (!crs.course_cd) continue;
+        let extBatches: any[] = [];
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const res = await fetch('https://myportal.srms.ac.in/SRMSERP/OnlineAttend/GetBatch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ colgcd: cd, coursecd: crs.course_cd }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+              extBatches = data;
+            }
+          }
+        } catch (err: any) {
+          this.logger.warn(`Failed to fetch GetBatch for colg ${cd}, course ${crs.course_cd}: ${err?.message}`);
+        }
+
+        // 4. Upsert batches into batches table
+        for (const ext of extBatches) {
+          try {
+            const rawBatchName = String(ext.batch_name || '').trim();
+            const batchCd = String(ext.batch_cd || '').trim();
+            const courseCd = String(ext.course_cd || crs.course_cd || '').trim();
+            const courseName = String(ext.course_name || crs.course_name || '').trim();
+            const yearNum = parseInt(rawBatchName, 10) || new Date().getFullYear();
+            const startDate = parseDotNetDate(ext.startdt);
+            const endDate = parseDotNetDate(ext.enddt);
+            const currBatCd = ext.curr_bat_Cd ? String(ext.curr_bat_Cd) : null;
+            const isActive = String(ext.active_flg) === '1';
+
+            // Clean code & title
+            const uniqueCode = `B${rawBatchName || batchCd}-C${courseCd}-${cd}`;
+            const displayName = rawBatchName ? `Batch ${rawBatchName}` : `Batch ${batchCd}`;
+
+            const existing = await this.ds.query(
+              `SELECT id FROM "${schema}".batches
+               WHERE (batch_cd = $1 AND course_cd = $2)
+                  OR code = $3
+               LIMIT 1`,
+              [batchCd, courseCd, uniqueCode],
+            ).catch(() => []);
+
+            if (existing && existing.length > 0) {
+              const updated = await this.ds.query(
+                `UPDATE "${schema}".batches
+                 SET code = $1,
+                     name = $2,
+                     year = $3,
+                     batch_cd = COALESCE($4, batch_cd),
+                     course_cd = COALESCE($5, course_cd),
+                     course_name = COALESCE($6, course_name),
+                     colg_cd = COALESCE($7, colg_cd),
+                     start_date = COALESCE($8, start_date),
+                     end_date = COALESCE($9, end_date),
+                     curr_bat_cd = COALESCE($10, curr_bat_cd),
+                     is_active = $11
+                 WHERE id = $12
+                 RETURNING *`,
+                [uniqueCode, displayName, yearNum, batchCd, courseCd, courseName, cd, startDate, endDate, currBatCd, isActive, existing[0].id],
+              );
+              const row = (updated && updated[0]) ? (updated[0]['0'] || (Array.isArray(updated[0]) ? updated[0][0] : updated[0])) : {};
+              syncedBatches.push({ ...row, college_id: col.id, college_name: col.name, college_code: col.code, college_slug: slug, course_code: courseCd });
+            } else {
+              const inserted = await this.ds.query(
+                `INSERT INTO "${schema}".batches (code, name, year, batch_cd, course_cd, course_name, colg_cd, start_date, end_date, curr_bat_cd, is_active)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                 RETURNING *`,
+                [uniqueCode, displayName, yearNum, batchCd, courseCd, courseName, cd, startDate, endDate, currBatCd, isActive],
+              );
+              const row = (inserted && inserted[0]) ? (inserted[0]['0'] || (Array.isArray(inserted[0]) ? inserted[0][0] : inserted[0])) : {};
+              syncedBatches.push({ ...row, college_id: col.id, college_name: col.name, college_code: col.code, college_slug: slug, course_code: courseCd });
+            }
+          } catch (upsertErr: any) {
+            this.logger.warn(`Failed to upsert batch for ${cd} course ${crs.course_cd}: ${upsertErr?.message}`);
+          }
+        }
+      }
+    }
+
+    this.logger.log(`Batch sync complete. Total batches synced to PostgreSQL: ${syncedBatches.length}`);
+    return syncedBatches;
+  }
+
+  async listBatches(tenantSlug?: string): Promise<any[]> {
+    const colleges = await this.listColleges();
+
+    if (tenantSlug && tenantSlug !== 'all') {
+      const slug = await this.resolveTenantSlug(tenantSlug);
+      const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
+      const collegeId = targetCollege?.id || await this.getCollegeIdBySlug(slug);
+      const collegeName = targetCollege?.name || '';
+      const collegeCode = targetCollege?.code || '';
+      const schema = `tenant_${slug}`;
+
+      try {
+        await this.ds.query(`
+          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS curr_bat_cd VARCHAR(50);
+          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS name VARCHAR(200);
+        `).catch(() => {});
+
+        const rows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT *, course_cd AS course_code FROM batches ORDER BY year DESC, code ASC`,
+        ).catch(() => []);
+
+        if (rows.length === 0) {
+          await this.syncExternalBatches(slug);
+          const fresh = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT *, course_cd AS course_code FROM batches ORDER BY year DESC, code ASC`,
+          ).catch(() => []);
+          return fresh.map((r: any) => ({
+            ...r,
+            college_id: collegeId,
+            college_name: collegeName,
+            college_code: collegeCode,
+            college_slug: slug,
+          }));
+        }
+
+        return rows.map((r: any) => ({
+          ...r,
+          college_id: collegeId,
+          college_name: collegeName,
+          college_code: collegeCode,
+          college_slug: slug,
+        }));
+      } catch (err: any) {
+        this.logger.warn(`Failed to list batches for ${slug}: ${err?.message}`);
+        return [];
+      }
+    }
+
+    // List batches across all colleges
+    const allBatches: any[] = [];
+    for (const col of colleges) {
+      try {
+        const rows = await this.tenantSchemaService.queryInTenant(
+          col.slug,
+          `SELECT *, course_cd AS course_code FROM batches ORDER BY year DESC, code ASC`,
+        ).catch(() => []);
+
+        allBatches.push(
+          ...rows.map((r: any) => ({
+            ...r,
+            college_id: col.id,
+            college_name: col.name,
+            college_code: col.code,
+            college_slug: col.slug,
+          })),
+        );
+      } catch (err) {}
+    }
+    return allBatches;
   }
 
   async createBatch(dto: CreateBatchDto, tenantSlug?: string) {

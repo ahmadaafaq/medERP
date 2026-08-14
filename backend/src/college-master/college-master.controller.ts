@@ -97,6 +97,20 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
+  @Post('live/batches')
+  @Get('live/batches')
+  @ApiOperation({ summary: 'Fetch live batches directly from SRMS Portal (POST { colgcd, coursecd })' })
+  async getLiveBatches(
+    @Body() body: any,
+    @Query('colgcd') queryColgcd?: string,
+    @Query('coursecd') queryCoursecd?: string,
+  ) {
+    const colgcd = body?.colgcd || body?.colg_cd || queryColgcd || '1';
+    const coursecd = body?.coursecd || body?.course_cd || queryCoursecd || '1';
+    const data = await this.collegeMasterService.fetchLiveBatches(colgcd, coursecd);
+    return { success: true, data };
+  }
+
   // ─── 2. COURSES ───────────────────────────────────────────────────────────
   @Post('courses/sync-external')
   @ApiOperation({ summary: 'Sync Courses sequentially from external SRMS Portal API' })
@@ -142,6 +156,27 @@ export class CollegeMasterController {
   }
 
   // ─── 3. BATCHES ───────────────────────────────────────────────────────────
+  @Post('batches/sync-external')
+  @ApiOperation({ summary: 'Sync Batches from external SRMS OnlineAttend GetBatch API' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async syncExternalBatchesPost(
+    @Query('tenant') tenant?: string,
+    @Query('coursecd') coursecd?: string,
+  ) {
+    const data = await this.collegeMasterService.syncExternalBatches(tenant, coursecd);
+    return { success: true, message: 'Batches synced successfully from SRMS GetBatch API to PostgreSQL', data };
+  }
+
+  @Get('batches/sync-external')
+  @ApiOperation({ summary: 'Sync Batches from external SRMS OnlineAttend GetBatch API (GET trigger)' })
+  async syncExternalBatchesGet(
+    @Query('tenant') tenant?: string,
+    @Query('coursecd') coursecd?: string,
+  ) {
+    const data = await this.collegeMasterService.syncExternalBatches(tenant, coursecd);
+    return { success: true, message: 'Batches synced successfully from SRMS GetBatch API to PostgreSQL', data };
+  }
+
   @Get('batches')
   @ApiOperation({ summary: 'List Batches — public read' })
   async listBatches(@Query('tenant') tenant?: string) {

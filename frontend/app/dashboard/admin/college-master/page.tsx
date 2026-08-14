@@ -5,6 +5,7 @@ import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import LiveCollegeCourseCascadingDropdown from '../../../../components/LiveCollegeCourseCascadingDropdown';
 import Live3LevelDepartmentCascadingDropdown from '../../../../components/Live3LevelDepartmentCascadingDropdown';
+import LiveCollegeCourseBatchCascadingDropdown from '../../../../components/LiveCollegeCourseBatchCascadingDropdown';
 
 const ActionButtons = ({ onEdit, onDelete }: { onEdit: () => void, onDelete: () => void }) => (
   <div className="flex items-center justify-end gap-1.5">
@@ -382,13 +383,71 @@ export default function CollegeMasterPage() {
     }
   };
 
+  // Sync batches for a single selected college via official SRMS GetBatch API
+  const syncBatchesForCollege = async (col: College, showToast = true): Promise<any[]> => {
+    if (!col || !col.slug) return [];
+    setSyncing(true);
+    if (showToast) setSyncMessage(`⚡ Querying SRMS GetBatch API for ${col.name}...`);
+    try {
+      const res = await fetch(`${API_BASE}/batches/sync-external?tenant=${col.slug}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        const list: any[] = data.data || [];
+        setBatches((prev) => {
+          const otherColleges = prev.filter((b) => b.college_id !== col.id && b.college_slug !== col.slug);
+          return [...otherColleges, ...list];
+        });
+        if (showToast) {
+          setSyncMessage(`⚡ Synced ${list.length} Batches for ${col.name} via SRMS GetBatch API to PostgreSQL ✅`);
+          setTimeout(() => setSyncMessage(''), 5000);
+        }
+        return list;
+      } else {
+        if (showToast) setSyncMessage(`Unable to sync batches for ${col.name}`);
+      }
+    } catch (err: any) {
+      console.error(`[CollegeMaster] Sync batches error for ${col.name}:`, err);
+      if (showToast) setSyncMessage(`Failed to connect to SRMS GetBatch API for ${col.name}`);
+    } finally {
+      setSyncing(false);
+    }
+    return [];
+  };
+
+  // Sync all batches sequentially across colleges from SRMS GetBatch API
+  const syncBatchesFromExternalApi = async () => {
+    setSyncing(true);
+    setSyncMessage('⚡ Sequentially syncing all batches for all colleges from SRMS GetBatch API to PostgreSQL...');
+    try {
+      const slug = getActiveTenantSlug();
+      const queryParam = selectedCollegeFilter === 'all' ? '?tenant=all' : (slug ? `?tenant=${slug}` : '');
+      const res = await fetch(`${API_BASE}/batches/sync-external${queryParam}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        const list = data.data || [];
+        setBatches(list);
+        setSyncMessage(`Synced ${list.length} Batches to PostgreSQL ✅`);
+        setTimeout(() => setSyncMessage(''), 5000);
+      } else {
+        setSyncMessage('Failed to sync batches from SRMS GetBatch API.');
+      }
+    } catch (err: any) {
+      console.error('[CollegeMaster] Sync batches error:', err);
+      setSyncMessage('Error syncing batches from SRMS API.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Handle User Selecting a College Filter in Dropdown
   const handleCollegeFilterSelect = async (cId: string) => {
     setSelectedCollegeFilter(cId);
     if (cId !== 'all') {
       const targetCol = colleges.find((c) => c.id === cId);
       if (targetCol) {
-        if (activeTab === 'branches') {
+        if (activeTab === 'batches') {
+          await syncBatchesForCollege(targetCol, true);
+        } else if (activeTab === 'branches') {
           await syncBranchesForCollege(targetCol, true);
         } else {
           await syncCoursesForCollege(targetCol, true);
@@ -1171,8 +1230,23 @@ export default function CollegeMasterPage() {
             ))}
           </div>
 
-          {/* Dynamic Cascading Dropdown: 3-Level (College → Course → Branch) on 5. Department Tab, 2-Level on other tabs */}
-          {activeTab === 'branches' ? (
+          {/* Dynamic Cascading Dropdown: 3-Level Batch on Tab 4, 3-Level Dept on Tab 5, 2-Level on other tabs */}
+          {activeTab === 'batches' ? (
+            <LiveCollegeCourseBatchCascadingDropdown
+              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || ''}
+              onCollegeSelect={async (colg) => {
+                if (colg) {
+                  const matched = colleges.find((c) => c.code === colg.colg_cd);
+                  if (matched) {
+                    setSelectedCollegeFilter(matched.id);
+                    await syncBatchesForCollege(matched, true);
+                  }
+                } else {
+                  setSelectedCollegeFilter('all');
+                }
+              }}
+            />
+          ) : activeTab === 'branches' ? (
             <Live3LevelDepartmentCascadingDropdown
               selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || ''}
               onCollegeSelect={async (colg) => {
@@ -1180,7 +1254,7 @@ export default function CollegeMasterPage() {
                   const matched = colleges.find((c) => c.code === colg.colg_cd);
                   if (matched) {
                     setSelectedCollegeFilter(matched.id);
-                    await syncCoursesForCollege(matched, true);
+                    await syncBranchesForCollege(matched, true);
                   }
                 } else {
                   setSelectedCollegeFilter('all');
@@ -1286,6 +1360,31 @@ export default function CollegeMasterPage() {
                       : selectedCollegeFilter !== 'all'
                       ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Courses`
                       : 'Sync All from GetCourse'}
+                  </span>
+                </button>
+              )}
+
+              {activeTab === 'batches' && (
+                <button
+                  onClick={() => {
+                    if (selectedCollegeFilter !== 'all') {
+                      const col = colleges.find(c => c.id === selectedCollegeFilter);
+                      if (col) syncBatchesForCollege(col, true);
+                    } else {
+                      syncBatchesFromExternalApi();
+                    }
+                  }}
+                  disabled={syncing}
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 rounded-lg shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                  title="Sequentially fetch & sync batches for selected or all colleges from SRMS OnlineAttend GetBatch API to PostgreSQL"
+                >
+                  <span className={syncing ? 'animate-spin' : ''}>📅</span>
+                  <span>
+                    {syncing
+                      ? 'Syncing Batches...'
+                      : selectedCollegeFilter !== 'all'
+                      ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Batches`
+                      : 'Sync All from GetBatch'}
                   </span>
                 </button>
               )}
@@ -1688,28 +1787,50 @@ export default function CollegeMasterPage() {
                         .filter((b) => isMatchCollege(b.college_id))
                         .filter((b) => 
                           (b.code || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
-                          (b.course_code || (b as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase())
+                          (b.course_code || (b as any).course_cd || (b as any).course_name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          String(b.year || '').includes(searchTerm || '')
                         )
                         .map((bth) => (
-                          <tr key={bth.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
-                            <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <tr key={bth.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="p-4 font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <span>🏛️</span>
-                                <span>{colleges.find((c) => c.id === bth.college_id)?.name || bth.college_name}</span>
+                                <span>{colleges.find((c) => c.id === bth.college_id)?.name || bth.college_name || 'SRMS Institution'}</span>
                               </div>
                             </td>
-                            <td className="p-4 text-indigo-600 dark:text-indigo-300 font-bold font-mono whitespace-nowrap">
-                              {bth.course_code || (bth as any).course_cd ? (
-                                `🎓 ${bth.course_code || (bth as any).course_cd}`
+                            <td className="p-4 text-purple-600 dark:text-purple-300 font-bold font-mono whitespace-nowrap">
+                              {(bth as any).course_name || bth.course_code || (bth as any).course_cd ? (
+                                <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 font-bold text-[10px]">
+                                  🎓 {(bth as any).course_name || `Course #${bth.course_code || (bth as any).course_cd}`}
+                                </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/20 text-amber-600 dark:text-amber-400">
                                   ⚠️ Unmapped Course
                                 </span>
                               )}
                             </td>
-                            <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{bth.code}</td>
-                            <td className="p-4 font-bold text-slate-900 dark:text-slate-900 dark:text-white whitespace-nowrap">{bth.year}</td>
-                            <td className="p-4 text-slate-500 dark:text-slate-600 dark:text-slate-400 whitespace-nowrap">{formatDate(bth.start_date)} - {formatDate(bth.end_date)}</td>
+                            <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <span>{bth.code}</span>
+                                {(bth as any).batch_cd && (
+                                  <span className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold text-[9px] border border-sky-500/20">
+                                    #{(bth as any).batch_cd}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                              <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-extrabold">
+                                Batch {bth.year || (bth as any).name}
+                              </span>
+                            </td>
+                            <td className="p-4 text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono text-[11px]">
+                              {bth.start_date || bth.end_date ? (
+                                `${formatDate(bth.start_date)} → ${formatDate(bth.end_date)}`
+                              ) : (
+                                <span className="text-slate-400 italic">Academic Year {bth.year}</span>
+                              )}
+                            </td>
                             <td className="p-4 whitespace-nowrap">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${bth.is_active ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
                                 {bth.is_active ? 'Active' : 'Inactive'}
