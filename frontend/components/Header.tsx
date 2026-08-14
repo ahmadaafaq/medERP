@@ -115,14 +115,15 @@ export default function Header({ title }: HeaderProps) {
 
     const empId = p.emp_id || p.empId || data.emp_id || data.empId || '';
 
+    const nameStr = String(name || '');
     const photoUrl =
       p.photo_url ||
       p.photoUrl ||
       data.photo_url ||
       data.photoUrl ||
-      (name.toLowerCase().includes('sanjay') || empId.includes('DR/07/026')
+      (nameStr.toLowerCase().includes('sanjay') || empId.includes('DR/07/026')
         ? '/avatars/dr_sanjay_singh.png'
-        : name.toLowerCase().includes('sarah') || name.toLowerCase().includes('aparna')
+        : nameStr.toLowerCase().includes('sarah') || nameStr.toLowerCase().includes('aparna')
         ? '/avatars/dr_sarah_sharma.png'
         : '');
 

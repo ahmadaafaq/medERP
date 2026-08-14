@@ -90,11 +90,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
   async onApplicationBootstrap() {
     this.logger.log('Checking and upgrading tenant schemas if necessary...');
     try {
-      const tenants = await this.dataSource.query(`SELECT slug FROM public.tenants`);
+      const tenants = await this.dataSource.query(`SELECT slug FROM public.tenants WHERE schema_provisioned = true OR slug = 'srms-ims'`);
       for (const tenant of tenants) {
-        await this.ensureLatestSchema(tenant.slug);
+        await this.ensureLatestSchema(tenant.slug).catch((e) => {
+          this.logger.warn(`Schema upgrade skipped for ${tenant.slug}: ${e.message}`);
+        });
       }
-      this.logger.log('All tenant schemas successfully verified/upgraded.');
+      this.logger.log('All provisioned tenant schemas successfully verified/upgraded.');
     } catch (err) {
       this.logger.error('Failed to run schema validation/upgrades on startup:', err);
     }
@@ -278,14 +280,21 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           code               VARCHAR(30) UNIQUE NOT NULL,
           name               VARCHAR(200) NOT NULL,
           degree_level       VARCHAR(50) DEFAULT 'UG',
-          duration_years     INT         DEFAULT 5,
-          professional_phase VARCHAR(100) DEFAULT '1st Professional (Phase I)',
+          duration_years     NUMERIC(4,1) DEFAULT 4.0,
+          professional_phase VARCHAR(100) DEFAULT 'Semester 1 (1st Year)',
+          academic_system    VARCHAR(50) DEFAULT 'semester',
+          course_cd          VARCHAR(50),
+          course_type        VARCHAR(50),
           is_active          BOOLEAN     DEFAULT true,
           created_at         TIMESTAMPTZ DEFAULT NOW()
         );
       `);
       await runner.query(`
-        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS professional_phase VARCHAR(100) DEFAULT '1st Professional (Phase I)';
+        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50) DEFAULT 'semester';
+        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
+        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS professional_phase VARCHAR(100) DEFAULT 'Semester 1 (1st Year)';
+        ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1);
       `);
 
       // ── Academic Sessions (added in later migration) ──────────────────────
@@ -522,7 +531,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         emp_id          VARCHAR(50)  UNIQUE NOT NULL,
         name            VARCHAR(200) NOT NULL,
         department_id   UUID        REFERENCES "${schema}".departments(id),
-        subject_id      UUID        REFERENCES "${schema}".subjects(id) ON DELETE SET NULL,
+        subject_id      UUID,
         designation     VARCHAR(100),
         qualification   TEXT,
         specialization  VARCHAR(200),
@@ -565,8 +574,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ) t
         WHERE t.rnum > 1
       );
-      ALTER TABLE "${schema}".batches ADD CONSTRAINT unq_batches_code UNIQUE (code);
-    `).catch(() => {});
+    `);
 
     // ── Groups Master (Batch Sub-Groups like A, B, C, D) ───────────────────
     await runner.query(`
@@ -783,6 +791,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         type            VARCHAR(20),
         is_longitudinal BOOLEAN      DEFAULT false,
         is_active       BOOLEAN      DEFAULT true
+      )
     `);
 
     // ── Faculty Subjects junction ──────────────────────────────────────────
@@ -794,6 +803,20 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         is_active   BOOLEAN      DEFAULT true,
         created_at  TIMESTAMPTZ  DEFAULT NOW(),
         CONSTRAINT uq_faculty_subject UNIQUE (faculty_id, subject_id)
+      )
+    `);
+
+    // ── Professional Phases ────────────────────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".professional_phases (
+        id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        college_id       VARCHAR(50),
+        course_cd        VARCHAR(50) DEFAULT 'MBBS',
+        name             VARCHAR(200) NOT NULL,
+        phase_order      INT         DEFAULT 1,
+        academic_system  VARCHAR(50) DEFAULT 'professional',
+        is_active        BOOLEAN     DEFAULT true,
+        created_at       TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
@@ -1409,11 +1432,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       const facUserId2 = facRes2[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='aparna.tyagi@srms.edu'`))[0]?.id;
       if (facUserId2) {
-        await runner.query(`
-          INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
-          VALUES ($1, 'EMP1002', 'Dr. Aparna Tyagi', 'Associate Professor', 'Human Anatomy & Histology', '/avatars/dr_sarah_sharma.png')
-          ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-        `, [facUserId2]);
+        const existingFac2 = await runner.query(`SELECT id FROM "${schema}".faculty WHERE user_id = $1 OR emp_id = 'EMP1002'`, [facUserId2]);
+        if (existingFac2.length === 0) {
+          await runner.query(`
+            INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
+            VALUES ($1, 'EMP1002', 'Dr. Aparna Tyagi', 'Associate Professor', 'Human Anatomy & Histology', '/avatars/dr_sarah_sharma.png')
+            ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
+          `, [facUserId2]);
+        }
       }
 
       // 4c. Dr. Sanjay Singh (Physiology)
@@ -1426,11 +1452,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       const facUserId3 = facRes3[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sanjay.singh@srms.edu'`))[0]?.id;
       if (facUserId3) {
-        await runner.query(`
-          INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
-          VALUES ($1, 'DR/07/026', 'Dr. Sanjay Singh', 'Assistant Professor', 'Human Physiology', '/avatars/dr_sanjay_singh.png')
-          ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-        `, [facUserId3]);
+        const existingFac3 = await runner.query(`SELECT id FROM "${schema}".faculty WHERE user_id = $1 OR emp_id = 'DR/07/026'`, [facUserId3]);
+        if (existingFac3.length === 0) {
+          await runner.query(`
+            INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
+            VALUES ($1, 'DR/07/026', 'Dr. Sanjay Singh', 'Assistant Professor', 'Human Physiology', '/avatars/dr_sanjay_singh.png')
+            ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
+          `, [facUserId3]);
+        }
       }
     } catch (e) {}
 
@@ -1561,6 +1590,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       `);
 
       await runner.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS competencies_code_uidx ON "${schema}".competencies (code);
+      `).catch(() => {});
+
+      await runner.query(`
         INSERT INTO "${schema}".competencies (code, description, domain, level, is_core, is_active) VALUES
           ('PY2.1', 'Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
           ('PY2.5', 'Perform and interpret spirometry and pulmonary function tests in normal subjects', 'SKILL', 'PERFORMS', true, true),
@@ -1571,7 +1604,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           ('AN2.3', 'Describe brachial plexus formation, branches and clinical nerve injury syndromes', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
           ('AN10.1', 'Describe scapular region muscles, rotator cuff and shoulder abduction', 'KNOWLEDGE', 'KNOWS', true, true)
         ON CONFLICT (code) DO UPDATE SET description = EXCLUDED.description;
-      `);
+      `).catch(() => {});
 
       const phyDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='PHY'`))[0]?.id;
       const anaDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='ANA'`))[0]?.id;

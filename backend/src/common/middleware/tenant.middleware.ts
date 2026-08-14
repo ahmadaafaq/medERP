@@ -60,8 +60,8 @@ export class TenantMiddleware implements NestMiddleware {
       slug = req.query.tenant as string;
     }
 
-    // Super-admin routes don't require a tenant
-    if (!slug) {
+    // Super-admin routes or multi-tenant aggregated routes ('all') don't require a single tenant context
+    if (!slug || slug === 'all') {
       next();
       return;
     }
@@ -72,10 +72,12 @@ export class TenantMiddleware implements NestMiddleware {
       slug = 'srms-ims';
     }
 
-    // Look up tenant in the public schema
+    // Look up tenant in the public schema by slug, code, or id
     const result = await this.dataSource.query(
-      `SELECT id, slug, name, is_active FROM public.tenants WHERE slug = $1 LIMIT 1`,
-      [slug.toLowerCase()],
+      `SELECT id, slug, name, is_active FROM public.tenants
+       WHERE LOWER(slug) = $1 OR LOWER(code) = $1 OR id::text = $1
+       LIMIT 1`,
+      [slug],
     );
 
     if (!result.length) {

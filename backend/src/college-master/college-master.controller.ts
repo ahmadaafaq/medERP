@@ -30,6 +30,20 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
+  @Post('colleges/sync-external')
+  @ApiOperation({ summary: 'Sync Colleges from SRMS ERP portal API' })
+  async syncExternalCollegesPost() {
+    const data = await this.collegeMasterService.syncExternalColleges();
+    return { success: true, message: 'Colleges synced successfully from SRMS portal API', data };
+  }
+
+  @Get('colleges/sync-external')
+  @ApiOperation({ summary: 'Sync Colleges from SRMS ERP portal API (GET trigger)' })
+  async syncExternalCollegesGet() {
+    const data = await this.collegeMasterService.syncExternalColleges();
+    return { success: true, message: 'Colleges synced successfully from SRMS portal API', data };
+  }
+
   @Post('colleges')
   @ApiOperation({ summary: 'Create new College' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -51,7 +65,54 @@ export class CollegeMasterController {
     return this.collegeMasterService.deleteCollege(id);
   }
 
+  // ─── LIVE PORTAL PROXIES (No DB storage, 100% live API responses) ──────
+  @Post('live/colleges')
+  @Get('live/colleges')
+  @ApiOperation({ summary: 'Fetch live colleges directly from SRMS Portal (POST {})' })
+  async getLiveColleges() {
+    const data = await this.collegeMasterService.fetchLiveColleges();
+    return { success: true, data };
+  }
+
+  @Post('live/courses')
+  @Get('live/courses')
+  @ApiOperation({ summary: 'Fetch live courses directly from SRMS Portal (POST { colgcd })' })
+  async getLiveCourses(@Body() body: any, @Query('colgcd') queryColgcd?: string) {
+    const colgcd = body?.colgcd || body?.colg_cd || queryColgcd || '1';
+    const data = await this.collegeMasterService.fetchLiveCourses(colgcd);
+    return { success: true, data };
+  }
+
+  @Post('live/branches')
+  @Get('live/branches')
+  @ApiOperation({ summary: 'Fetch live branches directly from SRMS Portal (POST { colgcd, coursecd })' })
+  async getLiveBranches(
+    @Body() body: any,
+    @Query('colgcd') queryColgcd?: string,
+    @Query('coursecd') queryCoursecd?: string,
+  ) {
+    const colgcd = body?.colgcd || body?.colg_cd || queryColgcd || '1';
+    const coursecd = body?.coursecd || body?.course_cd || queryCoursecd || '1';
+    const data = await this.collegeMasterService.fetchLiveBranches(colgcd, coursecd);
+    return { success: true, data };
+  }
+
   // ─── 2. COURSES ───────────────────────────────────────────────────────────
+  @Post('courses/sync-external')
+  @ApiOperation({ summary: 'Sync Courses sequentially from external SRMS Portal API' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async syncExternalCoursesPost(@Query('tenant') tenant?: string) {
+    const data = await this.collegeMasterService.syncExternalCourses(tenant);
+    return { success: true, message: 'Courses synced successfully from SRMS portal API', data };
+  }
+
+  @Get('courses/sync-external')
+  @ApiOperation({ summary: 'Sync Courses sequentially from external SRMS Portal API (GET)' })
+  async syncExternalCoursesGet(@Query('tenant') tenant?: string) {
+    const data = await this.collegeMasterService.syncExternalCourses(tenant);
+    return { success: true, message: 'Courses synced successfully from SRMS portal API', data };
+  }
+
   @Get('courses')
   @ApiOperation({ summary: 'List Courses — public read' })
   async listCourses(@Query('tenant') tenant?: string) {
@@ -110,6 +171,27 @@ export class CollegeMasterController {
   }
 
   // ─── 4. BRANCHES ──────────────────────────────────────────────────────────
+  @Post('branches/sync-external')
+  @ApiOperation({ summary: 'Sync Branches/Departments from external SRMS GetBranch API' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async syncExternalBranchesPost(
+    @Query('tenant') tenant?: string,
+    @Query('coursecd') coursecd?: string,
+  ) {
+    const data = await this.collegeMasterService.syncExternalBranches(tenant, coursecd);
+    return { success: true, message: 'Departments & Branches synced successfully from SRMS GetBranch API to PostgreSQL', data };
+  }
+
+  @Get('branches/sync-external')
+  @ApiOperation({ summary: 'Sync Branches/Departments from external SRMS GetBranch API (GET trigger)' })
+  async syncExternalBranchesGet(
+    @Query('tenant') tenant?: string,
+    @Query('coursecd') coursecd?: string,
+  ) {
+    const data = await this.collegeMasterService.syncExternalBranches(tenant, coursecd);
+    return { success: true, message: 'Departments & Branches synced successfully from SRMS GetBranch API to PostgreSQL', data };
+  }
+
   @Get('branches')
   @ApiOperation({ summary: 'List Branches/Departments — public read' })
   async listBranches(@Query('tenant') tenant?: string) {

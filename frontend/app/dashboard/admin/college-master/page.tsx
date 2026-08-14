@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import LiveCollegeCourseCascadingDropdown from '../../../../components/LiveCollegeCourseCascadingDropdown';
+import Live3LevelDepartmentCascadingDropdown from '../../../../components/Live3LevelDepartmentCascadingDropdown';
 
 const ActionButtons = ({ onEdit, onDelete }: { onEdit: () => void, onDelete: () => void }) => (
   <div className="flex items-center justify-end gap-1.5">
@@ -87,12 +89,15 @@ type SubCategory = 'colleges' | 'courses' | 'professionals' | 'batches' | 'branc
 
 interface College {
   id: string;
+  code?: string;
   name: string;
   slug: string;
   domain?: string;
   plan?: string;
   primary_color?: string;
   is_active: boolean;
+  schema_provisioned?: boolean;
+  created_at?: string;
 }
 
 interface Course {
@@ -176,6 +181,8 @@ export default function CollegeMasterPage() {
   const [activeTab, setActiveTab] = useState<SubCategory>('colleges');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
   const [selectedCollegeFilter, setSelectedCollegeFilter] = useState<string>('all');
 
   // All data starts empty — loaded from PostgreSQL via API
@@ -194,32 +201,207 @@ export default function CollegeMasterPage() {
   const [formData, setFormData] = useState<Record<string, any>>({});
 
   // ─── TENANT SLUG RESOLVER ────────────────────────────────────────────────────
-  // For tenant-scoped endpoints (courses, batches, branches, sessions),
-  // use the slug of the currently selected college (or the first loaded college).
   const getActiveTenantSlug = (): string => {
-    // If a specific college is selected in the filter, use its slug
     if (selectedCollegeFilter !== 'all') {
       return colleges.find((c) => c.id === selectedCollegeFilter)?.slug || '';
     }
-    // Otherwise use the first loaded college slug
     return colleges[0]?.slug || '';
   };
 
-  // Slug for the college currently selected in the form modal
   const getFormCollegeSlug = (): string => {
     return colleges.find((c) => c.id === formData.collegeId)?.slug
       || colleges[0]?.slug
       || '';
   };
 
+  // ─── SYNC FROM SRMS PORTAL API ───────────────────────────────────────────────
+  const syncFromExternalApi = async () => {
+    setSyncing(true);
+    setSyncMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/colleges/sync-external`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const list: College[] = (data.data || []).map((t: any) => ({
+          id: t.id,
+          code: t.code || '',
+          name: t.name,
+          slug: t.slug,
+          domain: t.domain || '',
+          plan: t.plan || 'enterprise',
+          primary_color: t.primary_color || '#6366F1',
+          is_active: t.is_active ?? true,
+          schema_provisioned: t.schema_provisioned ?? false,
+          created_at: t.created_at,
+        }));
+        setColleges(list);
+        setSyncMessage(`Synced ${list.length} SRMS Colleges from Portal API ✅`);
+        setTimeout(() => setSyncMessage(''), 5000);
+      } else {
+        setSyncMessage('Failed to sync colleges from portal API.');
+      }
+    } catch (err: any) {
+      console.error('[CollegeMaster] Sync error:', err);
+      setSyncMessage('Error syncing colleges from portal.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Sync courses for a single selected college via official SRMS GetCourse API
+  const syncCoursesForCollege = async (col: College, showToast = true): Promise<Course[]> => {
+    if (!col || !col.slug) return [];
+    setSyncing(true);
+    if (showToast) setSyncMessage(`⚡ Querying SRMS GetCourse API for ${col.name}...`);
+    try {
+      const res = await fetch(`${API_BASE}/courses/sync-external?tenant=${col.slug}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        const list: any[] = data.data || [];
+        const mappedList: Course[] = list.map((c: any) => ({
+          ...c,
+          degree_level: c.degree_level || c.degreeLevel || 'UG',
+          academic_system: c.academic_system || c.academicSystem || (col.slug === 'srms-ims' || col.code === '11' ? 'professional' : 'semester'),
+          college_id: col.id,
+          college_name: col.name,
+          college_code: col.code || '',
+          college_slug: col.slug,
+        }));
+
+        setCourses((prev) => {
+          const otherColleges = prev.filter((c) => c.college_id !== col.id && c.college_slug !== col.slug);
+          return [...otherColleges, ...mappedList];
+        });
+
+        if (showToast) {
+          setSyncMessage(`⚡ Synced ${mappedList.length} active courses for ${col.name} via SRMS GetCourse API ✅`);
+          setTimeout(() => setSyncMessage(''), 5000);
+        }
+        return mappedList;
+      } else {
+        if (showToast) setSyncMessage(`Unable to sync courses for ${col.name}`);
+      }
+    } catch (err: any) {
+      console.error(`[CollegeMaster] Sync courses error for ${col.name}:`, err);
+      if (showToast) setSyncMessage(`Failed to connect to SRMS GetCourse API for ${col.name}`);
+    } finally {
+      setSyncing(false);
+    }
+    return [];
+  };
+
+  // Sync all courses sequentially across colleges from SRMS GetCourse API
+  const syncCoursesFromExternalApi = async () => {
+    setSyncing(true);
+    setSyncMessage('⚡ Sequentially syncing all courses for all colleges from SRMS GetCourse API...');
+    try {
+      const slug = getActiveTenantSlug();
+      const queryParam = selectedCollegeFilter === 'all' ? '?tenant=all' : (slug ? `?tenant=${slug}` : '');
+      const res = await fetch(`${API_BASE}/courses/sync-external${queryParam}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        const list = data.data || [];
+        setCourses(list.map((c: any) => ({
+          ...c,
+          degree_level: c.degree_level || c.degreeLevel || 'UG',
+          academic_system: c.academic_system || c.academicSystem || (c.college_slug === 'srms-ims' || c.slug === 'srms-ims' ? 'professional' : 'semester'),
+          college_id: c.college_id || c.collegeId || colleges[0]?.id,
+          college_name: c.college_name || colleges.find(col => col.id === (c.college_id || c.collegeId))?.name || '',
+          college_code: c.college_code || colleges.find(col => col.id === (c.college_id || c.collegeId))?.code || '',
+          college_slug: c.college_slug || colleges.find(col => col.id === (c.college_id || c.collegeId))?.slug || '',
+        })));
+        setSyncMessage(`Synced ${list.length} Courses sequentially from SRMS Portal API ✅`);
+        setTimeout(() => setSyncMessage(''), 5000);
+      } else {
+        setSyncMessage('Failed to sync courses from portal API.');
+      }
+    } catch (err: any) {
+      console.error('[CollegeMaster] Sync courses error:', err);
+      setSyncMessage('Error syncing courses from portal.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Sync branches for a single selected college via official SRMS GetBranch API
+  const syncBranchesForCollege = async (col: College, showToast = true): Promise<any[]> => {
+    if (!col || !col.slug) return [];
+    setSyncing(true);
+    if (showToast) setSyncMessage(`⚡ Querying SRMS GetBranch API for ${col.name}...`);
+    try {
+      const res = await fetch(`${API_BASE}/branches/sync-external?tenant=${col.slug}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        const list: any[] = data.data || [];
+        setBranches((prev) => {
+          const otherColleges = prev.filter((b) => b.college_id !== col.id && b.college_slug !== col.slug);
+          return [...otherColleges, ...list];
+        });
+        if (showToast) {
+          setSyncMessage(`⚡ Synced ${list.length} Departments & Branches for ${col.name} via SRMS GetBranch API to PostgreSQL ✅`);
+          setTimeout(() => setSyncMessage(''), 5000);
+        }
+        return list;
+      } else {
+        if (showToast) setSyncMessage(`Unable to sync branches for ${col.name}`);
+      }
+    } catch (err: any) {
+      console.error(`[CollegeMaster] Sync branches error for ${col.name}:`, err);
+      if (showToast) setSyncMessage(`Failed to connect to SRMS GetBranch API for ${col.name}`);
+    } finally {
+      setSyncing(false);
+    }
+    return [];
+  };
+
+  // Sync all branches sequentially across colleges from SRMS GetBranch API
+  const syncBranchesFromExternalApi = async () => {
+    setSyncing(true);
+    setSyncMessage('⚡ Sequentially syncing all departments & branches for all colleges from SRMS GetBranch API to PostgreSQL...');
+    try {
+      const slug = getActiveTenantSlug();
+      const queryParam = selectedCollegeFilter === 'all' ? '?tenant=all' : (slug ? `?tenant=${slug}` : '');
+      const res = await fetch(`${API_BASE}/branches/sync-external${queryParam}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        const list = data.data || [];
+        setBranches(list);
+        setSyncMessage(`Synced ${list.length} Departments & Branches to PostgreSQL ✅`);
+        setTimeout(() => setSyncMessage(''), 5000);
+      } else {
+        setSyncMessage('Failed to sync branches from SRMS GetBranch API.');
+      }
+    } catch (err: any) {
+      console.error('[CollegeMaster] Sync branches error:', err);
+      setSyncMessage('Error syncing branches from SRMS API.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Handle User Selecting a College Filter in Dropdown
+  const handleCollegeFilterSelect = async (cId: string) => {
+    setSelectedCollegeFilter(cId);
+    if (cId !== 'all') {
+      const targetCol = colleges.find((c) => c.id === cId);
+      if (targetCol) {
+        if (activeTab === 'branches') {
+          await syncBranchesForCollege(targetCol, true);
+        } else {
+          await syncCoursesForCollege(targetCol, true);
+        }
+      }
+    }
+  };
+
   // ─── ON MOUNT: Load colleges from public.tenants (PostgreSQL) ───────────────
-  // This replaces all hardcoded data. localStorage is cleared to avoid stale mock.
   useEffect(() => {
-    // Clear old localStorage mock data on first load
     ['mederp_colleges','mederp_courses','mederp_batches','mederp_branches','mederp_sessions','mederp_residencies','mederp_professionals']
       .forEach((k) => localStorage.removeItem(k));
 
-    // Load real tenants from PostgreSQL via backend
     const loadColleges = async () => {
       try {
         const res = await fetch(`${API_BASE}/colleges`);
@@ -227,15 +409,18 @@ export default function CollegeMasterPage() {
           const data = await res.json();
           const list: College[] = (data.data || data || []).map((t: any) => ({
             id: t.id,
+            code: t.code || '',
             name: t.name,
             slug: t.slug,
             domain: t.domain || '',
             plan: t.plan || 'standard',
             primary_color: t.primary_color || '#6366F1',
             is_active: t.is_active ?? true,
+            schema_provisioned: t.schema_provisioned ?? false,
+            created_at: t.created_at,
           }));
           setColleges(list);
-          console.log(`[CollegeMaster] Loaded ${list.length} tenants from PostgreSQL ✅`);
+          console.log(`[CollegeMaster] Loaded ${list.length} colleges from PostgreSQL ✅`);
         } else {
           console.error('[CollegeMaster] Failed to load colleges from API');
         }
@@ -247,14 +432,9 @@ export default function CollegeMasterPage() {
   }, []);
 
   // ─── FETCH TAB DATA ───────────────────────────────────────────────────────────
-  // NOTE: tenant slug must match exactly what is in public.tenants.slug
-  // Uses getActiveTenantSlug() so the right tenant schema is queried
-
   const fetchData = async (tab: SubCategory) => {
-    // 'residencies' has no backend endpoint yet — local-only
     if (tab === 'residencies') return;
 
-    // Colleges come from public.tenants — no tenant slug needed
     if (tab === 'colleges') {
       setLoading(true);
       try {
@@ -263,12 +443,15 @@ export default function CollegeMasterPage() {
           const data = await res.json();
           const list: College[] = (data.data || data || []).map((t: any) => ({
             id: t.id,
+            code: t.code || '',
             name: t.name,
             slug: t.slug,
             domain: t.domain || '',
             plan: t.plan || 'standard',
             primary_color: t.primary_color || '#6366F1',
             is_active: t.is_active ?? true,
+            schema_provisioned: t.schema_provisioned ?? false,
+            created_at: t.created_at,
           }));
           setColleges(list);
         }
@@ -301,7 +484,8 @@ export default function CollegeMasterPage() {
         residencies: 'residencies',
       };
       const endpoint = endpointMap[tab] || tab;
-      const res = await fetch(`${API_BASE}/${endpoint}?tenant=${slug}`);
+      const tenantParam = (tab === 'courses' && selectedCollegeFilter === 'all') ? 'all' : slug;
+      const res = await fetch(`${API_BASE}/${endpoint}?tenant=${tenantParam}`);
       if (!res.ok) {
         const errText = await res.text();
         console.error(`[CollegeMaster] API ${tab} failed (${res.status}):`, errText);
@@ -310,7 +494,17 @@ export default function CollegeMasterPage() {
       const data = await res.json();
       const list = data.data || (Array.isArray(data) ? data : []);
       if (Array.isArray(list)) {
-        if (tab === 'courses') setCourses(list);
+        if (tab === 'courses') {
+          setCourses(list.map((c: any) => ({
+            ...c,
+            degree_level: c.degree_level || c.degreeLevel || 'UG',
+            academic_system: c.academic_system || c.academicSystem || (c.college_slug === 'srms-ims' || c.slug === 'srms-ims' ? 'professional' : 'semester'),
+            college_id: c.college_id || c.collegeId || colleges[0]?.id,
+            college_name: c.college_name || colleges.find(col => col.id === (c.college_id || c.collegeId))?.name || 'SRMS Institution',
+            college_code: c.college_code || colleges.find(col => col.id === (c.college_id || c.collegeId))?.code || '',
+            college_slug: c.college_slug || colleges.find(col => col.id === (c.college_id || c.collegeId))?.slug || '',
+          })));
+        }
         if (tab === 'batches') setBatches(list);
         if (tab === 'branches') setBranches(list);
         if (tab === 'groups') setGroups(list);
@@ -348,7 +542,7 @@ export default function CollegeMasterPage() {
       fetchData('batches');
       fetchData('branches');
     }
-  }, [activeTab]);
+  }, [activeTab, selectedCollegeFilter]);
 
   // Re-fetch dependencies once colleges load (so slug is available)
   useEffect(() => {
@@ -361,7 +555,7 @@ export default function CollegeMasterPage() {
         fetchData('branches');
       }
     }
-  }, [colleges]);
+  }, [colleges, selectedCollegeFilter]);
 
   // Helper: Available Courses under currently selected Form College
   const getCoursesForCollege = (collegeId: string) => {
@@ -377,9 +571,20 @@ export default function CollegeMasterPage() {
     const defaultCourseId = defaultCourse?.id || '';
 
     if (activeTab === 'colleges') {
-      setFormData({ name: '', slug: '', domain: '', plan: 'Enterprise', primaryColor: '#6366F1' });
+      setFormData({ code: '', name: '', slug: '', domain: '', plan: 'Enterprise', primaryColor: '#6366F1', isActive: true });
     } else if (activeTab === 'courses') {
-      setFormData({ collegeId: defaultCollegeId, code: '', name: '', degreeLevel: 'UG', academicSystem: 'professional' });
+      const selectedCol = colleges.find(c => c.id === defaultCollegeId) || colleges[0];
+      const isProf = selectedCol?.slug === 'srms-ims' || selectedCol?.code === '11';
+      setFormData({
+        collegeId: defaultCollegeId,
+        code: '',
+        name: '',
+        degreeLevel: 'UG',
+        academicSystem: isProf ? 'professional' : 'semester',
+        durationYears: isProf ? 5.5 : 4.0,
+        professionalPhase: isProf ? '1st Professional (Phase I)' : 'Semester 1 (1st Year)',
+        isActive: true,
+      });
     } else if (activeTab === 'professionals') {
       const isProf = defaultCourse?.academic_system !== 'semester';
       setFormData({
@@ -426,6 +631,40 @@ export default function CollegeMasterPage() {
   // Open Modal to Edit Item
   const handleEdit = (item: any) => {
     setEditingItem(item);
+
+    if (activeTab === 'colleges') {
+      setFormData({
+        ...item,
+        code: item.code || '',
+        name: item.name || '',
+        slug: item.slug || '',
+        domain: item.domain || '',
+        plan: item.plan || 'Enterprise',
+        primaryColor: item.primary_color || item.primaryColor || '#6366F1',
+        isActive: item.is_active ?? true,
+      });
+      setIsModalOpen(true);
+      return;
+    }
+
+    if (activeTab === 'courses') {
+      const col = colleges.find(c => c.id === (item.college_id || item.collegeId)) || colleges[0];
+      const isProf = item.academic_system === 'professional' || col?.slug === 'srms-ims' || col?.code === '11';
+      setFormData({
+        ...item,
+        collegeId: item.college_id || item.collegeId || colleges[0]?.id,
+        code: item.code || '',
+        name: item.name || '',
+        degreeLevel: item.degree_level || item.degreeLevel || 'UG',
+        academicSystem: item.academic_system || (isProf ? 'professional' : 'semester'),
+        durationYears: item.duration_years ?? (isProf ? 5.5 : 4.0),
+        professionalPhase: item.professional_phase || (isProf ? '1st Professional (Phase I)' : 'Semester 1 (1st Year)'),
+        isActive: item.is_active ?? true,
+      });
+      setIsModalOpen(true);
+      return;
+    }
+
     // For batches: reverse-lookup courseId UUID from course_code string (e.g. 'MBBS' → UUID)
     const resolvedCourseId =
       item.course_id || item.courseId ||
@@ -459,17 +698,28 @@ export default function CollegeMasterPage() {
   };
 
   // Handle Form College Change -> Automatically update Cascading Course Dropdown
-  const handleFormCollegeChange = (cId: string) => {
-    const availableCourses = getCoursesForCollege(cId);
+  const handleFormCollegeChange = async (cId: string) => {
+    const selectedCol = colleges.find(c => c.id === cId);
+    const isColIms = selectedCol?.slug === 'srms-ims' || selectedCol?.code === '11';
+    
+    let availableCourses = getCoursesForCollege(cId);
+    if (availableCourses.length === 0 && selectedCol) {
+      // Automatically fetch & sync courses for this newly selected college from SRMS GetCourse API
+      availableCourses = await syncCoursesForCollege(selectedCol, false);
+    }
+
     const firstCourse = availableCourses[0] || courses[0];
     const firstCourseId = firstCourse?.id || '';
     const isProf = firstCourse?.academic_system !== 'semester';
+
     setFormData({
       ...formData,
       collegeId: cId,
+      academicSystem: isColIms ? 'professional' : 'semester',
       courseId: firstCourseId,
       phaseName: isProf ? '1st Professional MBBS (Phase I)' : 'Semester 1 (1st Year)',
-      durationYears: isProf ? 1.5 : 0.5,
+      durationYears: activeTab === 'courses' ? (isColIms ? 5.5 : 4.0) : (isProf ? 1.5 : 0.5),
+      professionalPhase: isColIms ? '1st Professional (Phase I)' : 'Semester 1 (1st Year)',
     });
   };
 
@@ -666,14 +916,15 @@ export default function CollegeMasterPage() {
     if (activeTab === 'colleges') {
       const url = isEdit ? `${API_BASE}/colleges/${recordId}` : `${API_BASE}/colleges`;
       const bodyPayload: Record<string, any> = {
-        name: formData.name,
-        slug: formData.slug,
-        domain: formData.domain || '',
-        plan: formData.plan || 'standard',
+        code: formData.code?.trim() || undefined,
+        name: formData.name?.trim(),
+        slug: formData.slug?.trim(),
+        domain: formData.domain?.trim() || '',
+        plan: formData.plan || 'enterprise',
         primaryColor: formData.primaryColor || formData.primary_color || '#6366F1',
       };
       if (isEdit) {
-        bodyPayload.isActive = formData.is_active ?? true;
+        bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
       }
       try {
         const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyPayload) });
@@ -715,14 +966,20 @@ export default function CollegeMasterPage() {
 
     let bodyPayload: Record<string, any> = { ...formData };
     if (activeTab === 'courses') {
+      const isIms = (slug === 'srms-ims');
+      const academicSystem = formData.academicSystem || (isIms ? 'professional' : 'semester');
       bodyPayload = {
-        code: formData.code,
-        name: formData.name,
+        code: formData.code?.trim(),
+        name: formData.name?.trim(),
         degreeLevel: formData.degreeLevel || 'UG',
-        durationYears: Number(formData.durationYears) || 5,
-        professionalPhase: formData.phaseName || '1st Professional (Phase I)',
+        durationYears: Number(formData.durationYears) || (isIms ? 5.5 : 4.0),
+        professionalPhase: formData.professionalPhase || formData.phaseName || (isIms ? '1st Professional (Phase I)' : 'Semester 1 (1st Year)'),
+        academicSystem,
         collegeId: formData.collegeId,
       };
+      if (isEdit) {
+        bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
+      }
     } else if (activeTab === 'professionals') {
       bodyPayload = {
         name: formData.phaseName || '1st Professional MBBS (Phase I)',
@@ -914,6 +1171,39 @@ export default function CollegeMasterPage() {
             ))}
           </div>
 
+          {/* Dynamic Cascading Dropdown: 3-Level (College → Course → Branch) on 5. Department Tab, 2-Level on other tabs */}
+          {activeTab === 'branches' ? (
+            <Live3LevelDepartmentCascadingDropdown
+              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || ''}
+              onCollegeSelect={async (colg) => {
+                if (colg) {
+                  const matched = colleges.find((c) => c.code === colg.colg_cd);
+                  if (matched) {
+                    setSelectedCollegeFilter(matched.id);
+                    await syncCoursesForCollege(matched, true);
+                  }
+                } else {
+                  setSelectedCollegeFilter('all');
+                }
+              }}
+            />
+          ) : (
+            <LiveCollegeCourseCascadingDropdown
+              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || ''}
+              onCollegeSelect={async (colg) => {
+                if (colg) {
+                  const matched = colleges.find((c) => c.code === colg.colg_cd);
+                  if (matched) {
+                    setSelectedCollegeFilter(matched.id);
+                    await syncCoursesForCollege(matched, true);
+                  }
+                } else {
+                  setSelectedCollegeFilter('all');
+                }
+              }}
+            />
+          )}
+
           {/* Top Controls: Filter by College & Search Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-1">
@@ -924,12 +1214,14 @@ export default function CollegeMasterPage() {
                 </span>
                 <select
                   value={selectedCollegeFilter}
-                  onChange={(e) => setSelectedCollegeFilter(e.target.value)}
+                  onChange={(e) => handleCollegeFilterSelect(e.target.value)}
                   className="bg-transparent text-slate-900 dark:text-slate-900 dark:text-white font-bold focus:outline-none cursor-pointer"
                 >
                   <option value="all">All Registered Colleges ({colleges.length})</option>
                   {colleges.map((col) => (
-                    <option key={col.id} value={col.id}>{col.name}</option>
+                    <option key={col.id} value={col.id}>
+                      {col.code ? `[#${col.code}] ` : ''}{col.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -960,26 +1252,98 @@ export default function CollegeMasterPage() {
               </button>
             </div>
 
-            <button
-              onClick={() => fetchData(activeTab)}
-              className="px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:text-white bg-slate-200/80 dark:bg-slate-200/80 dark:bg-slate-200 dark:bg-slate-800/80 rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 shadow-sm shrink-0"
-            >
-              <span>🔄</span> Re-Sync Database
-            </button>
+            <div className="flex items-center gap-2">
+              {activeTab === 'colleges' && (
+                <button
+                  onClick={syncFromExternalApi}
+                  disabled={syncing}
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 rounded-lg shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                  title="Fetch & Sync latest 14 colleges from SRMS Portal API"
+                >
+                  <span className={syncing ? 'animate-spin' : ''}>🌐</span>
+                  <span>{syncing ? 'Syncing Colleges...' : 'Sync SRMS Portal'}</span>
+                </button>
+              )}
+
+              {activeTab === 'courses' && (
+                <button
+                  onClick={() => {
+                    if (selectedCollegeFilter !== 'all') {
+                      const col = colleges.find(c => c.id === selectedCollegeFilter);
+                      if (col) syncCoursesForCollege(col, true);
+                    } else {
+                      syncCoursesFromExternalApi();
+                    }
+                  }}
+                  disabled={syncing}
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-lg shadow-md shadow-purple-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                  title="Sequentially fetch & sync courses for selected or all colleges from SRMS GetCourse API"
+                >
+                  <span className={syncing ? 'animate-spin' : ''}>⚡</span>
+                  <span>
+                    {syncing
+                      ? 'Syncing Courses...'
+                      : selectedCollegeFilter !== 'all'
+                      ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Courses`
+                      : 'Sync All from GetCourse'}
+                  </span>
+                </button>
+              )}
+
+              {activeTab === 'branches' && (
+                <button
+                  onClick={() => {
+                    if (selectedCollegeFilter !== 'all') {
+                      const col = colleges.find(c => c.id === selectedCollegeFilter);
+                      if (col) syncBranchesForCollege(col, true);
+                    } else {
+                      syncBranchesFromExternalApi();
+                    }
+                  }}
+                  disabled={syncing}
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 rounded-lg shadow-md shadow-orange-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                  title="Sequentially fetch & sync branches/departments for selected or all colleges from SRMS GetBranch API to PostgreSQL"
+                >
+                  <span className={syncing ? 'animate-spin' : ''}>🌿</span>
+                  <span>
+                    {syncing
+                      ? 'Syncing Branches...'
+                      : selectedCollegeFilter !== 'all'
+                      ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Branches`
+                      : 'Sync All from GetBranch'}
+                  </span>
+                </button>
+              )}
+
+              <button
+                onClick={() => fetchData(activeTab)}
+                className="px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-200/80 dark:bg-slate-800/80 rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 shadow-sm shrink-0"
+              >
+                <span>🔄</span> Refresh
+              </button>
+            </div>
           </div>
+
+          {syncMessage && (
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+              <span>{syncMessage}</span>
+              <button onClick={() => setSyncMessage('')} className="text-emerald-500 hover:text-emerald-700">✕</button>
+            </div>
+          )}
 
           {/* Master DataTable */}
           <div className="glass-card overflow-hidden">
             {loading ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-700 dark:text-slate-700 dark:text-slate-300 border-collapse">
-                  <thead className="bg-slate-100 dark:bg-white dark:bg-slate-900/80 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-300 dark:border-slate-800">
+                <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300 border-collapse">
+                  <thead className="bg-slate-100 dark:bg-slate-900/80 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800">
                     {activeTab === 'colleges' && (
                       <tr>
-                        <th className="p-4 whitespace-nowrap">College Name</th>
+                        <th className="p-4 whitespace-nowrap">Code</th>
+                        <th className="p-4 whitespace-nowrap">College / Institution Name</th>
                         <th className="p-4 whitespace-nowrap">Slug Code</th>
                         <th className="p-4 whitespace-nowrap">Domain</th>
-                        <th className="p-4 whitespace-nowrap">Plan</th>
+                        <th className="p-4 whitespace-nowrap">Plan & Theme</th>
                         <th className="p-4 whitespace-nowrap">Status</th>
                         <th className="p-4 text-right whitespace-nowrap min-w-[140px]">Actions</th>
                       </tr>
@@ -1020,7 +1384,8 @@ export default function CollegeMasterPage() {
                     {activeTab === 'branches' && (
                       <tr>
                         <th className="p-4 whitespace-nowrap">Mapped College</th>
-                        <th className="p-4 whitespace-nowrap">Department Code</th>
+                        <th className="p-4 whitespace-nowrap">Mapped Course</th>
+                        <th className="p-4 whitespace-nowrap">Branch Code</th>
                         <th className="p-4 whitespace-nowrap">Department / Specialty Name</th>
                         <th className="p-4 whitespace-nowrap">Specialty Type</th>
                         <th className="p-4 whitespace-nowrap">Status</th>
@@ -1075,13 +1440,14 @@ export default function CollegeMasterPage() {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs text-slate-700 dark:text-slate-700 dark:text-slate-300 border-collapse">
-                  <thead className="bg-slate-100 dark:bg-white dark:bg-slate-900/80 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-300 dark:border-slate-800">
+                  <thead className="bg-slate-100 dark:bg-slate-900/80 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800">
                     {activeTab === 'colleges' && (
                       <tr>
-                        <th className="p-4 whitespace-nowrap">College Name</th>
+                        <th className="p-4 whitespace-nowrap">Code</th>
+                        <th className="p-4 whitespace-nowrap">College / Institution Name</th>
                         <th className="p-4 whitespace-nowrap">Slug Code</th>
                         <th className="p-4 whitespace-nowrap">Domain</th>
-                        <th className="p-4 whitespace-nowrap">Plan</th>
+                        <th className="p-4 whitespace-nowrap">Plan & Theme</th>
                         <th className="p-4 whitespace-nowrap">Status</th>
                         <th className="p-4 text-right whitespace-nowrap min-w-[140px]">Actions</th>
                       </tr>
@@ -1122,7 +1488,8 @@ export default function CollegeMasterPage() {
                     {activeTab === 'branches' && (
                       <tr>
                         <th className="p-4 whitespace-nowrap">Mapped College</th>
-                        <th className="p-4 whitespace-nowrap">Department Code</th>
+                        <th className="p-4 whitespace-nowrap">Mapped Course</th>
+                        <th className="p-4 whitespace-nowrap">Branch Code</th>
                         <th className="p-4 whitespace-nowrap">Department / Specialty Name</th>
                         <th className="p-4 whitespace-nowrap">Specialty Type</th>
                         <th className="p-4 whitespace-nowrap">Status</th>
@@ -1159,18 +1526,36 @@ export default function CollegeMasterPage() {
                     {/* 1. COLLEGES */}
                     {activeTab === 'colleges' &&
                       colleges
-                        .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.slug.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .filter((c) =>
+                          (c.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          (c.slug || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          (c.code ? String(c.code).toLowerCase().includes((searchTerm || '').toLowerCase()) : false)
+                        )
                         .map((col) => (
-                          <tr key={col.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
-                            <td className="p-4 font-bold text-slate-900 dark:text-slate-900 dark:text-white">
-                              <div className="flex items-center gap-2">
-                                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: col.primary_color || '#6366F1' }} />
+                          <tr key={col.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="p-4 whitespace-nowrap">
+                              <span className="px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-extrabold text-xs border border-indigo-500/20">
+                                #{col.code || '—'}
+                              </span>
+                            </td>
+                            <td className="p-4 font-bold text-slate-900 dark:text-white">
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm border border-black/10" style={{ backgroundColor: col.primary_color || '#6366F1' }} />
                                 <span>{col.name}</span>
+                                {col.slug === 'srms-ims' && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                    Primary IMS
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td className="p-4 font-mono text-indigo-600 dark:text-indigo-400 font-semibold whitespace-nowrap">{col.slug}</td>
-                            <td className="p-4 text-slate-500 dark:text-slate-600 dark:text-slate-400">{col.domain || 'N/A'}</td>
-                            <td className="p-4 whitespace-nowrap"><span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">{col.plan || 'Standard'}</span></td>
+                            <td className="p-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">{col.domain || 'N/A'}</td>
+                            <td className="p-4 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold uppercase text-[10px]">
+                                {col.plan || 'Enterprise'}
+                              </span>
+                            </td>
                             <td className="p-4 whitespace-nowrap">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${col.is_active ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
                                 {col.is_active ? 'Active' : 'Inactive'}
@@ -1186,45 +1571,80 @@ export default function CollegeMasterPage() {
                     {activeTab === 'courses' &&
                       courses
                         .filter((c) => isMatchCollege(c.college_id))
-                        .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.code.toLowerCase().includes(searchTerm.toLowerCase()))
-                        .map((crs) => (
-                          <tr key={crs.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
-                            <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                <span>🏛️</span>
-                                <span>{colleges.find((c) => c.id === crs.college_id)?.name || crs.college_name}</span>
-                              </div>
-                            </td>
-                            <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{crs.code}</td>
-                            <td className="p-4 font-bold text-slate-900 dark:text-slate-900 dark:text-white">{crs.name}</td>
-                            <td className="p-4 whitespace-nowrap"><span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">{crs.degree_level || 'UG'}</span></td>
-                            <td className="p-4 whitespace-nowrap">
-                              {crs.academic_system === 'semester' ? (
-                                <span className="px-2.5 py-1 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 font-bold text-[11px]">
-                                  📚 Semester System
+                        .filter((c) =>
+                          (c.name || (c as any).course_name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          (c.code || (c as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          (c.college_name || '').toLowerCase().includes((searchTerm || '').toLowerCase())
+                        )
+                        .map((crs) => {
+                          const col = colleges.find((c) => c.id === crs.college_id);
+                          const colName = col?.name || crs.college_name || 'SRMS Institution';
+                          const colCode = col?.code || crs.college_code || '';
+                          const isProf = crs.academic_system === 'professional';
+
+                          return (
+                            <tr key={crs.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="p-4 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  {colCode && (
+                                    <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-bold text-[10px] border border-indigo-500/20">
+                                      #{colCode}
+                                    </span>
+                                  )}
+                                  <span className="font-semibold text-slate-900 dark:text-white">{colName}</span>
+                                </div>
+                              </td>
+                              <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                                <span className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+                                  {crs.code}
                                 </span>
-                              ) : (
-                                <span className="px-2.5 py-1 rounded bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 font-bold text-[11px]">
-                                  🩺 Professional Phase
+                              </td>
+                              <td className="p-4 font-bold text-slate-900 dark:text-white">
+                                <div className="flex items-center gap-2">
+                                  <span>{crs.name}</span>
+                                  {crs.code === 'MBBS' && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                      NMC Medical
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-4 whitespace-nowrap">
+                                <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase">
+                                  {crs.degree_level || 'UG'}
                                 </span>
-                              )}
-                            </td>
-                            <td className="p-4 whitespace-nowrap">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${crs.is_active ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
-                                {crs.is_active ? 'Active' : 'Inactive'}
-                              </span>
-                            </td>
-                            <td className="p-4 text-right whitespace-nowrap min-w-[140px]">
-                              <ActionButtons onEdit={() => handleEdit(crs)} onDelete={() => handleDelete(crs.id)} />
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="p-4 whitespace-nowrap">
+                                {isProf ? (
+                                  <span className="px-2.5 py-1 rounded-md bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/25 font-bold text-[11px] flex items-center gap-1.5 w-fit">
+                                    <span>🩺</span> Professional Phase ({crs.duration_years || 5.5} Yrs)
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/25 font-bold text-[11px] flex items-center gap-1.5 w-fit">
+                                    <span>📚</span> Semester System ({crs.duration_years || 4} Yrs)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-4 whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${crs.is_active ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
+                                  {crs.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                              </td>
+                              <td className="p-4 text-right whitespace-nowrap min-w-[140px]">
+                                <ActionButtons onEdit={() => handleEdit(crs)} onDelete={() => handleDelete(crs.id)} />
+                              </td>
+                            </tr>
+                          );
+                        })}
 
                     {/* 3. PROFESSIONAL / SEMESTER PHASES */}
                     {activeTab === 'professionals' &&
                       professionals
                         .filter((p) => isMatchCollege(p.college_id))
-                        .filter((p) => p.phase_name.toLowerCase().includes(searchTerm.toLowerCase()) || p.course_code.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .filter((p) => 
+                          (p.phase_name || (p as any).name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                          (p.course_code || (p as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase())
+                        )
                         .map((pf) => (
                           <tr key={pf.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
                             <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
@@ -1266,7 +1686,10 @@ export default function CollegeMasterPage() {
                     {activeTab === 'batches' &&
                       batches
                         .filter((b) => isMatchCollege(b.college_id))
-                        .filter((b) => b.code.toLowerCase().includes(searchTerm.toLowerCase()) || (b.course_code || (b as any).course_cd || '').toLowerCase().includes(searchTerm.toLowerCase()))
+                        .filter((b) => 
+                          (b.code || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                          (b.course_code || (b as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase())
+                        )
                         .map((bth) => (
                           <tr key={bth.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
                             <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
@@ -1298,23 +1721,48 @@ export default function CollegeMasterPage() {
                           </tr>
                         ))}
 
-                    {/* 5. BRANCHES */}
-                    {/* 5. DEPARTMENTS & SPECIALTIES */}
+                    {/* 5. BRANCHES / DEPARTMENTS & SPECIALTIES */}
                     {activeTab === 'branches' &&
                       branches
                         .filter((br) => isMatchCollege(br.college_id))
-                        .filter((br) => br.name.toLowerCase().includes(searchTerm.toLowerCase()) || br.code.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .filter((br) => 
+                          (br.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                          (br.code || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          ((br as any).course_name || (br as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase())
+                        )
                         .map((br) => (
-                          <tr key={br.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
-                            <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <tr key={br.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="p-4 font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <span>🏛️</span>
-                                <span>{colleges.find((c) => c.id === br.college_id)?.name || br.college_name}</span>
+                                <span>{colleges.find((c) => c.id === br.college_id)?.name || br.college_name || 'SRMS Institution'}</span>
                               </div>
                             </td>
-                            <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{br.code}</td>
-                            <td className="p-4 font-bold text-slate-900 dark:text-slate-900 dark:text-white">{br.name}</td>
-                            <td className="p-4 whitespace-nowrap"><span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">{br.type}</span></td>
+                            <td className="p-4 text-purple-600 dark:text-purple-300 font-bold font-mono whitespace-nowrap">
+                              {(br as any).course_name || (br as any).course_cd ? (
+                                <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 font-bold text-[10px]">
+                                  🎓 {(br as any).course_name || `Course #${(br as any).course_cd}`}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-normal italic text-[10px]">General</span>
+                              )}
+                            </td>
+                            <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <span>{br.code}</span>
+                                {(br as any).branch_cd && (
+                                  <span className="px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold text-[9px] border border-orange-500/20">
+                                    #{(br as any).branch_cd}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4 font-bold text-slate-900 dark:text-white">{br.name}</td>
+                            <td className="p-4 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[10px]">
+                                {br.type || 'General'}
+                              </span>
+                            </td>
                             <td className="p-4 whitespace-nowrap">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${br.is_active ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
                                 {br.is_active ? 'Active' : 'Inactive'}
@@ -1330,7 +1778,10 @@ export default function CollegeMasterPage() {
                     {activeTab === 'groups' &&
                       groups
                         .filter((g) => isMatchCollege(g.college_id))
-                        .filter((g) => g.name.toLowerCase().includes(searchTerm.toLowerCase()) || g.code.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .filter((g) => 
+                          (g.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                          (g.code || '').toLowerCase().includes((searchTerm || '').toLowerCase())
+                        )
                         .map((grp) => {
                           const course = courses.find((c) => c.id === grp.course_id);
                           const batch = batches.find((b) => b.id === grp.batch_id);
@@ -1370,11 +1821,11 @@ export default function CollegeMasterPage() {
                           );
                         })}
 
-                    {/* 6. SESSIONS */}
+                    {/* 7. SESSIONS */}
                     {activeTab === 'sessions' &&
                       sessions
                         .filter((s) => isMatchCollege(s.college_id))
-                        .filter((s) => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .filter((s) => (s.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()))
                         .map((ses) => (
                           <tr key={ses.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
                             <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
@@ -1404,11 +1855,14 @@ export default function CollegeMasterPage() {
                           </tr>
                         ))}
 
-                    {/* 7. RESIDENCY / HOSTELLER / DAY SCHOLAR */}
+                    {/* 8. RESIDENCY / HOSTELLER / DAY SCHOLAR */}
                     {activeTab === 'residencies' &&
                       residencies
                         .filter((r) => isMatchCollege(r.college_id))
-                        .filter((r) => r.category_name.toLowerCase().includes(searchTerm.toLowerCase()) || r.residency_type.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .filter((r) => 
+                          (r.category_name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                          (r.residency_type || '').toLowerCase().includes((searchTerm || '').toLowerCase())
+                        )
                         .map((resItem) => {
                           const fillPct = Math.min(100, Math.round((resItem.allocated_count / (resItem.total_capacity || 1)) * 100));
                           return (
@@ -1538,32 +1992,74 @@ export default function CollegeMasterPage() {
               {/* COLLEGE FORM */}
               {activeTab === 'colleges' && (
                 <>
-                  <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">College Name *</label>
-                    <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">College Code (colg_cd) *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.code || ''}
+                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
+                        placeholder="e.g. 1, 11"
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">College Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name || ''}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
+                        placeholder="e.g. SRMS IMS,BAREILLY"
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Slug Code *</label>
-                      <input type="text" required value={formData.slug || ''} onChange={(e) => setFormData({ ...formData, slug: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-mono" />
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Slug Code / Subdomain *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.slug || ''}
+                        onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono"
+                        placeholder="e.g. srms-ims"
+                      />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Domain</label>
-                      <input type="text" value={formData.domain || ''} onChange={(e) => setFormData({ ...formData, domain: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white" />
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Domain</label>
+                      <input
+                        type="text"
+                        value={formData.domain || ''}
+                        onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
+                        placeholder="e.g. srms.mederp.app"
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Plan</label>
-                      <select value={formData.plan || 'Enterprise'} onChange={(e) => setFormData({ ...formData, plan: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Plan</label>
+                      <select
+                        value={formData.plan || 'Enterprise'}
+                        onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
+                      >
                         <option value="Enterprise">Enterprise</option>
                         <option value="Standard">Standard</option>
                         <option value="Starter">Starter</option>
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Primary Color</label>
-                      <input type="color" value={formData.primary_color || formData.primaryColor || '#6366F1'} onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value, primary_color: e.target.value })} className="w-full h-9 p-1 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded cursor-pointer" />
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Primary Color</label>
+                      <input
+                        type="color"
+                        value={formData.primary_color || formData.primaryColor || '#6366F1'}
+                        onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value, primary_color: e.target.value })}
+                        className="w-full h-9 p-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded cursor-pointer"
+                      />
                     </div>
                   </div>
                 </>
@@ -1574,36 +2070,80 @@ export default function CollegeMasterPage() {
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Course Code *</label>
-                      <input type="text" required value={formData.code || ''} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-mono" placeholder="e.g. MBBS / BAMS / BTECH-CS" />
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Course Code *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.code || ''}
+                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono uppercase font-bold"
+                        placeholder="e.g. MBBS / BTECH-CS / LLB"
+                      />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Degree Level</label>
-                      <select value={formData.degreeLevel || 'UG'} onChange={(e) => setFormData({ ...formData, degreeLevel: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Degree Level</label>
+                      <select
+                        value={formData.degreeLevel || 'UG'}
+                        onChange={(e) => setFormData({ ...formData, degreeLevel: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-semibold"
+                      >
                         <option value="UG">Undergraduate (UG)</option>
                         <option value="PG">Postgraduate (PG)</option>
-                        <option value="Diploma">Diploma / Paramedical</option>
+                        <option value="Diploma">Diploma / Vocational</option>
+                        <option value="Certificate">Certificate Program</option>
                       </select>
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Course Master Title *</label>
-                    <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white" placeholder="e.g. Bachelor of Medicine and Bachelor of Surgery" />
+                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Course Master Title *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.name || ''}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
+                      placeholder="e.g. Bachelor of Medicine and Bachelor of Surgery"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Total Duration (Years)</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0.5"
+                        max="8"
+                        value={formData.durationYears ?? 4.0}
+                        onChange={(e) => setFormData({ ...formData, durationYears: parseFloat(e.target.value) || 1.0 })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Starting Phase / Semester</label>
+                      <input
+                        type="text"
+                        value={formData.professionalPhase || formData.phaseName || ''}
+                        onChange={(e) => setFormData({ ...formData, professionalPhase: e.target.value, phaseName: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
+                        placeholder="e.g. 1st Professional (Phase I) / Semester 1"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-1 bg-indigo-50/60 dark:bg-indigo-950/40 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
                     <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
                       <span>Academic System Type *</span>
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">Controls Professional vs Semester Setup</span>
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">Only IMS is Professional; others Semester-based</span>
                     </label>
                     <select
-                      value={formData.academicSystem || 'professional'}
+                      value={formData.academicSystem || 'semester'}
                       onChange={(e) => setFormData({ ...formData, academicSystem: e.target.value })}
-                      className="w-full px-3 py-2 bg-white dark:bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded text-slate-900 dark:text-white font-bold"
                     >
-                      <option value="professional">🩺 Professional-wise System (MBBS / BAMS / BUMS / PG Medical)</option>
-                      <option value="semester">📚 Semester-wise System (B.Tech / B.Sc / B.Pharm / MBA)</option>
+                      <option value="professional">🩺 Professional Phase System (NMC MBBS / Medical Specialties)</option>
+                      <option value="semester">📚 Semester System (Engineering, Law, Nursing, Management, etc.)</option>
                     </select>
                   </div>
                 </>

@@ -6,6 +6,12 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 // ─── 1. COLLEGE ─────────────────────────────────────────────────────────────
 export class CreateCollegeDto {
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  code?: string;
+
   @ApiProperty({ example: 'SRMS Institute of Medical Sciences' })
   @IsString()
   @MaxLength(200)
@@ -38,6 +44,11 @@ export class CreateCollegeDto {
 }
 
 export class UpdateCollegeDto extends PartialType(CreateCollegeDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  code?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
@@ -81,6 +92,26 @@ export class CreateCourseDto {
   @IsString()
   professionalPhase?: string;
 
+  @ApiPropertyOptional({ example: 'professional' })
+  @IsOptional()
+  @IsString()
+  academicSystem?: string;
+
+  @ApiPropertyOptional({ example: 'professional' })
+  @IsOptional()
+  @IsString()
+  academic_system?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
+
+  @ApiPropertyOptional({ example: 'UG' })
+  @IsOptional()
+  @IsString()
+  courseType?: string;
+
   @ApiPropertyOptional({ example: 'c0a80101-0000-0000-0000-000000000001' })
   @IsOptional()
   @IsString()
@@ -92,6 +123,11 @@ export class UpdateCourseDto extends PartialType(CreateCourseDto) {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }
 
 // ─── 3. BATCHES ─────────────────────────────────────────────────────────────
