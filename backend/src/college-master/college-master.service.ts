@@ -520,12 +520,12 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         for (const ext of externalCourseList) {
           const rawName = String(ext.course_name || '').trim();
           const cleanAbbr = rawName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || `CRS${ext.course_cd}`;
-          const uniqueCode = `${cleanAbbr}-${cd}`;
+          const numericCode = String(ext.course_cd || `${cleanAbbr}-${cd}`);
           const meta = inferCourseMetadata(rawName, isIms);
           const isActive = String(ext.active_flg) === '1' || ext.ACTIVESTS === 'ACTIVE';
 
           targetCourses.push({
-            code: uniqueCode,
+            code: numericCode,
             name: rawName,
             degree_level: meta.degree_level,
             duration_years: meta.duration_years,
@@ -708,12 +708,13 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
     `).catch(() => {});
 
+    const courseCdVal = dto.courseCd || (dto as any).course_cd || dto.code || '1';
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO courses (code, name, degree_level, duration_years, professional_phase, academic_system, course_cd, course_type, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
        RETURNING *`,
-      [dto.code.toUpperCase(), dto.name, dto.degreeLevel || 'UG', duration, phase, academicSystem, dto.courseCd || null, dto.courseType || null],
+      [courseCdVal, dto.name, dto.degreeLevel || 'UG', duration, phase, academicSystem, courseCdVal, dto.courseType || null],
     );
     const collegeId = await this.getCollegeIdBySlug(slug);
     return { ...rows[0], college_id: collegeId, college_slug: slug };
@@ -724,6 +725,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     const schema = `tenant_${slug}`;
     const isIms = (slug === 'srms-ims');
     const academicSystem = dto.academicSystem || dto.academic_system;
+    const courseCdVal = dto.courseCd || (dto as any).course_cd || dto.code;
 
     await this.ds.query(`
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50);
@@ -741,10 +743,11 @@ export class CollegeMasterService implements OnApplicationBootstrap {
            academic_system = COALESCE($5, academic_system),
            course_cd = COALESCE($6, course_cd),
            course_type = COALESCE($7, course_type),
-           is_active = COALESCE($8, is_active)
-       WHERE id = $9
+           is_active = COALESCE($8, is_active),
+           code = COALESCE($9, code)
+       WHERE id = $10
        RETURNING *`,
-      [dto.name, dto.degreeLevel, dto.durationYears, dto.professionalPhase, academicSystem, dto.courseCd, dto.courseType, dto.isActive ?? dto.is_active, id],
+      [dto.name, dto.degreeLevel, dto.durationYears, dto.professionalPhase, academicSystem, courseCdVal, dto.courseType, dto.isActive ?? dto.is_active, courseCdVal, id],
     );
     if (rows.length === 0) throw new NotFoundException('Course not found');
     const collegeId = await this.getCollegeIdBySlug(slug);
@@ -880,16 +883,16 @@ export class CollegeMasterService implements OnApplicationBootstrap {
             const currBatCd = ext.curr_bat_Cd ? String(ext.curr_bat_Cd) : null;
             const isActive = String(ext.active_flg) === '1';
 
-            // Clean code & title
-            const uniqueCode = `B${rawBatchName || batchCd}-C${courseCd}-${cd}`;
-            const displayName = rawBatchName ? `Batch ${rawBatchName}` : `Batch ${batchCd}`;
+            // Numeric code matching SRMS API batch_cd
+            const numericCode = String(ext.batch_cd || ext.curr_bat_Cd || yearNum).trim();
+            const displayName = rawBatchName ? `Batch ${rawBatchName}` : `Batch ${numericCode}`;
 
             const existing = await this.ds.query(
               `SELECT id FROM "${schema}".batches
                WHERE (batch_cd = $1 AND course_cd = $2)
-                  OR code = $3
+                  OR (code = $3 AND course_cd = $2)
                LIMIT 1`,
-              [batchCd, courseCd, uniqueCode],
+              [batchCd, courseCd, numericCode],
             ).catch(() => []);
 
             if (existing && existing.length > 0) {
@@ -908,7 +911,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                      is_active = $11
                  WHERE id = $12
                  RETURNING *`,
-                [uniqueCode, displayName, yearNum, batchCd, courseCd, courseName, cd, startDate, endDate, currBatCd, isActive, existing[0].id],
+                [numericCode, displayName, yearNum, batchCd, courseCd, courseName, cd, startDate, endDate, currBatCd, isActive, existing[0].id],
               );
               const row = (updated && updated[0]) ? (updated[0]['0'] || (Array.isArray(updated[0]) ? updated[0][0] : updated[0])) : {};
               syncedBatches.push({ ...row, college_id: col.id, college_name: col.name, college_code: col.code, college_slug: slug, course_code: courseCd });
@@ -917,7 +920,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                 `INSERT INTO "${schema}".batches (code, name, year, batch_cd, course_cd, course_name, colg_cd, start_date, end_date, curr_bat_cd, is_active)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                  RETURNING *`,
-                [uniqueCode, displayName, yearNum, batchCd, courseCd, courseName, cd, startDate, endDate, currBatCd, isActive],
+                [numericCode, displayName, yearNum, batchCd, courseCd, courseName, cd, startDate, endDate, currBatCd, isActive],
               );
               const row = (inserted && inserted[0]) ? (inserted[0]['0'] || (Array.isArray(inserted[0]) ? inserted[0][0] : inserted[0])) : {};
               syncedBatches.push({ ...row, college_id: col.id, college_name: col.name, college_code: col.code, college_slug: slug, course_code: courseCd });
@@ -945,33 +948,26 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       const schema = `tenant_${slug}`;
 
       try {
-        await this.ds.query(`
-          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
-          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
-          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
-          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
-          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS curr_bat_cd VARCHAR(50);
-          ALTER TABLE "${schema}".batches ADD COLUMN IF NOT EXISTS name VARCHAR(200);
-        `).catch(() => {});
-
-        const rows = await this.tenantSchemaService.queryInTenant(
+        await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
+        let rows = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT *, course_cd AS course_code FROM batches ORDER BY year DESC, code ASC`,
+          `SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
+                  b.course_cd AS course_code
+           FROM batches b
+           LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
+           ORDER BY b.year DESC, b.code ASC`,
         ).catch(() => []);
 
         if (rows.length === 0) {
           await this.syncExternalBatches(slug);
-          const fresh = await this.tenantSchemaService.queryInTenant(
+          rows = await this.tenantSchemaService.queryInTenant(
             slug,
-            `SELECT *, course_cd AS course_code FROM batches ORDER BY year DESC, code ASC`,
+            `SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
+                    b.course_cd AS course_code
+             FROM batches b
+             LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
+             ORDER BY b.year DESC, b.code ASC`,
           ).catch(() => []);
-          return fresh.map((r: any) => ({
-            ...r,
-            college_id: collegeId,
-            college_name: collegeName,
-            college_code: collegeCode,
-            college_slug: slug,
-          }));
         }
 
         return rows.map((r: any) => ({
@@ -993,7 +989,11 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       try {
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
-          `SELECT *, course_cd AS course_code FROM batches ORDER BY year DESC, code ASC`,
+          `SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
+                  b.course_cd AS course_code
+           FROM batches b
+           LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
+           ORDER BY b.year DESC, b.code ASC`,
         ).catch(() => []);
 
         allBatches.push(
@@ -1011,32 +1011,38 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   async createBatch(dto: CreateBatchDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(dto.collegeId || tenantSlug);
+    const batchCdVal = String(dto.code || dto.year || '').trim();
+    const displayName = dto.year ? `Batch ${dto.year}` : `Batch ${batchCdVal}`;
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO batches (code, year, course_cd, department_id, start_date, end_date, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
+      `INSERT INTO batches (code, batch_cd, name, year, course_cd, department_id, start_date, end_date, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
        RETURNING *`,
-      [dto.code, dto.year, dto.courseCd, dto.departmentId || null, dto.startDate || null, dto.endDate || null],
+      [batchCdVal, batchCdVal, displayName, dto.year, dto.courseCd, dto.departmentId || null, dto.startDate || null, dto.endDate || null],
     );
     return rows[0];
   }
 
   async updateBatch(id: string, dto: UpdateBatchDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(dto.collegeId || tenantSlug);
+    const batchCdVal = dto.code ? String(dto.code).trim() : undefined;
+    const displayName = dto.year ? `Batch ${dto.year}` : undefined;
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE batches
        SET code = COALESCE($1, code),
-           year = COALESCE($2, year),
-           course_cd = COALESCE($3, course_cd),
-           department_id = COALESCE($4, department_id),
-           start_date = COALESCE($5, start_date),
-           end_date = COALESCE($6, end_date),
-           is_active = COALESCE($7, is_active)
-       WHERE id = $8
+           batch_cd = COALESCE($1, batch_cd),
+           name = COALESCE($2, name),
+           year = COALESCE($3, year),
+           course_cd = COALESCE($4, course_cd),
+           department_id = COALESCE($5, department_id),
+           start_date = COALESCE($6, start_date),
+           end_date = COALESCE($7, end_date),
+           is_active = COALESCE($8, is_active)
+       WHERE id = $9
        RETURNING *`,
-      [dto.code, dto.year, dto.courseCd, dto.departmentId, dto.startDate, dto.endDate, dto.isActive, id],
+      [batchCdVal, displayName, dto.year, dto.courseCd, dto.departmentId, dto.startDate, dto.endDate, dto.isActive, id],
     );
     if (rows.length === 0) throw new NotFoundException('Batch not found');
     return rows[0];
@@ -1169,7 +1175,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         for (const ext of extBranches) {
           try {
             const rawBranchName = String(ext.branch_name || '').trim();
-            const branchCd = String(ext.branch_cd || '').trim();
+            const branchCd = String(ext.branch_cd || '').trim() || '1';
             const courseCd = String(ext.course_cd || crs.course_cd || '').trim();
             const courseName = String(ext.course_name || crs.course_name || '').trim();
             const isActive = String(ext.active_flg) === '1' || ext.BRANCHSTS === 'ACTIVE';
@@ -1180,9 +1186,8 @@ export class CollegeMasterService implements OnApplicationBootstrap {
               displayName = courseName ? `${courseName} Department` : `Branch ${branchCd}`;
             }
 
-            // Generate clean unique code
-            const cleanAbbr = rawBranchName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) || `BR${branchCd}`;
-            const uniqueCode = `${cleanAbbr}-C${courseCd}-${cd}`;
+            // Numeric branch code matching SRMS API branch_cd
+            const numericCode = branchCd;
 
             // Infer department/branch type
             let deptType = 'General';
@@ -1192,7 +1197,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                 : displayName.toLowerCase().includes('path') || displayName.toLowerCase().includes('pharm')
                 ? 'Para-Clinical'
                 : 'Clinical';
-            } else if (courseName.toUpperCase().includes('TECH') || courseName.toUpperCase().includes('ENG') || cleanAbbr.includes('CSE') || cleanAbbr.includes('IT') || cleanAbbr.includes('ME') || cleanAbbr.includes('ECE')) {
+            } else if (courseName.toUpperCase().includes('TECH') || courseName.toUpperCase().includes('ENG') || displayName.includes('CSE') || displayName.includes('IT') || displayName.includes('ME') || displayName.includes('ECE')) {
               deptType = 'Engineering';
             } else if (courseName.toUpperCase().includes('PHARM')) {
               deptType = 'Pharmacy';
@@ -1205,10 +1210,10 @@ export class CollegeMasterService implements OnApplicationBootstrap {
             const existing = await this.ds.query(
               `SELECT id FROM "${schema}".departments
                WHERE (branch_cd = $1 AND course_cd = $2)
-                  OR code = $3
+                  OR (code = $3 AND course_cd = $2)
                   OR (name = $4 AND course_cd = $2)
                LIMIT 1`,
-              [branchCd, courseCd, uniqueCode, displayName],
+              [branchCd, courseCd, numericCode, displayName],
             ).catch(() => []);
 
             if (existing && existing.length > 0) {
@@ -1224,7 +1229,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                      is_active = $8
                  WHERE id = $9
                  RETURNING *`,
-                [displayName, uniqueCode, deptType, branchCd, courseCd, courseName, cd, isActive, existing[0].id],
+                [displayName, numericCode, deptType, branchCd, courseCd, courseName, cd, isActive, existing[0].id],
               );
               const row = (updated && updated[0]) ? (updated[0]['0'] || (Array.isArray(updated[0]) ? updated[0][0] : updated[0])) : {};
               syncedBranches.push({ ...row, college_id: col.id, college_name: col.name, college_code: col.code, college_slug: slug });
@@ -1233,7 +1238,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                 `INSERT INTO "${schema}".departments (code, name, type, branch_cd, course_cd, course_name, colg_cd, is_active)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  RETURNING *`,
-                [uniqueCode, displayName, deptType, branchCd, courseCd, courseName, cd, isActive],
+                [numericCode, displayName, deptType, branchCd, courseCd, courseName, cd, isActive],
               );
               const row = (inserted && inserted[0]) ? (inserted[0]['0'] || (Array.isArray(inserted[0]) ? inserted[0][0] : inserted[0])) : {};
               syncedBranches.push({ ...row, college_id: col.id, college_name: col.name, college_code: col.code, college_slug: slug });
@@ -1261,31 +1266,30 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       const schema = `tenant_${slug}`;
 
       try {
-        await this.ds.query(`
-          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
-          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
-          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
-          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
-        `).catch(() => {});
-
-        const rows = await this.tenantSchemaService.queryInTenant(
+        await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
+        let rows = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT * FROM departments ORDER BY code ASC, name ASC`,
+          `SELECT d.*,
+                  COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
+                  d.course_cd AS course_code,
+                  COALESCE(d.branch_cd, d.code) AS branch_cd
+           FROM departments d
+           LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
+           ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
         ).catch(() => []);
 
         if (rows.length === 0) {
           await this.syncExternalBranches(slug);
-          const fresh = await this.tenantSchemaService.queryInTenant(
+          rows = await this.tenantSchemaService.queryInTenant(
             slug,
-            `SELECT * FROM departments ORDER BY code ASC, name ASC`,
+            `SELECT d.*,
+                    COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
+                    d.course_cd AS course_code,
+                    COALESCE(d.branch_cd, d.code) AS branch_cd
+             FROM departments d
+             LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
+             ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
           ).catch(() => []);
-          return fresh.map(r => ({
-            ...r,
-            college_id: collegeId,
-            college_name: collegeName,
-            college_code: collegeCode,
-            college_slug: slug,
-          }));
         }
 
         return rows.map(r => ({
@@ -1307,7 +1311,13 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       try {
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
-          `SELECT * FROM departments ORDER BY code ASC, name ASC`,
+          `SELECT d.*,
+                  COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
+                  d.course_cd AS course_code,
+                  COALESCE(d.branch_cd, d.code) AS branch_cd
+           FROM departments d
+           LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
+           ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
         ).catch(() => []);
 
         allBranches.push(
@@ -1325,29 +1335,33 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   async createBranch(dto: CreateBranchDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(dto.collegeId || tenantSlug);
+    const branchCdVal = String(dto.branchCd || dto.code || '').trim() || '1';
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO departments (code, name, type, is_active)
-       VALUES ($1, $2, $3, true)
+      `INSERT INTO departments (code, branch_cd, name, type, course_cd, course_name, colg_cd, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
        RETURNING *`,
-      [dto.code.toUpperCase(), dto.name, dto.type],
+      [branchCdVal, branchCdVal, dto.name, dto.type || 'General', dto.courseCd || null, dto.courseName || null, dto.colgCd || null],
     );
     return rows[0];
   }
 
   async updateBranch(id: string, dto: UpdateBranchDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(dto.collegeId || tenantSlug);
+    const branchCdVal = dto.code || dto.branchCd ? String(dto.code || dto.branchCd).trim() : undefined;
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE departments
        SET code = COALESCE($1, code),
+           branch_cd = COALESCE($1, branch_cd),
            name = COALESCE($2, name),
            type = COALESCE($3, type),
-           is_active = COALESCE($4, is_active)
-       WHERE id = $5
+           course_cd = COALESCE($4, course_cd),
+           is_active = COALESCE($5, is_active)
+       WHERE id = $6
        RETURNING *`,
-      [dto.code ? dto.code.toUpperCase() : null, dto.name, dto.type, dto.isActive, id],
+      [branchCdVal, dto.name, dto.type, dto.courseCd, dto.isActive, id],
     );
     if (rows.length === 0) throw new NotFoundException('Branch not found');
     return rows[0];
@@ -1416,9 +1430,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       `UPDATE academic_sessions
        SET name = COALESCE($1, name),
            start_date = COALESCE($2, start_date),
-           end_date = COALESCE($3, end_date),
-           is_current = COALESCE($4, is_current),
-           is_active = COALESCE($5, is_active)
+                     is_active = COALESCE($5, is_active)
        WHERE id = $6
        RETURNING *`,
       [dto.name, dto.startDate, dto.endDate, dto.isCurrent, dto.isActive, id],
@@ -1437,44 +1449,155 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return { success: true, message: 'Academic session deleted successfully' };
   }
 
-  // ─── 6. PROFESSIONAL PHASES ───────────────────────────────────────────────
+  // ─── 6. PROFESSIONAL PHASES / ACADEMIC YEAR ───────────────────────────────
+  private async ensureProperPhasesForSchema(schema: string, slug: string) {
+    try {
+      await this.ds.query(`
+        ALTER TABLE "${schema}".professional_phases ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".professional_phases ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50);
+        ALTER TABLE "${schema}".professional_phases ADD COLUMN IF NOT EXISTS branch_name VARCHAR(200);
+        ALTER TABLE "${schema}".professional_phases ADD COLUMN IF NOT EXISTS academic_year INT DEFAULT 1;
+      `).catch(() => {});
+    } catch (err: any) {
+      // Schema may not have table yet
+    }
+  }
+
   async listProfessionals(tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
-    await this.tenantSchemaService.ensureLatestSchema(slug);
-    return this.tenantSchemaService.queryInTenant(
-      slug,
-      `SELECT id, name, phase_order, course_cd, academic_system, is_active, created_at
-       FROM professional_phases
-       ORDER BY phase_order ASC, created_at ASC`,
-    );
+    const colleges = await this.listColleges();
+
+    if (tenantSlug && tenantSlug !== 'all') {
+      const slug = await this.resolveTenantSlug(tenantSlug);
+      const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
+      const collegeId = targetCollege?.id || await this.getCollegeIdBySlug(slug);
+      const collegeName = targetCollege?.name || '';
+      const collegeCode = targetCollege?.code || '';
+      const schema = `tenant_${slug}`;
+      await this.tenantSchemaService.ensureLatestSchema(slug);
+      await this.ensureProperPhasesForSchema(schema, slug);
+
+      try {
+        const rows = await this.ds.query(
+          `SELECT DISTINCT ON (p.id)
+                  p.id, p.name, p.phase_order, p.course_cd, p.academic_system, p.is_active, p.created_at,
+                  p.branch_cd, p.branch_id, p.branch_name, p.academic_year,
+                  COALESCE(c.name, 'Course ' || p.course_cd) AS course_name,
+                  COALESCE(c.code, p.course_cd) AS course_code,
+                  COALESCE(NULLIF(p.branch_name, ''), 'General Branch') AS branch_display_name,
+                  1 AS duration_years
+           FROM "${schema}".professional_phases p
+           LEFT JOIN "${schema}".courses c ON c.course_cd = p.course_cd OR c.code = p.course_cd
+           ORDER BY p.id, p.phase_order ASC`,
+        );
+        return rows
+          .map((r: any) => ({
+            ...r,
+            phase_name: r.name,
+            academic_year: r.academic_year || (r.academic_system === 'semester' ? Math.ceil((r.phase_order || 1) / 2) : (r.phase_order || 1)),
+            college_id: collegeId,
+            college_name: collegeName,
+            college_code: collegeCode,
+            college_slug: slug,
+          }))
+          .sort((a: any, b: any) => (a.academic_year - b.academic_year) || (a.phase_order - b.phase_order));
+      } catch (err: any) {
+        return [];
+      }
+    }
+
+    // Return aggregated professional phases across all active colleges
+    const allProfessionals: any[] = [];
+    for (const col of colleges) {
+      const slug = col.slug;
+      const schema = `tenant_${slug}`;
+      try {
+        await this.ensureProperPhasesForSchema(schema, slug);
+        const rows = await this.ds.query(
+          `SELECT DISTINCT ON (p.id)
+                  p.id, p.name, p.phase_order, p.course_cd, p.academic_system, p.is_active, p.created_at,
+                  p.branch_cd, p.branch_id, p.branch_name, p.academic_year,
+                  COALESCE(c.name, 'Course ' || p.course_cd) AS course_name,
+                  COALESCE(c.code, p.course_cd) AS course_code,
+                  COALESCE(NULLIF(p.branch_name, ''), 'General Branch') AS branch_display_name,
+                  1 AS duration_years
+           FROM "${schema}".professional_phases p
+           LEFT JOIN "${schema}".courses c ON c.course_cd = p.course_cd OR c.code = p.course_cd
+           ORDER BY p.id, p.phase_order ASC`,
+        );
+        for (const row of rows) {
+          allProfessionals.push({
+            ...row,
+            phase_name: row.name,
+            academic_year: row.academic_year || (row.academic_system === 'semester' ? Math.ceil((row.phase_order || 1) / 2) : (row.phase_order || 1)),
+            college_id: col.id,
+            college_name: col.name,
+            college_code: col.code,
+            college_slug: slug,
+          });
+        }
+      } catch (err: any) {
+        // Schema not provisioned yet or table empty
+      }
+    }
+    return allProfessionals.sort((a: any, b: any) => (a.academic_year - b.academic_year) || (a.phase_order - b.phase_order));
   }
 
   async createProfessional(dto: CreateProfessionalDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(dto.collegeId || tenantSlug);
     await this.tenantSchemaService.ensureLatestSchema(slug);
+    const schema = `tenant_${slug}`;
+    await this.ensureProperPhasesForSchema(schema, slug);
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO professional_phases (name, phase_order, course_cd, academic_system, is_active)
-       VALUES ($1, $2, $3, $4, true)
+      `INSERT INTO professional_phases (name, phase_order, course_cd, branch_cd, branch_id, branch_name, academic_year, academic_system, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
        RETURNING *`,
-      [dto.name, dto.phaseOrder || 1, dto.courseCd || 'MBBS', dto.academicSystem || 'professional'],
+      [
+        dto.name,
+        dto.phaseOrder || 1,
+        dto.courseCd || '1',
+        dto.branchCd || null,
+        dto.branchId || null,
+        dto.branchName || null,
+        dto.academicYear || 1,
+        dto.academicSystem || (slug === 'srms-ims' ? 'professional' : 'semester'),
+      ],
     );
     return rows[0];
   }
 
   async updateProfessional(id: string, dto: UpdateProfessionalDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(dto.collegeId || tenantSlug);
+    const schema = `tenant_${slug}`;
+    await this.ensureProperPhasesForSchema(schema, slug);
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE professional_phases
        SET name = COALESCE($1, name),
            phase_order = COALESCE($2, phase_order),
            course_cd = COALESCE($3, course_cd),
-           academic_system = COALESCE($4, academic_system),
-           is_active = COALESCE($5, is_active)
-       WHERE id = $6
+           branch_cd = COALESCE($4, branch_cd),
+           branch_id = COALESCE($5, branch_id),
+           branch_name = COALESCE($6, branch_name),
+           academic_year = COALESCE($7, academic_year),
+           academic_system = COALESCE($8, academic_system),
+           is_active = COALESCE($9, is_active)
+       WHERE id = $10
        RETURNING *`,
-      [dto.name, dto.phaseOrder, dto.courseCd, dto.academicSystem, dto.isActive, id],
+      [
+        dto.name,
+        dto.phaseOrder,
+        dto.courseCd,
+        dto.branchCd,
+        dto.branchId,
+        dto.branchName,
+        dto.academicYear,
+        dto.academicSystem,
+        dto.isActive,
+        id,
+      ],
     );
     if (rows.length === 0) throw new NotFoundException('Professional phase not found');
     return rows[0];
@@ -1487,7 +1610,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       `DELETE FROM professional_phases WHERE id = $1`,
       [id],
     );
-    return { success: true, message: 'Professional phase deleted successfully' };
+    return { success: true, message: 'Academic Year / Professional phase deleted successfully' };
   }
 
   // ─── 8. GROUPS MASTER (BATCH SUB-GROUPS: A, B, C, D) ─────────────────────

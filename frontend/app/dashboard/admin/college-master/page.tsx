@@ -111,21 +111,71 @@ interface Course {
   college_name: string;
   college_code?: string;
   college_slug?: string;
+  course_cd?: string;
+  course_type?: string;
   duration_years?: number;
   is_active: boolean;
 }
 
 interface ProfessionalPhase {
   id: string;
+  name?: string;
   college_id: string;
   college_name: string;
   course_id: string;
   course_code: string;
   course_name: string;
+  branch_id?: string;
+  branch_cd?: string;
+  branch_name?: string;
+  academic_year?: number;
+  phase_order?: number;
   academic_system: 'professional' | 'semester';
   phase_name: string;
   duration_years: number;
   is_active: boolean;
+}
+
+const YEAR_NAMES: Record<number, string> = {
+  1: 'First Year',
+  2: 'Second Year',
+  3: 'Third Year',
+  4: 'Fourth Year',
+  5: 'Fifth Year',
+};
+
+const YEAR_SEMESTERS: Record<number, string[]> = {
+  1: ['1st Semester', '2nd Semester'],
+  2: ['3rd Semester', '4th Semester'],
+  3: ['5th Semester', '6th Semester'],
+  4: ['7th Semester', '8th Semester'],
+  5: ['9th Semester', '10th Semester'],
+};
+
+interface GroupedAcademicYear {
+  groupKey: string;
+  college_id: string;
+  college_name: string;
+  college_code?: string;
+  college_slug?: string;
+  course_id: string;
+  course_code: string;
+  course_name: string;
+  branch_id?: string;
+  branch_cd?: string;
+  branch_name?: string;
+  branch_display_name?: string;
+  academic_year: number;
+  academic_year_name: string;
+  academic_system: 'professional' | 'semester';
+  duration_years: number;
+  is_active: boolean;
+  semesters: Array<{
+    id: string;
+    name: string;
+    phase_order: number;
+    is_active: boolean;
+  }>;
 }
 
 interface Batch {
@@ -137,6 +187,8 @@ interface Batch {
   course_id: string;
   course_code: string;
   code: string;
+  batch_cd?: string;
+  name?: string;
   year: number;
   start_date?: string;
   end_date?: string;
@@ -154,6 +206,7 @@ interface Branch {
   course_name?: string;
   code: string;
   name: string;
+  branch_name?: string;
   type: string;
   branch_cd?: string;
   is_active: boolean;
@@ -213,13 +266,13 @@ export default function CollegeMasterPage() {
   // ─── TENANT SLUG RESOLVER ────────────────────────────────────────────────────
   const getActiveTenantSlug = (): string => {
     if (selectedCollegeFilter !== 'all') {
-      return colleges.find((c) => c.id === selectedCollegeFilter)?.slug || '';
+      return colleges.find((c) => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter)?.slug || '';
     }
     return colleges[0]?.slug || '';
   };
 
   const getFormCollegeSlug = (): string => {
-    return colleges.find((c) => c.id === formData.collegeId)?.slug
+    return colleges.find((c) => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId)?.slug
       || colleges[0]?.slug
       || '';
   };
@@ -552,7 +605,7 @@ export default function CollegeMasterPage() {
         residencies: 'residencies',
       };
       const endpoint = endpointMap[tab] || tab;
-      const tenantParam = (tab === 'courses' && selectedCollegeFilter === 'all') ? 'all' : slug;
+      const tenantParam = (selectedCollegeFilter === 'all' || tab === 'courses' || tab === 'professionals') && selectedCollegeFilter === 'all' ? 'all' : slug;
       const res = await fetch(`${API_BASE}/${endpoint}?tenant=${tenantParam}`);
       if (!res.ok) {
         const errText = await res.text();
@@ -578,17 +631,24 @@ export default function CollegeMasterPage() {
         if (tab === 'groups') setGroups(list);
         if (tab === 'sessions') setSessions(list);
         if (tab === 'professionals') {
-          const defaultCollege = selectedCollegeFilter !== 'all' ? colleges.find(c => c.id === selectedCollegeFilter) || colleges[0] : colleges[0];
           setProfessionals(list.map((p: any) => ({
             id: p.id,
-            college_id: p.college_id || defaultCollege?.id || '',
-            college_name: defaultCollege?.name || 'SRMS Institute of Medical Sciences',
-            course_id: p.course_cd || 'MBBS',
-            course_code: p.course_cd || 'MBBS',
-            course_name: 'Bachelor of Medicine, Bachelor of Surgery',
-            academic_system: (p.academic_system as any) || 'professional',
-            phase_name: p.name,
-            duration_years: p.phase_order || 1,
+            college_id: p.college_id || colleges[0]?.id || '',
+            college_name: p.college_name || colleges.find(col => col.id === p.college_id || col.code === p.college_code)?.name || 'SRMS Institution',
+            college_code: p.college_code || '',
+            college_slug: p.college_slug || '',
+            course_id: p.course_cd || p.course_code || '',
+            course_code: p.course_code || p.course_cd || '',
+            course_name: p.course_name || 'Academic Program',
+            branch_id: p.branch_id || '',
+            branch_cd: p.branch_cd || '',
+            branch_name: p.branch_name || p.branch_display_name || 'General Branch',
+            academic_year: Number(p.academic_year) || (p.academic_system === 'semester' ? Math.ceil((p.phase_order || 1) / 2) : 1),
+            phase_order: p.phase_order || 1,
+            academic_system: p.academic_system || (p.college_slug === 'srms-ims' ? 'professional' : 'semester'),
+            phase_name: p.name || p.phase_name || `Semester ${p.phase_order || 1}`,
+            name: p.name || p.phase_name || `Semester ${p.phase_order || 1}`,
+            duration_years: p.duration_years || 1,
             is_active: p.is_active ?? true,
           })));
         }
@@ -602,50 +662,206 @@ export default function CollegeMasterPage() {
 
   useEffect(() => {
     fetchData(activeTab);
-    // Batches & Groups & Professionals & Residencies need courses pre-loaded for course mapping dropdowns
-    if (['batches', 'groups', 'professionals', 'residencies'].includes(activeTab)) {
-      fetchData('courses');
+    // Always preload courses and branches so cascading Step 2 and Step 3 dropdowns are immediately populated
+    fetchData('courses');
+    if (['batches', 'branches', 'groups', 'professionals', 'residencies'].includes(activeTab)) {
+      fetchData('branches');
     }
     if (activeTab === 'groups') {
       fetchData('batches');
-      fetchData('branches');
     }
   }, [activeTab, selectedCollegeFilter]);
 
   // Re-fetch dependencies once colleges load (so slug is available)
   useEffect(() => {
     if (colleges.length > 0) {
-      if (['batches', 'groups', 'professionals', 'residencies'].includes(activeTab)) {
-        fetchData('courses');
+      fetchData('courses');
+      if (['batches', 'branches', 'groups', 'professionals', 'residencies'].includes(activeTab)) {
+        fetchData('branches');
       }
       if (activeTab === 'groups') {
         fetchData('batches');
-        fetchData('branches');
       }
     }
   }, [colleges, selectedCollegeFilter]);
 
-  // Helper: Available Courses under currently selected Form College
-  const getCoursesForCollege = (collegeId: string) => {
-    return courses.filter((c) => c.college_id === collegeId);
+  // Helper: Available Courses under currently selected Form College (robust matching by ID, slug, or code)
+  const getCoursesForCollege = (collegeIdOrSlug: string) => {
+    if (!collegeIdOrSlug) return courses;
+    const selectedCol = colleges.find(c => c.id === collegeIdOrSlug || c.slug === collegeIdOrSlug || c.code === collegeIdOrSlug);
+    const targetId = selectedCol?.id || collegeIdOrSlug;
+    const targetSlug = selectedCol?.slug;
+    const targetCode = selectedCol?.code;
+
+    const filtered = courses.filter((c) => 
+      c.college_id === targetId ||
+      (targetCode && c.college_id === targetCode) ||
+      (targetSlug && c.college_slug === targetSlug) ||
+      (targetCode && c.college_code === targetCode)
+    );
+    return filtered.length > 0 ? filtered : courses;
+  };
+
+  // Helper: Available Branches under currently selected Form College & Course
+  const getBranchesForCollegeAndCourse = (collegeIdOrSlug: string, courseIdOrCd?: string) => {
+    if (!collegeIdOrSlug && !courseIdOrCd) return branches;
+    
+    const selectedCol = colleges.find(c => c.id === collegeIdOrSlug || c.slug === collegeIdOrSlug || c.code === collegeIdOrSlug);
+    const targetColId = selectedCol?.id || collegeIdOrSlug;
+    const targetSlug = selectedCol?.slug;
+    const targetColgCd = selectedCol?.code;
+
+    const selectedCrs = courses.find(c => c.id === courseIdOrCd || c.code === courseIdOrCd || (c as any).course_cd === courseIdOrCd);
+    const targetCourseCd = (selectedCrs as any)?.course_cd || selectedCrs?.code || courseIdOrCd;
+
+    const colBranches = branches.filter((b: any) => 
+      (targetColId && b.college_id === targetColId) ||
+      (targetSlug && b.college_slug === targetSlug) ||
+      (targetColgCd && String(b.colg_cd) === String(targetColgCd)) ||
+      (targetColgCd && String(b.college_code) === String(targetColgCd))
+    );
+
+    if (!targetCourseCd) return colBranches.length > 0 ? colBranches : branches;
+
+    const courseSpecific = colBranches.filter((b: any) => 
+      String(b.course_cd) === String(targetCourseCd) || 
+      String(b.course_code) === String(targetCourseCd) ||
+      (selectedCrs?.name && b.course_name && b.course_name.toLowerCase().trim() === selectedCrs.name.toLowerCase().trim())
+    );
+
+    return courseSpecific.length > 0 ? courseSpecific : (colBranches.length > 0 ? colBranches : branches);
+  };
+
+  // Helper: Group individual semester rows into enterprise Academic Year entities
+  const getGroupedAcademicYears = (items: ProfessionalPhase[]): GroupedAcademicYear[] => {
+    const map = new Map<string, GroupedAcademicYear>();
+
+    items.forEach((p) => {
+      const yearNum = Number(p.academic_year) || (p.academic_system === 'semester' ? Math.ceil((p.phase_order || 1) / 2) : (p.phase_order || 1));
+      const colId = p.college_id || '';
+      const crsCd = p.course_code || (p as any).course_cd || '';
+      const brCd = p.branch_cd || p.branch_name || 'COMMON';
+      const key = `${colId}__${crsCd}__${brCd}__${yearNum}`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          groupKey: key,
+          college_id: p.college_id,
+          college_name: p.college_name,
+          college_code: (p as any).college_code,
+          college_slug: (p as any).college_slug,
+          course_id: p.course_id,
+          course_code: p.course_code,
+          course_name: p.course_name,
+          branch_id: p.branch_id,
+          branch_cd: p.branch_cd,
+          branch_name: p.branch_name || (p as any).branch_display_name || 'General Branch',
+          branch_display_name: (p as any).branch_display_name || p.branch_name || 'General Branch',
+          academic_year: yearNum,
+          academic_year_name: YEAR_NAMES[yearNum] || `Year ${yearNum}`,
+          academic_system: p.academic_system,
+          duration_years: p.duration_years || 1,
+          is_active: p.is_active,
+          semesters: [],
+        });
+      }
+
+      const group = map.get(key)!;
+      const semName = p.phase_name || p.name || `Semester ${p.phase_order || 1}`;
+      if (!group.semesters.some(s => s.name === semName && s.phase_order === (p.phase_order || 1))) {
+        group.semesters.push({
+          id: p.id,
+          name: semName,
+          phase_order: p.phase_order || 1,
+          is_active: p.is_active,
+        });
+      }
+      if (p.is_active) group.is_active = true;
+    });
+
+    map.forEach((g) => {
+      g.semesters.sort((a, b) => a.phase_order - b.phase_order);
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.college_name !== b.college_name) return a.college_name.localeCompare(b.college_name);
+      if (a.course_name !== b.course_name) return a.course_name.localeCompare(b.course_name);
+      return a.academic_year - b.academic_year;
+    });
   };
 
   // Open Modal to Add New Item (Preselect College & Course)
-  const handleAddNew = () => {
+  const handleAddNew = async () => {
     setEditingItem(null);
     const defaultCollegeId = selectedCollegeFilter !== 'all' ? selectedCollegeFilter : colleges[0]?.id || '';
-    const collegeCourses = getCoursesForCollege(defaultCollegeId);
+    const selectedCol = colleges.find(c => c.id === defaultCollegeId) || colleges[0];
+    let collegeCourses = getCoursesForCollege(defaultCollegeId);
+
+    if (collegeCourses.length === 0 && selectedCol) {
+      try {
+        const res = await fetch(`${API_BASE}/courses?tenant=${selectedCol.slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          const list = json.data || [];
+          if (list.length > 0) {
+            const mapped = list.map((c: any) => ({
+              ...c,
+              degree_level: c.degree_level || c.degreeLevel || 'UG',
+              academic_system: c.academic_system || c.academicSystem || (selectedCol.slug === 'srms-ims' || selectedCol.code === '11' ? 'professional' : 'semester'),
+              college_id: selectedCol.id,
+              college_name: selectedCol.name,
+              college_code: selectedCol.code || '',
+              college_slug: selectedCol.slug,
+            }));
+            setCourses((prev) => {
+              const others = prev.filter((c) => c.college_id !== selectedCol.id && c.college_slug !== selectedCol.slug);
+              return [...others, ...mapped];
+            });
+            collegeCourses = mapped;
+          } else {
+            collegeCourses = await syncCoursesForCollege(selectedCol, false);
+          }
+        }
+      } catch (e) {
+        console.warn('[CollegeMaster] handleAddNew course load error:', e);
+      }
+    }
+
     const defaultCourse = collegeCourses[0] || courses[0];
     const defaultCourseId = defaultCourse?.id || '';
+
+    // Pre-fetch branches for this college if empty
+    let collegeBranches = getBranchesForCollegeAndCourse(defaultCollegeId, defaultCourseId);
+    if (collegeBranches.length === 0 && selectedCol) {
+      try {
+        const bRes = await fetch(`${API_BASE}/branches?tenant=${selectedCol.slug}`);
+        if (bRes.ok) {
+          const bJson = await bRes.json();
+          const bList = bJson.data || (Array.isArray(bJson) ? bJson : []);
+          if (bList.length > 0) {
+            setBranches((prev) => {
+              const others = prev.filter((b) => b.college_id !== selectedCol.id && b.college_slug !== selectedCol.slug);
+              return [...others, ...bList];
+            });
+            collegeBranches = bList;
+          }
+        }
+      } catch (e) {
+        console.warn('[CollegeMaster] handleAddNew branch load error:', e);
+      }
+    }
+
+    const defaultCollegeCode = selectedCol?.code || selectedCol?.id || defaultCollegeId;
+    const defaultCourseCd = defaultCourse?.course_cd || defaultCourse?.code || defaultCourse?.id || '';
 
     if (activeTab === 'colleges') {
       setFormData({ code: '', name: '', slug: '', domain: '', plan: 'Enterprise', primaryColor: '#6366F1', isActive: true });
     } else if (activeTab === 'courses') {
-      const selectedCol = colleges.find(c => c.id === defaultCollegeId) || colleges[0];
       const isProf = selectedCol?.slug === 'srms-ims' || selectedCol?.code === '11';
       setFormData({
-        collegeId: defaultCollegeId,
+        collegeId: defaultCollegeCode,
         code: '',
+        course_cd: '',
         name: '',
         degreeLevel: 'UG',
         academicSystem: isProf ? 'professional' : 'semester',
@@ -654,17 +870,43 @@ export default function CollegeMasterPage() {
         isActive: true,
       });
     } else if (activeTab === 'professionals') {
-      const isProf = defaultCourse?.academic_system !== 'semester';
+      const isProf = defaultCourse?.academic_system === 'professional';
+      const availableBranches = getBranchesForCollegeAndCourse(defaultCollegeCode, defaultCourseCd);
+      const firstBranch = availableBranches[0];
+      const defaultBranchCd = firstBranch?.branch_cd || firstBranch?.code || '1';
       setFormData({
-        collegeId: defaultCollegeId,
-        courseId: defaultCourseId,
-        phaseName: isProf ? '1st Professional MBBS (Phase I)' : 'Semester 1 (1st Year)',
-        durationYears: isProf ? 1.5 : 0.5,
+        collegeId: defaultCollegeCode,
+        courseId: defaultCourseCd,
+        branchId: defaultBranchCd,
+        branchCd: defaultBranchCd,
+        branchName: firstBranch?.name || (firstBranch ? firstBranch.name : 'General Branch'),
+        academicYear: 1,
+        semester: '1st Semester',
+        phaseName: isProf ? '1st Professional MBBS (Phase I)' : '1st Semester',
+        durationYears: 1,
+        academicSystem: isProf ? 'professional' : 'semester',
       });
     } else if (activeTab === 'batches') {
-      setFormData({ collegeId: defaultCollegeId, courseId: defaultCourseId, code: '', year: 2024, startDate: '', endDate: '' });
+      setFormData({
+        collegeId: defaultCollegeCode,
+        courseId: defaultCourseCd,
+        code: '',
+        batch_cd: '',
+        year: new Date().getFullYear(),
+        startDate: '',
+        endDate: '',
+        isActive: true,
+      });
     } else if (activeTab === 'branches') {
-      setFormData({ collegeId: defaultCollegeId, courseId: defaultCourseId, code: '', name: '', type: 'Clinical' });
+      setFormData({
+        collegeId: defaultCollegeCode,
+        courseId: defaultCourseCd,
+        code: '',
+        branch_cd: '',
+        name: '',
+        type: 'General',
+        isActive: true,
+      });
     } else if (activeTab === 'groups') {
       // Ensure dependent data is loaded for the cascading dropdowns
       if (courses.length === 0) fetchData('courses');
@@ -716,12 +958,14 @@ export default function CollegeMasterPage() {
     }
 
     if (activeTab === 'courses') {
-      const col = colleges.find(c => c.id === (item.college_id || item.collegeId)) || colleges[0];
+      const col = colleges.find(c => c.id === (item.college_id || item.collegeId) || c.slug === item.college_slug || c.code === item.college_code) || colleges[0];
       const isProf = item.academic_system === 'professional' || col?.slug === 'srms-ims' || col?.code === '11';
+      const numericCourseCd = item.course_cd || item.code || '';
       setFormData({
         ...item,
-        collegeId: item.college_id || item.collegeId || colleges[0]?.id,
-        code: item.code || '',
+        collegeId: col?.code || col?.id || colleges[0]?.code || colleges[0]?.id,
+        code: numericCourseCd,
+        course_cd: numericCourseCd,
         name: item.name || '',
         degreeLevel: item.degree_level || item.degreeLevel || 'UG',
         academicSystem: item.academic_system || (isProf ? 'professional' : 'semester'),
@@ -733,12 +977,71 @@ export default function CollegeMasterPage() {
       return;
     }
 
-    // For batches: reverse-lookup courseId UUID from course_code string (e.g. 'MBBS' → UUID)
-    const resolvedCourseId =
-      item.course_id || item.courseId ||
-      (activeTab === 'batches'
-        ? courses.find(c => c.code === (item.course_code || item.course_cd))?.id || ''
-        : '');
+    if (activeTab === 'professionals') {
+      const yearNum = Number(item.academic_year) || (item.academic_system === 'semester' ? Math.ceil((item.phase_order || 1) / 2) : 1);
+      const semName = item.name || item.phase_name || (YEAR_SEMESTERS[yearNum]?.[0] || '1st Semester');
+      const resolvedCourse = courses.find(c => c.id === item.course_id || c.code === item.course_cd || (c as any).course_cd === item.course_cd || c.code === item.course_code);
+      const col = colleges.find(c => c.id === item.college_id || c.slug === item.college_slug || c.code === item.college_code);
+
+      setFormData({
+        ...item,
+        collegeId: col?.code || col?.id || item.college_id || colleges[0]?.code || colleges[0]?.id,
+        courseId: resolvedCourse?.course_cd || resolvedCourse?.code || item.course_id || '',
+        branchCd: item.branch_cd || '',
+        branchId: item.branch_id || '',
+        branchName: item.branch_name || item.branch_display_name || '',
+        academicYear: yearNum,
+        semester: semName,
+        phaseName: semName,
+        durationYears: item.duration_years || 1,
+        academicSystem: item.academic_system || 'semester',
+        isActive: item.is_active ?? true,
+      });
+      setIsModalOpen(true);
+      return;
+    }
+
+    if (activeTab === 'batches') {
+      const col = colleges.find(c => c.id === item.college_id || c.code === item.college_code || c.slug === item.college_slug) || colleges[0];
+      const crs = courses.find(c => c.course_cd === (item.course_cd || item.course_code) || c.code === (item.course_code || item.course_cd) || c.id === item.course_id);
+      const rawStartDate = item.start_date || item.startDate || '';
+      const rawEndDate = item.end_date || item.endDate || '';
+      setFormData({
+        ...item,
+        collegeId: col?.code || col?.id || colleges[0]?.code || colleges[0]?.id,
+        courseId: crs?.course_cd || crs?.code || item.course_cd || item.course_code || '',
+        code: item.batch_cd || item.code || '',
+        batch_cd: item.batch_cd || item.code || '',
+        year: item.year || new Date().getFullYear(),
+        startDate: rawStartDate && rawStartDate !== '—' ? formatDate(rawStartDate) : '',
+        endDate: rawEndDate && rawEndDate !== '—' ? formatDate(rawEndDate) : '',
+        isActive: item.is_active ?? true,
+      });
+      setIsModalOpen(true);
+      return;
+    }
+
+    if (activeTab === 'branches') {
+      const col = colleges.find(c => c.id === item.college_id || c.code === item.college_code || c.slug === item.college_slug) || colleges[0];
+      const targetCollegeId = col?.code || col?.id || colleges[0]?.code || colleges[0]?.id;
+      if (courses.length === 0) {
+        fetchData('courses');
+      }
+      const crs = courses.find(c => c.course_cd === (item.course_cd || item.course_code) || c.code === (item.course_code || item.course_cd) || c.id === item.course_id);
+      const targetCourseId = crs?.course_cd || crs?.code || item.course_cd || item.course_code || item.course_id || '';
+      setFormData({
+        ...item,
+        collegeId: targetCollegeId,
+        courseId: targetCourseId,
+        code: item.branch_cd || item.code || '',
+        branch_cd: item.branch_cd || item.code || '',
+        name: item.name || '',
+        type: item.type || 'General',
+        isActive: item.is_active ?? true,
+      });
+      setIsModalOpen(true);
+      return;
+    }
 
     const rawStartDate = item.start_date || item.startDate || '';
     const rawEndDate = item.end_date || item.endDate || '';
@@ -748,12 +1051,12 @@ export default function CollegeMasterPage() {
     setFormData({
       ...item,
       collegeId: item.college_id || item.collegeId || colleges[0]?.id,
-      courseId: resolvedCourseId,
+      courseId: item.course_id || item.courseId || '',
       startDate,
       endDate,
       isCurrent: item.is_current ?? item.isCurrent ?? false,
-      phaseName: item.phase_name || item.phaseName || '',
-      durationYears: item.duration_years || item.durationYears || 1.0,
+      phaseName: item.phase_name || item.phaseName || item.name || '',
+      durationYears: item.duration_years || item.durationYears || item.phase_order || 1.0,
       academicSystem: item.academic_system || item.academicSystem || 'professional',
       residencyType: item.residency_type || item.residencyType || 'Hosteller',
       categoryName: item.category_name || item.categoryName || '',
@@ -767,39 +1070,133 @@ export default function CollegeMasterPage() {
 
   // Handle Form College Change -> Automatically update Cascading Course Dropdown
   const handleFormCollegeChange = async (cId: string) => {
-    const selectedCol = colleges.find(c => c.id === cId);
+    const selectedCol = colleges.find(c => c.id === cId || c.slug === cId || c.code === cId);
     const isColIms = selectedCol?.slug === 'srms-ims' || selectedCol?.code === '11';
+    const targetSlug = selectedCol?.slug || cId;
     
-    let availableCourses = getCoursesForCollege(cId);
+    let availableCourses = getCoursesForCollege(selectedCol?.id || cId);
     if (availableCourses.length === 0 && selectedCol) {
-      // Automatically fetch & sync courses for this newly selected college from SRMS GetCourse API
-      availableCourses = await syncCoursesForCollege(selectedCol, false);
+      try {
+        // 1. Fetch courses for this tenant from backend (which looks in postgresql schema)
+        const res = await fetch(`${API_BASE}/courses?tenant=${targetSlug}`);
+        if (res.ok) {
+          const json = await res.json();
+          const list = json.data || (Array.isArray(json) ? json : []);
+          if (list.length > 0) {
+            const mapped = list.map((c: any) => ({
+              ...c,
+              degree_level: c.degree_level || c.degreeLevel || 'UG',
+              academic_system: c.academic_system || c.academicSystem || (targetSlug === 'srms-ims' || selectedCol.code === '11' ? 'professional' : 'semester'),
+              college_id: selectedCol.id,
+              college_name: selectedCol.name,
+              college_code: selectedCol.code || '',
+              college_slug: selectedCol.slug,
+            }));
+            setCourses((prev) => {
+              const others = prev.filter((c) => c.college_id !== selectedCol.id && c.college_slug !== selectedCol.slug);
+              return [...others, ...mapped];
+            });
+            availableCourses = mapped;
+          } else {
+            // 2. If empty, sync from SRMS GetCourse API
+            availableCourses = await syncCoursesForCollege(selectedCol, false);
+          }
+        } else {
+          availableCourses = await syncCoursesForCollege(selectedCol, false);
+        }
+      } catch (err) {
+        console.error('[CollegeMaster] Error loading courses on college change:', err);
+      }
     }
 
-    const firstCourse = availableCourses[0] || courses[0];
+    const firstCourse = availableCourses[0];
     const firstCourseId = firstCourse?.id || '';
-    const isProf = firstCourse?.academic_system !== 'semester';
+    const isProf = firstCourse?.academic_system === 'professional';
 
-    setFormData({
-      ...formData,
-      collegeId: cId,
+    // Load branches for this college if not already present
+    let availableBranches = getBranchesForCollegeAndCourse(selectedCol?.id || cId, firstCourseId);
+    if (availableBranches.length === 0 && selectedCol) {
+      try {
+        const bRes = await fetch(`${API_BASE}/branches?tenant=${targetSlug}`);
+        if (bRes.ok) {
+          const bJson = await bRes.json();
+          const bList = bJson.data || (Array.isArray(bJson) ? bJson : []);
+          if (bList.length > 0) {
+            setBranches((prev) => {
+              const others = prev.filter((b) => b.college_id !== selectedCol.id && b.college_slug !== selectedCol.slug);
+              return [...others, ...bList];
+            });
+            availableBranches = bList;
+          }
+        }
+      } catch (err) {
+        console.error('[CollegeMaster] Error loading branches on college change:', err);
+      }
+    }
+
+    const courseBranches = getBranchesForCollegeAndCourse(selectedCol?.code || selectedCol?.id || cId, firstCourseId);
+    const firstBranch = courseBranches[0];
+    const defaultBranchCd = firstBranch?.branch_cd || firstBranch?.code || '1';
+
+    setFormData((prev) => ({
+      ...prev,
+      collegeId: selectedCol?.code || selectedCol?.id || cId,
       academicSystem: isColIms ? 'professional' : 'semester',
-      courseId: firstCourseId,
-      phaseName: isProf ? '1st Professional MBBS (Phase I)' : 'Semester 1 (1st Year)',
-      durationYears: activeTab === 'courses' ? (isColIms ? 5.5 : 4.0) : (isProf ? 1.5 : 0.5),
-      professionalPhase: isColIms ? '1st Professional (Phase I)' : 'Semester 1 (1st Year)',
-    });
+      courseId: firstCourse?.course_cd || firstCourse?.code || firstCourseId,
+      branchId: defaultBranchCd,
+      branchCd: defaultBranchCd,
+      branchName: firstBranch?.name || (firstBranch ? firstBranch.name : 'General Branch'),
+      academicYear: 1,
+      semester: '1st Semester',
+      phaseName: isProf ? '1st Professional MBBS (Phase I)' : '1st Semester',
+      durationYears: activeTab === 'courses' ? (isColIms ? 5.5 : 4.0) : 1,
+      professionalPhase: isColIms ? '1st Professional (Phase I)' : '1st Semester',
+    }));
   };
 
-  // Handle Form Course Change -> Automatically determine Professional vs Semester options
-  const handleFormCourseChange = (crsId: string) => {
+  // Handle Form Course Change -> Automatically determine Professional vs Semester options & refresh branches
+  const handleFormCourseChange = async (crsId: string) => {
     const selectedCourse = courses.find((c) => c.id === crsId);
-    const isProf = selectedCourse?.academic_system !== 'semester';
-    setFormData({
-      ...formData,
-      courseId: crsId,
-      phaseName: isProf ? '1st Professional MBBS (Phase I)' : 'Semester 1 (1st Year)',
-      durationYears: isProf ? 1.5 : 0.5,
+    const isProf = selectedCourse?.academic_system === 'professional';
+    const targetSlug = selectedCourse?.college_slug || colleges.find(c => c.id === formData.collegeId)?.slug || 'all';
+
+    let availableBranches = getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.id, crsId);
+    if (availableBranches.length === 0) {
+      try {
+        const bRes = await fetch(`${API_BASE}/branches?tenant=${targetSlug}`);
+        if (bRes.ok) {
+          const bJson = await bRes.json();
+          const bList = bJson.data || (Array.isArray(bJson) ? bJson : []);
+          if (bList.length > 0) {
+            setBranches((prev) => {
+              const others = prev.filter((b) => b.college_slug !== targetSlug);
+              return [...others, ...bList];
+            });
+            availableBranches = bList;
+          }
+        }
+      } catch (err) {}
+    }
+
+    const courseBranches = getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.id, crsId);
+    const firstBranch = courseBranches[0];
+    const defaultBranchCd = firstBranch?.branch_cd || firstBranch?.code || '1';
+
+    setFormData((prev) => {
+      const currentYear = Number(prev.academicYear) || 1;
+      const startSem = isProf ? '1st Professional MBBS (Phase I)' : (YEAR_SEMESTERS[currentYear]?.[0] || '1st Semester');
+      return {
+        ...prev,
+        courseId: crsId,
+        branchId: defaultBranchCd,
+        branchCd: defaultBranchCd,
+        branchName: firstBranch?.name || (firstBranch ? firstBranch.name : 'General Branch'),
+        academicSystem: isProf ? 'professional' : 'semester',
+        academicYear: currentYear,
+        semester: startSem,
+        phaseName: startSem,
+        durationYears: isProf ? 1.5 : 1,
+      };
     });
   };
 
@@ -1034,10 +1431,13 @@ export default function CollegeMasterPage() {
 
     let bodyPayload: Record<string, any> = { ...formData };
     if (activeTab === 'courses') {
-      const isIms = (slug === 'srms-ims');
+      const selectedFormCol = colleges.find(c => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId);
+      const isIms = (slug === 'srms-ims' || selectedFormCol?.code === '11');
       const academicSystem = formData.academicSystem || (isIms ? 'professional' : 'semester');
+      const courseCdVal = formData.course_cd?.trim() || formData.code?.trim();
       bodyPayload = {
-        code: formData.code?.trim(),
+        code: courseCdVal,
+        course_cd: courseCdVal,
         name: formData.name?.trim(),
         degreeLevel: formData.degreeLevel || 'UG',
         durationYears: Number(formData.durationYears) || (isIms ? 5.5 : 4.0),
@@ -1049,23 +1449,77 @@ export default function CollegeMasterPage() {
         bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
       }
     } else if (activeTab === 'professionals') {
-      bodyPayload = {
-        name: formData.phaseName || '1st Professional MBBS (Phase I)',
-        phaseOrder: Number(formData.durationYears) || 1,
-        courseCd: formData.courseCode || 'MBBS',
-        academicSystem: formData.academicSystem || 'professional',
-        collegeId: formData.collegeId,
-      };
-    } else if (activeTab === 'batches') {
-      // Derive the course code string from the selected courseId UUID
-      const selectedCourse = courses.find(c => c.id === formData.courseId);
-      const courseCd = selectedCourse?.code || formData.courseCode || formData.course_code || formData.course_cd || '';
-      if (!courseCd) {
-        alert('Please select a Course to map this Batch to.');
+      const selectedCourse = courses.find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId) || getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id)[0];
+      const courseCd = selectedCourse?.course_cd || selectedCourse?.code || formData.courseId || '1';
+      const academicSystem = selectedCourse?.academic_system || (formData.academicSystem as any) || (slug === 'srms-ims' ? 'professional' : 'semester');
+      const academicYearNum = Number(formData.academicYear) || 1;
+      const isSemester = academicSystem === 'semester';
+
+      // Resolve branch accurately
+      const availableBranches = getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId);
+      const selectedBranch = availableBranches.find(b => b.branch_cd === formData.branchCd || b.code === formData.branchCd || b.id === formData.branchCd) || availableBranches[0];
+      const branchCd = formData.branchCd || selectedBranch?.branch_cd || selectedBranch?.code || '1';
+      const branchId = branchCd;
+      const branchName = formData.branchName || selectedBranch?.name || selectedBranch?.branch_name || (branchCd ? `Branch ${branchCd}` : 'General Branch');
+
+      if (!isEdit && isSemester) {
+        // Multi-semester provision for this Academic Year
+        const targetSemesters: string[] = YEAR_SEMESTERS[academicYearNum] || ['1st Semester', '2nd Semester'];
+
+        try {
+          for (const sem of targetSemesters) {
+            const semNumMatch = sem.match(/(\d+)/);
+            const computedOrder = semNumMatch ? parseInt(semNumMatch[1], 10) : (academicYearNum * 2 - 1);
+            const payload = {
+              name: sem,
+              phaseOrder: computedOrder,
+              courseCd: courseCd,
+              branchCd: branchCd,
+              branchId: branchId,
+              branchName: branchName,
+              academicYear: academicYearNum,
+              academicSystem: 'semester',
+              collegeId: formData.collegeId,
+              isActive: true,
+            };
+            await fetch(`${API_BASE}/professionals?tenant=${slug}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+          }
+          await fetchData('professionals');
+        } catch (e) {
+          console.error('[CollegeMaster] error provisioning academic year semesters:', e);
+        }
+        setIsModalOpen(false);
         return;
       }
+
+      const semesterName = isSemester ? (formData.semester || YEAR_SEMESTERS[academicYearNum]?.[0] || '1st Semester') : (formData.phaseName || '1st Professional MBBS (Phase I)');
+      const semNumMatch = semesterName.match(/(\d+)/);
+      const computedOrder = semNumMatch ? parseInt(semNumMatch[1], 10) : (academicYearNum * 2 - 1);
+
       bodyPayload = {
-        code: formData.code,
+        name: semesterName,
+        phaseOrder: computedOrder,
+        courseCd: courseCd,
+        branchCd: branchCd,
+        branchId: branchId,
+        branchName: branchName,
+        academicYear: academicYearNum,
+        academicSystem: academicSystem,
+        collegeId: formData.collegeId,
+      };
+      if (isEdit) {
+        bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
+      }
+    } else if (activeTab === 'batches') {
+      const selectedCourse = courses.find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId) || getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id)[0];
+      const courseCd = selectedCourse?.course_cd || selectedCourse?.code || formData.courseId || '1';
+      const batchCdVal = String(formData.code || formData.batch_cd || formData.year || '').trim();
+      bodyPayload = {
+        code: batchCdVal,
         year: Number(formData.year) || new Date().getFullYear(),
         courseCd,
         startDate: formData.startDate || null,
@@ -1073,12 +1527,21 @@ export default function CollegeMasterPage() {
         collegeId: formData.collegeId,
       };
     } else if (activeTab === 'branches') {
+      const selectedCourse = courses.find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId) || getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id)[0];
+      const courseCd = selectedCourse?.course_cd || selectedCourse?.code || formData.courseId || '1';
+      const branchCdVal = String(formData.code || formData.branch_cd || '1').trim();
       bodyPayload = {
-        code: formData.code,
-        name: formData.name,
-        type: formData.type || 'Clinical',
+        code: branchCdVal,
+        branchCd: branchCdVal,
+        name: formData.name?.trim(),
+        type: formData.type || 'General',
+        courseCd,
+        courseName: selectedCourse?.name || null,
         collegeId: formData.collegeId,
       };
+      if (isEdit) {
+        bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
+      }
     } else if (activeTab === 'sessions') {
       bodyPayload = {
         name: formData.name,
@@ -1194,7 +1657,7 @@ export default function CollegeMasterPage() {
   const categories = [
     { key: 'colleges', label: '1. College', icon: '🏢', count: colleges.length },
     { key: 'courses', label: '2. Courses', icon: '🎓', count: courses.filter((c) => isMatchCollege(c.college_id)).length },
-    { key: 'professionals', label: '3. Professional / Semester', icon: '🩺', count: professionals.filter((p) => isMatchCollege(p.college_id)).length },
+    { key: 'professionals', label: '3. Academic Year', icon: '📅', count: professionals.filter((p) => isMatchCollege(p.college_id)).length },
     { key: 'batches', label: '4. Batch', icon: '📅', count: batches.filter((b) => isMatchCollege(b.college_id)).length },
     { key: 'branches', label: '5. Departments & Specialties', icon: '🩺', count: branches.filter((br) => isMatchCollege(br.college_id)).length },
     { key: 'groups', label: '6. Group Master', icon: '👥', count: groups.filter((g) => isMatchCollege(g.college_id)).length },
@@ -1471,8 +1934,9 @@ export default function CollegeMasterPage() {
                       <tr>
                         <th className="p-4 whitespace-nowrap">Mapped College</th>
                         <th className="p-4 whitespace-nowrap">Mapped Course</th>
-                        <th className="p-4 whitespace-nowrap">System Type</th>
-                        <th className="p-4 whitespace-nowrap">Professional Phase / Semester Title</th>
+                        <th className="p-4 whitespace-nowrap">Mapped Branch</th>
+                        <th className="p-4 whitespace-nowrap">Academic Year</th>
+                        <th className="p-4 whitespace-nowrap">Semester / Phase</th>
                         <th className="p-4 whitespace-nowrap">Duration</th>
                         <th className="p-4 whitespace-nowrap">Status</th>
                         <th className="p-4 text-right whitespace-nowrap min-w-[140px]">Actions</th>
@@ -1575,8 +2039,9 @@ export default function CollegeMasterPage() {
                       <tr>
                         <th className="p-4 whitespace-nowrap">Mapped College</th>
                         <th className="p-4 whitespace-nowrap">Mapped Course</th>
-                        <th className="p-4 whitespace-nowrap">System Type</th>
-                        <th className="p-4 whitespace-nowrap">Professional Phase / Semester Title</th>
+                        <th className="p-4 whitespace-nowrap">Mapped Branch</th>
+                        <th className="p-4 whitespace-nowrap">Academic Year</th>
+                        <th className="p-4 whitespace-nowrap">Included Semesters / Phases</th>
                         <th className="p-4 whitespace-nowrap">Duration</th>
                         <th className="p-4 whitespace-nowrap">Status</th>
                         <th className="p-4 text-right whitespace-nowrap min-w-[140px]">Actions</th>
@@ -1704,7 +2169,7 @@ export default function CollegeMasterPage() {
                               </td>
                               <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
                                 <span className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
-                                  {crs.code}
+                                  #{crs.course_cd || crs.code}
                                 </span>
                               </td>
                               <td className="p-4 font-bold text-slate-900 dark:text-white">
@@ -1745,50 +2210,92 @@ export default function CollegeMasterPage() {
                           );
                         })}
 
-                    {/* 3. PROFESSIONAL / SEMESTER PHASES */}
+                    {/* 3. ACADEMIC YEAR (GROUPED ENTERPRISE VIEW) */}
                     {activeTab === 'professionals' &&
-                      professionals
-                        .filter((p) => isMatchCollege(p.college_id))
-                        .filter((p) => 
-                          (p.phase_name || (p as any).name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
-                          (p.course_code || (p as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase())
-                        )
-                        .map((pf) => (
-                          <tr key={pf.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
-                            <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                <span>🏛️</span>
-                                <span>{colleges.find((c) => c.id === pf.college_id)?.name || pf.college_name}</span>
-                              </div>
-                            </td>
-                            <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
-                              🎓 {pf.course_code}
-                            </td>
-                            <td className="p-4 font-semibold text-slate-600 dark:text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                              {pf.academic_system === 'semester' ? '📚 Semester' : '🩺 Professional'}
-                            </td>
-                            <td className="p-4 font-bold text-slate-900 dark:text-slate-900 dark:text-white whitespace-nowrap">
-                              <span className={`px-2.5 py-1 rounded font-extrabold text-[11px] border ${
-                                pf.academic_system === 'semester'
-                                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
-                                  : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20'
-                              }`}>
-                                {pf.academic_system === 'semester' ? '📚 ' : '🩺 '} {pf.phase_name}
-                              </span>
-                            </td>
-                            <td className="p-4 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
-                              {pf.duration_years} Years
-                            </td>
-                            <td className="p-4 whitespace-nowrap">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${pf.is_active ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
-                                {pf.is_active ? 'Active' : 'Inactive'}
-                              </span>
-                            </td>
-                            <td className="p-4 text-right whitespace-nowrap min-w-[140px]">
-                              <ActionButtons onEdit={() => handleEdit(pf)} onDelete={() => handleDelete(pf.id)} />
-                            </td>
-                          </tr>
-                        ))}
+                      getGroupedAcademicYears(
+                        professionals
+                          .filter((p) => isMatchCollege(p.college_id))
+                          .filter((p) => 
+                            (p.phase_name || (p as any).name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                            (p.course_code || (p as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                            ((p as any).branch_name || '').toLowerCase().includes((searchTerm || '').toLowerCase())
+                          )
+                      ).map((grp) => (
+                        <tr key={grp.groupKey} className="hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors group">
+                          <td className="p-4 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <span>🏛️</span>
+                              <span className="font-semibold">{colleges.find((c) => c.id === grp.college_id)?.name || grp.college_name}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                            <span className="px-2.5 py-1 rounded bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 font-bold text-[11px] inline-flex items-center gap-1">
+                              🎓 {grp.course_name || grp.course_code}
+                            </span>
+                          </td>
+                          <td className="p-4 font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            <span className="px-2.5 py-1 rounded bg-slate-500/10 text-slate-700 dark:text-slate-300 border border-slate-500/20 font-bold text-[11px] inline-flex items-center gap-1">
+                              🏢 {grp.branch_name}
+                            </span>
+                          </td>
+                          <td className="p-4 font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap">
+                            <span className="px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-extrabold inline-flex items-center gap-1.5 shadow-xs">
+                              <span>📅</span> {grp.academic_year_name}
+                            </span>
+                          </td>
+                          <td className="p-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {grp.semesters.map((sem) => (
+                                <span
+                                  key={sem.id}
+                                  className="px-2.5 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/25 font-bold text-[11px] inline-flex items-center gap-1.5 transition-all shadow-2xs"
+                                  title={`Phase Order: #${sem.phase_order}`}
+                                >
+                                  <span>📚</span>
+                                  <span>{sem.name}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-4 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                            {grp.duration_years || 1} Year
+                          </td>
+                          <td className="p-4 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${grp.is_active ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
+                              {grp.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right whitespace-nowrap min-w-[140px]">
+                            <ActionButtons
+                              onEdit={() => {
+                                const firstSem = grp.semesters[0];
+                                const fullPf = professionals.find((p) => p.id === firstSem?.id) || {
+                                  id: firstSem?.id,
+                                  college_id: grp.college_id,
+                                  course_id: grp.course_id,
+                                  branch_id: grp.branch_id,
+                                  branch_cd: grp.branch_cd,
+                                  branch_name: grp.branch_name,
+                                  academic_year: grp.academic_year,
+                                  phase_order: firstSem?.phase_order,
+                                  phase_name: firstSem?.name,
+                                  academic_system: grp.academic_system,
+                                  duration_years: grp.duration_years,
+                                  is_active: grp.is_active,
+                                };
+                                handleEdit(fullPf);
+                              }}
+                              onDelete={async () => {
+                                if (confirm(`Are you sure you want to delete ${grp.academic_year_name} (${grp.semesters.map((s) => s.name).join(', ')}) for ${grp.course_name} — ${grp.branch_name}?`)) {
+                                  for (const sem of grp.semesters) {
+                                    await handleDelete(sem.id);
+                                  }
+                                }
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      ))}
 
                     {/* 4. BATCHES */}
                     {activeTab === 'batches' &&
@@ -1819,18 +2326,13 @@ export default function CollegeMasterPage() {
                               )}
                             </td>
                             <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                <span>{bth.code}</span>
-                                {(bth as any).batch_cd && (
-                                  <span className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold text-[9px] border border-sky-500/20">
-                                    #{(bth as any).batch_cd}
-                                  </span>
-                                )}
-                              </div>
+                              <span className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+                                #{bth.batch_cd || bth.code}
+                              </span>
                             </td>
                             <td className="p-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
                               <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-extrabold">
-                                Batch {bth.year || (bth as any).name}
+                                Batch {bth.year || (bth as any).name || bth.code}
                               </span>
                             </td>
                             <td className="p-4 text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono text-[11px]">
@@ -1878,14 +2380,9 @@ export default function CollegeMasterPage() {
                               )}
                             </td>
                             <td className="p-4 font-bold font-mono text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                <span>{br.code}</span>
-                                {(br as any).branch_cd && (
-                                  <span className="px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold text-[9px] border border-orange-500/20">
-                                    #{(br as any).branch_cd}
-                                  </span>
-                                )}
-                              </div>
+                              <span className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+                                #{br.branch_cd || br.code}
+                              </span>
                             </td>
                             <td className="p-4 font-bold text-slate-900 dark:text-white">{br.name}</td>
                             <td className="p-4 whitespace-nowrap">
@@ -2079,17 +2576,24 @@ export default function CollegeMasterPage() {
               {activeTab !== 'colleges' && (
                 <div className="space-y-1 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
                   <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
-                    <span>1st Priority: Select College *</span>
-                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">Mapped College ID</span>
+                    <span>Step 1: Select College *</span>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">
+                      colg_cd: #{colleges.find(c => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId)?.code || '1'}
+                    </span>
                   </label>
                   <select
                     required
-                    value={formData.collegeId || colleges[0]?.id}
+                    value={
+                      colleges.find(c => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId)?.code ||
+                      formData.collegeId ||
+                      colleges[0]?.code ||
+                      colleges[0]?.id
+                    }
                     onChange={(e) => handleFormCollegeChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-white dark:bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
                   >
                     {colleges.map((col) => (
-                      <option key={col.id} value={col.id}>
+                      <option key={col.id} value={col.code || col.id}>
                         🏛️ {col.name} ({col.slug})
                       </option>
                     ))}
@@ -2099,23 +2603,38 @@ export default function CollegeMasterPage() {
 
               {/* STEP 2: Mandatory Cascading Select Course Dropdown */}
               {['professionals', 'batches', 'branches', 'residencies'].includes(activeTab) && (
-                <div className="space-y-1 bg-slate-50 dark:bg-white/60 dark:bg-white dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-300 dark:border-slate-800">
-                  <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
-                    <span>2nd Priority: Select Course *</span>
-                    <span className="text-[10px] text-slate-600 dark:text-slate-400 font-normal">Filtered by Selected College</span>
+                <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                  <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
+                    <span>Step 2: Select Course *</span>
+                    <span className="text-[10px] text-slate-500 font-normal">
+                      course_cd: #{getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId)?.course_cd || '1'}
+                    </span>
                   </label>
                   <select
                     required
-                    value={formData.courseId || getCoursesForCollege(formData.collegeId || colleges[0]?.id)[0]?.id}
+                    value={
+                      getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId)?.course_cd ||
+                      formData.courseId ||
+                      ''
+                    }
                     onChange={(e) => handleFormCourseChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-white dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
                   >
-                    {getCoursesForCollege(formData.collegeId || colleges[0]?.id).map((crs) => (
-                      <option key={crs.id} value={crs.id}>
-                        🎓 {crs.code} — {crs.name} ({crs.academic_system === 'semester' ? 'Semester System' : 'Professional Phase'})
-                      </option>
-                    ))}
+                    {getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).length === 0 ? (
+                      <option value="">-- No Courses Found for this College --</option>
+                    ) : (
+                      getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).map((crs: any) => (
+                        <option key={crs.id} value={crs.course_cd || crs.code || crs.id}>
+                          🎓 {crs.name} (Code: #{crs.course_cd || crs.code}) — {crs.academic_system === 'semester' ? 'Semester System' : 'Professional Phase'}
+                        </option>
+                      ))
+                    )}
                   </select>
+                  {getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).length === 0 && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium pt-1">
+                      ⚠️ No courses found in database for this college. Switch to &apos;2. Courses&apos; tab to add or sync courses.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -2200,14 +2719,14 @@ export default function CollegeMasterPage() {
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Course Code *</label>
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Course Code (course_cd) *</label>
                       <input
                         type="text"
                         required
-                        value={formData.code || ''}
-                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono uppercase font-bold"
-                        placeholder="e.g. MBBS / BTECH-CS / LLB"
+                        value={formData.course_cd || formData.code || ''}
+                        onChange={(e) => setFormData({ ...formData, code: e.target.value, course_cd: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
+                        placeholder="e.g. 1, 2, 3"
                       />
                     </div>
                     <div className="space-y-1">
@@ -2279,133 +2798,216 @@ export default function CollegeMasterPage() {
                 </>
               )}
 
-              {/* DYNAMIC FORM FOR PROFESSIONAL / SEMESTER SETUP */}
+              {/* DYNAMIC FORM FOR ACADEMIC YEAR (STEPS 3, 4, 5, 6) */}
               {activeTab === 'professionals' && (
                 <>
-                  <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-extrabold flex items-center gap-1.5">
-                      <span>{isSelectedCourseSemesterSystem ? '📚 Select Semester Title *' : '🩺 Select Professional Phase Title *'}</span>
+                  {/* STEP 3: Mandatory Branch Selection */}
+                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
+                      <span>Step 3: Select Branch / Department *</span>
+                      <span className="text-[10px] text-slate-500 font-normal">
+                        Filtered by Selected Course & College
+                      </span>
+                    </label>
+                    <select
+                      required
+                      value={formData.branchCd || getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId)[0]?.branch_cd || ''}
+                      onChange={(e) => {
+                        const bCd = e.target.value;
+                        const bList = getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId);
+                        const bObj = bList.find(b => String(b.branch_cd) === String(bCd) || b.code === bCd || b.id === bCd);
+                        const resolvedCd = bObj?.branch_cd || bObj?.code || bCd || '1';
+                        setFormData({
+                          ...formData,
+                          branchCd: resolvedCd,
+                          branchId: resolvedCd,
+                          branchName: bObj?.name || (bCd ? bCd : 'General Branch'),
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
+                    >
+                      {getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId).length === 0 ? (
+                        <option value="">🏢 General Branch / Department</option>
+                      ) : (
+                        getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId).map((b: any) => (
+                          <option key={b.id || b.code || b.branch_cd} value={b.branch_cd || b.code || b.id}>
+                            🏢 {b.name} (Code: #{b.branch_cd || b.code || '1'})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  {/* STEP 4: Academic Year Dropdown list First Year to Fifth Year */}
+                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
+                      <span>Step 4: Select Academic Year (1 to 5 Years) *</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Year Level</span>
+                    </label>
+                    <select
+                      required
+                      value={Number(formData.academicYear) || 1}
+                      onChange={(e) => {
+                        const yearNum = parseInt(e.target.value, 10) || 1;
+                        const defaultSemForYear = YEAR_SEMESTERS[yearNum]?.[0] || '1st Semester';
+                        setFormData({
+                          ...formData,
+                          academicYear: yearNum,
+                          semester: isSelectedCourseSemesterSystem ? defaultSemForYear : formData.semester,
+                          phaseName: isSelectedCourseSemesterSystem ? defaultSemForYear : formData.phaseName,
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value={1}>First Year</option>
+                      <option value={2}>Second Year</option>
+                      <option value={3}>Third Year</option>
+                      <option value={4}>Fourth Year</option>
+                      <option value={5}>Fifth Year</option>
+                    </select>
+                  </div>
+
+                  {/* STEP 5: Included Semesters for the Year */}
+                  <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between text-xs">
+                      <span>{isSelectedCourseSemesterSystem ? `Step 5: Semesters Provisioned for ${YEAR_NAMES[Number(formData.academicYear) || 1]}` : 'Step 5: Professional Phase *'}</span>
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                        {isSelectedCourseSemesterSystem ? 'Both Semesters Included' : 'NMC Standards'}
+                      </span>
                     </label>
                     {isSelectedCourseSemesterSystem ? (
-                      <select
-                        value={formData.phaseName || 'Semester 1 (1st Year)'}
-                        onChange={(e) => setFormData({ ...formData, phaseName: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
-                      >
-                        <option value="Semester 1 (1st Year)">Semester 1 (1st Year)</option>
-                        <option value="Semester 2 (1st Year)">Semester 2 (1st Year)</option>
-                        <option value="Semester 3 (2nd Year)">Semester 3 (2nd Year)</option>
-                        <option value="Semester 4 (2nd Year)">Semester 4 (2nd Year)</option>
-                        <option value="Semester 5 (3rd Year)">Semester 5 (3rd Year)</option>
-                        <option value="Semester 6 (3rd Year)">Semester 6 (3rd Year)</option>
-                        <option value="Semester 7 (4th Year)">Semester 7 (4th Year)</option>
-                        <option value="Semester 8 (4th Year)">Semester 8 (4th Year)</option>
-                      </select>
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        {(YEAR_SEMESTERS[Number(formData.academicYear) || 1] || ['1st Semester', '2nd Semester']).map((semName) => (
+                          <div
+                            key={semName}
+                            className="flex items-center gap-2 p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/80 shadow-xs"
+                          >
+                            <span className="text-base">📚</span>
+                            <div className="flex-1">
+                              <p className="font-extrabold text-xs text-slate-900 dark:text-white">{semName}</p>
+                              <p className="text-[10px] text-slate-500 font-medium">{YEAR_NAMES[Number(formData.academicYear) || 1]}</p>
+                            </div>
+                            <span className="text-xs text-emerald-600 font-extrabold">✓ Included</span>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <select
                         value={formData.phaseName || '1st Professional MBBS (Phase I)'}
                         onChange={(e) => setFormData({ ...formData, phaseName: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
                       >
                         <option value="1st Professional MBBS (Phase I)">1st Professional MBBS (Phase I)</option>
                         <option value="2nd Professional MBBS (Phase II)">2nd Professional MBBS (Phase II)</option>
                         <option value="3rd Professional MBBS Part I (Phase III-1)">3rd Professional MBBS Part I (Phase III Part I)</option>
                         <option value="3rd Professional MBBS Part II (Final MBBS)">3rd Professional MBBS Part II (Final MBBS / Phase III Part II)</option>
-                        <option value="BAMS 1st Professional Phase">BAMS 1st Professional Phase</option>
-                        <option value="BAMS 2nd Professional Phase">BAMS 2nd Professional Phase</option>
-                        <option value="BAMS 3rd Professional Phase">BAMS 3rd Professional Phase</option>
-                        <option value="BUMS Professional Phase">BUMS Professional Phase</option>
-                        <option value="PG Residency Year 1">PG Residency Year 1</option>
-                        <option value="PG Residency Year 2">PG Residency Year 2</option>
-                        <option value="PG Residency Year 3">PG Residency Year 3</option>
                       </select>
                     )}
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Duration (Years) *</label>
+                  {/* STEP 6: Duration For Academic Year */}
+                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <label className="text-slate-700 dark:text-slate-300 font-semibold">
+                      Step 6: Duration for Academic Year (Years) *
+                    </label>
                     <input
                       type="number"
-                      step="0.5"
-                      value={formData.durationYears ?? (isSelectedCourseSemesterSystem ? 0.5 : 1.5)}
-                      onChange={(e) => setFormData({ ...formData, durationYears: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
+                      step="1"
+                      min="1"
+                      max="6"
+                      value={formData.durationYears ?? 1}
+                      onChange={(e) => setFormData({ ...formData, durationYears: Number(e.target.value) || 1 })}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
+                      placeholder="1"
                     />
                   </div>
                 </>
               )}
 
               {/* BATCH FORM */}
-              {activeTab === 'batches' && (() => {
-                const batchCollegeCourses = getCoursesForCollege(formData.collegeId || colleges[0]?.id || '');
-                return (
-                  <>
-                    {/* Course selector — critical for correct course_cd mapping */}
+              {activeTab === 'batches' && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center gap-1.5">
-                        <span>🎓 Map to Course *</span>
-                        <span className="text-[10px] text-indigo-500 font-normal">(Saves as course_cd in DB)</span>
-                      </label>
-                      <select
-                        value={formData.courseId || ''}
-                        onChange={(e) => setFormData({ ...formData, courseId: e.target.value })}
-                        className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 border-2 border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-semibold"
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Batch Code (batch_cd) *</label>
+                      <input
+                        type="text"
                         required
-                      >
-                        <option value="">-- Select Course --</option>
-                        {(batchCollegeCourses.length > 0 ? batchCollegeCourses : courses).map((c) => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-                        ))}
-                      </select>
+                        value={formData.code || formData.batch_cd || ''}
+                        onChange={(e) => setFormData({ ...formData, code: e.target.value, batch_cd: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
+                        placeholder="e.g. 1, 2, 3"
+                      />
                     </div>
+                    <div className="space-y-1">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Admission / Batch Year *</label>
+                      <input
+                        type="number"
+                        required
+                        value={formData.year || new Date().getFullYear()}
+                        onChange={(e) => setFormData({ ...formData, year: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
+                        placeholder="2024"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Start Date</label>
+                      <input type="date" value={formData.startDate || ''} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">End Date</label>
+                      <input type="date" value={formData.endDate || ''} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
+                    </div>
+                  </div>
+                </>
+              )}
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-slate-700 dark:text-slate-300 font-semibold">Batch Code *</label>
-                        <input type="text" required value={formData.code || ''} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono" placeholder="MB2025" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-slate-700 dark:text-slate-300 font-semibold">Admission Year *</label>
-                        <input type="number" required value={formData.year || new Date().getFullYear()} onChange={(e) => setFormData({ ...formData, year: Number(e.target.value) })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-slate-700 dark:text-slate-300 font-semibold">Start Date</label>
-                        <input type="date" value={formData.startDate || ''} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-slate-700 dark:text-slate-300 font-semibold">End Date</label>
-                        <input type="date" value={formData.endDate || ''} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
-
-              {/* DEPARTMENT FORM */}
+              {/* DEPARTMENT / BRANCH FORM */}
               {activeTab === 'branches' && (
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Department Code *</label>
-                      <input type="text" required value={formData.code || ''} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono" placeholder="PATH / ANESTH / ANAT" />
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Branch Code (branch_cd) *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.code || formData.branch_cd || ''}
+                        onChange={(e) => setFormData({ ...formData, code: e.target.value, branch_cd: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
+                        placeholder="e.g. 1, 2, 3"
+                      />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Specialty Type</label>
-                      <select value={formData.type || 'Clinical'} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Specialty / Discipline Type</label>
+                      <select
+                        value={formData.type || 'General'}
+                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
+                      >
+                        <option value="General">General / Core Discipline</option>
+                        <option value="Engineering">Engineering & Technology</option>
+                        <option value="Pharmacy">Pharmacy Sciences</option>
+                        <option value="Management">Management Studies</option>
+                        <option value="Law">Legal Studies</option>
                         <option value="Pre-Clinical">Pre-Clinical (Anatomy, Physiology, Biochemistry)</option>
-                        <option value="Para-Clinical">Para-Clinical (Pathology, Pharmacology, Microbiology, Forensic)</option>
-                        <option value="Clinical">Clinical (Anesthesiology, Medicine, Surgery, Pediatrics, OBG, Ortho)</option>
-                        <option value="Non-Clinical">Non-Clinical</option>
-                        <option value="Paramedical">Paramedical</option>
-                        <option value="Administration">Administration</option>
+                        <option value="Para-Clinical">Para-Clinical (Pathology, Pharmacology, Microbiology)</option>
+                        <option value="Clinical">Clinical Specialties (Medicine, Surgery, Pediatrics)</option>
+                        <option value="Administration">Administration / Support</option>
                       </select>
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Department / Specialty Name *</label>
-                    <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" placeholder="Anesthesiology / Pathology / Human Anatomy" />
+                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Department / Branch Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.name || ''}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
+                      placeholder="e.g. (CSE) / BCA Department / Department of Anatomy"
+                    />
                   </div>
                 </>
               )}

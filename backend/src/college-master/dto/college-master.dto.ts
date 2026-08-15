@@ -176,25 +176,51 @@ export class UpdateBatchDto extends PartialType(CreateBatchDto) {
 
 // ─── 4. BRANCH / DEPARTMENT ─────────────────────────────────────────────────
 export class CreateBranchDto {
-  @ApiProperty({ example: 'ANAT' })
+  @ApiProperty({ example: '1' })
   @IsString()
-  @MaxLength(20)
+  @MaxLength(50)
   code: string;
 
-  @ApiProperty({ example: 'Department of Human Anatomy' })
+  @ApiProperty({ example: 'Computer Science & Engineering' })
   @IsString()
   @MaxLength(200)
   name: string;
 
-  @ApiProperty({ example: 'Non-Clinical' })
+  @ApiPropertyOptional({ example: 'Engineering' })
+  @IsOptional()
   @IsString()
   @MaxLength(50)
-  type: string;
+  type?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  colgCd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateBranchDto extends PartialType(CreateBranchDto) {
@@ -237,7 +263,7 @@ export class UpdateSessionDto extends PartialType(CreateSessionDto) {
   isActive?: boolean;
 }
 
-// ─── 6. PROFESSIONAL PHASES ─────────────────────────────────────────────────
+// ─── 6. PROFESSIONAL PHASES / ACADEMIC YEAR ─────────────────────────────────
 export class CreateProfessionalDto {
   @ApiProperty({ example: '1st Professional MBBS (Phase I)' })
   @IsString()
@@ -254,6 +280,26 @@ export class CreateProfessionalDto {
   @IsString()
   courseCd?: string;
 
+  @ApiPropertyOptional({ example: 'CS' })
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
+  @ApiPropertyOptional({ example: 'Computer Science & Engg' })
+  @IsOptional()
+  @IsString()
+  branchName?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsNumber()
+  academicYear?: number;
+
   @ApiPropertyOptional({ example: 'professional' })
   @IsOptional()
   @IsString()
@@ -263,6 +309,11 @@ export class CreateProfessionalDto {
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateProfessionalDto extends PartialType(CreateProfessionalDto) {

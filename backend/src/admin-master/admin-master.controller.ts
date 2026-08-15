@@ -12,6 +12,7 @@ import {
   CreateDeliveryTypeDto, UpdateDeliveryTypeDto,
   CreateSubjectOfferingDto, UpdateSubjectOfferingDto,
   LinkFacultySubjectDto,
+  CreateUnitMasterDto, UpdateUnitMasterDto,
 } from './dto/admin-master.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/role.enum';
@@ -273,5 +274,36 @@ export class AdminMasterController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async unlinkFacultySubject(@Param('id') id: string, @Query('tenant') tenant?: string) {
     return this.adminMasterService.unlinkFacultySubject(id, tenant);
+  }
+
+  // ─── 9. UNIT MASTER ─────────────────────────────────────────────────────────
+  @Get('units')
+  @ApiOperation({ summary: 'List Units — tenant read' })
+  async listUnits(@Query('tenant') tenant?: string) {
+    const data = await this.adminMasterService.listUnits(tenant);
+    return { success: true, data };
+  }
+
+  @Post('units')
+  @ApiOperation({ summary: 'Create Unit' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async createUnit(@Body() dto: CreateUnitMasterDto, @Query('tenant') tenant?: string) {
+    const data = await this.adminMasterService.createUnit(dto, tenant);
+    return { success: true, data, message: 'Unit created successfully' };
+  }
+
+  @Put('units/:id')
+  @ApiOperation({ summary: 'Update Unit' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async updateUnit(@Param('id') id: string, @Body() dto: UpdateUnitMasterDto, @Query('tenant') tenant?: string) {
+    const data = await this.adminMasterService.updateUnit(id, dto, tenant);
+    return { success: true, data, message: 'Unit updated successfully' };
+  }
+
+  @Delete('units/:id')
+  @ApiOperation({ summary: 'Delete Unit' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async deleteUnit(@Param('id') id: string, @Query('tenant') tenant?: string) {
+    return this.adminMasterService.deleteUnit(id, tenant);
   }
 }

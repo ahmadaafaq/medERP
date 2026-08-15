@@ -371,18 +371,6 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Seed standard NMC phases if professional_phases table is empty
-      const existingPhases = await runner.query(`SELECT id FROM "${schema}".professional_phases LIMIT 1`);
-      if (existingPhases.length === 0) {
-        await runner.query(`
-          INSERT INTO "${schema}".professional_phases (name, phase_order, course_cd, academic_system, is_active) VALUES
-            ('1st Professional MBBS (Phase I)', 1, 'MBBS', 'professional', true),
-            ('2nd Professional MBBS (Phase II)', 2, 'MBBS', 'professional', true),
-            ('3rd Professional MBBS Part I (Phase III-1)', 3, 'MBBS', 'professional', true),
-            ('3rd Professional MBBS Part II (Phase III-2)', 4, 'MBBS', 'professional', true)
-        `);
-      }
-
       // ── Student Phase Progressions (Promotion History) ────────────────────
       await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_phase_progressions (
@@ -1365,18 +1353,6 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ('PD',  'Pandemic Module'),
         ('CP',  'Clinical Posting')
       ON CONFLICT (code) DO NOTHING
-    `);
-
-    // Seed standard NMC professional phases
-    await runner.query(`
-      INSERT INTO "${schema}".professional_phases (name, phase_order, course_cd, academic_system, is_active)
-      SELECT * FROM (VALUES
-        ('1st Professional MBBS (Phase I)', 1, 'MBBS', 'professional', true),
-        ('2nd Professional MBBS (Phase II)', 2, 'MBBS', 'professional', true),
-        ('3rd Professional MBBS Part I (Phase III-1)', 3, 'MBBS', 'professional', true),
-        ('3rd Professional MBBS Part II (Phase III-2)', 4, 'MBBS', 'professional', true)
-      ) AS tmp (name, phase_order, course_cd, academic_system, is_active)
-      WHERE NOT EXISTS (SELECT 1 FROM "${schema}".professional_phases LIMIT 1)
     `);
 
     // ── Seed Default Authentic Users (Admin, Clerk, Faculty, Student, Warden) ──
