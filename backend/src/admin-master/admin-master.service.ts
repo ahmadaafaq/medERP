@@ -1,6 +1,8 @@
 import {
   Injectable, NotFoundException, BadRequestException, Logger,
 } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { TenantSchemaService } from '../database/tenant-schema.service';
 import {
   CreateProfessionalLinkerDto, UpdateProfessionalLinkerDto,
@@ -18,16 +20,46 @@ export class AdminMasterService {
   private readonly logger = new Logger(AdminMasterService.name);
 
   constructor(
+    @InjectDataSource() private readonly ds: DataSource,
     private readonly tenantSchemaService: TenantSchemaService,
   ) {}
 
-  private resolveTenantSlug(tenantSlug?: string): string {
-    return this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+  private async resolveTenantSlug(tenantSlugOrId?: string): Promise<string> {
+    if (!tenantSlugOrId || tenantSlugOrId === 'all') return 'srms-ims';
+    const clean = String(tenantSlugOrId).trim().toLowerCase();
+    if (clean === 'srms') return 'srms-ims';
+    try {
+      const rows = await this.ds.query(
+        `SELECT slug FROM public.tenants
+         WHERE LOWER(slug) = LOWER($1) OR LOWER(code) = LOWER($1) OR id::text = $1
+         LIMIT 1`,
+        [clean],
+      );
+      if (rows.length > 0 && rows[0].slug) {
+        return rows[0].slug;
+      }
+    } catch (e) {}
+    return this.tenantSchemaService.resolveTenantSlug(clean);
+  }
+
+  private async listColleges(): Promise<any[]> {
+    try {
+      const rows = await this.ds.query(`
+        SELECT id, code, name, slug, domain, plan, primary_color, is_active
+        FROM public.tenants
+        WHERE is_active = true
+        ORDER BY code ASC NULLS LAST, name ASC
+      `);
+      return rows || [];
+    } catch (err: any) {
+      this.logger.warn(`Failed to list colleges from public.tenants: ${err.message}`);
+      return [{ id: 'srms-ims', code: '11', name: 'SRMS Institute of Medical Sciences', slug: 'srms-ims', is_active: true }];
+    }
   }
 
   // ─── 1. PROFESSIONAL LINKER ───────────────────────────────────────────────
   async listProfessionalLinkers(tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     return this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT * FROM professional_linkers ORDER BY created_at DESC`,
@@ -35,7 +67,7 @@ export class AdminMasterService {
   }
 
   async createProfessionalLinker(dto: CreateProfessionalLinkerDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO professional_linkers (code, name, course_cd, professional_phase, academic_session, description, is_active)
@@ -47,7 +79,7 @@ export class AdminMasterService {
   }
 
   async updateProfessionalLinker(id: string, dto: UpdateProfessionalLinkerDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE professional_linkers
@@ -67,7 +99,7 @@ export class AdminMasterService {
   }
 
   async deleteProfessionalLinker(id: string, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     await this.tenantSchemaService.queryInTenant(
       slug,
       `DELETE FROM professional_linkers WHERE id = $1`,
@@ -76,20 +108,83 @@ export class AdminMasterService {
     return { success: true, message: 'Professional Linker deleted successfully' };
   }
 
-  // ─── 2. DEPARTMENT MASTER ──────────────────────────────────────────────────
+  // ─── 2. DEPARTMENT MASTER (COLLEGE-WISE & CROSS-COLLEGE) ────────────────────
   async listDepartments(tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
-    return this.tenantSchemaService.queryInTenant(
-      slug,
-      `SELECT d.*, u.email as hod_email 
-       FROM departments d
-       LEFT JOIN users u ON d.hod_user_id = u.id
-       ORDER BY d.code ASC`,
-    );
+    const colleges = await this.listColleges();
+
+    if (tenantSlug && tenantSlug !== 'all') {
+      const slug = await this.resolveTenantSlug(tenantSlug);
+      const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
+      const collegeId = targetCollege?.id || slug;
+      const collegeName = targetCollege?.name || 'SRMS Institution';
+      const collegeCode = targetCollege?.code || '';
+      const schema = `tenant_${slug}`;
+
+      try {
+        await this.ds.query(`
+          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+        `).catch(() => {});
+
+        const rows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT d.*, u.email as hod_email 
+           FROM departments d
+           LEFT JOIN users u ON d.hod_user_id = u.id
+           ORDER BY d.code ASC, d.name ASC`,
+        ).catch(() => []);
+
+        return rows.map(r => ({
+          ...r,
+          college_id: collegeId,
+          college_name: collegeName,
+          college_code: collegeCode,
+          college_slug: slug,
+        }));
+      } catch (err: any) {
+        this.logger.warn(`Failed to list departments for ${slug}: ${err.message}`);
+        return [];
+      }
+    }
+
+    // List departments across all colleges
+    const allDepartments: any[] = [];
+    for (const col of colleges) {
+      try {
+        const schema = `tenant_${col.slug}`;
+        await this.ds.query(`
+          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+          ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+        `).catch(() => {});
+
+        const rows = await this.tenantSchemaService.queryInTenant(
+          col.slug,
+          `SELECT d.*, u.email as hod_email 
+           FROM departments d
+           LEFT JOIN users u ON d.hod_user_id = u.id
+           ORDER BY d.code ASC, d.name ASC`,
+        ).catch(() => []);
+
+        allDepartments.push(
+          ...rows.map(r => ({
+            ...r,
+            college_id: col.id,
+            college_name: col.name,
+            college_code: col.code,
+            college_slug: col.slug,
+          })),
+        );
+      } catch (err) {}
+    }
+    return allDepartments;
   }
 
   async createDepartment(dto: CreateDepartmentMasterDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM departments WHERE code = $1`,
@@ -110,7 +205,7 @@ export class AdminMasterService {
   }
 
   async updateDepartment(id: string, dto: UpdateDepartmentMasterDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE departments
@@ -128,7 +223,7 @@ export class AdminMasterService {
   }
 
   async deleteDepartment(id: string, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     await this.tenantSchemaService.queryInTenant(
       slug,
       `DELETE FROM departments WHERE id = $1`,
@@ -137,21 +232,72 @@ export class AdminMasterService {
     return { success: true, message: 'Department deleted successfully' };
   }
 
-  // ─── 3. SUBJECT MASTER ─────────────────────────────────────────────────────
+  // ─── 3. SUBJECT MASTER (COLLEGE-WISE & CROSS-COLLEGE) ───────────────────────
   async listSubjects(tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
-    return this.tenantSchemaService.queryInTenant(
-      slug,
-      `SELECT s.*, d.name as department_name, b.code as batch_code
-       FROM subjects s
-       LEFT JOIN departments d ON s.department_id = d.id
-       LEFT JOIN batches b ON s.batch_id = b.id
-       ORDER BY s.code ASC`,
-    );
+    const colleges = await this.listColleges();
+
+    if (tenantSlug && tenantSlug !== 'all') {
+      const slug = await this.resolveTenantSlug(tenantSlug);
+      const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
+      const collegeId = targetCollege?.id || slug;
+      const collegeName = targetCollege?.name || 'SRMS Institution';
+      const collegeCode = targetCollege?.code || '';
+
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT s.*, 
+                d.name as department_name, 
+                d.code as department_code, 
+                d.course_name as department_course_name,
+                b.code as batch_code
+         FROM subjects s
+         LEFT JOIN departments d ON s.department_id = d.id
+         LEFT JOIN batches b ON s.batch_id = b.id
+         ORDER BY s.code ASC, s.name ASC`,
+      ).catch(() => []);
+
+      return rows.map(r => ({
+        ...r,
+        college_id: collegeId,
+        college_name: collegeName,
+        college_code: collegeCode,
+        college_slug: slug,
+      }));
+    }
+
+    // List subjects across all colleges
+    const allSubjects: any[] = [];
+    for (const col of colleges) {
+      try {
+        const rows = await this.tenantSchemaService.queryInTenant(
+          col.slug,
+          `SELECT s.*, 
+                  d.name as department_name, 
+                  d.code as department_code, 
+                  d.course_name as department_course_name,
+                  b.code as batch_code
+           FROM subjects s
+           LEFT JOIN departments d ON s.department_id = d.id
+           LEFT JOIN batches b ON s.batch_id = b.id
+           ORDER BY s.code ASC, s.name ASC`,
+        ).catch(() => []);
+
+        allSubjects.push(
+          ...rows.map(r => ({
+            ...r,
+            college_id: col.id,
+            college_name: col.name,
+            college_code: col.code,
+            college_slug: col.slug,
+          })),
+        );
+      } catch (err) {}
+    }
+    return allSubjects;
   }
 
   async createSubject(dto: CreateSubjectMasterDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM subjects WHERE code = $1`,
@@ -172,7 +318,7 @@ export class AdminMasterService {
   }
 
   async updateSubject(id: string, dto: UpdateSubjectMasterDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE subjects
@@ -193,7 +339,7 @@ export class AdminMasterService {
   }
 
   async deleteSubject(id: string, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
 
     // Safely clear/delete foreign key references in child tables before deleting subject
     const nullifyTables = ['attendance_sessions', 'logbook_activity_types', 'logbook_entries', 'timetable_slots', 'competencies', 'faculty'];
@@ -228,7 +374,7 @@ export class AdminMasterService {
 
   // ─── 4. TOPIC MASTER ───────────────────────────────────────────────────────
   async listTopics(tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     return this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT t.*, s.name as subject_name, s.code as subject_code, l.code as cbme_code, l.name as cbme_name
@@ -240,7 +386,7 @@ export class AdminMasterService {
   }
 
   async createTopic(dto: CreateTopicMasterDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO topics (subject_id, code, name, description, hours, is_active, linker_id)
@@ -252,7 +398,7 @@ export class AdminMasterService {
   }
 
   async updateTopic(id: string, dto: UpdateTopicMasterDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE topics
@@ -272,7 +418,7 @@ export class AdminMasterService {
   }
 
   async deleteTopic(id: string, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     try {
       await this.tenantSchemaService.queryInTenant(
         slug,
@@ -290,7 +436,7 @@ export class AdminMasterService {
 
   // ─── 5. COMPETENCY MASTER ──────────────────────────────────────────────────
   async listCompetencies(tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     return this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT c.*, s.name as subject_name, s.code as subject_code, t.name as topic_name, t.code as topic_code, l.code as cbme_code, l.name as cbme_name
@@ -303,7 +449,7 @@ export class AdminMasterService {
   }
 
   async createCompetency(dto: CreateCompetencyMasterDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO competencies (subject_id, topic_id, code, description, domain, level, is_core, is_active, linker_id)
@@ -324,7 +470,7 @@ export class AdminMasterService {
   }
 
   async updateCompetency(id: string, dto: UpdateCompetencyMasterDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE competencies
@@ -357,7 +503,7 @@ export class AdminMasterService {
   }
 
   async deleteCompetency(id: string, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     await this.tenantSchemaService.queryInTenant(
       slug,
       `DELETE FROM competencies WHERE id = $1`,
@@ -368,7 +514,7 @@ export class AdminMasterService {
 
   // ─── 6. DELIVERY TYPES ─────────────────────────────────────────────────────
   async listDeliveryTypes(tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     return this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT * FROM delivery_types ORDER BY code ASC`,
@@ -376,7 +522,7 @@ export class AdminMasterService {
   }
 
   async createDeliveryType(dto: CreateDeliveryTypeDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM delivery_types WHERE code = $1`,
@@ -396,7 +542,7 @@ export class AdminMasterService {
   }
 
   async updateDeliveryType(id: string, dto: UpdateDeliveryTypeDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE delivery_types
@@ -412,7 +558,7 @@ export class AdminMasterService {
   }
 
   async deleteDeliveryType(id: string, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     await this.tenantSchemaService.queryInTenant(
       slug,
       `DELETE FROM delivery_types WHERE id = $1`,
@@ -423,7 +569,7 @@ export class AdminMasterService {
 
   // ─── 7. SUBJECT OFFERINGS ──────────────────────────────────────────────────
   async listSubjectOfferings(tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     return this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT so.*, 
@@ -439,7 +585,7 @@ export class AdminMasterService {
   }
 
   async createSubjectOffering(dto: CreateSubjectOfferingDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM subject_offerings 
@@ -460,7 +606,7 @@ export class AdminMasterService {
   }
 
   async updateSubjectOffering(id: string, dto: UpdateSubjectOfferingDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE subject_offerings
@@ -479,7 +625,7 @@ export class AdminMasterService {
   }
 
   async deleteSubjectOffering(id: string, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     await this.tenantSchemaService.queryInTenant(
       slug,
       `DELETE FROM subject_offerings WHERE id = $1`,
@@ -490,7 +636,7 @@ export class AdminMasterService {
 
   // ─── 8. FACULTY SUBJECT LINKER ─────────────────────────────────────────────
   async listFacultySubjects(query: { facultyId?: string; subjectId?: string; departmentId?: string }, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const params: any[] = [];
     let sql = `
       SELECT fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
@@ -522,7 +668,7 @@ export class AdminMasterService {
   }
 
   async linkFacultySubject(dto: LinkFacultySubjectDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO faculty_subjects (faculty_id, subject_id)
@@ -535,7 +681,7 @@ export class AdminMasterService {
   }
 
   async updateFacultySubject(id: string, dto: LinkFacultySubjectDto, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE faculty_subjects
@@ -548,7 +694,7 @@ export class AdminMasterService {
   }
 
   async unlinkFacultySubject(id: string, tenantSlug?: string) {
-    const slug = this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug);
     await this.tenantSchemaService.queryInTenant(
       slug,
       `DELETE FROM faculty_subjects WHERE id = $1`,

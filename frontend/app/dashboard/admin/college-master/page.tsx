@@ -109,6 +109,9 @@ interface Course {
   academic_system: 'professional' | 'semester';
   college_id: string;
   college_name: string;
+  college_code?: string;
+  college_slug?: string;
+  duration_years?: number;
   is_active: boolean;
 }
 
@@ -129,6 +132,8 @@ interface Batch {
   id: string;
   college_id: string;
   college_name: string;
+  college_code?: string;
+  college_slug?: string;
   course_id: string;
   course_code: string;
   code: string;
@@ -142,11 +147,15 @@ interface Branch {
   id: string;
   college_id: string;
   college_name: string;
+  college_code?: string;
+  college_slug?: string;
   course_id?: string;
   course_code?: string;
+  course_name?: string;
   code: string;
   name: string;
   type: string;
+  branch_cd?: string;
   is_active: boolean;
 }
 

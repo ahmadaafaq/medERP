@@ -56,7 +56,7 @@ export class CreateDepartmentMasterDto {
 
   @ApiProperty({ example: 'ANAT' })
   @IsString()
-  @MaxLength(20)
+  @MaxLength(50)
   code: string;
 
   @ApiProperty({ example: 'Pre-Clinical' })
@@ -81,7 +81,7 @@ export class UpdateDepartmentMasterDto extends PartialType(CreateDepartmentMaste
 export class CreateSubjectMasterDto {
   @ApiProperty({ example: 'ANAT-101' })
   @IsString()
-  @MaxLength(30)
+  @MaxLength(50)
   code: string;
 
   @ApiProperty({ example: 'Human Anatomy' })
