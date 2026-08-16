@@ -659,7 +659,21 @@ export default function StudentMasterPage() {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const result = await res.json();
-      setStudents(result.data || []);
+      const list: Student[] = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.data?.data)
+        ? result.data.data
+        : Array.isArray(result?.data)
+        ? result.data
+        : [];
+      const seen = new Set<string>();
+      const deduped = list.filter((s) => {
+        const key = s.id || s.registration_no || s.rollno;
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setStudents(deduped);
     } catch (err) {
       console.error('Failed to fetch students', err);
     } finally {

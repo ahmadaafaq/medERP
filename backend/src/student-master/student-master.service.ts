@@ -89,24 +89,6 @@ export class StudentMasterService {
           params.push(`%${query.search}%`);
           sql += ` AND (s.name ILIKE $${params.length} OR s.rollno ILIKE $${params.length} OR s.registration_no ILIKE $${params.length})`;
         }
-        if (query.collegeId && query.collegeId !== 'all') {
-          const colIdVal = query.collegeId;
-          const matchedColg = colleges.find(
-            (c: any) => c.id === colIdVal || c.slug === colIdVal || c.code === colIdVal || (c.name && c.name.toLowerCase() === colIdVal.toLowerCase())
-          );
-          if (matchedColg) {
-            params.push(matchedColg.id);
-            const pId = params.length;
-            params.push(matchedColg.name);
-            const pName = params.length;
-            params.push(matchedColg.code || matchedColg.id);
-            const pCode = params.length;
-            sql += ` AND (sa.college_id::text = $${pId} OR sa.college_name ILIKE $${pName} OR sa.college_id::text = $${pCode})`;
-          } else {
-            params.push(colIdVal);
-            sql += ` AND (sa.college_id::text = $${params.length} OR sa.college_name ILIKE $${params.length})`;
-          }
-        }
         if (query.courseId && query.courseId !== 'all') {
           params.push(query.courseId);
           const p1 = params.length;

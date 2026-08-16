@@ -1470,8 +1470,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         if (existingStudent.length === 0) {
           await runner.query(`
             INSERT INTO "${schema}".students (user_id, rollno, registration_no, name, batch_cd, course_cd)
-            VALUES ($1, 'MBBS2023045', '2023MBBS045', 'Rahul Verma', '2023-MBBS', 'MBBS')
-            ON CONFLICT (registration_no) DO UPDATE SET name = EXCLUDED.name;
+            VALUES ($1, 'MBBS2023045', '2023MBBS045', 'Rahul Verma', '2023-MBBS', 'MBBS');
           `, [studUserId]);
         }
       }
@@ -1492,8 +1491,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         if (existingKabir.length === 0) {
           await runner.query(`
             INSERT INTO "${schema}".students (user_id, rollno, registration_no, name, batch_cd, course_cd)
-            VALUES ($1, '20260008', '20260008', 'Kabir Rao Deshmukh', '2025-MBBS', 'MBBS')
-            ON CONFLICT (registration_no) DO UPDATE SET name = EXCLUDED.name;
+            VALUES ($1, '20260008', '20260008', 'Kabir Rao Deshmukh', '2025-MBBS', 'MBBS');
           `, [kabirUserId]);
         }
       }
