@@ -12,6 +12,7 @@ interface College {
   name: string;
   slug: string;
   code: string;
+  colg_cd?: string;
 }
 
 interface Batch {
@@ -19,12 +20,14 @@ interface Batch {
   code: string;
   year?: number;
   name?: string;
+  batch_cd?: string;
 }
 
 interface Subject {
   id: string;
   code: string;
   name: string;
+  subject_cd?: string;
 }
 
 interface StudentMatrixRow {
@@ -122,6 +125,17 @@ export default function FacultyMISReportsPage() {
     setCurrentPage(1);
   }, [activeTab, selectedBatchId, selectedSubjectId, shortageFilter, searchQuery]);
 
+  const dedupeBy = <T,>(arr: T[], keyFn: (item: T) => string): T[] => {
+    const seen = new Set<string>();
+    return (arr || []).filter(item => {
+      if (!item) return false;
+      const key = keyFn(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   const fetchMetadataAndUserContext = async () => {
     const slug = selectedTenantSlug || getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
@@ -133,7 +147,7 @@ export default function FacultyMISReportsPage() {
       if (colRes && colRes.ok) {
         const colJson = await colRes.json();
         const colList = Array.isArray(colJson?.data) ? colJson.data : Array.isArray(colJson) ? colJson : [];
-        setColleges(colList);
+        setColleges(dedupeBy(colList, (c: College) => String(c.colg_cd || c.code || c.slug || c.id)));
       }
 
       // 2. Fetch User Profile
@@ -155,7 +169,7 @@ export default function FacultyMISReportsPage() {
       const parse = (j: any) => Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
 
       if (bRes && bRes.ok) {
-        const bList: Batch[] = parse(await bRes.json());
+        const bList: Batch[] = dedupeBy(parse(await bRes.json()), (b: Batch) => String(b.batch_cd || b.code || b.id));
         setBatches(bList);
         if (bList.length > 0) {
           const currentBatchExists = bList.some(b => b.id === selectedBatchId);
@@ -166,7 +180,8 @@ export default function FacultyMISReportsPage() {
       }
 
       if (sRes && sRes.ok) {
-        setSubjects(parse(await sRes.json()));
+        const sList: Subject[] = dedupeBy(parse(await sRes.json()), (s: Subject) => String(s.subject_cd || s.code || s.name || s.id));
+        setSubjects(sList);
       }
     } catch (e) {
       console.error('Failed to load MIS metadata', e);

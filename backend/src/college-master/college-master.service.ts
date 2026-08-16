@@ -319,14 +319,14 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   async listColleges(): Promise<any[]> {
     await this.ds.query(`ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS code VARCHAR(50);`).catch(() => {});
     const rows = await this.ds.query(
-      `SELECT id, code, name, slug, domain, plan, primary_color, is_active, schema_provisioned, created_at
+      `SELECT DISTINCT ON (code) id, code, name, slug, domain, plan, primary_color, is_active, schema_provisioned, created_at
        FROM public.tenants
-       ORDER BY CAST(NULLIF(regexp_replace(code, '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, name ASC`,
+       ORDER BY code, CAST(NULLIF(regexp_replace(code, '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, name ASC`,
     );
     if (rows.length === 0) {
       return this.syncExternalColleges();
     }
-    return rows;
+    return rows.sort((a: any, b: any) => (parseInt(a.code, 10) || 0) - (parseInt(b.code, 10) || 0));
   }
 
   async createCollege(dto: CreateCollegeDto) {

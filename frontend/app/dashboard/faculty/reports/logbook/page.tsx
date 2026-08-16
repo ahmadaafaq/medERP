@@ -206,6 +206,18 @@ export default function FacultyUGLogbookReportPage() {
   const [logbookEntries, setLogbookEntries] = useState<LogbookRow[]>(sampleLogbookData);
   const [loading, setLoading] = useState<boolean>(false);
 
+  // Utility for foolproof array deduplication by key
+  const dedupeBy = <T,>(arr: T[], keyFn: (item: T) => string): T[] => {
+    const seen = new Set<string>();
+    return (arr || []).filter(item => {
+      if (!item) return false;
+      const key = keyFn(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   // ─── 1. Fetch Colleges on Mount ────────────────────────────────────────────
   useEffect(() => {
     fetchColleges();
@@ -218,7 +230,8 @@ export default function FacultyUGLogbookReportPage() {
       const res = await fetch(`${API_BASE}/college-master/colleges`, { headers });
       if (res.ok) {
         const json = await res.json();
-        const list: College[] = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+        const rawList: College[] = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+        const list = dedupeBy(rawList, (c: College) => String(c.colg_cd || c.code || c.slug || c.id));
         setColleges(list);
 
         const currentSlug = getInitialTenantSlug();
@@ -249,7 +262,10 @@ export default function FacultyUGLogbookReportPage() {
         'x-tenant-slug': slug,
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       };
-      const parse = (j: any) => Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+      const parse = (j: any) => {
+        const raw = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+        return dedupeBy(raw, (item: any) => String(item.code || item.id || item.name));
+      };
 
       const [cRes, brRes, bRes, dRes, sRes] = await Promise.all([
         fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers }).catch(() => null),
@@ -281,13 +297,14 @@ export default function FacultyUGLogbookReportPage() {
   const isMedicalCollege = selectedColgCd === '2' || selectedCollegeSlug.includes('ims');
 
   const filteredCourses = useMemo(() => {
-    return courses.filter(c => {
+    const list = courses.filter(c => {
       const cName = (c.name || '').toLowerCase();
       const cCode = (c.code || '').toLowerCase();
       const isMedCourse = cName.includes('mbbs') || cCode === 'mbbs' || cName.includes('medicine');
       if (isMedicalCollege) return isMedCourse || c.colg_cd === '2';
       return !isMedCourse;
     });
+    return dedupeBy(list, c => String(c.course_cd || c.code || c.id));
   }, [courses, isMedicalCollege]);
 
   useEffect(() => {
@@ -308,15 +325,17 @@ export default function FacultyUGLogbookReportPage() {
       if (!selectedCourseCd) return true;
       return String(b.course_cd) === String(selectedCourseCd);
     });
-    return list.length > 0 ? list : [{ branch_cd: '1', code: '1', name: 'General Branch (1)' }];
+    const base = list.length > 0 ? list : [{ branch_cd: '1', code: '1', name: 'General Branch (1)' }];
+    return dedupeBy(base, b => String(b.branch_cd || b.code || b.id));
   }, [branches, selectedCourseCd, isMedicalCollege]);
 
   // ─── Filter Batches by Selected Course ─────────────────────────────────────
   const filteredBatches = useMemo(() => {
-    return batches.filter(b => {
+    const list = batches.filter(b => {
       if (!selectedCourseCd) return true;
       return String(b.course_cd) === String(selectedCourseCd) || (b.code && b.code.includes(`C${selectedCourseCd}`));
     });
+    return dedupeBy(list, b => String(b.code || b.batch_cd || b.id));
   }, [batches, selectedCourseCd]);
 
   // ─── Filter Departments (CET Engineering vs IMS Medical) ───────────────────

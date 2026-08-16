@@ -52,12 +52,12 @@ export class AdminMasterService {
   private async listColleges(): Promise<any[]> {
     try {
       const rows = await this.ds.query(`
-        SELECT id, code, name, slug, domain, plan, primary_color, is_active
+        SELECT DISTINCT ON (code) id, code, name, slug, domain, plan, primary_color, is_active
         FROM public.tenants
         WHERE is_active = true
-        ORDER BY code ASC NULLS LAST, name ASC
+        ORDER BY code, CAST(NULLIF(regexp_replace(code, '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, name ASC
       `);
-      return rows || [];
+      return (rows || []).sort((a: any, b: any) => (parseInt(a.code, 10) || 0) - (parseInt(b.code, 10) || 0));
     } catch (err: any) {
       this.logger.warn(`Failed to list colleges from public.tenants: ${err.message}`);
       return [{ id: 'srms-ims', code: '11', name: 'SRMS Institute of Medical Sciences', slug: 'srms-ims', is_active: true }];

@@ -543,6 +543,18 @@ export default function AssessmentMasterPage() {
   const [publishEndTime, setPublishEndTime] = useState('10:00');
   const [publishedExams, setPublishedExams] = useState<any[]>([]);
 
+  // Utility for foolproof array deduplication by key
+  const dedupeBy = <T,>(arr: T[], keyFn: (item: T) => string): T[] => {
+    const seen = new Set<string>();
+    return (arr || []).filter(item => {
+      if (!item) return false;
+      const key = keyFn(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   // 1. Initial College List Fetch
   useEffect(() => {
     fetchColleges();
@@ -555,7 +567,8 @@ export default function AssessmentMasterPage() {
       const res = await fetch(`${API_BASE}/college-master/colleges`, { headers });
       if (res.ok) {
         const json = await res.json();
-        const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+        const rawList = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+        const list: College[] = dedupeBy(rawList, (c: College) => String(c.code || c.slug || c.id));
         setColleges(list);
 
         const currentSlug = getInitialTenantSlug();
@@ -583,7 +596,10 @@ export default function AssessmentMasterPage() {
         'x-tenant-slug': slug,
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       };
-      const parse = (j: any) => Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+      const parse = (j: any) => {
+        const raw = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+        return dedupeBy(raw, (item: any) => String(item.code || item.id || item.name));
+      };
 
       const [deptRes, subjRes, unitRes, topicRes, compRes, linkRes, profRes, qRes, papersRes, coursesRes, branchesRes, batchesRes] = await Promise.all([
         fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers: h }).catch(() => null),
@@ -649,16 +665,14 @@ export default function AssessmentMasterPage() {
       if (isMedicalCollege) return isMedCourse || c.colg_cd === '2';
       return !isMedCourse;
     });
-    if (list.length === 0) {
-      return isMedicalCollege
-        ? [{ id: 'c-mbbs', code: 'MBBS', name: 'Bachelor of Medicine, Bachelor of Surgery (MBBS)', course_cd: '1' }]
-        : [
-            { id: 'c-bca', code: 'BCA', name: 'Bachelor of Computer Applications (BCA)', course_cd: '13' },
-            { id: 'c-btech', code: 'B.Tech', name: 'Bachelor of Technology (B.Tech)', course_cd: '1' },
-            { id: 'c-mca', code: 'MCA', name: 'Master of Computer Applications (MCA)', course_cd: '2' },
-          ];
-    }
-    return list;
+    const base = list.length > 0 ? list : (isMedicalCollege
+      ? [{ id: 'c-mbbs', code: 'MBBS', name: 'Bachelor of Medicine, Bachelor of Surgery (MBBS)', course_cd: '1' }]
+      : [
+          { id: 'c-bca', code: 'BCA', name: 'Bachelor of Computer Applications (BCA)', course_cd: '13' },
+          { id: 'c-btech', code: 'B.Tech', name: 'Bachelor of Technology (B.Tech)', course_cd: '1' },
+          { id: 'c-mca', code: 'MCA', name: 'Master of Computer Applications (MCA)', course_cd: '2' },
+        ]);
+    return dedupeBy(base, c => String(c.course_cd || c.code || c.id));
   }, [courses, isMedicalCollege]);
 
   useEffect(() => {
@@ -679,10 +693,11 @@ export default function AssessmentMasterPage() {
       if (!selectedCourseCd) return true;
       return String(b.course_cd) === String(selectedCourseCd);
     });
-    return list.length > 0 ? list : [
+    const base = list.length > 0 ? list : [
       { branch_cd: '1', code: '1', name: 'Computer Applications / General Branch' },
       { branch_cd: '2', code: '2', name: 'Computer Science & Engineering (CSE)' },
     ];
+    return dedupeBy(base, b => String(b.branch_cd || b.code || b.id));
   }, [branches, selectedCourseCd, isMedicalCollege]);
 
   useEffect(() => {
@@ -700,10 +715,11 @@ export default function AssessmentMasterPage() {
       if (!selectedCourseCd) return true;
       return String(b.course_cd) === String(selectedCourseCd) || (b.code && b.code.includes(`C${selectedCourseCd}`));
     });
-    return list.length > 0 ? list : [
+    const base = list.length > 0 ? list : [
       { id: 'b1', code: 'B2026-C13-1', name: 'Batch 2026 (BCA)', year: 2026, batch_cd: 'B2026-C13-1' },
       { id: 'b2', code: 'B2025-C13-1', name: 'Batch 2025 (BCA)', year: 2025, batch_cd: 'B2025-C13-1' },
     ];
+    return dedupeBy(base, b => String(b.code || b.batch_cd || b.id));
   }, [batches, selectedCourseCd]);
 
   useEffect(() => {
@@ -725,10 +741,11 @@ export default function AssessmentMasterPage() {
       if (!selectedCourseCd) return true;
       return String(d.course_cd) === String(selectedCourseCd) || dName.includes(selectedCourseCd.toLowerCase());
     });
-    return list.length > 0 ? list : [
+    const base = list.length > 0 ? list : [
       { id: '13', code: '13', name: 'Department of Computer Applications (BCA)', course_cd: '13' },
       { id: '1', code: '1', name: 'Department of Computer Science & Engineering', course_cd: '1' },
     ];
+    return dedupeBy(base, d => String(d.id || d.code || d.name));
   }, [departments, selectedCourseCd, isMedicalCollege]);
 
   useEffect(() => {
@@ -750,11 +767,12 @@ export default function AssessmentMasterPage() {
       if (selectedCourseCd && s.course_cd && String(s.course_cd) !== String(selectedCourseCd)) return false;
       return true;
     });
-    return list.length > 0 ? list : [
+    const base = list.length > 0 ? list : [
       { id: '88534', code: '88534', name: 'Web Technology (BCA-301)', course_cd: '13' },
       { id: '88535', code: '88535', name: 'Python Programming (BCA-302)', course_cd: '13' },
       { id: '88536', code: '88536', name: 'Database Management Systems (BCA-303)', course_cd: '13' },
     ];
+    return dedupeBy(base, s => String(s.id || s.code || s.name));
   }, [allSubjects, selectedCourseCd, isMedicalCollege]);
 
   useEffect(() => {
