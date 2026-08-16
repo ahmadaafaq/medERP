@@ -596,9 +596,20 @@ export default function AssessmentMasterPage() {
         'x-tenant-slug': slug,
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       };
+      // Generic parser: dedupes by id first, then code (safe for most entities)
       const parse = (j: any) => {
         const raw = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-        return dedupeBy(raw, (item: any) => String(item.code || item.id || item.name));
+        return dedupeBy(raw, (item: any) => String(item.id || item.code || item.name));
+      };
+      // Branch parser: dedupe by branch_cd + course_cd composite (branches share code across courses)
+      const parseBranches = (j: any) => {
+        const raw = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+        return dedupeBy(raw, (item: any) => `${item.branch_cd || item.code}|${item.course_cd || ''}`);
+      };
+      // Batch parser: dedupe by batch_cd + course_cd composite
+      const parseBatches = (j: any) => {
+        const raw = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+        return dedupeBy(raw, (item: any) => `${item.batch_cd || item.code}|${item.course_cd || ''}`);
       };
 
       const [deptRes, subjRes, unitRes, topicRes, compRes, linkRes, profRes, qRes, papersRes, coursesRes, branchesRes, batchesRes] = await Promise.all([
@@ -624,8 +635,9 @@ export default function AssessmentMasterPage() {
       if (linkRes && linkRes.ok) { const j = await linkRes.json(); setAllLinkers(parse(j)); }
       if (profRes && profRes.ok) { const j = await profRes.json(); setCollegeProfessionals(parse(j)); }
       if (coursesRes && coursesRes.ok) { const j = await coursesRes.json(); const cList = parse(j); setCourses(cList); setCollegeCourses(cList); }
-      if (branchesRes && branchesRes.ok) { const j = await branchesRes.json(); setBranches(parse(j)); }
-      if (batchesRes && batchesRes.ok) { const j = await batchesRes.json(); const bList = parse(j); setBatches(bList); setCollegeBatches(bList); }
+      // Use composite-key parsers so BCA (code=1, course=13) & B.Tech (code=1, course=1) both survive
+      if (branchesRes && branchesRes.ok) { const j = await branchesRes.json(); setBranches(parseBranches(j)); }
+      if (batchesRes && batchesRes.ok) { const j = await batchesRes.json(); const bList = parseBatches(j); setBatches(bList); setCollegeBatches(bList); }
 
       if (qRes && qRes.ok) {
         const j = await qRes.json();
@@ -719,7 +731,7 @@ export default function AssessmentMasterPage() {
     const base = list.length > 0 ? list : [
       { branch_cd: '1', code: '1', name: 'General Branch', course_cd: selectedCourseCd },
     ];
-    return dedupeBy(base, b => String(b.branch_cd || b.code || b.id));
+    return dedupeBy(base, b => `${b.branch_cd || b.code || b.id}|${b.course_cd || ''}`);
   }, [branches, selectedCourseCd, isMedicalCollege]);
 
   useEffect(() => {
