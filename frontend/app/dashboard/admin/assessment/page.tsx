@@ -638,7 +638,24 @@ export default function AssessmentMasterPage() {
       } else {
         setQuestions(DEFAULT_INITIAL_QUESTIONS);
       }
-      if (papersRes && papersRes.ok) { const j = await papersRes.json(); setDesignedPapers(parse(j)); }
+      if (papersRes && papersRes.ok) {
+        const j = await papersRes.json();
+        const papersList = parse(j);
+        setDesignedPapers(papersList);
+        // Load previously published exams from backend papers (status-based)
+        const published = papersList
+          .filter((p: any) => p.status === 'Published' || p.is_active)
+          .map((p: any) => ({
+            id: p.id,
+            paperCode: p.code || p.paper_code || '',
+            paperName: p.name || p.title || 'Exam Paper',
+            batch: p.batch_code || p.target_batch || '—',
+            date: p.exam_date ? p.exam_date.slice(0, 10) : (p.created_at ? p.created_at.slice(0, 10) : ''),
+            time: p.start_time && p.end_time ? `${p.start_time} - ${p.end_time}` : '—',
+            status: 'PUBLISHED',
+          }));
+        if (published.length > 0) setPublishedExams(published);
+      }
     } catch (e) {
       console.error('[AssessmentMaster] Failed to fetch Master data', e);
       setQuestions(DEFAULT_INITIAL_QUESTIONS);
@@ -686,16 +703,21 @@ export default function AssessmentMasterPage() {
 
   // Filter Branches by Course
   const filteredBranches = useMemo(() => {
-    const list = branches.filter(b => {
+    // All non-medical branches for this college
+    const nonMedBranches = branches.filter(b => {
       if (isMedicalCollege) return (b.name && b.name.includes('Department of')) || b.code === 'ANA' || b.code === 'PHY';
       const isMed = b.code === 'ANA' || b.code === 'PHY' || (b.name && (b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology')));
-      if (isMed) return false;
+      return !isMed;
+    });
+    // Try filtering by course_cd first
+    const courseFiltered = nonMedBranches.filter(b => {
       if (!selectedCourseCd) return true;
       return String(b.course_cd) === String(selectedCourseCd);
     });
+    // If course-specific branches found, use those; else show all non-medical branches for this college
+    const list = courseFiltered.length > 0 ? courseFiltered : nonMedBranches;
     const base = list.length > 0 ? list : [
-      { branch_cd: '1', code: '1', name: 'Computer Applications / General Branch' },
-      { branch_cd: '2', code: '2', name: 'Computer Science & Engineering (CSE)' },
+      { branch_cd: '1', code: '1', name: 'General Branch', course_cd: selectedCourseCd },
     ];
     return dedupeBy(base, b => String(b.branch_cd || b.code || b.id));
   }, [branches, selectedCourseCd, isMedicalCollege]);
@@ -815,17 +837,29 @@ export default function AssessmentMasterPage() {
 
   const handleUnitChange = (unitId: string) => {
     setSelectedUnitId(unitId);
-    const matchingTopics = availableTopics.filter(t => t.unit_id === unitId || t.unit_code === unitId);
+    // Also update the question bank filter to match selected unit
+    const unitObj = availableUnits.find(u => u.id === unitId || u.code === unitId);
+    setFilterUnit(unitObj?.code || unitId || 'all');
+
+    const matchingTopics = availableTopics.filter(t => t.unit_id === unitId || t.unit_code === unitId ||
+      (unitObj && (t.unit_id === unitObj.id || t.unit_code === unitObj.code)));
     if (matchingTopics.length > 0) {
       const firstT = matchingTopics[0];
       setSelectedTopicId(firstT.id || firstT.code);
       setSelectedTopicName(firstT.name);
+      setFilterTopic(firstT.name || 'all');
 
       const matchingSub = availableSubTopics.find(s => s.topic_id === firstT.id || s.topic_code === firstT.code);
       if (matchingSub) {
         setSelectedSubTopicId(matchingSub.id || matchingSub.code);
         setSelectedSubTopicCode(matchingSub.code);
+        setFilterSubTopic(matchingSub.code || 'all');
+      } else {
+        setFilterSubTopic('all');
       }
+    } else {
+      setFilterTopic('all');
+      setFilterSubTopic('all');
     }
   };
 
@@ -833,11 +867,16 @@ export default function AssessmentMasterPage() {
     setSelectedTopicId(topicId);
     const found = availableTopics.find(t => t.id === topicId || t.code === topicId);
     setSelectedTopicName(found?.name || '');
+    // Also update the question bank filter
+    setFilterTopic(found?.name || topicId || 'all');
 
     const matchingSub = availableSubTopics.find(s => s.topic_id === topicId || s.topic_code === topicId || (found && (s.topic_id === found.id || s.topic_code === found.code)));
     if (matchingSub) {
       setSelectedSubTopicId(matchingSub.id || matchingSub.code);
       setSelectedSubTopicCode(matchingSub.code);
+      setFilterSubTopic(matchingSub.code || 'all');
+    } else {
+      setFilterSubTopic('all');
     }
   };
 
@@ -846,9 +885,11 @@ export default function AssessmentMasterPage() {
     if (found) {
       setSelectedSubTopicId(found.id || found.code);
       setSelectedSubTopicCode(found.code);
+      setFilterSubTopic(found.code || 'all');
     } else {
       setSelectedSubTopicId(subTopicIdOrCode);
       setSelectedSubTopicCode(subTopicIdOrCode);
+      setFilterSubTopic(subTopicIdOrCode || 'all');
     }
   };
 
@@ -1515,19 +1556,45 @@ export default function AssessmentMasterPage() {
   };
 
   // Publish Examination (Tab 3)
-  const handlePublishExam = (e: React.FormEvent) => {
+  const handlePublishExam = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newExam = {
-      id: Date.now().toString(),
-      paperCode,
-      paperName: paperTitle,
-      batch: publishTargetBatch,
-      date: publishDate,
-      time: `${publishStartTime} - ${publishEndTime}`,
-      status: 'PUBLISHED',
-    };
-    setPublishedExams([newExam, ...publishedExams]);
-    setAlert({ type: 'success', message: `Exam [${paperCode}] published to student portal for batch ${publishTargetBatch}!` });
+    setSaving(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const h: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-tenant-slug': selectedCollegeSlug,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      };
+      // Update the paper with publish info
+      const selectedPaper = designedPapers.find(p => p.code === paperCode);
+      if (selectedPaper) {
+        await fetch(`${API_BASE}/exams/papers/${selectedPaper.id}?tenant=${selectedCollegeSlug}`, {
+          method: 'PATCH',
+          headers: h,
+          body: JSON.stringify({
+            status: 'Published',
+            target_batch: publishTargetBatch,
+            exam_date: publishDate,
+            start_time: publishStartTime,
+            end_time: publishEndTime,
+          }),
+        }).catch(() => null);
+      }
+      const newExam = {
+        id: Date.now().toString(),
+        paperCode,
+        paperName: selectedPaper?.name || paperTitle,
+        batch: publishTargetBatch,
+        date: publishDate,
+        time: `${publishStartTime} - ${publishEndTime}`,
+        status: 'PUBLISHED',
+      };
+      setPublishedExams(prev => [newExam, ...prev.filter(ex => ex.paperCode !== paperCode)]);
+      setAlert({ type: 'success', message: `Exam [${paperCode}] published to student portal for batch ${publishTargetBatch}!` });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -1644,7 +1711,7 @@ export default function AssessmentMasterPage() {
                     >
                       {colleges.map(c => (
                         <option key={c.code || c.slug} value={String(c.code || c.id || '1')}>
-                          [{c.code || '1'}] {(c.name || '').split(',')[0]}
+                          [{c.code || '1'}] {c.name || ''}
                         </option>
                       ))}
                     </select>
