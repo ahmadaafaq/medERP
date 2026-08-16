@@ -407,27 +407,40 @@ export default function FacultyMarksPage() {
         const json = await res.json();
         const rawList: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
         if (rawList.length > 0) {
-          const mapped: ExamPaper[] = rawList.map((p: any) => ({
-            id: p.id,
-            code: p.code || 'MED-2025-PHY-T1',
-            name: p.name || 'MBBS Physiology Sessional Examination',
-            max_marks: Number(p.max_marks || 100),
-            passing_marks: Number(p.passing_marks || 50),
-            duration_mins: Number(p.duration_minutes || p.duration_mins || 180),
-            sections_count: Array.isArray(p.sections) ? p.sections.length : 3,
-            mode: 'MCQs & DESC',
-            status: p.status || 'Approved',
-            subject_id: p.subject_id,
-            batch_id: p.batch_id,
-            topic_name: p.topic_name || 'General Physiology & Cell Membrane',
-            batch_code: p.batch_code || selectedBatch?.code || '2025-MBBS',
-            sections: (Array.isArray(p.sections) && p.sections.length > 0) ? mapRawSections(p.sections) : defaultSections,
-          }));
-          setAllFetchedPapers(mapped);
-          if (!selectedPaperId || !mapped.find(p => p.id === selectedPaperId)) {
-            setSelectedPaperId(mapped[0].id);
+          const seen = new Set<string>();
+          const mapped: ExamPaper[] = rawList
+            .filter((p: any) => {
+              const code = (p.code || '').toUpperCase();
+              const name = (p.name || '').toUpperCase();
+              if (code === 'EXAM-PAPER' || name === 'EXAM-PAPER' || code === 'TEST' || code === 'DUMMY') return false;
+              if (seen.has(p.id) || (p.code && seen.has(p.code))) return false;
+              seen.add(p.id);
+              if (p.code) seen.add(p.code);
+              return true;
+            })
+            .map((p: any) => ({
+              id: p.id,
+              code: p.code || 'MED-2025-PHY-T1',
+              name: p.name || 'MBBS Physiology Sessional Examination',
+              max_marks: Number(p.max_marks || 100),
+              passing_marks: Number(p.passing_marks || 50),
+              duration_mins: Number(p.duration_minutes || p.duration_mins || 180),
+              sections_count: Array.isArray(p.sections) ? p.sections.length : 3,
+              mode: 'MCQs & DESC',
+              status: p.status || 'Approved',
+              subject_id: p.subject_id,
+              batch_id: p.batch_id,
+              topic_name: p.topic_name || 'General Physiology & Cell Membrane',
+              batch_code: p.batch_code || selectedBatch?.code || '2025-MBBS',
+              sections: (Array.isArray(p.sections) && p.sections.length > 0) ? mapRawSections(p.sections) : defaultSections,
+            }));
+          if (mapped.length > 0) {
+            setAllFetchedPapers(mapped);
+            if (!selectedPaperId || !mapped.find(p => p.id === selectedPaperId)) {
+              setSelectedPaperId(mapped[0].id);
+            }
+            return;
           }
-          return;
         }
       }
     } catch (e) {

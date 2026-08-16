@@ -360,25 +360,37 @@ export default function TheoryResultReportPage() {
         setAllSubjects(sList);
       }
 
-      // 6. Exam Papers
+      // 6. Exam Papers - dedupe by id, filter out test papers
       if (pRes && pRes.ok) {
         const pList = parse(await pRes.json());
-        const mappedPapers: ExamPaper[] = pList.map((p: any) => {
-          const questions = extractQuestionsFromSections(p.sections || []);
-          return {
-            id: p.id,
-            code: p.code || 'EXAM-PAPER',
-            name: p.name || 'Examination Paper',
-            max_marks: Number(p.max_marks || 100),
-            passing_marks: Number(p.passing_marks || 40),
-            duration_mins: Number(p.duration_minutes || p.duration_mins || 60),
-            status: p.status || 'Active',
-            subject_code: p.subject_code || p.subject_cd,
-            batch_code: p.batch_code || p.batch_cd,
-            sections: Array.isArray(p.sections) ? p.sections : [],
-            questions,
-          };
-        });
+        const seen = new Set<string>();
+        const mappedPapers: ExamPaper[] = pList
+          .filter((p: any) => {
+            const code = (p.code || '').toUpperCase();
+            const name = (p.name || '').toUpperCase();
+            if (code === 'EXAM-PAPER' || name === 'EXAM-PAPER' || code === 'TEST' || code === 'DUMMY') return false;
+            if (seen.has(p.id) || (p.code && seen.has(p.code))) return false;
+            seen.add(p.id);
+            if (p.code) seen.add(p.code);
+            return true;
+          })
+          .map((p: any) => {
+            const questions = extractQuestionsFromSections(p.sections || []);
+            return {
+              id: p.id,
+              code: p.code || 'PAPER',
+              name: p.name || 'Examination Paper',
+              max_marks: Number(p.max_marks || 100),
+              passing_marks: Number(p.passing_marks || 40),
+              duration_mins: Number(p.duration_minutes || p.duration_mins || 60),
+              status: p.status || 'Active',
+              subject_code: p.subject_code || p.subject_cd,
+              batch_code: p.batch_code || p.batch_cd,
+              semester: p.semester ? String(p.semester) : (p.sem_cd ? String(p.sem_cd) : null),
+              sections: Array.isArray(p.sections) ? p.sections : [],
+              questions,
+            };
+          });
         setAllFetchedPapers(mappedPapers);
         if (mappedPapers.length > 0) {
           setSelectedPaperCode(mappedPapers[0].code);
@@ -455,7 +467,6 @@ export default function TheoryResultReportPage() {
     }
   }, [filteredCourses, selectedCourseCd]);
 
-  // ─── Filter Branches by Selected Course ────────────────────────────────────
   const filteredBranches = useMemo(() => {
     const list = branches.filter(b => {
       if (isMedicalCollege) {
@@ -465,11 +476,16 @@ export default function TheoryResultReportPage() {
       if (isMed) return false;
 
       if (!selectedCourseCd) return true;
-      return String(b.course_cd) === String(selectedCourseCd) || (b.course_name && b.course_name.toLowerCase().includes(selectedCourseCd.toLowerCase()));
+      return String(b.course_cd) === String(selectedCourseCd);
     });
 
-    const base = list.length > 0 ? list : [{ branch_cd: '1', code: '1', name: 'General Branch (1)' }];
-    return dedupeBy(base, b => String(b.branch_cd || b.code || b.id));
+    const nonMed = branches.filter(b => {
+      const isMed = b.code === 'ANA' || b.code === 'PHY' || (b.name && (b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology')));
+      return !isMed;
+    });
+
+    const base = list.length > 0 ? list : (nonMed.length > 0 ? nonMed : [{ branch_cd: '1', code: '1', name: 'General Branch (1)' }]);
+    return dedupeBy(base, b => `${b.branch_cd || b.code || b.id}|${(b as any).course_cd || ''}`);
   }, [branches, selectedCourseCd, isMedicalCollege]);
 
   useEffect(() => {
@@ -551,16 +567,17 @@ export default function TheoryResultReportPage() {
     }
   }, [filteredSubjects, selectedSubjectCd]);
 
-  // ─── Filtered Exam Papers for Subject ──────────────────────────────────────
+  // ─── Filtered Exam Papers for Subject & Semester ───────────────────────────
   const filteredPapers = useMemo(() => {
     if (allFetchedPapers.length === 0) return [];
-    if (!selectedSubjectCd) return allFetchedPapers;
 
     const selSubjObj = allSubjects.find(s => s.code === selectedSubjectCd || String(s.subject_cd) === selectedSubjectCd);
     const subjCode = selSubjObj?.code?.toLowerCase() || selectedSubjectCd.toLowerCase();
     const subjName = selSubjObj?.name?.toLowerCase() || '';
 
-    const matched = allFetchedPapers.filter(p => {
+    // Step 1: Filter by subject
+    let matched = allFetchedPapers.filter(p => {
+      if (!p.subject_code && !selectedSubjectCd) return true;
       if (p.subject_code && p.subject_code.toLowerCase() === subjCode) return true;
       const pCode = (p.code || '').toLowerCase();
       const pName = (p.name || '').toLowerCase();
@@ -568,8 +585,14 @@ export default function TheoryResultReportPage() {
       return false;
     });
 
+    // Step 2: Filter by semester
+    if (selectedSemCd) {
+      const semFiltered = matched.filter(p => !(p as any).semester || String((p as any).semester) === String(selectedSemCd));
+      if (semFiltered.length > 0) matched = semFiltered;
+    }
+
     return matched.length > 0 ? matched : allFetchedPapers;
-  }, [allFetchedPapers, selectedSubjectCd, allSubjects]);
+  }, [allFetchedPapers, selectedSubjectCd, selectedSemCd, allSubjects]);
 
   const activePaper = useMemo(() => {
     return filteredPapers.find(p => p.code === selectedPaperCode) || filteredPapers[0] || allFetchedPapers[0] || null;
@@ -656,7 +679,16 @@ export default function TheoryResultReportPage() {
       const paperQuestions = activePaper?.questions || [];
 
       if (rawStudents.length > 0) {
-        const mapped: StudentTheoryReport[] = rawStudents.map((st: any, idx: number) => {
+        // Deduplicate students by rollno / registration_no to eliminate repeated names in table
+        const seenStudents = new Set<string>();
+        const dedupedStudents = rawStudents.filter((st: any) => {
+          const key = st.rollno || st.registration_no || st.id;
+          if (!key || seenStudents.has(key)) return false;
+          seenStudents.add(key);
+          return true;
+        });
+
+        const mapped: StudentTheoryReport[] = dedupedStudents.map((st: any, idx: number) => {
           const studentRoll = st.rollno || st.registration_no || `ST-${idx + 1}`;
           const studentReg = st.registration_no || st.rollno || studentRoll;
 
@@ -1029,7 +1061,7 @@ export default function TheoryResultReportPage() {
                 >
                   {colleges.map(c => (
                     <option key={c.code || c.slug} value={String(c.colg_cd || c.code)}>
-                      [{c.colg_cd || c.code}] {(c.name || '').split(',')[0]}
+                      [{c.colg_cd || c.code}] {c.name || ''}
                     </option>
                   ))}
                 </select>
