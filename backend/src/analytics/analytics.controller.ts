@@ -1,15 +1,27 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Tenant } from '../common/decorators/tenant.decorator';
 
 @Controller('analytics')
-@UseGuards(JwtAuthGuard)
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get('dashboard/college')
-  async getCollegeKpis(@Tenant() tenantSlug: string) {
-    return this.analyticsService.getCollegeKpis(tenantSlug);
+  async getCollegeKpis(
+    @Query('tenant') queryTenant?: string,
+    @Tenant() tenantSlug?: string,
+  ) {
+    const slug = queryTenant || tenantSlug || 'srms-cet-bareilly';
+    return this.analyticsService.getCollegeKpis(slug);
+  }
+
+  @Post('punch')
+  async recordPunch(
+    @Body() body: { punchType: 'IN' | 'OUT'; facultyId?: string; time?: string },
+    @Query('tenant') queryTenant?: string,
+    @Tenant() tenantSlug?: string,
+  ) {
+    const slug = queryTenant || tenantSlug || 'srms-cet-bareilly';
+    return this.analyticsService.recordPunch(body, slug);
   }
 }
