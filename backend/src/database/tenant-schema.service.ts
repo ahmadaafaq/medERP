@@ -1570,106 +1570,128 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       }
     } catch (e) {}
 
-    // 9. Seed authentic timetable slots & competencies for Physiology & Anatomy default departments
+    // 9. Seed authentic timetable slots & competencies / subtopics depending on college type
     try {
-      await runner.query(`
-        INSERT INTO "${schema}".departments (name, code, type, is_active)
-        SELECT * FROM (VALUES
-          ('Department of Physiology', 'PHY', 'PRE_CLINICAL', true),
-          ('Department of Anatomy', 'ANA', 'PRE_CLINICAL', true)
-        ) AS v(name, code, type, is_active)
-        WHERE NOT EXISTS (
-          SELECT 1 FROM "${schema}".departments d WHERE d.code = v.code
-        );
-      `).catch(() => {});
+      const isMedical = resolvedSlug.includes('ims') || resolvedSlug.includes('iahs') || resolvedSlug.includes('nursing');
 
-      await runner.query(`
-        INSERT INTO "${schema}".subjects (name, code, credits, type, is_active)
-        SELECT * FROM (VALUES
-          ('Human Physiology & Organ Systems', 'PHY101', 4, 'THEORY', true),
-          ('Human Anatomy & Histology', 'ANA101', 4, 'THEORY', true)
-        ) AS v(name, code, credits, type, is_active)
-        WHERE NOT EXISTS (
-          SELECT 1 FROM "${schema}".subjects s WHERE s.code = v.code
-        );
-      `).catch(() => {});
-
-      await runner.query(`
-        INSERT INTO "${schema}".batches (code, year, course_cd, is_active)
-        SELECT * FROM (VALUES
-          ('2023-MBBS', 2023, 'MBBS', true),
-          ('2025', 2025, 'MBBS', true)
-        ) AS v(code, year, course_cd, is_active)
-        WHERE NOT EXISTS (
-          SELECT 1 FROM "${schema}".batches b WHERE b.code = v.code
-        );
-      `).catch(() => {});
-
-      await runner.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS competencies_code_uidx ON "${schema}".competencies (code);
-      `).catch(() => {});
-
-      await runner.query(`
-        INSERT INTO "${schema}".competencies (code, description, domain, level, is_core, is_active) VALUES
-          ('PY2.1', 'Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-          ('PY2.5', 'Perform and interpret spirometry and pulmonary function tests in normal subjects', 'SKILL', 'PERFORMS', true, true),
-          ('PY3.1', 'Describe cardiac action potential, conduction system of heart and normal ECG waves', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-          ('PY4.2', 'Describe renal clearance and glomerular filtration rate measurement', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-          ('PY5.1', 'Describe synaptic transmission, neurotransmitters and receptor mechanisms', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-          ('AN1.1', 'Describe osteology of upper limb, clavicle, scapula and humerus attachments', 'KNOWLEDGE', 'KNOWS', true, true),
-          ('AN2.3', 'Describe brachial plexus formation, branches and clinical nerve injury syndromes', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-          ('AN10.1', 'Describe scapular region muscles, rotator cuff and shoulder abduction', 'KNOWLEDGE', 'KNOWS', true, true)
-        ON CONFLICT (code) DO UPDATE SET description = EXCLUDED.description;
-      `).catch(() => {});
-
-      const phyDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='PHY'`))[0]?.id;
-      const anaDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='ANA'`))[0]?.id;
-
-      const phySub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='PHY101'`))[0]?.id;
-      const anaSub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='ANA101'`))[0]?.id;
-
-      const mbbsBatch = (await runner.query(`SELECT id FROM "${schema}".batches WHERE code='2023-MBBS' OR code='2025' LIMIT 1`))[0]?.id;
-      
-      const sarahFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1001' OR name LIKE '%Sarah%' LIMIT 1`))[0]?.id;
-      const aparnaFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1002' OR name LIKE '%Aparna%' LIMIT 1`))[0]?.id;
-
-      // Ensure faculty department IDs are linked properly
-      if (sarahFacId && phyDept) {
-        await runner.query(`UPDATE "${schema}".faculty SET department_id = $1 WHERE id = $2`, [phyDept, sarahFacId]).catch(() => {});
-      }
-      if (aparnaFacId && anaDept) {
-        await runner.query(`UPDATE "${schema}".faculty SET department_id = $1 WHERE id = $2`, [anaDept, aparnaFacId]).catch(() => {});
-      }
-
-      // Purge unregistered or non-Anatomy/Physiology dummy slots
-      await runner.query(`
-        DELETE FROM "${schema}".timetable_slots 
-        WHERE subject_id NOT IN ($1, $2) OR faculty_id NOT IN ($3, $4) OR faculty_id IS NULL;
-      `, [phySub, anaSub, sarahFacId || '00000000-0000-0000-0000-000000000000', aparnaFacId || '00000000-0000-0000-0000-000000000000']).catch(() => {});
-
-      const countRes = await runner.query(`SELECT COUNT(*) as count FROM "${schema}".timetable_slots`);
-      if (parseInt(countRes[0]?.count || '0', 10) === 0 && mbbsBatch && phySub && anaSub && sarahFacId && aparnaFacId) {
+      if (isMedical) {
         await runner.query(`
-          INSERT INTO "${schema}".timetable_slots
-            (department_id, subject_id, batch_id, faculty_id, day_of_week, start_time, end_time, room, slot_type, topic, competency_codes)
-          VALUES
-            ($1, $2, $5, $3, 1, '09:00:00'::TIME, '10:00:00'::TIME, 'Lecture Hall 1', 'LECTURE', 'Excitation-Contraction Coupling in Muscle', 'PY2.1'),
-            ($1, $2, $5, $3, 1, '14:00:00'::TIME, '16:00:00'::TIME, 'Physiology Lab A', 'PRACTICAL', 'Spirometry & Pulmonary Function Tests', 'PY2.5'),
-            ($6, $7, $5, $4, 1, '10:00:00'::TIME, '11:00:00'::TIME, 'Dissection Hall 2', 'LECTURE', 'Upper Limb Osteology & Scapula Attachments', 'AN1.1'),
+          INSERT INTO "${schema}".departments (name, code, type, is_active)
+          SELECT * FROM (VALUES
+            ('Department of Physiology', 'PHY', 'PRE_CLINICAL', true),
+            ('Department of Anatomy', 'ANA', 'PRE_CLINICAL', true)
+          ) AS v(name, code, type, is_active)
+          WHERE NOT EXISTS (
+            SELECT 1 FROM "${schema}".departments d WHERE d.code = v.code
+          );
+        `).catch(() => {});
 
-            ($6, $7, $5, $4, 2, '09:00:00'::TIME, '10:00:00'::TIME, 'Dissection Hall 1', 'LECTURE', 'Brachial Plexus Anatomy & Nerve Lesions', 'AN2.3'),
-            ($1, $2, $5, $3, 2, '10:00:00'::TIME, '11:00:00'::TIME, 'Lecture Hall 1', 'LECTURE', 'Cardiac Action Potential & ECG Waves', 'PY3.1'),
+        await runner.query(`
+          INSERT INTO "${schema}".subjects (name, code, credits, type, is_active)
+          SELECT * FROM (VALUES
+            ('Human Physiology & Organ Systems', 'PHY101', 4, 'THEORY', true),
+            ('Human Anatomy & Histology', 'ANA101', 4, 'THEORY', true)
+          ) AS v(name, code, credits, type, is_active)
+          WHERE NOT EXISTS (
+            SELECT 1 FROM "${schema}".subjects s WHERE s.code = v.code
+          );
+        `).catch(() => {});
 
-            ($1, $2, $5, $3, 3, '10:00:00'::TIME, '11:00:00'::TIME, 'Lecture Hall 1', 'LECTURE', 'Renal Clearance & Glomerular Filtration', 'PY4.2'),
-            ($6, $7, $5, $4, 4, '10:00:00'::TIME, '11:00:00'::TIME, 'Dissection Hall 1', 'LECTURE', 'Scapular Region & Shoulder Abduction', 'AN10.1'),
-            ($1, $2, $5, $3, 5, '10:00:00'::TIME, '12:00:00'::TIME, 'Physiology Lab B', 'PRACTICAL', 'Synaptic Transmission & Neurotransmitters', 'PY5.1');
-        `, [
-          phyDept, phySub, sarahFacId, aparnaFacId, mbbsBatch,
-          anaDept, anaSub
-        ]);
+        await runner.query(`
+          INSERT INTO "${schema}".batches (code, year, course_cd, is_active)
+          SELECT * FROM (VALUES
+            ('2023-MBBS', 2023, 'MBBS', true),
+            ('2025', 2025, 'MBBS', true)
+          ) AS v(code, year, course_cd, is_active)
+          WHERE NOT EXISTS (
+            SELECT 1 FROM "${schema}".batches b WHERE b.code = v.code
+          );
+        `).catch(() => {});
+
+        await runner.query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS competencies_code_uidx ON "${schema}".competencies (code);
+        `).catch(() => {});
+
+        await runner.query(`
+          INSERT INTO "${schema}".competencies (code, description, domain, level, is_core, is_active) VALUES
+            ('PY2.1', 'Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
+            ('PY2.5', 'Perform and interpret spirometry and pulmonary function tests in normal subjects', 'SKILL', 'PERFORMS', true, true),
+            ('PY3.1', 'Describe cardiac action potential, conduction system of heart and normal ECG waves', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
+            ('PY4.2', 'Describe renal clearance and glomerular filtration rate measurement', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
+            ('PY5.1', 'Describe synaptic transmission, neurotransmitters and receptor mechanisms', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
+            ('AN1.1', 'Describe osteology of upper limb, clavicle, scapula and humerus attachments', 'KNOWLEDGE', 'KNOWS', true, true),
+            ('AN2.3', 'Describe brachial plexus formation, branches and clinical nerve injury syndromes', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
+            ('AN10.1', 'Describe scapular region muscles, rotator cuff and shoulder abduction', 'KNOWLEDGE', 'KNOWS', true, true)
+          ON CONFLICT (code) DO UPDATE SET description = EXCLUDED.description;
+        `).catch(() => {});
+
+        const phyDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='PHY'`))[0]?.id;
+        const anaDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='ANA'`))[0]?.id;
+
+        const phySub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='PHY101'`))[0]?.id;
+        const anaSub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='ANA101'`))[0]?.id;
+
+        const mbbsBatch = (await runner.query(`SELECT id FROM "${schema}".batches WHERE code='2023-MBBS' OR code='2025' LIMIT 1`))[0]?.id;
+        
+        const sarahFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1001' OR name LIKE '%Sarah%' LIMIT 1`))[0]?.id;
+        const aparnaFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1002' OR name LIKE '%Aparna%' LIMIT 1`))[0]?.id;
+
+        // Ensure faculty department IDs are linked properly
+        if (sarahFacId && phyDept) {
+          await runner.query(`UPDATE "${schema}".faculty SET department_id = $1 WHERE id = $2`, [phyDept, sarahFacId]).catch(() => {});
+        }
+        if (aparnaFacId && anaDept) {
+          await runner.query(`UPDATE "${schema}".faculty SET department_id = $1 WHERE id = $2`, [anaDept, aparnaFacId]).catch(() => {});
+        }
+
+        // Purge unregistered or non-Anatomy/Physiology dummy slots
+        await runner.query(`
+          DELETE FROM "${schema}".timetable_slots 
+          WHERE subject_id NOT IN ($1, $2) OR faculty_id NOT IN ($3, $4) OR faculty_id IS NULL;
+        `, [phySub, anaSub, sarahFacId || '00000000-0000-0000-0000-000000000000', aparnaFacId || '00000000-0000-0000-0000-000000000000']).catch(() => {});
+
+        const countRes = await runner.query(`SELECT COUNT(*) as count FROM "${schema}".timetable_slots`);
+        if (parseInt(countRes[0]?.count || '0', 10) === 0 && mbbsBatch && phySub && anaSub && sarahFacId && aparnaFacId) {
+          await runner.query(`
+            INSERT INTO "${schema}".timetable_slots
+              (department_id, subject_id, batch_id, faculty_id, day_of_week, start_time, end_time, room, slot_type, topic, competency_codes)
+            VALUES
+              ($1, $2, $5, $3, 1, '09:00:00'::TIME, '10:00:00'::TIME, 'Lecture Hall 1', 'LECTURE', 'Excitation-Contraction Coupling in Muscle', 'PY2.1'),
+              ($1, $2, $5, $3, 1, '14:00:00'::TIME, '16:00:00'::TIME, 'Physiology Lab A', 'PRACTICAL', 'Spirometry & Pulmonary Function Tests', 'PY2.5'),
+              ($6, $7, $5, $4, 1, '10:00:00'::TIME, '11:00:00'::TIME, 'Dissection Hall 2', 'LECTURE', 'Upper Limb Osteology & Scapula Attachments', 'AN1.1'),
+
+              ($6, $7, $5, $4, 2, '09:00:00'::TIME, '10:00:00'::TIME, 'Dissection Hall 1', 'LECTURE', 'Brachial Plexus Anatomy & Nerve Lesions', 'AN2.3'),
+              ($1, $2, $5, $3, 2, '10:00:00'::TIME, '11:00:00'::TIME, 'Lecture Hall 1', 'LECTURE', 'Cardiac Action Potential & ECG Waves', 'PY3.1'),
+
+              ($1, $2, $5, $3, 3, '10:00:00'::TIME, '11:00:00'::TIME, 'Lecture Hall 1', 'LECTURE', 'Renal Clearance & Glomerular Filtration', 'PY4.2'),
+              ($6, $7, $5, $4, 4, '10:00:00'::TIME, '11:00:00'::TIME, 'Dissection Hall 1', 'LECTURE', 'Scapular Region & Shoulder Abduction', 'AN10.1'),
+              ($1, $2, $5, $3, 5, '10:00:00'::TIME, '12:00:00'::TIME, 'Physiology Lab B', 'PRACTICAL', 'Synaptic Transmission & Neurotransmitters', 'PY5.1');
+          `, [
+            phyDept, phySub, sarahFacId, aparnaFacId, mbbsBatch,
+            anaDept, anaSub
+          ]);
+        }
+      } else {
+        // Engineering / Management schemas (SRMS CET, CETR, IBS, Law, etc.)
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS subjects_code_uq_idx ON "${schema}".subjects (code);`).catch(() => {});
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS units_code_uq_idx ON "${schema}".units (code);`).catch(() => {});
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS topics_code_uq_idx ON "${schema}".topics (code);`).catch(() => {});
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS competencies_code_uq_idx ON "${schema}".competencies (code);`).catch(() => {});
+
+        // Purge any accidental medical Anatomy/Physiology records from engineering schemas
+        await runner.query(`
+          DELETE FROM "${schema}".competencies 
+          WHERE code LIKE 'AN%' OR code LIKE 'PY1%' OR code LIKE 'PY2%' OR code LIKE 'PY3%' OR code LIKE 'PY4%' OR code LIKE 'PY5%'
+             OR description ILIKE '%osteology%' OR description ILIKE '%brachial%' OR description ILIKE '%scapular%';
+        `).catch(() => {});
+
+        await runner.query(`
+          DELETE FROM "${schema}".subjects 
+          WHERE code IN ('ANA101', 'PHY101') OR name ILIKE '%Human Anatomy%' OR name ILIKE '%Human Physiology%';
+        `).catch(() => {});
       }
     } catch (e) {
-      this.logger.error('Error seeding default timetable_slots:', e);
+      this.logger.error('Error seeding default timetable_slots/academic structures:', e);
     }
 
     this.logger.log(`Default data seeded for schema: ${schema}`);

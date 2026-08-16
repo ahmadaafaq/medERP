@@ -393,19 +393,45 @@ export default function AdminMasterPage() {
 
   useEffect(() => {
     const loadAll = async () => {
-      await fetchColleges();
+      let initialCollegeCode = '1';
+      try {
+        const res = await fetch(`${COLLEGE_API_BASE}/colleges`);
+        if (res.ok) {
+          const json = await res.json();
+          const list: College[] = json.data || json || [];
+          setColleges(list);
+
+          const savedSlug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant')) : null;
+          const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
+
+          const defaultCol = list.find(c =>
+            (savedSlug && (c.slug === savedSlug || c.id === savedSlug)) ||
+            (savedColgCd && (String((c as any).colg_cd) === savedColgCd || String(c.id) === savedColgCd || String(c.code) === savedColgCd)) ||
+            c.slug === 'srms-cet-bareilly' ||
+            String(c.code) === '1'
+          ) || list[0];
+
+          if (defaultCol) {
+            initialCollegeCode = defaultCol.code || defaultCol.id || defaultCol.slug;
+            setSelectedCollegeFilter(initialCollegeCode);
+          }
+        }
+      } catch (err) {
+        console.error('[AdminMaster] Error loading colleges:', err);
+      }
+
       await Promise.all([
         fetchCourses(),
-        fetchCategoryData('departments', 'all'),
-        fetchCategoryData('subjects', 'all'),
-        fetchCategoryData('professional-linkers', 'all'),
-        fetchCategoryData('units', 'all'),
-        fetchCategoryData('topics', 'all'),
-        fetchCategoryData('competencies', 'all'),
-        fetchCategoryData('delivery-types', 'all'),
-        fetchCategoryData('subject-offerings', 'all'),
-        fetchProfessionals('all'),
-        fetchBatches('all'),
+        fetchCategoryData('departments', initialCollegeCode),
+        fetchCategoryData('subjects', initialCollegeCode),
+        fetchCategoryData('professional-linkers', initialCollegeCode),
+        fetchCategoryData('units', initialCollegeCode),
+        fetchCategoryData('topics', initialCollegeCode),
+        fetchCategoryData('competencies', initialCollegeCode),
+        fetchCategoryData('delivery-types', initialCollegeCode),
+        fetchCategoryData('subject-offerings', initialCollegeCode),
+        fetchProfessionals(initialCollegeCode),
+        fetchBatches(initialCollegeCode),
       ]);
     };
     loadAll();
@@ -1128,7 +1154,7 @@ export default function AdminMasterPage() {
     { key: 'delivery-types', label: '5. Delivery Types', icon: '📖', count: deliveryTypes.length },
     { key: 'units', label: '6. Unit Master', icon: '📑', count: units.length },
     { key: 'topics', label: '7. Topic Master', icon: '📝', count: topics.length },
-    { key: 'competencies', label: '8. Competency Master', icon: '🎯', count: competencies.length },
+    { key: 'competencies', label: '8. Sub Topics', icon: '🎯', count: competencies.length },
   ];
 
   const getFilteredItemsList = () => {
@@ -1432,7 +1458,7 @@ export default function AdminMasterPage() {
               <div className="relative flex-1 min-w-[180px]">
                 <input
                   type="text"
-                  placeholder={`Search in ${activeTab}...`}
+                  placeholder={activeTab === 'competencies' ? 'Search in sub-topics...' : `Search in ${activeTab}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-8 pr-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#5B4BFF] transition-all"
@@ -1950,7 +1976,7 @@ export default function AdminMasterPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={9} className="p-8 text-center text-slate-500 font-medium">No competencies / sub-topics registered matching the selected filter. Click &apos;Add New&apos; to create.</td></tr>
+                        <tr><td colSpan={9} className="p-8 text-center text-slate-500 font-medium">No sub-topics registered matching the selected filter. Click &apos;Add New&apos; to create.</td></tr>
                       ) : (
                         paginatedList.map((c: any) => (
                           <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
