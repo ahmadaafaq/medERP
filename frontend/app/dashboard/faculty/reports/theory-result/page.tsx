@@ -182,6 +182,13 @@ interface ExamPaper {
 
 const API_BASE = 'http://localhost:3001/api/v1';
 
+const getInitialColgCd = (): string => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('colg_cd') || '1';
+  }
+  return '1';
+};
+
 const getInitialTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
     return (
@@ -207,8 +214,8 @@ export default function TheoryResultReportPage() {
 
   // ─── 1. Colleges State (Rule 1: colg_cd) ───────────────────────────────────
   const [colleges, setColleges] = useState<College[]>([]);
-  const [selectedColgCd, setSelectedColgCd] = useState<string>('1'); // '1' = CET, '2' = IMS
-  const [selectedCollegeSlug, setSelectedCollegeSlug] = useState<string>(getInitialTenantSlug());
+  const [selectedColgCd, setSelectedColgCd] = useState<string>(getInitialColgCd);
+  const [selectedCollegeSlug, setSelectedCollegeSlug] = useState<string>(getInitialTenantSlug);
 
   // ─── Step 1: 7-Level Cascading Hierarchy (RestrictAPI.md Standard) ─────────
   // Order: 1. College -> 2. Course -> 3. Branch -> 4. Batch -> 5. Semester -> 6. Department -> 7. Subject
@@ -261,7 +268,11 @@ export default function TheoryResultReportPage() {
         setColleges(list);
 
         const currentSlug = getInitialTenantSlug();
-        const found = list.find((c: College) => c.slug === currentSlug || String(c.code) === currentSlug || String(c.colg_cd) === currentSlug);
+        const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
+        const found = list.find((c: College) => 
+          (savedColgCd && String(c.colg_cd || c.code) === savedColgCd) ||
+          c.slug === currentSlug || String(c.code) === currentSlug || String(c.colg_cd) === currentSlug
+        );
         if (found) {
           setSelectedCollegeSlug(found.slug);
           setSelectedColgCd(String(found.colg_cd || found.code || '1'));
@@ -990,7 +1001,14 @@ export default function TheoryResultReportPage() {
                     const val = e.target.value;
                     setSelectedColgCd(val);
                     const found = colleges.find(c => String(c.colg_cd || c.code) === val);
-                    if (found) setSelectedCollegeSlug(found.slug);
+                    if (found) {
+                      setSelectedCollegeSlug(found.slug);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('colg_cd', val);
+                        localStorage.setItem('tenantSlug', found.slug);
+                        localStorage.setItem('selectedTenant', found.slug);
+                      }
+                    }
                   }}
                   className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                 >

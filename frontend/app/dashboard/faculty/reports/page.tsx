@@ -70,16 +70,16 @@ const getTenantSlug = (): string => {
       localStorage.getItem('selectedTenant') ||
       localStorage.getItem('institutionSlug') ||
       localStorage.getItem('tenant') ||
-      'srms-ims'
+      'srms-cet-bareilly'
     );
   }
-  return 'srms-ims';
+  return 'srms-cet-bareilly';
 };
 
 type TabType = 'daily' | 'subject_wise' | 'cumulative' | 'shortage';
 
 export default function FacultyMISReportsPage() {
-  const [deptName, setDeptName] = useState('Department of Physiology');
+  const [deptName, setDeptName] = useState('Department of Computer Applications');
   const [colleges, setColleges] = useState<College[]>([]);
   const [selectedTenantSlug, setSelectedTenantSlug] = useState<string>(getTenantSlug());
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -456,7 +456,16 @@ export default function FacultyMISReportsPage() {
                   <label className="block text-[11px] font-extrabold text-[#5B4BFF] uppercase mb-1">Target College *</label>
                   <select
                     value={selectedTenantSlug}
-                    onChange={(e) => setSelectedTenantSlug(e.target.value)}
+                    onChange={(e) => {
+                      const slug = e.target.value;
+                      setSelectedTenantSlug(slug);
+                      const found = colleges.find(c => c.slug === slug);
+                      if (found && typeof window !== 'undefined') {
+                        localStorage.setItem('tenantSlug', slug);
+                        localStorage.setItem('selectedTenant', slug);
+                        localStorage.setItem('colg_cd', String(found.code || '1'));
+                      }
+                    }}
                     className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#5B4BFF] font-black text-xs focus:ring-2 focus:ring-[#5B4BFF]"
                   >
                     {colleges.map(c => (
