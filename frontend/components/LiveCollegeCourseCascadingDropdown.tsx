@@ -49,14 +49,14 @@ export default function LiveCollegeCourseCascadingDropdown({
     setCollegesLoading(true);
     setCollegesError(null);
     try {
-      // First try Next.js server proxy route (avoids browser CORS)
+      // 1. Next.js server proxy route (handles SSL and bypass)
       let res = await fetch('/api/srms/colleges', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       }).catch(() => null);
 
-      // Fallback 1: Backend live endpoint
+      // Fallback: Backend live endpoint
       if (!res || !res.ok) {
         res = await fetch('http://localhost:3001/api/v1/college-master/live/colleges', {
           method: 'POST',
@@ -64,17 +64,8 @@ export default function LiveCollegeCourseCascadingDropdown({
         }).catch(() => null);
       }
 
-      // Fallback 2: Direct portal API
       if (!res || !res.ok) {
-        res = await fetch('https://myportal.srms.ac.in/SRMSERP/Home/GetCollege', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-      }
-
-      if (!res.ok) {
-        throw new Error(`Failed to load colleges (HTTP ${res.status})`);
+        throw new Error(`Failed to load colleges`);
       }
 
       const data = await res.json();
@@ -110,14 +101,14 @@ export default function LiveCollegeCourseCascadingDropdown({
     if (onCourseSelect) onCourseSelect(null);
 
     try {
-      // First try Next.js server proxy route
+      // 1. Next.js server proxy route
       let res = await fetch('/api/srms/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ colgcd: colgCd }),
       }).catch(() => null);
 
-      // Fallback 1: Backend live proxy
+      // Fallback: Backend live proxy
       if (!res || !res.ok) {
         res = await fetch(`http://localhost:3001/api/v1/college-master/live/courses?colgcd=${colgCd}`, {
           method: 'POST',
@@ -125,17 +116,8 @@ export default function LiveCollegeCourseCascadingDropdown({
         }).catch(() => null);
       }
 
-      // Fallback 2: Direct portal endpoint
       if (!res || !res.ok) {
-        res = await fetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetCourse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ colgcd: colgCd }),
-        });
-      }
-
-      if (!res.ok) {
-        throw new Error(`Failed to load courses (HTTP ${res.status})`);
+        throw new Error(`Failed to load courses`);
       }
 
       const data = await res.json();

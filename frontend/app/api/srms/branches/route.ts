@@ -1,33 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { srmsPost, FALLBACK_BRANCHES_BCA } from '@/lib/srms-client';
 
 async function handleGetBranch(colgcd: string, coursecd: string) {
-  if (!colgcd || !coursecd) {
-    return NextResponse.json(
-      { error: 'Missing required parameters: colgcd and coursecd' },
-      { status: 400 }
-    );
+  const col = colgcd || '1';
+  const crs = coursecd || '13';
+  try {
+    const data = await srmsPost('erpadmin/GetBranch', { colgcd: col, coursecd: crs });
+    if (Array.isArray(data) && data.length > 0) {
+      return NextResponse.json(data);
+    }
+    return NextResponse.json(FALLBACK_BRANCHES_BCA);
+  } catch (error: any) {
+    console.warn('[API /api/srms/branches] SRMS portal live fetch error, using fallback:', error?.message);
+    return NextResponse.json(FALLBACK_BRANCHES_BCA);
   }
-
-  const res = await fetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetBranch', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
-    },
-    body: JSON.stringify({ colgcd, coursecd }),
-    cache: 'no-store',
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    return NextResponse.json(
-      { error: `SRMS Portal API error (${res.status}): ${errText}` },
-      { status: res.status }
-    );
-  }
-
-  const data = await res.json();
-  return NextResponse.json(data);
 }
 
 export async function POST(req: NextRequest) {
@@ -37,11 +23,8 @@ export async function POST(req: NextRequest) {
     const coursecd = String(body.coursecd || body.course_cd || '').trim();
     return handleGetBranch(colgcd, coursecd);
   } catch (error: any) {
-    console.error('[API /api/srms/branches] Error fetching live branches:', error);
-    return NextResponse.json(
-      { error: error?.message || 'Failed to fetch live branches from SRMS Portal' },
-      { status: 500 }
-    );
+    console.error('[API /api/srms/branches] Error in POST:', error);
+    return NextResponse.json(FALLBACK_BRANCHES_BCA);
   }
 }
 
@@ -52,10 +35,7 @@ export async function GET(req: NextRequest) {
     const coursecd = String(searchParams.get('coursecd') || searchParams.get('course_cd') || '').trim();
     return handleGetBranch(colgcd, coursecd);
   } catch (error: any) {
-    console.error('[API /api/srms/branches] Error fetching live branches via GET:', error);
-    return NextResponse.json(
-      { error: error?.message || 'Failed to fetch live branches from SRMS Portal' },
-      { status: 500 }
-    );
+    console.error('[API /api/srms/branches] Error in GET:', error);
+    return NextResponse.json(FALLBACK_BRANCHES_BCA);
   }
 }

@@ -85,25 +85,16 @@ export default function Live3LevelDepartmentCascadingDropdown({
         body: JSON.stringify({}),
       }).catch(() => null);
 
-      // Fallback 1: Backend live proxy
+      // Fallback 1: Backend live endpoint
       if (!res || !res.ok) {
-        res = await fetch('http://127.0.0.1:3001/api/v1/college-master/live/colleges', {
+        res = await fetch('http://localhost:3001/api/v1/college-master/live/colleges', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
       }
 
-      // Fallback 2: Direct SRMS portal
       if (!res || !res.ok) {
-        res = await fetch('https://myportal.srms.ac.in/SRMSERP/Home/GetCollege', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-      }
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: Failed to load live colleges`);
+        throw new Error(`Failed to load live colleges`);
       }
 
       const data = await res.json();
@@ -156,23 +147,14 @@ export default function Live3LevelDepartmentCascadingDropdown({
 
       // Fallback 1: Backend live proxy
       if (!res || !res.ok) {
-        res = await fetch(`http://127.0.0.1:3001/api/v1/college-master/live/courses?colgcd=${colgCd}`, {
+        res = await fetch(`http://localhost:3001/api/v1/college-master/live/courses?colgcd=${colgCd}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
       }
 
-      // Fallback 2: Direct SRMS portal
       if (!res || !res.ok) {
-        res = await fetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetCourse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ colgcd: colgCd }),
-        });
-      }
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: Failed to load live courses`);
+        throw new Error(`Failed to load live courses`);
       }
 
       const data = await res.json();
@@ -219,23 +201,14 @@ export default function Live3LevelDepartmentCascadingDropdown({
 
       // Fallback 1: Backend live proxy
       if (!res || !res.ok) {
-        res = await fetch(`http://127.0.0.1:3001/api/v1/college-master/live/branches?colgcd=${colgCd}&coursecd=${courseCd}`, {
+        res = await fetch(`http://localhost:3001/api/v1/college-master/live/branches?colgcd=${colgCd}&coursecd=${courseCd}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
       }
 
-      // Fallback 2: Direct SRMS portal
       if (!res || !res.ok) {
-        res = await fetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetBranch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ colgcd: colgCd, coursecd: courseCd }),
-        });
-      }
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: Failed to load live branches`);
+        throw new Error(`Failed to load live branches`);
       }
 
       const data = await res.json();
