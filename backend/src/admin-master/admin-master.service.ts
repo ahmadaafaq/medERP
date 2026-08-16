@@ -1167,11 +1167,33 @@ export class AdminMasterService {
 
   // ─── 6. DELIVERY TYPES ─────────────────────────────────────────────────────
   async listDeliveryTypes(tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
-    return this.tenantSchemaService.queryInTenant(
-      slug,
-      `SELECT * FROM delivery_types ORDER BY code ASC`,
-    );
+    const colleges = await this.listColleges();
+
+    if (tenantSlug && tenantSlug !== 'all') {
+      const slug = await this.resolveTenantSlug(tenantSlug);
+      return this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT DISTINCT ON (code) * FROM delivery_types ORDER BY code ASC`,
+      ).catch(() => []);
+    }
+
+    // tenant === 'all' or default
+    const allItems: any[] = [];
+    const seen = new Set<string>();
+    for (const col of colleges) {
+      if (!col.slug) continue;
+      const rows = await this.tenantSchemaService.queryInTenant(
+        col.slug,
+        `SELECT DISTINCT ON (code) * FROM delivery_types ORDER BY code ASC`,
+      ).catch(() => []);
+      for (const r of rows) {
+        if (!seen.has(r.code)) {
+          seen.add(r.code);
+          allItems.push(r);
+        }
+      }
+    }
+    return allItems;
   }
 
   async createDeliveryType(dto: CreateDeliveryTypeDto, tenantSlug?: string) {

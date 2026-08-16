@@ -483,7 +483,11 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      await this.seedDefaultData(runner, slug);
+      try {
+        await this.seedDefaultData(runner, slug);
+      } catch (seedErr) {
+        this.logger.warn(`Non-fatal warning in seedDefaultData for ${slug}: ${seedErr.message}`);
+      }
     } catch (err) {
       this.logger.error(`Failed to ensure latest schema for ${slug}:`, err);
       throw err;
@@ -1350,26 +1354,40 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     `);
 
     // Seed default leave types
-    await runner.query(`
-      INSERT INTO "${schema}".leave_types (code, name, max_days_per_year) VALUES
-        ('CL',  'Casual Leave',          12),
-        ('SL',  'Sick Leave',            10),
-        ('EL',  'Earned Leave',          30),
-        ('ML',  'Maternity Leave',       180),
-        ('COL', 'Compensatory Off Leave', 0)
-      ON CONFLICT DO NOTHING
-    `);
+    try {
+      await runner.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS leave_types_code_uq_idx ON "${schema}".leave_types (code);
+      `).catch(() => {});
+      const existingLT = await runner.query(`SELECT id FROM "${schema}".leave_types LIMIT 1`).catch(() => []);
+      if (existingLT.length === 0) {
+        await runner.query(`
+          INSERT INTO "${schema}".leave_types (code, name, max_days_per_year) VALUES
+            ('CL',  'Casual Leave',          12),
+            ('SL',  'Sick Leave',            10),
+            ('EL',  'Earned Leave',          30),
+            ('ML',  'Maternity Leave',       180),
+            ('COL', 'Compensatory Off Leave', 0);
+        `).catch(() => {});
+      }
+    } catch (e) {}
 
     // Seed default delivery types
-    await runner.query(`
-      INSERT INTO "${schema}".delivery_types (code, name) VALUES
-        ('TH',  'Theory'),
-        ('PR',  'Practical'),
-        ('AE',  'AETCOM'),
-        ('PD',  'Pandemic Module'),
-        ('CP',  'Clinical Posting')
-      ON CONFLICT (code) DO NOTHING
-    `);
+    try {
+      await runner.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS delivery_types_code_uq_idx ON "${schema}".delivery_types (code);
+      `).catch(() => {});
+      const existingDT = await runner.query(`SELECT id FROM "${schema}".delivery_types LIMIT 1`).catch(() => []);
+      if (existingDT.length === 0) {
+        await runner.query(`
+          INSERT INTO "${schema}".delivery_types (code, name) VALUES
+            ('TH',  'Theory'),
+            ('PR',  'Practical'),
+            ('AE',  'AETCOM'),
+            ('PD',  'Pandemic Module'),
+            ('CP',  'Clinical Posting');
+        `).catch(() => {});
+      }
+    } catch (e) {}
 
     // ── Seed Default Authentic Users (Admin, Clerk, Faculty, Student, Warden) ──
     const defaultPasswordHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.'; // Default password hash for 'Password@123' / 'admin@123' / '1234'
