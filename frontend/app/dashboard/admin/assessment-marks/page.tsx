@@ -335,25 +335,37 @@ export default function AdminAssessmentMarksPage() {
         setAllSubjects(sList);
       }
 
-      // 6. Exam Papers
+      // 6. Exam Papers - dedupe by id, filter out test papers
       if (pRes && pRes.ok) {
         const pList = parse(await pRes.json());
-        const mappedPapers: ExamPaper[] = pList.map((p: any) => ({
-          id: p.id,
-          code: p.code || 'EXAM-PAPER',
-          name: p.name || 'Examination Paper',
-          max_marks: Number(p.max_marks || 100),
-          passing_marks: Number(p.passing_marks || 40),
-          duration_minutes: Number(p.duration_minutes || p.duration_mins || 60),
-          sections_count: Array.isArray(p.sections) ? p.sections.length : 1,
-          type: p.type || 'THEORY_PRACTICAL',
-          status: p.status || 'Active',
-          subject_id: p.subject_id,
-          subject_code: p.subject_code || p.subject_cd,
-          batch_id: p.batch_id,
-          batch_code: p.batch_code || p.batch_cd,
-          sections: Array.isArray(p.sections) ? p.sections : [],
-        }));
+        const seen = new Set<string>();
+        const mappedPapers: ExamPaper[] = pList
+          .filter((p: any) => {
+            // Skip test/placeholder papers
+            const code = (p.code || '').toUpperCase();
+            if (code === 'EXAM-PAPER' || code === 'TEST' || code === 'DUMMY') return false;
+            // Deduplicate by id
+            if (seen.has(p.id)) return false;
+            seen.add(p.id);
+            return true;
+          })
+          .map((p: any) => ({
+            id: p.id,
+            code: p.code || 'PAPER',
+            name: p.name || 'Examination Paper',
+            max_marks: Number(p.max_marks || 100),
+            passing_marks: Number(p.passing_marks || 40),
+            duration_minutes: Number(p.duration_minutes || p.duration_mins || 60),
+            sections_count: Array.isArray(p.sections) ? p.sections.length : 1,
+            type: p.type || 'THEORY_PRACTICAL',
+            status: p.status || 'Active',
+            subject_id: p.subject_id,
+            subject_code: p.subject_code || p.subject_cd,
+            batch_id: p.batch_id,
+            batch_code: p.batch_code || p.batch_cd,
+            semester: p.semester ? String(p.semester) : null,
+            sections: Array.isArray(p.sections) ? p.sections : [],
+          }));
         setAllFetchedPapers(mappedPapers);
         if (mappedPapers.length > 0) {
           setSelectedPaperCode(mappedPapers[0].code);
@@ -405,16 +417,20 @@ export default function AdminAssessmentMarksPage() {
       if (isMedicalCollege) {
         return b.name.includes('Department of') || b.code === 'ANA' || b.code === 'PHY';
       }
-      // CET branches: Exclude medical departments
       const isMed = b.code === 'ANA' || b.code === 'PHY' || b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology');
       if (isMed) return false;
-
       if (!selectedCourseCd) return true;
-      return String(b.course_cd) === String(selectedCourseCd) || (b.course_name && b.course_name.toLowerCase().includes(selectedCourseCd.toLowerCase()));
+      // First try exact match by course_cd
+      return String(b.course_cd) === String(selectedCourseCd);
     });
-
-    const base = list.length > 0 ? list : [{ branch_cd: '1', code: '1', name: 'General Branch (1)' }];
-    return dedupeBy(base, b => String(b.branch_cd || b.code || b.id));
+    // Fallback: show all non-medical if no course-specific ones found
+    const nonMed = branches.filter(b => {
+      const isMed = b.code === 'ANA' || b.code === 'PHY' || b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology');
+      return !isMed;
+    });
+    const base = list.length > 0 ? list : (nonMed.length > 0 ? nonMed : [{ branch_cd: '1', code: '1', name: 'General Branch (1)' }]);
+    // Composite key: branch_cd + course_cd so BCA(1) and CSE(1) coexist
+    return dedupeBy(base, b => `${b.branch_cd || b.code || b.id}|${(b as any).course_cd || ''}`);
   }, [branches, selectedCourseCd, isMedicalCollege]);
 
   useEffect(() => {
@@ -499,25 +515,34 @@ export default function AdminAssessmentMarksPage() {
     }
   }, [filteredSubjects, selectedSubjectCd]);
 
-  // ─── Filtered Exam Papers for Subject ──────────────────────────────────────
+  // ─── Filtered Exam Papers for Subject & Semester ───────────────────────────
   const filteredPapers = useMemo(() => {
     if (allFetchedPapers.length === 0) return [];
-    if (!selectedSubjectCd) return allFetchedPapers;
 
     const selSubjObj = allSubjects.find(s => s.code === selectedSubjectCd || String(s.subject_cd) === selectedSubjectCd);
     const subjCode = selSubjObj?.code?.toLowerCase() || selectedSubjectCd.toLowerCase();
     const subjName = selSubjObj?.name?.toLowerCase() || '';
 
-    const matched = allFetchedPapers.filter(p => {
+    // Step 1: Filter by subject (if available)
+    let matched = allFetchedPapers.filter(p => {
+      if (!p.subject_code && !selectedSubjectCd) return true;
       if (p.subject_code && p.subject_code.toLowerCase() === subjCode) return true;
       const pCode = p.code.toLowerCase();
       const pName = p.name.toLowerCase();
-      if (subjCode && (pCode.includes(subjCode) || pName.includes(subjName))) return true;
+      if (subjCode && (pCode.includes(subjCode) || (subjName && pName.includes(subjName)))) return true;
       return false;
     });
 
+    // Step 2: Filter by semester (if paper has semester metadata)
+    if (selectedSemCd) {
+      const semFiltered = matched.filter(p => !(p as any).semester || String((p as any).semester) === String(selectedSemCd));
+      // Only apply semester filter if it still leaves some papers
+      if (semFiltered.length > 0) matched = semFiltered;
+    }
+
+    // Step 3: Fallback to all papers if no subject match
     return matched.length > 0 ? matched : allFetchedPapers;
-  }, [allFetchedPapers, selectedSubjectCd, allSubjects]);
+  }, [allFetchedPapers, selectedSubjectCd, selectedSemCd, allSubjects]);
 
   const activePaper = useMemo(() => {
     return filteredPapers.find(p => p.code === selectedPaperCode) || filteredPapers[0] || allFetchedPapers[0] || null;
@@ -565,7 +590,16 @@ export default function AdminAssessmentMarksPage() {
       const passingMarks = activePaper?.passing_marks || (maxPaperMarks * 0.4);
 
       if (rawStudents.length > 0) {
-        const mapped: StudentRow[] = rawStudents.map((st: any, idx: number) => {
+        // Deduplicate students by rollno + registration_no to prevent duplicate rows
+        const seenStudents = new Set<string>();
+        const dedupedStudents = rawStudents.filter((st: any) => {
+          const key = st.rollno || st.registration_no || st.id;
+          if (!key || seenStudents.has(key)) return false;
+          seenStudents.add(key);
+          return true;
+        });
+
+        const mapped: StudentRow[] = dedupedStudents.map((st: any, idx: number) => {
           const studentRoll = st.rollno || st.registration_no || `ST-${idx + 1}`;
           const studentReg = st.registration_no || st.rollno || studentRoll;
 
@@ -605,7 +639,9 @@ export default function AdminAssessmentMarksPage() {
 
         setStudents(mapped);
         if (mapped.length > 0 && !selectedStudentRollno) {
-          setSelectedStudentRollno(mapped[0].rollno);
+          // Auto-select first pending (non-evaluated) student
+          const firstPending = mapped.find(s => !s.evaluated);
+          setSelectedStudentRollno(firstPending?.rollno || mapped[0].rollno);
         }
       }
     } catch (e) {
@@ -1152,14 +1188,21 @@ export default function AdminAssessmentMarksPage() {
                 <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
                   {filteredStudents.map((st) => {
                     const isSelected = st.rollno === selectedStudentRollno;
+                    const isCompleted = st.evaluated;
                     return (
                       <div
                         key={st.rollno || st.id}
-                        onClick={() => handleSelectStudent(st.rollno)}
-                        className={`p-3.5 rounded-xl cursor-pointer transition-all duration-150 border flex items-center justify-between ${
-                          isSelected
-                            ? 'bg-[#5B4BFF] border-[#5B4BFF] text-white shadow-md'
-                            : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-slate-400 text-slate-700 dark:text-slate-300'
+                        onClick={() => {
+                          // Completed/evaluated students cannot be re-selected for editing
+                          if (!isCompleted) handleSelectStudent(st.rollno);
+                        }}
+                        title={isCompleted ? 'Already evaluated — view only' : 'Click to evaluate'}
+                        className={`p-3.5 rounded-xl transition-all duration-150 border flex items-center justify-between ${
+                          isCompleted
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 cursor-not-allowed opacity-80'
+                            : isSelected
+                              ? 'bg-[#5B4BFF] border-[#5B4BFF] text-white shadow-md cursor-pointer'
+                              : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-slate-400 text-slate-700 dark:text-slate-300 cursor-pointer'
                         }`}
                       >
                         <div className="flex items-center gap-3">
