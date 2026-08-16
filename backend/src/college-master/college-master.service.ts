@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import * as https from 'https';
 import { TenantSchemaService } from '../database/tenant-schema.service';
 import {
   CreateCollegeDto, UpdateCollegeDto,
@@ -30,6 +31,47 @@ const FALLBACK_SRMS_COLLEGES = [
   { colg_cd: '13', colg_name: 'SRMS QUIZ PANEL' },
   { colg_cd: '14', colg_name: 'SRMS CRICKET ACADEMY' },
 ];
+
+/**
+ * SRMS portal (myportal.srms.ac.in) uses an expired SSL certificate.
+ * srmsFetch() wraps the Node global fetch with an https.Agent that
+ * bypasses certificate expiry for this specific external host only.
+ */
+const _srmsAgent = new https.Agent({ rejectUnauthorized: false });
+async function srmsFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, ...((_srmsAgent as any) ? { dispatcher: undefined } : {}), } as any).catch(() => {
+    // Fallback: use node https module directly to handle expired cert
+    return new Promise<Response>((resolve, reject) => {
+      const urlObj = new URL(url);
+      const postData = (init.body as string) || '';
+      const options = {
+        hostname: urlObj.hostname,
+        port: 443,
+        path: urlObj.pathname + urlObj.search,
+        method: (init.method || 'POST').toUpperCase(),
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+          ...((init.headers as Record<string, string>) || {}),
+        },
+        rejectUnauthorized: false,
+      };
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          resolve(new Response(data, {
+            status: res.statusCode || 200,
+            headers: res.headers as any,
+          }));
+        });
+      });
+      req.on('error', reject);
+      if (postData) req.write(postData);
+      req.end();
+    });
+  });
+}
 
 function parseDotNetDate(dateStr: any): string | null {
   if (!dateStr) return null;
@@ -201,7 +243,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000);
-      const res = await fetch('https://myportal.srms.ac.in/SRMSERP/Home/GetCollege', {
+      const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/Home/GetCollege', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
@@ -266,7 +308,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   async fetchLiveColleges(): Promise<any[]> {
-    const res = await fetch('https://myportal.srms.ac.in/SRMSERP/Home/GetCollege', {
+    const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/Home/GetCollege', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
@@ -278,7 +320,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   async fetchLiveCourses(colgcd: string): Promise<any[]> {
-    const res = await fetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetCourse', {
+    const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetCourse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ colgcd: String(colgcd).trim() }),
@@ -291,7 +333,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   async fetchLiveBranches(colgcd: string, coursecd: string): Promise<any[]> {
-    const res = await fetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetBranch', {
+    const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetBranch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ colgcd: String(colgcd).trim(), coursecd: String(coursecd).trim() }),
@@ -304,7 +346,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   async fetchLiveBatches(colgcd: string, coursecd: string): Promise<any[]> {
-    const res = await fetch('https://myportal.srms.ac.in/SRMSERP/OnlineAttend/GetBatch', {
+    const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/OnlineAttend/GetBatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ colgcd: String(colgcd).trim(), coursecd: String(coursecd).trim() }),
@@ -484,7 +526,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 6000);
-          const res = await fetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetCourse', {
+          const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetCourse', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ colgcd: cd }),
@@ -853,7 +895,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 6000);
-          const res = await fetch('https://myportal.srms.ac.in/SRMSERP/OnlineAttend/GetBatch', {
+          const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/OnlineAttend/GetBatch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ colgcd: cd, coursecd: crs.course_cd }),
@@ -1154,7 +1196,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 6000);
-          const res = await fetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetBranch', {
+          const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetBranch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ colgcd: cd, coursecd: crs.course_cd }),
