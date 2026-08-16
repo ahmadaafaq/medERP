@@ -25,8 +25,14 @@ export class AdminMasterService {
     private readonly tenantSchemaService: TenantSchemaService,
   ) {}
 
+  private isUUID(str: string): boolean {
+    if (!str || typeof str !== 'string') return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  }
+
   private async resolveTenantSlug(tenantSlugOrId?: string): Promise<string> {
-    if (!tenantSlugOrId || tenantSlugOrId === 'all') return 'srms-ims';
+    if (!tenantSlugOrId) return 'srms-ims';
+    if (tenantSlugOrId === 'all') return 'all';
     const clean = String(tenantSlugOrId).trim().toLowerCase();
     if (clean === 'srms') return 'srms-ims';
     try {
@@ -1470,19 +1476,59 @@ export class AdminMasterService {
   // ─── 8. FACULTY SUBJECT LINKER ─────────────────────────────────────────────
   async listFacultySubjects(query: { facultyId?: string; subjectId?: string; departmentId?: string }, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
+    const colleges = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+
+    if (slug === 'all') {
+      const allLinks: any[] = [];
+      for (const col of colleges) {
+        if (!col.slug) continue;
+        const s = `tenant_${col.slug}`;
+        try {
+          const rows = await this.ds.query(
+            `SELECT fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
+                    f.name AS faculty_name, f.emp_id AS faculty_code, f.designation AS faculty_designation,
+                    fd.name AS faculty_department_name, fd.code AS faculty_department_code,
+                    s.name AS subject_name, s.code AS subject_code,
+                    sd.name AS subject_department_name, sd.code AS subject_department_code
+             FROM "${s}".faculty_subjects fs
+             JOIN "${s}".faculty f ON f.id = fs.faculty_id
+             LEFT JOIN "${s}".departments fd ON (fd.id = f.department_id OR fd.code = f.department_id::text)
+             JOIN "${s}".subjects s ON s.id = fs.subject_id
+             LEFT JOIN "${s}".departments sd ON (sd.id = s.department_id OR sd.code = s.department_id::text)
+             WHERE fs.is_active = true
+             ORDER BY fs.created_at DESC`
+          );
+          rows.forEach((r: any) => {
+            allLinks.push({
+              ...r,
+              college_id: col.id,
+              college_name: col.name,
+              college_code: col.code,
+              college_slug: col.slug,
+            });
+          });
+        } catch (e) {}
+      }
+      return allLinks;
+    }
+
+    const currentCollege = colleges.find((c: any) => c.slug === slug || c.id === slug || c.code === slug);
+    const targetSlug = currentCollege?.slug || slug;
+    const s = `tenant_${targetSlug}`;
+
     const params: any[] = [];
     let sql = `
       SELECT fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
              f.name AS faculty_name, f.emp_id AS faculty_code, f.designation AS faculty_designation,
-             fd.name AS faculty_department_name,
+             fd.name AS faculty_department_name, fd.code AS faculty_department_code,
              s.name AS subject_name, s.code AS subject_code,
-             sd.name AS subject_department_name
-      FROM faculty_subjects fs
-      JOIN faculty f ON f.id = fs.faculty_id
-      LEFT JOIN departments fd ON fd.id = f.department_id
-      JOIN subjects s ON s.id = fs.subject_id
-      LEFT JOIN departments sd ON sd.id = s.department_id
-      WHERE 1=1
+             sd.name AS subject_department_name, sd.code AS subject_department_code
+      FROM "${s}".faculty_subjects fs
+      JOIN "${s}".faculty f ON f.id = fs.faculty_id
+      LEFT JOIN "${s}".departments fd ON (fd.id = f.department_id OR fd.code = f.department_id::text)
+      JOIN "${s}".subjects s ON s.id = fs.subject_id
+      LEFT JOIN "${s}".departments sd ON (sd.id = s.department_id OR sd.code = s.department_id::text)
+      WHERE fs.is_active = true
     `;
     if (query?.facultyId) {
       params.push(query.facultyId);
@@ -1494,45 +1540,119 @@ export class AdminMasterService {
     }
     if (query?.departmentId) {
       params.push(query.departmentId);
-      sql += ` AND (f.department_id = $${params.length} OR s.department_id = $${params.length})`;
+      sql += ` AND (f.department_id = $${params.length} OR s.department_id = $${params.length} OR fd.code = $${params.length} OR sd.code = $${params.length})`;
     }
     sql += ` ORDER BY fs.created_at DESC`;
-    return this.tenantSchemaService.queryInTenant(slug, sql, params);
+    const rows = await this.ds.query(sql, params).catch(() => []);
+    return rows.map((r: any) => ({
+      ...r,
+      college_id: currentCollege?.id,
+      college_name: currentCollege?.name,
+      college_code: currentCollege?.code,
+      college_slug: currentCollege?.slug || targetSlug,
+    }));
   }
 
   async linkFacultySubject(dto: LinkFacultySubjectDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
-    const rows = await this.tenantSchemaService.queryInTenant(
-      slug,
-      `INSERT INTO faculty_subjects (faculty_id, subject_id)
-       VALUES ($1, $2)
+    const colleges = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+    const currentCollege = colleges.find((c: any) => c.slug === slug || c.id === slug || c.code === slug);
+    const targetSlug = currentCollege?.slug || (slug === 'all' ? 'srms-cet-bareilly' : slug);
+    const schema = `tenant_${targetSlug}`;
+
+    // Resolve Faculty UUID
+    let facId = dto.facultyId;
+    if (!this.isUUID(facId)) {
+      const fRows = await this.ds.query(
+        `SELECT id FROM "${schema}".faculty WHERE emp_id = $1 OR id::text = $1 LIMIT 1`,
+        [dto.facultyId],
+      ).catch(() => []);
+      if (fRows.length) facId = fRows[0].id;
+    }
+
+    // Resolve Subject UUID
+    let subId = dto.subjectId;
+    if (!this.isUUID(subId)) {
+      const sRows = await this.ds.query(
+        `SELECT id FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
+        [dto.subjectId],
+      ).catch(() => []);
+      if (sRows.length) subId = sRows[0].id;
+    }
+
+    const rows = await this.ds.query(
+      `INSERT INTO "${schema}".faculty_subjects (faculty_id, subject_id, is_active)
+       VALUES ($1, $2, true)
        ON CONFLICT (faculty_id, subject_id) DO UPDATE SET is_active = true
        RETURNING *`,
-      [dto.facultyId, dto.subjectId]
+      [facId, subId]
     );
     return rows[0];
   }
 
   async updateFacultySubject(id: string, dto: LinkFacultySubjectDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
-    const rows = await this.tenantSchemaService.queryInTenant(
-      slug,
-      `UPDATE faculty_subjects
-       SET faculty_id = $1, subject_id = $2
+    const colleges = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+    const currentCollege = colleges.find((c: any) => c.slug === slug || c.id === slug || c.code === slug);
+    const targetSlug = currentCollege?.slug || (slug === 'all' ? 'srms-cet-bareilly' : slug);
+    const schema = `tenant_${targetSlug}`;
+
+    // Resolve Faculty UUID
+    let facId = dto.facultyId;
+    if (!this.isUUID(facId)) {
+      const fRows = await this.ds.query(
+        `SELECT id FROM "${schema}".faculty WHERE emp_id = $1 OR id::text = $1 LIMIT 1`,
+        [dto.facultyId],
+      ).catch(() => []);
+      if (fRows.length) facId = fRows[0].id;
+    }
+
+    // Resolve Subject UUID
+    let subId = dto.subjectId;
+    if (!this.isUUID(subId)) {
+      const sRows = await this.ds.query(
+        `SELECT id FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
+        [dto.subjectId],
+      ).catch(() => []);
+      if (sRows.length) subId = sRows[0].id;
+    }
+
+    const rows = await this.ds.query(
+      `UPDATE "${schema}".faculty_subjects
+       SET faculty_id = $1, subject_id = $2, is_active = true
        WHERE id = $3
        RETURNING *`,
-      [dto.facultyId, dto.subjectId, id]
+      [facId, subId, id]
     );
     return rows[0];
   }
 
   async unlinkFacultySubject(id: string, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
-    await this.tenantSchemaService.queryInTenant(
-      slug,
-      `DELETE FROM faculty_subjects WHERE id = $1`,
+    const colleges = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+
+    if (slug === 'all' || !slug) {
+      for (const col of colleges) {
+        if (!col.slug) continue;
+        const s = `tenant_${col.slug}`;
+        try {
+          const res = await this.ds.query(`DELETE FROM "${s}".faculty_subjects WHERE id = $1 RETURNING id`, [id]);
+          if (res.length > 0) {
+            return { success: true, message: 'Faculty subject link removed successfully' };
+          }
+        } catch (e) {}
+      }
+      return { success: true, message: 'Faculty subject link removed successfully' };
+    }
+
+    const currentCollege = colleges.find((c: any) => c.slug === slug || c.id === slug || c.code === slug);
+    const targetSlug = currentCollege?.slug || slug;
+    const schema = `tenant_${targetSlug}`;
+
+    await this.ds.query(
+      `DELETE FROM "${schema}".faculty_subjects WHERE id = $1`,
       [id],
-    );
+    ).catch(() => {});
     return { success: true, message: 'Faculty subject link removed successfully' };
   }
 

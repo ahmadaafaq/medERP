@@ -73,11 +73,25 @@ export class SubmitResultDto {
   practicalMark?: number;
 
   @IsOptional()
+  @IsString()
   rollno?: string;
 
   @IsOptional()
+  @IsString()
+  registrationNo?: string;
+
+  @IsOptional()
+  @IsString()
+  paperCode?: string;
+
+  @IsOptional()
+  @IsString()
   studentName?: string;
+
+  @IsOptional()
+  isPass?: boolean;
 }
+
 
 export class CreateQuestionDto {
   @IsString()

@@ -20,7 +20,12 @@ export const TenantId = createParamDecorator(
 export const TenantSlug = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): string => {
     const request = ctx.switchToHttp().getRequest();
-    return request.tenant?.slug || 'srms';
+    return (
+      (request.query?.tenant as string) ||
+      (request.headers?.['x-tenant-slug'] as string) ||
+      request.tenant?.slug ||
+      'all'
+    );
   },
 );
 

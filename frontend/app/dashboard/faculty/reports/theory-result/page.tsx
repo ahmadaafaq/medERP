@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../../components/Sidebar';
 import Header from '../../../../../components/Header';
+import FacultyReportsNav from '../../../../../components/FacultyReportsNav';
 
 interface Department {
   id: string;
@@ -109,7 +110,13 @@ const API_BASE = 'http://localhost:3001/api/v1';
 
 const getTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantSlug') || 'srms-ims';
+    return (
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('institutionSlug') ||
+      localStorage.getItem('tenant') ||
+      'srms-ims'
+    );
   }
   return 'srms-ims';
 };
@@ -120,6 +127,7 @@ const getTenantName = (): string => {
   }
   return '';
 };
+
 
 // Default fallback questions for Physiology papers
 const defaultPhysiologyQuestions: PaperQuestion[] = [
@@ -806,6 +814,15 @@ export default function FacultyTheoryResultPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Faculty MIS Reports — Theory Assessment Results" />
         <main className="p-6 space-y-6 flex-1">
+          {/* Top Reports Suite Navigation Tabs */}
+          <FacultyReportsNav
+            activeReport="theory"
+            stats={{
+              attendanceCount: 'Sessions',
+              logbookCount: 'Ledger',
+              theoryCount: `${students.length} Evaluated`,
+            }}
+          />
 
           {/* ── Main Title Banner Card ── */}
           <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

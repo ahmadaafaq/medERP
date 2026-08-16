@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 
@@ -113,6 +113,8 @@ interface Student {
   group_id?: string;
   group_code?: string;
   group_name?: string;
+  branch_id?: string;
+  branch_code?: string;
 }
 
 interface ProfessionalPhase {
@@ -183,12 +185,14 @@ export default function StudentMasterPage() {
   // Filter console tenant-specific data (per selected college in filter)
   const [filterCourses, setFilterCourses] = useState<Course[]>([]);
   const [filterBatches, setFilterBatches] = useState<Batch[]>([]);
+  const [filterBranches, setFilterBranches] = useState<Branch[]>([]);
   const [filterSessions, setFilterSessions] = useState<AcademicSession[]>([]);
 
   // Filtering states
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCollege, setSelectedCollege] = useState('all');
   const [selectedCourse, setSelectedCourse] = useState('all');
+  const [selectedBranch, setSelectedBranch] = useState('all');
   const [selectedBatch, setSelectedBatch] = useState('all');
   const [selectedSession, setSelectedSession] = useState('all');
   const [selectedResidency, setSelectedResidency] = useState('all');
@@ -342,7 +346,7 @@ export default function StudentMasterPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCollege, selectedCourse, selectedBatch, selectedSession, selectedResidency, selectedProfessionalFilter, linkedOnly, viewMode]);
+  }, [searchQuery, selectedCollege, selectedCourse, selectedBatch, selectedBranch, selectedSession, selectedResidency, selectedGroup, selectedProfessionalFilter, linkedOnly, viewMode]);
 
   // Form-level tenant-specific data (loaded when college is selected in form)
   const filteredCourses = allCourses;
@@ -413,29 +417,58 @@ export default function StudentMasterPage() {
     }
   };
 
-  // When filter console college changes, load that college's data
+  // When filter console college changes, load that college's data & fetch students
   const handleFilterCollegeChange = async (cId: string) => {
     setSelectedCollege(cId);
     setSelectedCourse('all');
     setSelectedBatch('all');
+    setSelectedBranch('all');
     setSelectedSession('all');
+    setSelectedGroup('all');
     setSelectedProfessionalFilter('all');
     if (cId === 'all') {
       setFilterCourses([]);
       setFilterBatches([]);
+      setFilterBranches([]);
       setFilterSessions([]);
+      fetchStudents({
+        collegeId: 'all',
+        courseId: 'all',
+        batchId: 'all',
+        branchId: 'all',
+        sessionId: 'all',
+        residencyType: 'all',
+        groupId: 'all',
+        professionalPhase: 'all',
+      });
       return;
     }
-    const college = colleges.find((c) => c.id === cId);
+    const college = colleges.find((c) => c.id === cId || c.slug === cId);
     if (college?.slug) {
       const data = await loadTenantData(college.slug);
-      setFilterCourses(data.courses);
-      setFilterBatches(data.batches);
-      setFilterSessions(data.sessions);
-      setAllProfessionals(data.professionals);
+      setFilterCourses(data.courses || []);
+      setFilterBatches(data.batches || []);
+      setFilterBranches(data.branches || []);
+      setFilterSessions(data.sessions || []);
+      setAllProfessionals(data.professionals || []);
+      setAllGroups(data.groups || []);
       if (data.professionals && data.professionals.length > 0) {
         setTargetProfessionalId(data.professionals[0].id);
       }
+      if (data.groups && data.groups.length > 0) {
+        setTargetGroupId(data.groups[0].id);
+      }
+      fetchStudents({
+        overrideTenant: college.slug,
+        collegeId: cId,
+        courseId: 'all',
+        batchId: 'all',
+        branchId: 'all',
+        sessionId: 'all',
+        residencyType: 'all',
+        groupId: 'all',
+        professionalPhase: 'all',
+      });
     }
   };
 
@@ -513,12 +546,19 @@ export default function StudentMasterPage() {
       if (collegeList.length > 0) {
         const firstCollege = collegeList[0];
         const data = await loadTenantData(firstCollege.slug);
-        setAllCourses(data.courses);
-        setAllBatches(data.batches);
-        setAllSessions(data.sessions);
-        setAllBranches(data.branches);
-        setAllProfessionals(data.professionals);
-        setAllGroups(data.groups);
+        setAllCourses(data.courses || []);
+        setAllBatches(data.batches || []);
+        setAllSessions(data.sessions || []);
+        setAllBranches(data.branches || []);
+        setAllProfessionals(data.professionals || []);
+        setAllGroups(data.groups || []);
+
+        // Also set filter state for default college
+        setFilterCourses(data.courses || []);
+        setFilterBatches(data.batches || []);
+        setFilterBranches(data.branches || []);
+        setFilterSessions(data.sessions || []);
+
         if (data.professionals && data.professionals.length > 0) {
           setTargetProfessionalId(data.professionals[0].id);
         }
@@ -533,26 +573,61 @@ export default function StudentMasterPage() {
 
   const getActiveTenantSlug = () => {
     const activeCollege = selectedCollege !== 'all'
-      ? colleges.find((c) => c.id === selectedCollege)
+      ? colleges.find((c) => c.id === selectedCollege || c.slug === selectedCollege)
       : colleges[0];
     return activeCollege?.slug || 'srms-ims';
   };
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (overrides?: {
+    overrideTenant?: string;
+    collegeId?: string;
+    courseId?: string;
+    batchId?: string;
+    branchId?: string;
+    sessionId?: string;
+    residencyType?: string;
+    groupId?: string;
+    professionalPhase?: string;
+    linkedOnly?: boolean;
+    search?: string;
+  }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token') || '';
-      const tenantSlug = getActiveTenantSlug();
+      const cId = overrides?.collegeId !== undefined ? overrides.collegeId : selectedCollege;
+      const targetCollege = cId !== 'all' ? colleges.find(c => c.id === cId || c.slug === cId) : colleges[0];
+      const tenantSlug = overrides?.overrideTenant || targetCollege?.slug || getActiveTenantSlug();
+
+      const crsId = overrides?.courseId !== undefined ? overrides.courseId : selectedCourse;
+      const batId = overrides?.batchId !== undefined ? overrides.batchId : selectedBatch;
+      const brId = overrides?.branchId !== undefined ? overrides.branchId : selectedBranch;
+      const sessId = overrides?.sessionId !== undefined ? overrides.sessionId : selectedSession;
+      const resType = overrides?.residencyType !== undefined ? overrides.residencyType : selectedResidency;
+      const grpId = overrides?.groupId !== undefined ? overrides.groupId : selectedGroup;
+      const profFilter = overrides?.professionalPhase !== undefined ? overrides.professionalPhase : selectedProfessionalFilter;
+      const lkOnly = overrides?.linkedOnly !== undefined ? overrides.linkedOnly : linkedOnly;
+      const qSearch = overrides?.search !== undefined ? overrides.search : searchQuery;
+
       let url = `${API_BASE}/student-master?tenant=${tenantSlug}`;
-      if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
-      if (selectedCollege !== 'all') url += `&collegeId=${selectedCollege}`;
-      if (selectedCourse !== 'all') url += `&courseId=${selectedCourse}`;
-      if (selectedBatch !== 'all') url += `&batchId=${selectedBatch}`;
-      if (selectedSession !== 'all') url += `&sessionId=${selectedSession}`;
-      if (selectedResidency !== 'all') url += `&residencyType=${selectedResidency}`;
-      if (selectedGroup !== 'all') url += `&groupId=${selectedGroup}`;
-      if (selectedProfessionalFilter !== 'all') url += `&professionalPhase=${encodeURIComponent(selectedProfessionalFilter)}`;
-      if (linkedOnly) url += `&linkedOnly=true`;
+      if (qSearch) url += `&search=${encodeURIComponent(qSearch)}`;
+      if (cId !== 'all') url += `&collegeId=${encodeURIComponent(cId)}`;
+      if (crsId !== 'all') {
+        const crsObj = filterCourses.find(c => c.id === crsId);
+        url += `&courseId=${encodeURIComponent(crsObj?.code || crsId)}`;
+      }
+      if (batId !== 'all') {
+        const batObj = filterBatches.find(b => b.id === batId);
+        url += `&batchId=${encodeURIComponent(batObj?.code || batId)}`;
+      }
+      if (brId !== 'all') {
+        const brObj = filterBranches.find(b => b.id === brId);
+        url += `&branchId=${encodeURIComponent(brObj?.code || brId)}`;
+      }
+      if (sessId !== 'all') url += `&sessionId=${encodeURIComponent(sessId)}`;
+      if (resType !== 'all') url += `&residencyType=${encodeURIComponent(resType)}`;
+      if (grpId !== 'all') url += `&groupId=${encodeURIComponent(grpId)}`;
+      if (profFilter !== 'all') url += `&professionalPhase=${encodeURIComponent(profFilter)}`;
+      if (lkOnly) url += `&linkedOnly=true`;
 
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
@@ -812,10 +887,125 @@ export default function StudentMasterPage() {
     }
   };
 
-  const totalItems = students.length;
+  const filteredStudents = useMemo(() => {
+    return students.filter((st) => {
+      // 1. Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesQ =
+          (st.name || '').toLowerCase().includes(q) ||
+          (st.rollno || '').toLowerCase().includes(q) ||
+          (st.registration_no || '').toLowerCase().includes(q);
+        if (!matchesQ) return false;
+      }
+
+      // 2. Course Filter
+      if (selectedCourse !== 'all') {
+        const crsObj = filterCourses.find((c) => c.id === selectedCourse);
+        const matchCode = (crsObj?.code || '').toLowerCase();
+        const matchName = (crsObj?.name || '').toLowerCase();
+        const stCourse = (st.course_code || '').toLowerCase();
+        if (
+          matchCode &&
+          !stCourse.includes(matchCode) &&
+          !matchName.includes(stCourse) &&
+          st.course_code !== selectedCourse &&
+          st.course_code !== crsObj?.code
+        ) {
+          return false;
+        }
+      }
+
+      // 3. Batch Filter
+      if (selectedBatch !== 'all') {
+        const batObj = filterBatches.find((b) => b.id === selectedBatch);
+        const matchBatCode = (batObj?.code || '').toLowerCase();
+        const matchBatYear = String(batObj?.year || '');
+        const stBatch = (st.batch_code || '').toLowerCase();
+        if (
+          matchBatCode &&
+          !stBatch.includes(matchBatCode) &&
+          !stBatch.includes(matchBatYear) &&
+          st.batch_code !== selectedBatch &&
+          st.batch_id !== selectedBatch &&
+          st.batch_code !== batObj?.code
+        ) {
+          return false;
+        }
+      }
+
+      // 4. Branch Filter
+      if (selectedBranch !== 'all') {
+        const brObj = filterBranches.find((b) => b.id === selectedBranch);
+        const matchBrCode = (brObj?.code || '').toLowerCase();
+        const stBranch = (st.branch_code || '').toLowerCase();
+        if (
+          matchBrCode &&
+          !stBranch.includes(matchBrCode) &&
+          st.branch_code !== selectedBranch &&
+          st.branch_code !== brObj?.code
+        ) {
+          return false;
+        }
+      }
+
+      // 5. Session Filter
+      if (selectedSession !== 'all') {
+        const sessObj = filterSessions.find((s) => s.id === selectedSession);
+        const matchSess = (sessObj?.name || '').toLowerCase();
+        const stSess = (st.academic_session || '').toLowerCase();
+        if (matchSess && !stSess.includes(matchSess) && st.academic_session !== selectedSession) {
+          return false;
+        }
+      }
+
+      // 6. Residency Filter
+      if (selectedResidency !== 'all' && st.residency_type !== selectedResidency) {
+        return false;
+      }
+
+      // 7. Group Filter
+      if (selectedGroup !== 'all' && st.group_id !== selectedGroup && st.group_code !== selectedGroup) {
+        return false;
+      }
+
+      // 8. Prof Phase Filter
+      if (selectedProfessionalFilter !== 'all') {
+        const stPhase = (st.professional_phase || '').toLowerCase();
+        const filterPhase = selectedProfessionalFilter.toLowerCase();
+        if (!stPhase.includes(filterPhase)) {
+          return false;
+        }
+      }
+
+      // 9. Linked Only
+      if (linkedOnly && (!st.professional_phase || !st.professional_id)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    students,
+    searchQuery,
+    selectedCourse,
+    selectedBatch,
+    selectedBranch,
+    selectedSession,
+    selectedResidency,
+    selectedGroup,
+    selectedProfessionalFilter,
+    linkedOnly,
+    filterCourses,
+    filterBatches,
+    filterBranches,
+    filterSessions,
+  ]);
+
+  const totalItems = filteredStudents.length;
   const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedStudents = students.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const paginatedStudents = filteredStudents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
     <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200">
@@ -823,28 +1013,35 @@ export default function StudentMasterPage() {
       <main className="flex-1 overflow-y-auto pb-10">
         <Header title="Student Master" />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8 mt-6">
           {/* Filtering Console */}
           <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all mb-8">
-            <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--color-ink-500)] mb-4">Search & Query Console</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--color-ink-500)] mb-4 flex items-center justify-between">
+              <span>Search & Query Console</span>
+              <span className="text-[10px] font-bold text-[var(--color-primary-700)] normal-case">
+                Showing {filteredStudents.length} of {students.length} Total Loaded Students
+              </span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
+              {/* 1. Search Query */}
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Search Query</label>
                 <input
                   type="text"
-                  placeholder="Name, Reg No, Roll No..."
+                  placeholder="Name, Reg, Roll..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
                 />
               </div>
 
+              {/* 2. College */}
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">College</label>
                 <select
                   value={selectedCollege}
                   onChange={(e) => handleFilterCollegeChange(e.target.value)}
-                  className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
+                  className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px] font-bold"
                 >
                   <option value="all">All Colleges</option>
                   {colleges.map((c) => (
@@ -853,41 +1050,76 @@ export default function StudentMasterPage() {
                 </select>
               </div>
 
+              {/* 3. Course */}
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Course</label>
                 <select
                   value={selectedCourse}
-                  onChange={(e) => setSelectedCourse(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedCourse(val);
+                    fetchStudents({ courseId: val });
+                  }}
                   disabled={selectedCollege === 'all'}
-                  className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px]"
+                  className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px] font-bold"
                 >
-                  <option value="all">All Courses</option>
+                  <option value="all">All Courses ({filterCourses.length})</option>
                   {filterCourses.map((c) => (
                     <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
                   ))}
                 </select>
               </div>
 
+              {/* 4. Branch / Dept */}
+              <div>
+                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Branch / Dept</label>
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedBranch(val);
+                    fetchStudents({ branchId: val });
+                  }}
+                  disabled={selectedCollege === 'all'}
+                  className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px]"
+                >
+                  <option value="all">All Branches ({filterBranches.length})</option>
+                  {filterBranches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 5. Batch */}
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Batch</label>
                 <select
                   value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedBatch(val);
+                    fetchStudents({ batchId: val });
+                  }}
                   disabled={selectedCollege === 'all'}
-                  className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px]"
+                  className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px] font-bold"
                 >
-                  <option value="all">All Batches</option>
+                  <option value="all">All Batches ({filterBatches.length})</option>
                   {filterBatches.map((b) => (
                     <option key={b.id} value={b.id}>{b.code} ({b.year})</option>
                   ))}
                 </select>
               </div>
 
+              {/* 6. Session */}
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Session</label>
                 <select
                   value={selectedSession}
-                  onChange={(e) => setSelectedSession(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedSession(val);
+                    fetchStudents({ sessionId: val });
+                  }}
                   disabled={selectedCollege === 'all'}
                   className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px]"
                 >
@@ -898,11 +1130,16 @@ export default function StudentMasterPage() {
                 </select>
               </div>
 
+              {/* 7. Residency */}
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Residency</label>
                 <select
                   value={selectedResidency}
-                  onChange={(e) => setSelectedResidency(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedResidency(val);
+                    fetchStudents({ residencyType: val });
+                  }}
                   className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
                 >
                   <option value="all">All Types</option>
@@ -912,11 +1149,16 @@ export default function StudentMasterPage() {
                 </select>
               </div>
 
+              {/* 8. Group */}
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Group</label>
                 <select
                   value={selectedGroup}
-                  onChange={(e) => setSelectedGroup(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedGroup(val);
+                    fetchStudents({ groupId: val });
+                  }}
                   className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
                 >
                   <option value="all">All Groups</option>
@@ -926,11 +1168,16 @@ export default function StudentMasterPage() {
                 </select>
               </div>
 
+              {/* 9. Prof Phase */}
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Prof Phase</label>
                 <select
                   value={selectedProfessionalFilter}
-                  onChange={(e) => setSelectedProfessionalFilter(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedProfessionalFilter(val);
+                    fetchStudents({ professionalPhase: val });
+                  }}
                   className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
                 >
                   <option value="all">All Phases</option>
@@ -947,7 +1194,11 @@ export default function StudentMasterPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setLinkedOnly(!linkedOnly)}
+                  onClick={() => {
+                    const next = !linkedOnly;
+                    setLinkedOnly(next);
+                    fetchStudents({ linkedOnly: next });
+                  }}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-[11px] transition-all ${
                     linkedOnly
                       ? 'bg-[var(--color-primary-700)] text-white border-[var(--color-primary-700)] shadow-sm'
@@ -1020,6 +1271,7 @@ export default function StudentMasterPage() {
                     setSearchQuery('');
                     setSelectedCollege('all');
                     setSelectedCourse('all');
+                    setSelectedBranch('all');
                     setSelectedBatch('all');
                     setSelectedSession('all');
                     setSelectedResidency('all');
@@ -1028,7 +1280,20 @@ export default function StudentMasterPage() {
                     setLinkedOnly(false);
                     setFilterCourses([]);
                     setFilterBatches([]);
+                    setFilterBranches([]);
                     setFilterSessions([]);
+                    fetchStudents({
+                      collegeId: 'all',
+                      courseId: 'all',
+                      batchId: 'all',
+                      branchId: 'all',
+                      sessionId: 'all',
+                      residencyType: 'all',
+                      groupId: 'all',
+                      professionalPhase: 'all',
+                      linkedOnly: false,
+                      search: '',
+                    });
                   }}
                   className="premium-btn-secondary py-1.5 px-3 rounded-lg font-bold text-[11px] border border-[var(--color-border)] text-[var(--color-ink-700)] hover:border-[var(--color-primary-700)] hover:text-[var(--color-primary-700)] bg-[var(--color-bg-surface)] hover:bg-[var(--color-primary-50)] transition-all"
                 >
@@ -1036,7 +1301,7 @@ export default function StudentMasterPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={fetchStudents}
+                  onClick={() => fetchStudents()}
                   className="premium-btn-primary py-1.5 px-3 rounded-lg font-bold text-[11px] bg-[var(--color-primary-700)] hover:bg-[var(--color-primary-900)] text-white border-[var(--color-primary-700)] shadow-sm transition-all"
                 >
                   Apply Filters
@@ -1111,21 +1376,21 @@ export default function StudentMasterPage() {
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
                     <button
                       onClick={() => {
-                        if (selectedStudentIds.length === students.length && students.length > 0) {
+                        if (selectedStudentIds.length === filteredStudents.length && filteredStudents.length > 0) {
                           setSelectedStudentIds([]);
                         } else {
-                          setSelectedStudentIds(students.map(s => s.id));
+                          setSelectedStudentIds(filteredStudents.map(s => s.id));
                         }
                       }}
                       className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold text-xs text-white transition-all whitespace-nowrap flex items-center justify-center gap-2 shadow-sm"
                     >
                       <input
                         type="checkbox"
-                        checked={students.length > 0 && selectedStudentIds.length === students.length}
+                        checked={filteredStudents.length > 0 && selectedStudentIds.length === filteredStudents.length}
                         readOnly
                         className="rounded border-slate-600 bg-slate-900 text-indigo-600 pointer-events-none w-3.5 h-3.5"
                       />
-                      <span>{selectedStudentIds.length === students.length && students.length > 0 ? 'Deselect All' : 'Select All Batch'} ({selectedStudentIds.length})</span>
+                      <span>{selectedStudentIds.length === filteredStudents.length && filteredStudents.length > 0 ? 'Deselect All' : 'Select All Batch'} ({selectedStudentIds.length})</span>
                     </button>
 
                     <select
@@ -1172,21 +1437,21 @@ export default function StudentMasterPage() {
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
                     <button
                       onClick={() => {
-                        if (selectedStudentIds.length === students.length && students.length > 0) {
+                        if (selectedStudentIds.length === filteredStudents.length && filteredStudents.length > 0) {
                           setSelectedStudentIds([]);
                         } else {
-                          setSelectedStudentIds(students.map(s => s.id));
+                          setSelectedStudentIds(filteredStudents.map(s => s.id));
                         }
                       }}
                       className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold text-xs text-white transition-all whitespace-nowrap flex items-center justify-center gap-2 shadow-sm"
                     >
                       <input
                         type="checkbox"
-                        checked={students.length > 0 && selectedStudentIds.length === students.length}
+                        checked={filteredStudents.length > 0 && selectedStudentIds.length === filteredStudents.length}
                         readOnly
                         className="rounded border-slate-600 bg-slate-900 text-purple-600 pointer-events-none w-3.5 h-3.5"
                       />
-                      <span>{selectedStudentIds.length === students.length && students.length > 0 ? 'Deselect All' : 'Select Batch Students'} ({selectedStudentIds.length})</span>
+                      <span>{selectedStudentIds.length === filteredStudents.length && filteredStudents.length > 0 ? 'Deselect All' : 'Select Batch Students'} ({selectedStudentIds.length})</span>
                     </button>
 
                     <select
@@ -1233,9 +1498,9 @@ export default function StudentMasterPage() {
                       <th className="pl-5 w-12 text-center">
                         <input
                           type="checkbox"
-                          checked={students.length > 0 && selectedStudentIds.length === students.length}
+                          checked={filteredStudents.length > 0 && selectedStudentIds.length === filteredStudents.length}
                           onChange={(e) => {
-                            if (e.target.checked) setSelectedStudentIds(students.map(s => s.id));
+                            if (e.target.checked) setSelectedStudentIds(filteredStudents.map(s => s.id));
                             else setSelectedStudentIds([]);
                           }}
                           className="rounded border-[var(--color-border)] bg-[var(--color-bg-sunken)] text-[var(--color-primary-700)] focus:ring-[var(--color-primary-700)] w-4 h-4 cursor-pointer"
@@ -1258,10 +1523,41 @@ export default function StudentMasterPage() {
                 <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
                   {loading ? (
                     <TableSkeleton colCount={viewMode === 'linker' ? 12 : 11} />
-                  ) : students.length === 0 ? (
+                  ) : filteredStudents.length === 0 ? (
                     <tr>
-                      <td colSpan={viewMode === 'linker' ? 12 : 11} className="p-8 text-center text-slate-500 font-medium">
-                        No registered students found matching search filters.
+                      <td colSpan={viewMode === 'linker' ? 12 : 11} className="p-12 text-center text-slate-500 font-medium">
+                        <div className="max-w-md mx-auto space-y-3">
+                          <span className="text-3xl">👥</span>
+                          <h4 className="text-sm font-black text-slate-900 dark:text-white">No Registered Students Found</h4>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            No students match the current filter selection ({selectedCollege !== 'all' ? (colleges.find(c => c.id === selectedCollege || c.slug === selectedCollege)?.name || selectedCollege) : 'All Colleges'}
+                            {selectedCourse !== 'all' ? ` • ${filterCourses.find(c => c.id === selectedCourse)?.name || selectedCourse}` : ''}
+                            {selectedBranch !== 'all' ? ` • ${filterBranches.find(b => b.id === selectedBranch)?.name || selectedBranch}` : ''}
+                            {selectedBatch !== 'all' ? ` • Batch ${filterBatches.find(b => b.id === selectedBatch)?.code || selectedBatch}` : ''}).
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditModeId(null);
+                              setFormData((prev) => ({
+                                ...prev,
+                                firstName: '',
+                                middleName: '',
+                                lastName: '',
+                                registrationNo: '',
+                                rollNo: '',
+                                mobileNumber: '',
+                                emailAddress: '',
+                                declarationSigned: false,
+                              }));
+                              setCurrentStep(1);
+                              setIsModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--color-primary-700)] text-white text-xs font-bold shadow hover:bg-[var(--color-primary-800)]"
+                          >
+                            + Register Student Under This Selection
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -1285,13 +1581,20 @@ export default function StudentMasterPage() {
                             <img
                               src={student.photo_url}
                               alt={student.name}
+                              loading="lazy"
                               className="w-8 h-8 rounded-full object-cover border border-[var(--color-border)]"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                                const fb = (e.target as HTMLElement).parentElement?.querySelector('.avatar-fallback') as HTMLElement;
+                                if (fb) fb.style.display = 'flex';
+                              }}
                             />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-[var(--color-primary-700)] text-white flex items-center justify-center text-[10px] font-extrabold">
-                              {student.name?.charAt(0)?.toUpperCase() || '?'}
-                            </div>
-                          )}
+                          ) : null}
+                          <div
+                            className={`w-8 h-8 rounded-full bg-[var(--color-primary-700)] text-white flex items-center justify-center text-[10px] font-extrabold avatar-fallback ${student.photo_url ? 'hidden' : ''}`}
+                          >
+                            {student.name?.charAt(0)?.toUpperCase() || '?'}
+                          </div>
                         </td>
                         <td className="font-extrabold text-[var(--color-primary-700)] font-mono">{student.registration_no}</td>
                         <td className="font-mono text-[var(--color-ink-700)]">{student.rollno || '—'}</td>
@@ -2216,17 +2519,21 @@ export default function StudentMasterPage() {
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md flex-shrink-0">
               <div className="flex items-center gap-4">
-                {viewStudent?.photoUrl ? (
+                {(viewStudent?.photoUrl || (viewStudent as any)?.photo_url) ? (
                   <img
-                    src={viewStudent.photoUrl}
+                    src={viewStudent?.photoUrl || (viewStudent as any)?.photo_url}
                     alt={viewStudent?.name}
                     className="w-12 h-12 rounded-xl object-cover border-2 border-indigo-500 shadow-lg"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                      const fb = (e.target as HTMLElement).parentElement?.querySelector('.drawer-avatar-fallback') as HTMLElement;
+                      if (fb) fb.style.display = 'flex';
+                    }}
                   />
-                ) : (
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white font-black text-xl">
-                    {viewStudent?.name?.charAt(0) || '?'}
-                  </div>
-                )}
+                ) : null}
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white font-black text-xl drawer-avatar-fallback ${(viewStudent?.photoUrl || (viewStudent as any)?.photo_url) ? 'hidden' : ''}`}>
+                  {viewStudent?.name?.charAt(0) || '?'}
+                </div>
                 <div>
                   <h2 className="text-base font-black text-white">{viewStudent?.name || 'Loading…'}</h2>
                   <p className="text-[11px] text-slate-400 font-mono">{viewStudent?.registrationNo || viewStudent?.registration_no}</p>

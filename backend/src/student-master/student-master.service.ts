@@ -13,83 +13,186 @@ export class StudentMasterService {
     private readonly tenantSchemaService: TenantSchemaService,
   ) {}
 
+  private async resolveTenantSlug(tenantSlugOrCollege?: string): Promise<string> {
+    if (!tenantSlugOrCollege || tenantSlugOrCollege === 'srms') {
+      return 'srms-cet-bareilly';
+    }
+    if (tenantSlugOrCollege === 'all') {
+      return 'all';
+    }
+    const input = tenantSlugOrCollege.toLowerCase().trim();
+    try {
+      const tenants = await this.dataSource.query(
+        `SELECT slug, code, id FROM public.tenants WHERE is_active = true`
+      );
+      const match = tenants.find(
+        (t: any) =>
+          t.slug.toLowerCase() === input ||
+          t.id.toLowerCase() === input ||
+          (t.code && t.code.toLowerCase() === input)
+      );
+      if (match) return match.slug;
+    } catch (e) {}
+    return input;
+  }
+
   async listStudents(
     tenantSlug: string,
-    query: { search?: string; collegeId?: string; courseId?: string; batchId?: string; sessionId?: string; residencyType?: string; professionalPhase?: string; groupId?: string; linkedOnly?: string },
+    query: {
+      search?: string;
+      collegeId?: string;
+      courseId?: string;
+      batchId?: string;
+      branchId?: string;
+      sessionId?: string;
+      residencyType?: string;
+      professionalPhase?: string;
+      groupId?: string;
+      linkedOnly?: string;
+    },
   ) {
-    const slug = tenantSlug || 'srms';
-    await this.tenantSchemaService.ensureLatestSchema(slug);
+    const rawSlug = query.collegeId && query.collegeId !== 'all' ? query.collegeId : tenantSlug;
+    const resolvedSlug = await this.resolveTenantSlug(rawSlug);
 
-    // Ensure group columns exist on student_admissions
-    try {
-      await this.tenantSchemaService.queryInTenant(
-        slug,
-        `ALTER TABLE student_admissions 
-         ADD COLUMN IF NOT EXISTS group_id UUID,
-         ADD COLUMN IF NOT EXISTS group_code VARCHAR(50),
-         ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);`,
-      );
-      await this.tenantSchemaService.queryInTenant(
-        slug,
-        `ALTER TABLE students ADD COLUMN IF NOT EXISTS group_id UUID;`,
-      );
-    } catch (e) {}
+    const colleges = await this.dataSource.query(
+      `SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`
+    ).catch(() => []);
 
-    const params: any[] = [];
-    let sql = `
-      SELECT s.id, s.name, s.rollno, s.registration_no, s.is_active, s.created_at, s.photo_url,
-             sa.college_name, sa.course_code, sa.academic_session, sa.batch_code, sa.batch_id, sa.residency_type, sa.admission_type, sa.professional_id, sa.professional_phase,
-             sa.group_id, sa.group_code, sa.group_name
-      FROM students s
-      LEFT JOIN student_admissions sa ON sa.student_id = s.id
-      WHERE 1=1
-    `;
+    const targetSlugs = resolvedSlug === 'all'
+      ? colleges.map((c: any) => c.slug).filter(Boolean)
+      : [colleges.find((c: any) => c.slug === resolvedSlug || c.id === resolvedSlug || c.code === resolvedSlug)?.slug || resolvedSlug];
 
-    if (query.search) {
-      params.push(`%${query.search}%`);
-      sql += ` AND (s.name ILIKE $${params.length} OR s.rollno ILIKE $${params.length} OR s.registration_no ILIKE $${params.length})`;
-    }
-    if (query.collegeId) {
-      params.push(query.collegeId);
-      sql += ` AND sa.college_id = $${params.length}`;
-    }
-    if (query.courseId) {
-      params.push(query.courseId);
-      sql += ` AND sa.course_id = $${params.length}`;
-    }
-    if (query.batchId) {
-      params.push(query.batchId);
-      sql += ` AND sa.batch_id = $${params.length}`;
-    }
-    if (query.sessionId) {
-      params.push(query.sessionId);
-      sql += ` AND sa.session_id = $${params.length}`;
-    }
-    if (query.residencyType) {
-      params.push(query.residencyType);
-      sql += ` AND sa.residency_type = $${params.length}`;
-    }
-    if (query.groupId) {
-      params.push(query.groupId);
-      sql += ` AND (sa.group_id = $${params.length} OR s.group_id = $${params.length})`;
-    }
-    if (query.professionalPhase && query.professionalPhase !== 'all') {
-      params.push(query.professionalPhase);
-      sql += ` AND sa.professional_phase = $${params.length}`;
-      // When filtering by phase, only return students actually linked to a phase
-      sql += ` AND sa.professional_id IS NOT NULL`;
-    } else if (query.linkedOnly === 'true') {
-      // Show only students who have been linked to any professional phase
-      sql += ` AND sa.professional_id IS NOT NULL AND sa.professional_phase IS NOT NULL`;
+    const allResults: any[] = [];
+
+    for (const slug of targetSlugs) {
+      if (!slug) continue;
+      try {
+        await this.tenantSchemaService.ensureLatestSchema(slug);
+
+        const params: any[] = [];
+        let sql = `
+          SELECT s.id, s.name, s.rollno, s.registration_no, s.is_active, s.created_at, s.photo_url,
+                 sa.college_name,
+                 COALESCE(sa.course_code, s.course_cd) AS course_code,
+                 sa.academic_session,
+                 COALESCE(sa.batch_code, s.batch_cd) AS batch_code,
+                 COALESCE(sa.batch_id, s.batch_id) AS batch_id,
+                 sa.residency_type, sa.admission_type, sa.professional_id, sa.professional_phase,
+                 COALESCE(sa.group_id, s.group_id) AS group_id, sa.group_code, sa.group_name,
+                 sa.branch_id, sa.branch_code
+          FROM students s
+          LEFT JOIN student_admissions sa ON sa.student_id = s.id
+          WHERE 1=1
+        `;
+
+        if (query.search) {
+          params.push(`%${query.search}%`);
+          sql += ` AND (s.name ILIKE $${params.length} OR s.rollno ILIKE $${params.length} OR s.registration_no ILIKE $${params.length})`;
+        }
+        if (query.collegeId && query.collegeId !== 'all') {
+          const colIdVal = query.collegeId;
+          const matchedColg = colleges.find(
+            (c: any) => c.id === colIdVal || c.slug === colIdVal || c.code === colIdVal || (c.name && c.name.toLowerCase() === colIdVal.toLowerCase())
+          );
+          if (matchedColg) {
+            params.push(matchedColg.id);
+            const pId = params.length;
+            params.push(matchedColg.name);
+            const pName = params.length;
+            sql += ` AND (sa.college_id::text = $${pId} OR sa.college_name ILIKE $${pName})`;
+          } else {
+            params.push(colIdVal);
+            sql += ` AND (sa.college_id::text = $${params.length} OR sa.college_name ILIKE $${params.length})`;
+          }
+        }
+        if (query.courseId && query.courseId !== 'all') {
+          params.push(query.courseId);
+          const p1 = params.length;
+          params.push(`%${query.courseId}%`);
+          const p2 = params.length;
+          sql += ` AND (sa.course_id::text = $${p1} OR sa.course_code = $${p1} OR sa.course_code ILIKE $${p2} OR s.course_cd = $${p1})`;
+        }
+        if (query.batchId && query.batchId !== 'all') {
+          params.push(query.batchId);
+          const p1 = params.length;
+          params.push(`%${query.batchId}%`);
+          const p2 = params.length;
+          sql += ` AND (sa.batch_id::text = $${p1} OR sa.batch_code = $${p1} OR sa.batch_code ILIKE $${p2} OR s.batch_cd = $${p1} OR s.admission_year::text = $${p1})`;
+        }
+        if (query.branchId && query.branchId !== 'all') {
+          params.push(query.branchId);
+          const p1 = params.length;
+          params.push(`%${query.branchId}%`);
+          const p2 = params.length;
+          sql += ` AND (sa.branch_id::text = $${p1} OR sa.branch_code = $${p1} OR sa.branch_name ILIKE $${p2} OR s.branch_id::text = $${p1} OR s.department_id::text = $${p1})`;
+        }
+        if (query.sessionId && query.sessionId !== 'all') {
+          params.push(query.sessionId);
+          const p1 = params.length;
+          params.push(`%${query.sessionId}%`);
+          const p2 = params.length;
+          sql += ` AND (sa.session_id::text = $${p1} OR sa.academic_session ILIKE $${p2})`;
+        }
+        if (query.residencyType && query.residencyType !== 'all') {
+          params.push(query.residencyType);
+          sql += ` AND sa.residency_type = $${params.length}`;
+        }
+        if (query.groupId && query.groupId !== 'all') {
+          params.push(query.groupId);
+          sql += ` AND (sa.group_id::text = $${params.length} OR s.group_id::text = $${params.length} OR sa.group_code = $${params.length})`;
+        }
+        if (query.professionalPhase && query.professionalPhase !== 'all') {
+          params.push(`%${query.professionalPhase}%`);
+          sql += ` AND (sa.professional_phase ILIKE $${params.length} OR sa.professional_id::text ILIKE $${params.length})`;
+          sql += ` AND sa.professional_id IS NOT NULL`;
+        } else if (query.linkedOnly === 'true') {
+          sql += ` AND sa.professional_id IS NOT NULL AND sa.professional_phase IS NOT NULL`;
+        }
+
+        sql += ` ORDER BY s.created_at DESC`;
+
+        const rows = await this.tenantSchemaService.queryInTenant(slug, sql, params);
+        const col = colleges.find((c: any) => c.slug === slug);
+        rows.forEach((r: any) => {
+          allResults.push({
+            ...r,
+            college_name: r.college_name || col?.name,
+            college_slug: slug,
+          });
+        });
+      } catch (e) {
+        this.logger.warn(`Failed querying students in tenant ${slug}: ${e.message}`);
+      }
     }
 
-    sql += ` ORDER BY s.created_at DESC`;
-
-    return this.tenantSchemaService.queryInTenant(slug, sql, params);
+    return allResults;
   }
 
   async getStudent(tenantSlug: string, id: string) {
-    const slug = tenantSlug || 'srms';
+    const rawSlug = await this.resolveTenantSlug(tenantSlug);
+    const colleges = await this.dataSource.query(
+      `SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`
+    ).catch(() => []);
+
+    let slug = rawSlug;
+    if (rawSlug === 'all' || !rawSlug) {
+      for (const col of colleges) {
+        if (!col.slug) continue;
+        try {
+          const check = await this.tenantSchemaService.queryInTenant(
+            col.slug,
+            `SELECT id FROM students WHERE id = $1`,
+            [id],
+          );
+          if (check.length > 0) {
+            slug = col.slug;
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+
+    slug = slug || 'srms-cet-bareilly';
     const studentRows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT * FROM students WHERE id = $1`,
@@ -211,7 +314,7 @@ export class StudentMasterService {
   }
 
   async generateNextRegistrationNo(tenantSlug: string, sessionYear: string): Promise<string> {
-    const slug = tenantSlug || 'srms';
+    const slug = await this.resolveTenantSlug(tenantSlug);
     const yearStr = sessionYear || new Date().getFullYear().toString();
     const pattern = `${yearStr}%`;
     const rows = await this.tenantSchemaService.queryInTenant(
@@ -250,7 +353,11 @@ export class StudentMasterService {
   }
 
   async createStudent(tenantSlug: string, dto: CreateStudentDto) {
-    const slug = tenantSlug || 'srms';
+    const rawSlug = dto.collegeId || tenantSlug;
+    let slug = await this.resolveTenantSlug(rawSlug);
+    if (slug === 'all') slug = 'srms-cet-bareilly';
+
+    await this.tenantSchemaService.ensureLatestSchema(slug);
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
     await runner.startTransaction();
 
@@ -398,17 +505,32 @@ export class StudentMasterService {
       // 8. Insert into student_documents
       await runner.query(
         `INSERT INTO student_documents (
-           student_id, passport_photo_url, student_signature_url, parent_signature_url, aadhaar_card_url, class_10_marksheet_url, class_12_marksheet_url, neet_score_card_url
+           student_id, passport_photo_url, student_signature_url, parent_signature_url,
+           aadhaar_card_url, class_10_marksheet_url, class_12_marksheet_url, neet_score_card_url
          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [studentId, dto.photoUrl || null, null, null, null, null, null, null],
+        [
+          studentId,
+          dto.photoUrl || null,
+          null,
+          null,
+          dto.aadhaarCardUrl || null,
+          dto.class10MarksheetUrl || null,
+          dto.class12MarksheetUrl || null,
+          dto.neetScoreCardUrl || null,
+        ],
       );
 
       // 9. Insert into student_fees
       await runner.query(
         `INSERT INTO student_fees (
            student_id, paid_fees, pending_fees, total_fees
-         ) VALUES ($1, 0, 0, 0)`,
-        [studentId],
+         ) VALUES ($1, $2, $3, $4)`,
+        [
+          studentId,
+          dto.paidFees || 0,
+          (dto.totalFees || 0) - (dto.paidFees || 0),
+          dto.totalFees || 0,
+        ],
       );
 
       // 10. Insert into student_hostel
@@ -416,7 +538,12 @@ export class StudentMasterService {
         `INSERT INTO student_hostel (
            student_id, hostel_required, hostel_name, room_number
          ) VALUES ($1, $2, $3, $4)`,
-        [studentId, dto.hostelRequired ?? false, dto.hostelName || null, dto.roomNumber || null],
+        [
+          studentId,
+          dto.hostelRequired ?? false,
+          dto.hostelName || null,
+          dto.roomNumber || null,
+        ],
       );
 
       // 11. Insert into student_transport
@@ -424,7 +551,11 @@ export class StudentMasterService {
         `INSERT INTO student_transport (
            student_id, bus_required, transport_route
          ) VALUES ($1, $2, $3)`,
-        [studentId, dto.busRequired ?? false, null],
+        [
+          studentId,
+          dto.busRequired ?? false,
+          dto.busRoute || null,
+        ],
       );
 
       // 12. Insert into student_library
@@ -432,37 +563,69 @@ export class StudentMasterService {
         `INSERT INTO student_library (
            student_id, library_card_no, rfid_tag
          ) VALUES ($1, $2, $3)`,
-        [studentId, dto.libraryCardNo || null, null],
+        [
+          studentId,
+          dto.libraryCardNo || null,
+          null,
+        ],
       );
 
       // 13. Insert into student_medical
       await runner.query(
         `INSERT INTO student_medical (
-           student_id, medical_history, vaccination_status, fitness_certificate_url
-         ) VALUES ($1, $2, $3, $4)`,
-        [studentId, null, dto.vaccinationStatus || null, null],
+           student_id, medical_history, blood_group, allergies, emergency_medical_notes, vaccination_status
+         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          studentId,
+          dto.medicalConditions || null,
+          dto.bloodGroup || null,
+          null,
+          null,
+          dto.vaccinationStatus || null,
+        ],
       );
 
       // 14. Insert into student_bank_accounts
       await runner.query(
         `INSERT INTO student_bank_accounts (
-           student_id, bank_name, account_number, ifsc_code
-         ) VALUES ($1, $2, $3, $4)`,
-        [studentId, dto.bankName || null, dto.accountNumber || null, dto.ifscCode || null],
+           student_id, bank_name, account_number, ifsc_code, branch_name
+         ) VALUES ($1, $2, $3, $4, $5)`,
+        [
+          studentId,
+          dto.bankName || null,
+          dto.accountNumber || null,
+          dto.ifscCode || null,
+          null,
+        ],
       );
 
       // 15. Insert into student_emergency_contacts
       await runner.query(
         `INSERT INTO student_emergency_contacts (
-           student_id, contact_name, relationship, phone
-         ) VALUES ($1, $2, $3, $4)`,
-        [studentId, dto.fatherName || null, 'Father', dto.fatherMobile || null],
+           student_id, contact_name, relationship, phone_number, alternate_phone
+         ) VALUES ($1, $2, $3, $4, $5)`,
+        [
+          studentId,
+          dto.emergencyContactName || dto.fatherName || null,
+          dto.emergencyRelationship || 'Parent',
+          dto.emergencyContactMobile || dto.fatherMobile || null,
+          null,
+        ],
       );
 
       await runner.commitTransaction();
-      return { success: true, id: studentId, registrationNo: regNo };
+      this.logger.log(`[StudentMaster] Successfully created student: ${name} (${regNo}) in tenant ${slug}`);
+      return {
+        id: studentId,
+        registrationNo: regNo,
+        name,
+        rollNo: dto.rollNo,
+        collegeName: dto.collegeName,
+        courseCode: dto.courseCode,
+      };
     } catch (err) {
       await runner.rollbackTransaction();
+      this.logger.error(`[StudentMaster] Create student failed:`, err);
       throw err;
     } finally {
       await runner.release();
@@ -470,7 +633,25 @@ export class StudentMasterService {
   }
 
   async updateStudent(tenantSlug: string, id: string, dto: UpdateStudentDto) {
-    const slug = tenantSlug || 'srms';
+    const rawSlug = dto.collegeId || tenantSlug;
+    let slug = await this.resolveTenantSlug(rawSlug);
+    const colleges = await this.dataSource.query(`SELECT slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+
+    if (slug === 'all' || !slug) {
+      for (const col of colleges) {
+        if (!col.slug) continue;
+        try {
+          const check = await this.tenantSchemaService.queryInTenant(col.slug, `SELECT id FROM students WHERE id = $1`, [id]);
+          if (check.length > 0) {
+            slug = col.slug;
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+
+    slug = slug || 'srms-cet-bareilly';
+    await this.tenantSchemaService.ensureLatestSchema(slug);
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
     await runner.startTransaction();
 
@@ -581,12 +762,38 @@ export class StudentMasterService {
         ],
       );
 
+      // Update student_fees
+      await runner.query(
+        `UPDATE student_fees
+         SET paid_fees = $1, total_fees = $2, pending_fees = $3
+         WHERE student_id = $4`,
+        [
+          dto.paidFees || 0,
+          dto.totalFees || 0,
+          (dto.totalFees || 0) - (dto.paidFees || 0),
+          id,
+        ],
+      );
+
       // Update student_hostel
       await runner.query(
         `UPDATE student_hostel
          SET hostel_required = $1, hostel_name = $2, room_number = $3
          WHERE student_id = $4`,
         [dto.hostelRequired ?? false, dto.hostelName || null, dto.roomNumber || null, id],
+      );
+
+      // Update student_emergency_contacts
+      await runner.query(
+        `UPDATE student_emergency_contacts
+         SET contact_name = $1, relationship = $2, phone_number = $3
+         WHERE student_id = $4`,
+        [
+          dto.emergencyContactName || dto.fatherName || null,
+          dto.emergencyRelationship || 'Parent',
+          dto.emergencyContactMobile || dto.fatherMobile || null,
+          id,
+        ],
       );
 
       // Update student_bank_accounts
@@ -632,7 +839,22 @@ export class StudentMasterService {
   }
 
   async deleteStudent(tenantSlug: string, id: string) {
-    const slug = tenantSlug || 'srms';
+    let slug = await this.resolveTenantSlug(tenantSlug);
+    const colleges = await this.dataSource.query(`SELECT slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+    if (slug === 'all' || !slug) {
+      for (const col of colleges) {
+        if (!col.slug) continue;
+        try {
+          const check = await this.tenantSchemaService.queryInTenant(col.slug, `SELECT id FROM students WHERE id = $1`, [id]);
+          if (check.length > 0) {
+            slug = col.slug;
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+    slug = slug || 'srms-cet-bareilly';
+    const schema = `tenant_${slug}`;
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
     await runner.startTransaction();
 
@@ -677,7 +899,7 @@ export class StudentMasterService {
          WHERE tc.constraint_type = 'FOREIGN KEY' 
            AND ccu.table_name = 'students' 
            AND tc.table_schema = $1`,
-        [slug],
+        [schema],
       );
 
       for (const fk of fkTables) {
@@ -722,7 +944,8 @@ export class StudentMasterService {
   }
 
   async bulkLinkProfessional(tenantSlug: string, dto: BulkLinkProfessionalDto) {
-    const slug = tenantSlug || 'srms';
+    let slug = await this.resolveTenantSlug(tenantSlug);
+    if (slug === 'all') slug = 'srms-cet-bareilly';
     await this.tenantSchemaService.ensureLatestSchema(slug);
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
     await runner.startTransaction();
@@ -780,7 +1003,8 @@ export class StudentMasterService {
   }
 
   async bulkLinkGroup(tenantSlug: string, dto: BulkLinkGroupDto) {
-    const slug = tenantSlug || 'srms';
+    let slug = await this.resolveTenantSlug(tenantSlug);
+    if (slug === 'all') slug = 'srms-cet-bareilly';
     await this.tenantSchemaService.ensureLatestSchema(slug);
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
     await runner.startTransaction();

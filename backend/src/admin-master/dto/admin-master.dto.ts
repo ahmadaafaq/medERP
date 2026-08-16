@@ -522,12 +522,12 @@ export class UpdateSubjectOfferingDto extends PartialType(CreateSubjectOfferingD
 
 // ─── 8. FACULTY SUBJECT LINKER ───────────────────────────────────────────────
 export class LinkFacultySubjectDto {
-  @ApiProperty()
-  @IsUUID()
+  @ApiProperty({ description: 'Faculty UUID or Employee Code' })
+  @IsString()
   facultyId: string;
 
-  @ApiProperty()
-  @IsUUID()
+  @ApiProperty({ description: 'Subject UUID or Subject Numeric Code' })
+  @IsString()
   subjectId: string;
 }
 

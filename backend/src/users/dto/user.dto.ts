@@ -149,6 +149,16 @@ export class CreateFacultyDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
 }
 
 export class BulkCreateStudentsDto {

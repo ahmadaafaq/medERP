@@ -111,94 +111,78 @@ export class ExaminationService {
     const practicalMark = Number(dto.practicalMark || 0);
 
     try {
-      // 1. Resolve student UUID from database
+      // 1. Resolve student UUID from database (by UUID, Roll No, Registration No, or Name)
       let realStudentId: string | null = null;
-      if (dto.studentId && this.isUUID(dto.studentId)) {
-        const checkSt = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT id FROM students WHERE id = $1 LIMIT 1`,
-          [dto.studentId],
-        );
-        if (checkSt && checkSt.length > 0) {
-          realStudentId = checkSt[0].id;
-        }
+      const roll = dto.rollno || dto.studentId || '';
+      const reg = dto.registrationNo || dto.rollno || dto.studentId || '';
+      const name = dto.studentName || '';
+
+      const checkSt = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM students 
+         WHERE (id::text = $1 AND $1 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+            OR rollno = $2 
+            OR registration_no = $2 
+            OR rollno = $3 
+            OR registration_no = $3 
+            OR ($4 <> '' AND LOWER(name) = LOWER($4))
+         LIMIT 1`,
+        [dto.studentId || '', roll, reg, name],
+      );
+
+      if (checkSt && checkSt.length > 0) {
+        realStudentId = checkSt[0].id;
       }
 
+      // Auto-create student in database if not yet existing
       if (!realStudentId) {
-        const studentLookup = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT id FROM students 
-           WHERE registration_no = $1 
-              OR rollno = $1 
-              OR LOWER(registration_no) = LOWER($1)
-              OR LOWER(rollno) = LOWER($1)
-              OR LOWER(name) = LOWER($2)
-              OR REPLACE(rollno, '#', '') = REPLACE($1, '#', '')
-           LIMIT 1`,
-          [dto.rollno || dto.studentId || '', dto.studentName || dto.studentId || ''],
-        );
-        if (studentLookup && studentLookup.length > 0) {
-          realStudentId = studentLookup[0].id;
-        }
-      }
-
-      // Auto-create student in database if not yet existing (e.g. fallback roster student)
-      if (!realStudentId) {
-        const roll = dto.rollno || (dto.studentId?.startsWith('#') ? dto.studentId : `#${dto.studentId || '20260008'}`);
-        const name = dto.studentName || 'Kabir Rao Deshmukh';
+        const studentRoll = roll || reg || '2500141790001';
+        const studentReg = reg || studentRoll;
+        const studentName = name || 'Student';
         const insertSt = await this.tenantSchemaService.queryInTenant(
           slug,
           `INSERT INTO students (registration_no, rollno, name, gender)
            VALUES ($1, $2, $3, 'Male')
            ON CONFLICT (registration_no) 
-           DO UPDATE SET name = EXCLUDED.name
+           DO UPDATE SET name = EXCLUDED.name, rollno = EXCLUDED.rollno
            RETURNING id`,
-          [roll, roll, name],
+          [studentReg, studentRoll, studentName],
         );
         realStudentId = insertSt[0]?.id;
       }
 
-      // 2. Resolve paper UUID from database
+      // 2. Resolve paper UUID from database (by UUID, Code, or Name)
       let realPaperId: string | null = null;
-      let passingMarks = 16;
-      if (dto.paperId && this.isUUID(dto.paperId)) {
-        const paperRes = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT id, max_marks, passing_marks FROM examination_papers WHERE id = $1 LIMIT 1`,
-          [dto.paperId],
-        );
-        if (paperRes && paperRes.length > 0) {
-          realPaperId = paperRes[0].id;
-          passingMarks = paperRes[0]?.passing_marks ? Number(paperRes[0].passing_marks) : 16;
-        }
-      }
+      let passingMarks = 32;
+      const paperCodeOrId = dto.paperCode || dto.paperId || '';
 
-      if (!realPaperId) {
-        const paperLookup = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT id, max_marks, passing_marks FROM examination_papers 
-           WHERE code = 'MED-2025-PHY-T5' OR code LIKE '%PHY%' OR code LIKE '%MED%' 
-           ORDER BY created_at DESC LIMIT 1`,
-        );
-        if (paperLookup && paperLookup.length > 0) {
-          realPaperId = paperLookup[0].id;
-          passingMarks = paperLookup[0]?.passing_marks ? Number(paperLookup[0].passing_marks) : 16;
-        }
+      const paperRes = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, max_marks, passing_marks FROM examination_papers 
+         WHERE (id::text = $1 AND $1 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+            OR code = $2 
+            OR code = $1
+            OR name ILIKE $2
+         ORDER BY created_at DESC LIMIT 1`,
+        [dto.paperId || '', paperCodeOrId],
+      );
+
+      if (paperRes && paperRes.length > 0) {
+        realPaperId = paperRes[0].id;
+        passingMarks = paperRes[0]?.passing_marks ? Number(paperRes[0].passing_marks) : 32;
       }
 
       // Auto-create paper if not yet in database
       if (!realPaperId) {
-        const defaultPaperId = (dto.paperId && this.isUUID(dto.paperId)) ? dto.paperId : '1e3dd283-e919-4c0e-9d3e-a30e5a842954';
         const insertPaper = await this.tenantSchemaService.queryInTenant(
           slug,
-          `INSERT INTO examination_papers (id, code, name, max_marks, passing_marks, type, duration_minutes)
-           VALUES ($1, 'MED-2025-PHY-T5', 'MBBS Physiology Sessional Exam', 40, 16, 'THEORY', 60)
-           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+          `INSERT INTO examination_papers (code, name, max_marks, passing_marks, type, duration_minutes)
+           VALUES ($1, $2, 80, 32, 'THEORY', 60)
            RETURNING id, passing_marks`,
-          [defaultPaperId],
+          [paperCodeOrId || 'EXAM-PAPER-01', dto.paperCode || 'Examination Paper'],
         );
         realPaperId = insertPaper[0]?.id;
-        passingMarks = 16;
+        passingMarks = 32;
       }
 
       const isPass = Number(dto.marksObtained) >= passingMarks;
@@ -255,18 +239,19 @@ export class ExaminationService {
                WHERE 1=1`;
     const params: any[] = [];
 
-    if (paperId && this.isUUID(paperId)) {
-      params.push(paperId);
-      sql += ` AND r.paper_id = $${params.length}`;
+    if (paperId && paperId.trim() !== '') {
+      params.push(paperId.trim());
+      sql += ` AND (r.paper_id::text = $${params.length} OR p.code = $${params.length} OR p.id::text = $${params.length})`;
     }
-    if (studentId && this.isUUID(studentId)) {
-      params.push(studentId);
-      sql += ` AND r.student_id = $${params.length}`;
+    if (studentId && studentId.trim() !== '') {
+      params.push(studentId.trim());
+      sql += ` AND (r.student_id::text = $${params.length} OR s.rollno = $${params.length} OR s.registration_no = $${params.length} OR s.id::text = $${params.length})`;
     }
 
     sql += ` ORDER BY r.created_at DESC`;
     return this.tenantSchemaService.queryInTenant(slug, sql, params);
   }
+
 
   async getStudentMarks(tenantSlug: string, identifier: string) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
@@ -300,8 +285,8 @@ export class ExaminationService {
          college_id, department_id, subject_id, professional_phase, topic, mode,
          question_text, option_a, option_b, option_c, option_d, correct_option,
          difficulty_level, competency_code, has_sub_questions, sub_questions, max_marks,
-         topic_id, competency_id
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18, $19)
+         topic_id, competency_id, unit_id, unit_code, unit_name, topic_code, sub_topic_id, sub_topic_code
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22, $23, $24, $25)
        RETURNING *`,
       [
         this.isUUID(dto.collegeId) ? dto.collegeId : null,
@@ -317,24 +302,36 @@ export class ExaminationService {
         dto.optionD || null,
         dto.correctOption || null,
         dto.difficultyLevel || 'Medium',
-        dto.competencyCode || null,
+        dto.competencyCode || dto.subTopicCode || null,
         dto.hasSubQuestions ?? false,
         subQuestionsJson,
         dto.maxMarks ?? 1.0,
         this.isUUID(dto.topicId) ? dto.topicId : null,
         this.isUUID(dto.competencyId) ? dto.competencyId : null,
+        this.isUUID(dto.unitId) ? dto.unitId : null,
+        dto.unitCode || 'CO1',
+        dto.unitName || 'CO1: Introduction to Web Technology / Python',
+        dto.topicCode || null,
+        this.isUUID(dto.subTopicId) ? dto.subTopicId : null,
+        dto.subTopicCode || dto.competencyCode || null,
       ],
     );
     return res[0];
   }
 
   async getQuestions(tenantSlug: string, query: {
-    departmentId?: string; subjectId?: string; mode?: string; professionalPhase?: string; topicId?: string; topic?: string; competencyId?: string; competencyCode?: string;
+    departmentId?: string; subjectId?: string; mode?: string; professionalPhase?: string; topicId?: string; topic?: string; competencyId?: string; competencyCode?: string; unitCode?: string;
   } = {}) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const params: any[] = [];
     let sql = `
-      SELECT q.*, d.name AS department_name, s.name AS subject_name, s.code AS subject_code
+      SELECT q.*, 
+             COALESCE(q.unit_code, 'CO1') AS unit_code,
+             COALESCE(q.unit_name, 'CO1: Introduction to Web Technology / Python') AS unit_name,
+             COALESCE(q.sub_topic_code, q.competency_code) AS sub_topic_code,
+             d.name AS department_name, 
+             s.name AS subject_name, 
+             s.code AS subject_code
       FROM question_bank q
       LEFT JOIN departments d ON d.id = q.department_id
       LEFT JOIN subjects s ON s.id = q.subject_id

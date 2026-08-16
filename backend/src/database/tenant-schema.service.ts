@@ -136,6 +136,22 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
+      await runner.query(`
+        ALTER TABLE "${schema}".student_admissions 
+          ADD COLUMN IF NOT EXISTS group_id UUID,
+          ADD COLUMN IF NOT EXISTS group_code VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS group_name VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS branch_id UUID,
+          ADD COLUMN IF NOT EXISTS branch_code VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS branch_name VARCHAR(100);
+      `);
+
+      await runner.query(`
+        ALTER TABLE "${schema}".students 
+          ADD COLUMN IF NOT EXISTS group_id UUID,
+          ADD COLUMN IF NOT EXISTS branch_id UUID;
+      `);
+
       // Create student_academic_details
       await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_academic_details (
@@ -1541,18 +1557,26 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     // 9. Seed authentic timetable slots & competencies for Physiology & Anatomy default departments
     try {
       await runner.query(`
-        INSERT INTO "${schema}".departments (name, code, type, is_active) VALUES
+        INSERT INTO "${schema}".departments (name, code, type, is_active)
+        SELECT * FROM (VALUES
           ('Department of Physiology', 'PHY', 'PRE_CLINICAL', true),
           ('Department of Anatomy', 'ANA', 'PRE_CLINICAL', true)
-        ON CONFLICT (code) DO NOTHING;
-      `);
+        ) AS v(name, code, type, is_active)
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "${schema}".departments d WHERE d.code = v.code
+        );
+      `).catch(() => {});
 
       await runner.query(`
-        INSERT INTO "${schema}".subjects (name, code, credits, type, is_active) VALUES
+        INSERT INTO "${schema}".subjects (name, code, credits, type, is_active)
+        SELECT * FROM (VALUES
           ('Human Physiology & Organ Systems', 'PHY101', 4, 'THEORY', true),
           ('Human Anatomy & Histology', 'ANA101', 4, 'THEORY', true)
-        ON CONFLICT (code) DO NOTHING;
-      `);
+        ) AS v(name, code, credits, type, is_active)
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "${schema}".subjects s WHERE s.code = v.code
+        );
+      `).catch(() => {});
 
       await runner.query(`
         INSERT INTO "${schema}".batches (code, year, course_cd, is_active)

@@ -329,6 +329,63 @@ export class CreateStudentDto {
   @IsString()
   ifscCode?: string;
 
+  // Documents
+  @ApiPropertyOptional({ example: 'https://...' })
+  @IsOptional()
+  @IsString()
+  aadhaarCardUrl?: string;
+
+  @ApiPropertyOptional({ example: 'https://...' })
+  @IsOptional()
+  @IsString()
+  class10MarksheetUrl?: string;
+
+  @ApiPropertyOptional({ example: 'https://...' })
+  @IsOptional()
+  @IsString()
+  class12MarksheetUrl?: string;
+
+  @ApiPropertyOptional({ example: 'https://...' })
+  @IsOptional()
+  @IsString()
+  neetScoreCardUrl?: string;
+
+  // Fees & Transport Details
+  @ApiPropertyOptional({ example: 50000 })
+  @IsOptional()
+  @IsNumber()
+  paidFees?: number;
+
+  @ApiPropertyOptional({ example: 150000 })
+  @IsOptional()
+  @IsNumber()
+  totalFees?: number;
+
+  @ApiPropertyOptional({ example: 'Route 4 - City Center' })
+  @IsOptional()
+  @IsString()
+  busRoute?: string;
+
+  @ApiPropertyOptional({ example: 'None' })
+  @IsOptional()
+  @IsString()
+  medicalConditions?: string;
+
+  @ApiPropertyOptional({ example: 'Rakesh Sharma' })
+  @IsOptional()
+  @IsString()
+  emergencyContactName?: string;
+
+  @ApiPropertyOptional({ example: 'Father' })
+  @IsOptional()
+  @IsString()
+  emergencyRelationship?: string;
+
+  @ApiPropertyOptional({ example: '9876543210' })
+  @IsOptional()
+  @IsString()
+  emergencyContactMobile?: string;
+
   // Step 6: Medical & Status
   @ApiPropertyOptional({ example: 'Vaccinated (Fully)' })
   @IsOptional()

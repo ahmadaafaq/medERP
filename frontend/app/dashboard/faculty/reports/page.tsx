@@ -3,6 +3,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import FacultyReportsNav from '../../../../components/FacultyReportsNav';
+
+interface College {
+  id: string;
+  name: string;
+  slug: string;
+  code: string;
+}
 
 interface Batch {
   id: string;
@@ -55,7 +63,13 @@ const API_BASE = 'http://localhost:3001/api/v1';
 
 const getTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantSlug') || 'srms-ims';
+    return (
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('institutionSlug') ||
+      localStorage.getItem('tenant') ||
+      'srms-ims'
+    );
   }
   return 'srms-ims';
 };
@@ -64,6 +78,8 @@ type TabType = 'daily' | 'subject_wise' | 'cumulative' | 'shortage';
 
 export default function FacultyMISReportsPage() {
   const [deptName, setDeptName] = useState('Department of Physiology');
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [selectedTenantSlug, setSelectedTenantSlug] = useState<string>(getTenantSlug());
   const [batches, setBatches] = useState<Batch[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   
@@ -92,48 +108,62 @@ export default function FacultyMISReportsPage() {
 
   useEffect(() => {
     fetchMetadataAndUserContext();
-  }, []);
+  }, [selectedTenantSlug]);
 
   useEffect(() => {
     if (selectedBatchId) {
       fetchCompiledReports();
     }
-  }, [selectedBatchId, selectedSubjectId, fromDate, toDate]);
+  }, [selectedBatchId, selectedSubjectId, fromDate, toDate, selectedTenantSlug]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, selectedBatchId, selectedSubjectId, shortageFilter, searchQuery]);
 
   const fetchMetadataAndUserContext = async () => {
-    const slug = getTenantSlug();
+    const slug = selectedTenantSlug || getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
 
     try {
+      // 1. Fetch Colleges
+      const colRes = await fetch(`${API_BASE}/college-master/colleges`, { headers: h }).catch(() => null);
+      if (colRes && colRes.ok) {
+        const colJson = await colRes.json();
+        const colList = Array.isArray(colJson?.data) ? colJson.data : Array.isArray(colJson) ? colJson : [];
+        setColleges(colList);
+      }
+
+      // 2. Fetch User Profile
       const meRes = await fetch(`${API_BASE}/auth/me`, { headers: h }).catch(() => null);
       if (meRes && meRes.ok) {
         const json = await meRes.json();
         const meData = json.data || json;
         const profile = meData.profile || {};
-        const dName = profile.department_name || meData.departmentName || 'Department of Physiology';
+        const dName = profile.department_name || meData.departmentName || 'Academic Department';
         setDeptName(dName);
       }
 
+      // 3. Fetch Batches and Subjects for active tenant
       const [bRes, sRes] = await Promise.all([
-        fetch(`${API_BASE}/college-master/batches`, { headers: h }),
-        fetch(`${API_BASE}/admin-master/subjects`, { headers: h }),
+        fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers: h }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers: h }).catch(() => null),
       ]);
 
       const parse = (j: any) => Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
 
-      let bList: Batch[] = [];
-      if (bRes.ok) {
-        bList = parse(await bRes.json());
+      if (bRes && bRes.ok) {
+        const bList: Batch[] = parse(await bRes.json());
         setBatches(bList);
-        if (bList.length > 0) setSelectedBatchId(bList[0].id);
+        if (bList.length > 0) {
+          const currentBatchExists = bList.some(b => b.id === selectedBatchId);
+          if (!currentBatchExists) {
+            setSelectedBatchId(bList[0].id);
+          }
+        }
       }
 
-      if (sRes.ok) {
+      if (sRes && sRes.ok) {
         setSubjects(parse(await sRes.json()));
       }
     } catch (e) {
@@ -141,37 +171,40 @@ export default function FacultyMISReportsPage() {
     }
   };
 
+
   const fetchCompiledReports = async () => {
     if (!selectedBatchId) return;
     setLoading(true);
-    const slug = getTenantSlug();
+    const slug = selectedTenantSlug || getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
 
     try {
       let mUrl = `${API_BASE}/attendance/batches/${selectedBatchId}/matrix-report`;
       const mParams = new URLSearchParams();
+      mParams.set('tenant', slug);
       if (fromDate) mParams.set('fromDate', fromDate);
       if (toDate) mParams.set('toDate', toDate);
-      if (mParams.toString()) mUrl += `?${mParams.toString()}`;
+      mUrl += `?${mParams.toString()}`;
 
       let rUrl = `${API_BASE}/attendance/batches/${selectedBatchId}/report`;
       const rParams = new URLSearchParams();
+      rParams.set('tenant', slug);
       if (selectedSubjectId !== 'all') rParams.set('subjectId', selectedSubjectId);
       if (fromDate) rParams.set('fromDate', fromDate);
       if (toDate) rParams.set('toDate', toDate);
-      if (rParams.toString()) rUrl += `?${rParams.toString()}`;
+      rUrl += `?${rParams.toString()}`;
 
-      let wUrl = `${API_BASE}/attendance/weekly-sessions?batchId=${selectedBatchId}&fromDate=${fromDate || '2026-08-01'}&toDate=${toDate || '2026-08-31'}`;
+      let wUrl = `${API_BASE}/attendance/weekly-sessions?batchId=${selectedBatchId}&fromDate=${fromDate || '2026-08-01'}&toDate=${toDate || '2026-08-31'}&tenant=${encodeURIComponent(slug)}`;
       if (selectedSubjectId !== 'all') wUrl += `&subjectId=${selectedSubjectId}`;
 
       const [mRes, rRes, wRes] = await Promise.all([
-        fetch(mUrl, { headers: h }),
-        fetch(rUrl, { headers: h }),
-        fetch(wUrl, { headers: h }),
+        fetch(mUrl, { headers: h }).catch(() => null),
+        fetch(rUrl, { headers: h }).catch(() => null),
+        fetch(wUrl, { headers: h }).catch(() => null),
       ]);
 
-      if (mRes.ok) {
+      if (mRes && mRes.ok) {
         const json = await mRes.json();
         const data = json.data !== undefined ? json.data : json;
         setMatrixData({
@@ -180,13 +213,13 @@ export default function FacultyMISReportsPage() {
         });
       }
 
-      if (rRes.ok) {
+      if (rRes && rRes.ok) {
         const json = await rRes.json();
         const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
         setRosterData(list);
       }
 
-      if (wRes.ok) {
+      if (wRes && wRes.ok) {
         const json = await wRes.json();
         const wData = json.data || json;
         const sList = Array.isArray(wData?.sessions) ? wData.sessions : Array.isArray(wData) ? wData : [];
@@ -355,6 +388,16 @@ export default function FacultyMISReportsPage() {
         <Header title="Faculty MIS Reports — Attendance Ledger" />
         
         <main className="p-6 space-y-6 flex-1">
+          {/* Top Reports Suite Navigation Tabs */}
+          <FacultyReportsNav
+            activeReport="attendance"
+            stats={{
+              attendanceCount: stats.totalClasses > 0 ? `${stats.totalClasses} Sessions` : 'Active',
+              logbookCount: 'Ledger',
+              theoryCount: 'Assessment',
+            }}
+          />
+
           {/* Header Bar */}
           <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
@@ -370,7 +413,7 @@ export default function FacultyMISReportsPage() {
                 Subject-Wise &amp; Cumulative Monthly Attendance Ledger
               </h2>
               <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5 font-medium">
-                Live multi-subject medical attendance compiled dynamically from PostgreSQL database (<code className="text-[#5B4BFF] font-mono font-bold">attendance_sessions</code> &amp; <code className="text-[#5B4BFF] font-mono font-bold">attendance_records</code>)
+                Live multi-subject attendance compiled dynamically from PostgreSQL database (<code className="text-[#5B4BFF] font-mono font-bold">attendance_sessions</code> &amp; <code className="text-[#5B4BFF] font-mono font-bold">attendance_records</code>)
               </p>
             </div>
             
@@ -401,6 +444,22 @@ export default function FacultyMISReportsPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+              {/* Institution / College */}
+              {colleges.length > 1 && (
+                <div>
+                  <label className="block text-[11px] font-extrabold text-[#5B4BFF] uppercase mb-1">Target College *</label>
+                  <select
+                    value={selectedTenantSlug}
+                    onChange={(e) => setSelectedTenantSlug(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#5B4BFF] font-black text-xs focus:ring-2 focus:ring-[#5B4BFF]"
+                  >
+                    {colleges.map(c => (
+                      <option key={c.id} value={c.slug}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Target Batch */}
               <div>
                 <label className="block text-[11px] font-extrabold text-[#4E5969] dark:text-slate-400 uppercase mb-1">Target Batch *</label>
@@ -410,7 +469,7 @@ export default function FacultyMISReportsPage() {
                   className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs focus:ring-2 focus:ring-[#5B4BFF]"
                 >
                   {batches.map(b => (
-                    <option key={b.id} value={b.id}>{b.code} ({b.name || 'MBBS Phase I'})</option>
+                    <option key={b.id} value={b.id}>{b.code} ({b.name || 'Batch'})</option>
                   ))}
                 </select>
               </div>
