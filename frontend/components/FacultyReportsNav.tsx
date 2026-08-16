@@ -30,15 +30,6 @@ export default function FacultyReportsNav({ activeReport, role, stats }: Faculty
       accent: 'border-[#5B4BFF] text-[#5B4BFF]',
     },
     {
-      id: 'logbook',
-      href: `${base}/logbook`,
-      title: 'UG LogBook Evaluation',
-      subtitle: 'Clinical procedures, practical competencies & faculty sign-offs',
-      icon: '📚',
-      badge: stats?.logbookCount !== undefined ? `${stats.logbookCount} Verified` : 'LogBook',
-      accent: 'border-[#00C48C] text-[#00C48C]',
-    },
-    {
       id: 'theory',
       href: `${base}/theory-result`,
       title: 'Theory & Assessment',
@@ -52,7 +43,7 @@ export default function FacultyReportsNav({ activeReport, role, stats }: Faculty
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-2 shadow-soft">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {reports.map((r) => {
           const isActive = activeReport === r.id;
           return (

@@ -324,29 +324,29 @@ export default function StudentDashboard() {
               </span>
             </Link>
 
-            {/* Card 4: UG Clinical Logbook */}
+            {/* Card 4: Academic Timetable & Schedule */}
             <Link 
-              href="/dashboard/student/logbook" 
+              href="/dashboard/student/timetable" 
               className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft hover:shadow-md transition-all duration-200 block group"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
-                  UG Clinical Logbook
+                  Timetable Schedule
                 </span>
                 <span className="p-2 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 font-black text-xs">
-                  CBME UG
+                  Active
                 </span>
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <p className="text-3xl font-black text-[#1B1E28] dark:text-white group-hover:text-purple-600 transition-colors">
-                  {logbookVerifiedCount} / {logbookTotalCount}
+                  7 Classes
                 </p>
               </div>
               <p className="mt-3 text-xs text-[#4E5969] dark:text-slate-400 font-medium">
-                Verified Faculty Sign-Offs
+                Scheduled Weekly Sessions
               </p>
               <span className="mt-3 text-[11px] font-bold text-purple-600 dark:text-purple-400 group-hover:translate-x-1 inline-block transition-transform">
-                Open UG Logbook Tracker →
+                View Weekly Timetable →
               </span>
             </Link>
 
@@ -460,20 +460,20 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
-              {/* Logbook Quick Submit Button */}
+              {/* Schedule Quick View Button */}
               <div className="p-6 rounded-[22px] bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200 dark:border-indigo-500/20 shadow-soft space-y-3">
                 <h3 className="text-sm font-black text-[#1B1E28] dark:text-white tracking-tight">
-                  📝 UG Clinical Logbook Entry
+                  📅 Academic Schedule & Timetable
                 </h3>
                 <p className="text-xs text-[#4E5969] dark:text-slate-300">
-                  Have you attended a ward round or procedure today? Submit your logbook entry for faculty sign-off.
+                  Review your daily class slots, assigned faculty, and laboratory rooms.
                 </p>
-                <button
-                  onClick={() => setIsLogbookModalOpen(true)}
-                  className="w-full py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3FE3] text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                <Link
+                  href="/dashboard/student/timetable"
+                  className="w-full py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3FE3] text-white font-bold text-xs shadow-md transition-all inline-block text-center cursor-pointer"
                 >
-                  + Submit New Logbook Entry
-                </button>
+                  View Weekly Schedule →
+                </Link>
               </div>
 
             </div>

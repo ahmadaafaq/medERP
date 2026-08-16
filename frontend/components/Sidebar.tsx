@@ -117,20 +117,6 @@ export default function Sidebar({ role }: SidebarProps) {
                 <span>Assessment Marks Entry</span>
               </Link>
 
-              <Link href="/dashboard/admin/ug-logbook/evaluation" className={getLinkClass('/dashboard/admin/ug-logbook/evaluation')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>UG Logbook Evaluation</span>
-              </Link>
-
-              <Link href="/dashboard/admin/ug-logbook/activity-master" className={getLinkClass('/dashboard/admin/ug-logbook/activity-master')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span>UG Logbook Master</span>
-              </Link>
-
               {/* Expandable MIS Reports Accordion for Admin */}
               <div className="space-y-1">
                 <button
@@ -168,18 +154,6 @@ export default function Sidebar({ role }: SidebarProps) {
                     </Link>
 
                     <Link
-                      href="/dashboard/admin/reports/logbook"
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
-                        pathname === '/dashboard/admin/reports/logbook'
-                          ? 'font-black text-white bg-[#5B4BFF] shadow-sm'
-                          : 'font-medium text-purple-200/70 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
-                      <span>2. UG LogBook Report</span>
-                    </Link>
-
-                    <Link
                       href="/dashboard/admin/reports/theory-result"
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
                         pathname === '/dashboard/admin/reports/theory-result' || pathname === '/dashboard/admin/reports/theory'
@@ -188,7 +162,7 @@ export default function Sidebar({ role }: SidebarProps) {
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-[#FFB020]"></span>
-                      <span>3. Theory Result</span>
+                      <span>2. Theory Result</span>
                     </Link>
                   </div>
                 )}
@@ -253,13 +227,6 @@ export default function Sidebar({ role }: SidebarProps) {
                 <span>Assessment Marks</span>
               </Link>
 
-              <Link href="/dashboard/faculty/logbook" className={getLinkClass('/dashboard/faculty/logbook')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>UG Logbook Evaluation</span>
-              </Link>
-
               {/* Expandable MIS Reports Accordion */}
               <div className="space-y-1">
                 <button
@@ -297,18 +264,6 @@ export default function Sidebar({ role }: SidebarProps) {
                     </Link>
 
                     <Link
-                      href="/dashboard/faculty/reports/logbook"
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
-                        pathname === '/dashboard/faculty/reports/logbook'
-                          ? 'font-black text-white bg-[#5B4BFF] shadow-sm'
-                          : 'font-medium text-purple-200/70 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
-                      <span>2. UG LogBook Report</span>
-                    </Link>
-
-                    <Link
                       href="/dashboard/faculty/reports/theory-result"
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
                         pathname === '/dashboard/faculty/reports/theory-result' || pathname === '/dashboard/faculty/reports/theory'
@@ -317,7 +272,7 @@ export default function Sidebar({ role }: SidebarProps) {
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-[#FFB020]"></span>
-                      <span>3. Theory Result</span>
+                      <span>2. Theory Result</span>
                     </Link>
                   </div>
                 )}
@@ -374,20 +329,6 @@ export default function Sidebar({ role }: SidebarProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 <span>Schedule</span>
-              </Link>
-
-              <Link href="/dashboard/student/schedule" className={getLinkClass('/dashboard/student/schedule')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Schedule</span>
-              </Link>
-
-              <Link href="/dashboard/student/logbook" className={getLinkClass('/dashboard/student/logbook')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>UG Logbook</span>
               </Link>
 
               <Link href="/dashboard/student/attendance" className={getLinkClass('/dashboard/student/attendance')}>
