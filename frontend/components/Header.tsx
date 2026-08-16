@@ -29,6 +29,7 @@ interface UserProfileData {
 }
 
 export default function Header({ title }: HeaderProps) {
+  const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
   const [user, setUser] = useState<UserProfileData | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -51,6 +52,8 @@ export default function Header({ title }: HeaderProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setMounted(true);
+
     // 1. Theme initialization — Light mode active by default
     const savedTheme = localStorage.getItem('mederp_theme') as 'dark' | 'light' | null;
     if (savedTheme) {
@@ -311,8 +314,8 @@ export default function Header({ title }: HeaderProps) {
     return nameStr.substring(0, 2).toUpperCase();
   };
 
-  const userName = user?.name || 'Logged User';
-  const userRole = user?.role || (getStorageItem('role') || 'STUDENT').toUpperCase();
+  const userName = user?.name || (mounted ? (getStorageItem('name') || getStorageItem('role') || 'Admin') : 'Admin');
+  const userRole = (user?.role || (mounted ? (getStorageItem('role') || 'ADMIN') : 'ADMIN')).toUpperCase();
   const userDisplayId = user?.registrationNo
     ? `REG: ${user.registrationNo}`
     : user?.empId
@@ -376,7 +379,7 @@ export default function Header({ title }: HeaderProps) {
                     className="w-10 h-10 rounded-xl object-cover border-2 border-[#F36C21] shadow-lg shadow-orange-500/30 group-hover:scale-105 transition-all"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-xl bg-[#F36C21] text-white font-black flex items-center justify-center text-sm shadow-lg shadow-orange-500/30 group-hover:scale-105 transition-all border border-white/30">
+                  <div className="w-10 h-10 rounded-xl bg-[#F36C21] text-white font-black flex items-center justify-center text-sm shadow-lg shadow-orange-500/30 group-hover:scale-105 transition-all border border-white/30" suppressHydrationWarning>
                     {getUserInitials(userName)}
                   </div>
                 )}
@@ -384,9 +387,9 @@ export default function Header({ title }: HeaderProps) {
                 <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#00C48C] border-2 border-[#2D2575] rounded-full"></span>
               </div>
 
-              <div className="hidden sm:block text-left">
-                <span className="block text-xs font-black text-white truncate max-w-[130px]">{userName}</span>
-                <span className="block text-[10px] text-purple-200/80 font-bold uppercase">{userRole}</span>
+              <div className="hidden sm:block text-left" suppressHydrationWarning>
+                <span className="block text-xs font-black text-white truncate max-w-[130px]" suppressHydrationWarning>{userName}</span>
+                <span className="block text-[10px] text-purple-200/80 font-bold uppercase" suppressHydrationWarning>{userRole}</span>
               </div>
             </button>
 
@@ -402,20 +405,20 @@ export default function Header({ title }: HeaderProps) {
                       className="w-12 h-12 rounded-xl object-cover border border-indigo-500/40 shadow-lg shadow-indigo-500/10"
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 text-white font-black flex items-center justify-center text-base shadow-lg shadow-indigo-600/25 border border-indigo-400/30">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 text-white font-black flex items-center justify-center text-base shadow-lg shadow-indigo-600/25 border border-indigo-400/30" suppressHydrationWarning>
                       {getUserInitials(userName)}
                     </div>
                   )}
 
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-extrabold text-sm text-white truncate">{userName}</h3>
-                    <p className="text-[11px] text-slate-400 truncate">{user?.email || 'Registered User'}</p>
+                    <h3 className="font-extrabold text-sm text-white truncate" suppressHydrationWarning>{userName}</h3>
+                    <p className="text-[11px] text-slate-400 truncate" suppressHydrationWarning>{user?.email || 'Registered User'}</p>
 
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className={`text-[9px] px-2 py-0.5 rounded-md border font-extrabold tracking-wider ${getRoleBadgeStyle(userRole)}`}>
+                    <div className="flex items-center gap-2 mt-1.5" suppressHydrationWarning>
+                      <span className={`text-[9px] px-2 py-0.5 rounded-md border font-extrabold tracking-wider ${getRoleBadgeStyle(userRole)}`} suppressHydrationWarning>
                         {userRole}
                       </span>
-                      <span className="text-[9px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 font-mono font-bold">
+                      <span className="text-[9px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 font-mono font-bold" suppressHydrationWarning>
                         {userDisplayId}
                       </span>
                     </div>
