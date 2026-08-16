@@ -231,7 +231,14 @@ export default function StaffMasterPage() {
         } else if (Array.isArray(json?.items)) {
           dataList = json.items;
         }
-        setFaculties(dataList);
+        const seen = new Set<string>();
+        const dedupedList = dataList.filter(f => {
+          const key = f.emp_id || f.id || f.email;
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setFaculties(dedupedList);
         setCurrentPage(1);
       }
     } catch (err) {
@@ -592,7 +599,7 @@ export default function StaffMasterPage() {
 
   // Filter faculties locally
   const filteredFaculties = useMemo(() => {
-    return faculties.filter((fac) => {
+    const rawList = faculties.filter((fac: Faculty) => {
       // 1. Filter by College
       if (selectedCollegeFilter !== 'all') {
         const targetCol = colleges.find(c => String(c.code) === String(selectedCollegeFilter) || String(c.id) === String(selectedCollegeFilter) || c.slug === selectedCollegeFilter);
@@ -640,6 +647,14 @@ export default function StaffMasterPage() {
         if (!matchesSearch) return false;
       }
 
+      return true;
+    });
+
+    const seen = new Set<string>();
+    return rawList.filter((f: Faculty) => {
+      const key = f.emp_id || f.id || f.email;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
   }, [faculties, selectedCollegeFilter, selectedDeptFilter, selectedStaffTypeFilter, searchTerm, colleges, departments]);
@@ -792,7 +807,7 @@ export default function StaffMasterPage() {
                       </td>
                     </tr>
                   ) : (
-                    paginatedFaculties.map((fac) => {
+                    paginatedFaculties.map((fac: Faculty) => {
                       const matchedCol = colleges.find(c => c.id === fac.college_id || c.code === fac.college_code || c.slug === fac.college_slug);
                       const displayColName = matchedCol?.name || fac.college_name || 'SRMS CET';
                       const displayColCode = matchedCol?.code || fac.college_code || '1';
@@ -810,7 +825,7 @@ export default function StaffMasterPage() {
                                   />
                                 ) : (
                                   <span className="font-extrabold text-[#5B4BFF] text-xs">
-                                    {fac.name ? fac.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : 'ST'}
+                                    {fac.name ? fac.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'ST'}
                                   </span>
                                 )}
                               </div>

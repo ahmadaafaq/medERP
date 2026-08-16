@@ -297,25 +297,25 @@ export class UsersService {
 
     const [rows, countRows] = await Promise.all([
       this.ds.query(
-        `SELECT f.id, f.emp_id, f.name, f.designation, f.photo_url,
+        `SELECT DISTINCT ON (f.id) f.id, f.emp_id, f.name, f.designation, f.photo_url,
                 f.phone, f.department_id, f.subject_id, f.gender, f.experience, f.staff_type, f.is_active,
                 u.email, u.role, u.is_active as user_active,
                 d.name AS department_name, d.code AS department_code,
                 s.name AS subject_name, s.code AS subject_code
          FROM "${schema}".faculty f
          LEFT JOIN "${schema}".users u ON u.id = f.user_id
-         LEFT JOIN "${schema}".departments d ON (d.id = f.department_id OR d.code = f.department_id::text)
-         LEFT JOIN "${schema}".subjects s ON (s.id = f.subject_id OR s.code = f.subject_id::text)
+         LEFT JOIN "${schema}".departments d ON (d.id = f.department_id OR (f.department_id IS NOT NULL AND d.code = f.department_id::text))
+         LEFT JOIN "${schema}".subjects s ON (s.id = f.subject_id OR (f.subject_id IS NOT NULL AND s.code = f.subject_id::text))
          ${where}
-         ORDER BY f.name ASC
+         ORDER BY f.id, f.name ASC
          LIMIT $${i} OFFSET $${i + 1}`,
         [...params, limit, offset],
       ).catch(() => []),
       this.ds.query(
-        `SELECT COUNT(*) FROM "${schema}".faculty f
+        `SELECT COUNT(DISTINCT f.id) FROM "${schema}".faculty f
          LEFT JOIN "${schema}".users u ON u.id = f.user_id
-         LEFT JOIN "${schema}".departments d ON (d.id = f.department_id OR d.code = f.department_id::text)
-         LEFT JOIN "${schema}".subjects s ON (s.id = f.subject_id OR s.code = f.subject_id::text)
+         LEFT JOIN "${schema}".departments d ON (d.id = f.department_id OR (f.department_id IS NOT NULL AND d.code = f.department_id::text))
+         LEFT JOIN "${schema}".subjects s ON (s.id = f.subject_id OR (f.subject_id IS NOT NULL AND s.code = f.subject_id::text))
          ${where}`,
         params,
       ).catch(() => [{ count: '0' }]),
