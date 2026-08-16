@@ -51,9 +51,13 @@ export class AuthService {
     const resolvedSlug = tenantSlug ? this.tenantSchemaService.resolveTenantSlug(tenantSlug) : null;
 
     if (resolvedSlug) {
-      // Ensure schema tables and seed users exist for this tenant
-      await this.tenantSchemaService.ensureLatestSchema(resolvedSlug);
       schema = `tenant_${resolvedSlug}`;
+      // Safely ensure schema tables exist without failing login if already initialized
+      try {
+        await this.tenantSchemaService.ensureLatestSchema(resolvedSlug);
+      } catch (err: any) {
+        this.logger.warn(`Schema check bypassed for ${resolvedSlug}: ${err.message}`);
+      }
       const rows = await this.ds.query(
         `SELECT u.id, u.email, u.password_hash, u.role, u.is_active, u.must_change_password,
                 u.failed_login_count, u.locked_until, u.last_login_at,

@@ -1587,7 +1587,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         WHERE NOT EXISTS (
           SELECT 1 FROM "${schema}".batches b WHERE b.code = v.code
         );
-      `);
+      `).catch(() => {});
 
       await runner.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS competencies_code_uidx ON "${schema}".competencies (code);

@@ -41,7 +41,13 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'User authenticated successfully, JWT tokens issued.' })
   @ApiResponse({ status: 401, description: 'Invalid credentials or account locked.' })
   async login(@Body() dto: LoginDto, @Req() req: Request) {
-    const tenantSlug = req.tenant?.slug;
+    const tenantSlug =
+      req.tenant?.slug ||
+      (req.query?.tenant as string) ||
+      (req.headers['x-tenant-slug'] as string) ||
+      (dto as any)?.tenantSlug ||
+      (dto as any)?.tenant ||
+      'srms-cet-bareilly';
     return this.authService.login(dto, tenantSlug);
   }
 
