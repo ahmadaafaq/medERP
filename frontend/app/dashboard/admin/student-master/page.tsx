@@ -596,6 +596,10 @@ export default function StudentMasterPage() {
     }
   };
 
+  useEffect(() => {
+    fetchMetadata();
+  }, []);
+
   const getActiveTenantSlug = () => {
     const savedSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null;
     const activeCollege = selectedCollege !== 'all'

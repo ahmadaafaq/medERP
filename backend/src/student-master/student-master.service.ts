@@ -67,8 +67,6 @@ export class StudentMasterService {
     for (const slug of targetSlugs) {
       if (!slug) continue;
       try {
-        await this.tenantSchemaService.ensureLatestSchema(slug);
-
         const params: any[] = [];
         let sql = `
           SELECT DISTINCT ON (s.id) s.id, s.name, s.rollno, s.registration_no, s.is_active, s.created_at, s.photo_url,
