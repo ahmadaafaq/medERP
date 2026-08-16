@@ -2,9 +2,11 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 interface FacultyReportsNavProps {
   activeReport: 'attendance' | 'logbook' | 'theory';
+  role?: 'admin' | 'faculty';
   stats?: {
     attendanceCount?: number | string;
     logbookCount?: number | string;
@@ -12,11 +14,15 @@ interface FacultyReportsNavProps {
   };
 }
 
-export default function FacultyReportsNav({ activeReport, stats }: FacultyReportsNavProps) {
+export default function FacultyReportsNav({ activeReport, role, stats }: FacultyReportsNavProps) {
+  const pathname = usePathname();
+  const isAdmin = role === 'admin' || (pathname && pathname.includes('/dashboard/admin/'));
+  const base = isAdmin ? '/dashboard/admin/reports' : '/dashboard/faculty/reports';
+
   const reports = [
     {
       id: 'attendance',
-      href: '/dashboard/faculty/reports/attendance',
+      href: `${base}/attendance`,
       title: 'MIS Attendance Ledger',
       subtitle: 'Daily logs, multi-subject matrix, cumulative & shortage analysis',
       icon: '📊',
@@ -25,7 +31,7 @@ export default function FacultyReportsNav({ activeReport, stats }: FacultyReport
     },
     {
       id: 'logbook',
-      href: '/dashboard/faculty/reports/logbook',
+      href: `${base}/logbook`,
       title: 'UG LogBook Evaluation',
       subtitle: 'Clinical procedures, practical competencies & faculty sign-offs',
       icon: '📚',
@@ -34,7 +40,7 @@ export default function FacultyReportsNav({ activeReport, stats }: FacultyReport
     },
     {
       id: 'theory',
-      href: '/dashboard/faculty/reports/theory-result',
+      href: `${base}/theory-result`,
       title: 'Theory & Assessment',
       subtitle: 'Exam papers, question-level analysis & competency scores',
       icon: '📝',
@@ -42,6 +48,7 @@ export default function FacultyReportsNav({ activeReport, stats }: FacultyReport
       accent: 'border-[#F36C21] text-[#F36C21]',
     },
   ];
+
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-2 shadow-soft">

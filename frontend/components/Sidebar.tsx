@@ -13,7 +13,7 @@ export default function Sidebar({ role }: SidebarProps) {
   const [misReportsOpen, setMisReportsOpen] = useState(true);
 
   useEffect(() => {
-    if (pathname?.startsWith('/dashboard/faculty/reports')) {
+    if (pathname?.startsWith('/dashboard/faculty/reports') || pathname?.startsWith('/dashboard/admin/reports')) {
       setMisReportsOpen(true);
     }
   }, [pathname]);
@@ -103,27 +103,6 @@ export default function Sidebar({ role }: SidebarProps) {
                 <span>Attendance Master</span>
               </Link>
 
-              <Link href="/dashboard/admin/attendance-reports" className={getLinkClass('/dashboard/admin/attendance-reports')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span>MIS Attendance Reports</span>
-              </Link>
-
-              <Link href="/dashboard/admin" className={getLinkClass('/dashboard/admin/faculty-directory')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <span>Faculty Directory</span>
-              </Link>
-
-              <Link href="/dashboard/admin" className={getLinkClass('/dashboard/admin/fees')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
-                <span>Fee Structure Builder</span>
-              </Link>
-
               <Link href="/dashboard/admin/assessment" className={getLinkClass('/dashboard/admin/assessment')}>
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -151,6 +130,69 @@ export default function Sidebar({ role }: SidebarProps) {
                 </svg>
                 <span>UG Logbook Master</span>
               </Link>
+
+              {/* Expandable MIS Reports Accordion for Admin */}
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setMisReportsOpen(!misReportsOpen)}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-r-xl font-bold transition-all group ${
+                    pathname?.startsWith('/dashboard/admin/reports') || misReportsOpen
+                      ? 'text-white bg-white/15 border-l-4 border-[#F36C21] shadow-lg shadow-purple-950/20'
+                      : 'text-purple-200/80 hover:text-white hover:bg-white/10 border-l-4 border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>MIS Reports</span>
+                  </div>
+                  <span className="w-5 h-5 rounded-md bg-white/20 text-white font-black flex items-center justify-center text-xs shadow-inner">
+                    {misReportsOpen ? '−' : '+'}
+                  </span>
+                </button>
+
+                {misReportsOpen && (
+                  <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-white/10 ml-3">
+                    <Link
+                      href="/dashboard/admin/reports/attendance"
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === '/dashboard/admin/reports' || pathname === '/dashboard/admin/reports/attendance'
+                          ? 'font-black text-white bg-[#5B4BFF] shadow-sm'
+                          : 'font-medium text-purple-200/70 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]"></span>
+                      <span>1. Attendance Report</span>
+                    </Link>
+
+                    <Link
+                      href="/dashboard/admin/reports/logbook"
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === '/dashboard/admin/reports/logbook'
+                          ? 'font-black text-white bg-[#5B4BFF] shadow-sm'
+                          : 'font-medium text-purple-200/70 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
+                      <span>2. UG LogBook Report</span>
+                    </Link>
+
+                    <Link
+                      href="/dashboard/admin/reports/theory-result"
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                        pathname === '/dashboard/admin/reports/theory-result' || pathname === '/dashboard/admin/reports/theory'
+                          ? 'font-black text-white bg-[#5B4BFF] shadow-sm'
+                          : 'font-medium text-purple-200/70 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#FFB020]"></span>
+                      <span>3. Theory Result</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
             </>
           ) : role === 'faculty' ? (
             <>

@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import Sidebar from '../../../../../components/Sidebar';
 import Header from '../../../../../components/Header';
 import FacultyReportsNav from '../../../../../components/FacultyReportsNav';
+
 
 interface Department {
   id: string;
@@ -186,15 +188,19 @@ export default function FacultyUGLogbookReportPage() {
   const verifiedCount = logbookEntries.filter(e => e.status === 'VERIFIED').length;
   const pendingCount = logbookEntries.filter(e => e.status === 'PENDING').length;
 
+  const pathname = usePathname();
+  const currentRole: 'admin' | 'faculty' = (pathname && pathname.includes('/dashboard/admin/')) ? 'admin' : 'faculty';
+
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans">
-      <Sidebar role="faculty" />
+      <Sidebar role={currentRole} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="Faculty MIS Reports — UG LogBook Evaluation" />
+        <Header title={currentRole === 'admin' ? 'Admin MIS Reports — UG LogBook Evaluation' : 'Faculty MIS Reports — UG LogBook Evaluation'} />
         <main className="p-6 space-y-6 flex-1">
           {/* Top Reports Suite Navigation Tabs */}
           <FacultyReportsNav
             activeReport="logbook"
+            role={currentRole}
             stats={{
               attendanceCount: 'Sessions',
               logbookCount: `${verifiedCount} Sign-offs`,

@@ -1,41 +1,83 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import Sidebar from '../../../../../components/Sidebar';
 import Header from '../../../../../components/Header';
 import FacultyReportsNav from '../../../../../components/FacultyReportsNav';
 
+// ─── Interfaces conforming strictly to RestrictAPI.md (Zero GUID Standard) ──
+interface College {
+  id?: string;
+  colg_cd?: number | string;
+  code: string;
+  name: string;
+  slug: string;
+}
+
+interface CourseItem {
+  id?: string;
+  course_cd: string;
+  code: string;
+  name: string;
+  degree_level?: string;
+  colg_cd?: string;
+}
+
+interface BranchItem {
+  id?: string;
+  branch_cd: string;
+  code: string;
+  name: string;
+  course_cd?: string;
+  course_name?: string;
+  colg_cd?: string;
+}
+
+interface BatchItem {
+  id?: string;
+  batch_cd: string;
+  code: string;
+  name?: string;
+  year?: number;
+  course_cd?: string;
+  course_name?: string;
+  colg_cd?: string;
+}
+
 interface Department {
-  id: string;
+  id?: string;
+  dept_cd?: number | string;
   name: string;
   code: string;
+  course_cd?: string;
+  course_name?: string;
+  branch_cd?: string;
+  colg_cd?: string;
+  college_slug?: string;
 }
 
 interface Subject {
-  id: string;
+  id?: string;
+  subject_cd?: number | string;
   name: string;
   code: string;
   department_id?: string;
+  department_name?: string;
+  department_code?: string;
+  course_cd?: string;
+  branch_cd?: string;
+  semester?: number | string;
+  colg_cd?: string;
+  college_slug?: string;
 }
 
-interface Batch {
-  id: string;
-  code: string;
-  year?: number;
-  name?: string;
-}
-
-interface CbmeYear {
+interface QuestionSubPart {
   id: string;
   label: string;
-  year?: string;
-}
-
-interface Professional {
-  id: string;
-  name: string;
-  course_cd?: string;
-  phase_order?: number;
+  questionText?: string;
+  question_text?: string;
+  marks: number;
 }
 
 interface PaperQuestion {
@@ -45,44 +87,77 @@ interface PaperQuestion {
   questionText: string;
   mode: 'MCQ' | 'DESC' | 'PRACTICAL';
   topic?: string;
-  competencyCode: string;
-  competencyDesc?: string;
+  subTopicCode: string;
+  subTopicDesc?: string;
   maxMarks: number;
   optionA?: string;
   optionB?: string;
   optionC?: string;
   optionD?: string;
   correctOption?: string;
-  subQuestions?: { id: string; label: string; questionText: string; marks: number }[];
+  subQuestions?: QuestionSubPart[];
+}
+
+interface SubTopicSummary {
+  code: string;
+  desc: string;
+  totalMaxMarks: number;
+  questionCount: number;
+}
+
+interface PracticalCategory {
+  id: string;
+  name: string;
+  icon: string;
+  maxMarks: number;
+  scoredMarks: number;
+  percentage: number;
+  color: string;
 }
 
 interface StudentTheoryReport {
   id: string;
   rollno: string;
+  registration_no?: string;
   name: string;
   gender: string;
   course: string;
   batch: string;
-  professional: string;
+  semester: string;
   evaluated: boolean;
   marksObtained: number;
   maxMarks: number;
+  percentage: number;
   practicalMarks: number;
   practicalMax: number;
+  practicalPercentage: number;
+  practicalCategories: PracticalCategory[];
   isPass: boolean;
-  // Map of competency code -> { correct: number; total: number; pct: number; scoredMarks: number; maxMarks: number; desc?: string }
-  competencyResults: { [compCode: string]: { correct: number; total: number; pct: number; scoredMarks: number; maxMarks: number; desc?: string } };
-  // Student's answer attempts for each question in the paper
+  photo_url?: string;
+  questionMarks?: { [qId: string]: number };
+  subPartMarks?: { [subKey: string]: number };
+  subTopicResults: {
+    [subTopicCode: string]: {
+      scored: number;
+      totalMax: number;
+      pct: number;
+      questionCount: number;
+      desc?: string;
+    };
+  };
   questionAttempts: {
     questionId: string;
     qNo: number;
     part: string;
     questionText: string;
-    competencyCode: string;
-    competencyDesc?: string;
+    subTopicCode: string;
+    subTopicDesc?: string;
     selectedOption?: string;
     correctOption?: string;
-    options?: { label: string; text: string }[];
+    optionA?: string;
+    optionB?: string;
+    optionC?: string;
+    optionD?: string;
     marksScored: number;
     maxMarks: number;
     isCorrect: boolean;
@@ -99,724 +174,757 @@ interface ExamPaper {
   passing_marks: number;
   duration_mins?: number;
   status?: string;
-  subject_id?: string;
-  subject_name?: string;
-  topic_name?: string;
+  subject_code?: string;
   batch_code?: string;
+  sections?: any[];
   questions: PaperQuestion[];
 }
 
 const API_BASE = 'http://localhost:3001/api/v1';
 
-const getTenantSlug = (): string => {
+const getInitialTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
     return (
       localStorage.getItem('tenantSlug') ||
       localStorage.getItem('selectedTenant') ||
       localStorage.getItem('institutionSlug') ||
       localStorage.getItem('tenant') ||
-      'srms-ims'
+      'srms-cet-bareilly'
     );
   }
-  return 'srms-ims';
+  return 'srms-cet-bareilly';
 };
 
-const getTenantName = (): string => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantName') || localStorage.getItem('institutionName') || '';
-  }
-  return '';
-};
-
-
-// Default fallback questions for Physiology papers
-const defaultPhysiologyQuestions: PaperQuestion[] = [
-  {
-    id: 'py-q1',
-    qNo: 1,
-    part: 'PART A',
-    questionText: 'Which plasma protein is mainly responsible for maintaining colloid osmotic pressure?',
-    mode: 'MCQ',
-    topic: 'Topic 02 : Haematology (2024)',
-    competencyCode: 'PY2.1(2024)',
-    competencyDesc: 'Describe the composition and functions of blood & erythropoiesis',
-    maxMarks: 2,
-    optionA: 'Fibrinogen',
-    optionB: 'Albumin',
-    optionC: 'Globulin',
-    optionD: 'Hemoglobin',
-    correctOption: 'option_b',
-  },
-  {
-    id: 'py-q2',
-    qNo: 2,
-    part: 'PART A',
-    questionText: 'The most abundant formed element in blood is:',
-    mode: 'MCQ',
-    topic: 'Topic 02 : Haematology (2024)',
-    competencyCode: 'PY2.1(2024)',
-    competencyDesc: 'Describe the composition and functions of blood & erythropoiesis',
-    maxMarks: 2,
-    optionA: 'Platelets',
-    optionB: 'Leukocytes',
-    optionC: 'Erythrocytes',
-    optionD: 'Plasma proteins',
-    correctOption: 'option_c',
-  },
-  {
-    id: 'py-q3',
-    qNo: 3,
-    part: 'PART A',
-    questionText: 'Hemoglobin is primarily responsible for:',
-    mode: 'MCQ',
-    topic: 'Topic 01: General Physiology (2024)',
-    competencyCode: 'PY1.1(2024)',
-    competencyDesc: 'Describe and demonstrate cell membrane transport mechanisms & homeostasis',
-    maxMarks: 2,
-    optionA: 'Blood clotting',
-    optionB: 'Oxygen transport',
-    optionC: 'Immune defense',
-    optionD: 'Plasma osmotic pressure',
-    correctOption: 'option_b',
-  },
-  {
-    id: 'py-q4',
-    qNo: 4,
-    part: 'PART A',
-    questionText: 'The hormone primarily responsible for stimulating erythropoiesis is:',
-    mode: 'MCQ',
-    topic: 'Topic 01: General Physiology (2024)',
-    competencyCode: 'PY1.1(2024)',
-    competencyDesc: 'Describe and demonstrate cell membrane transport mechanisms & homeostasis',
-    maxMarks: 2,
-    optionA: 'Insulin',
-    optionB: 'Thyroxine',
-    optionC: 'Erythropoietin',
-    optionD: 'Cortisol',
-    correctOption: 'option_c',
-  },
-  {
-    id: 'py-q5',
-    qNo: 5,
-    part: 'PART A',
-    questionText: 'The principal site of erythropoiesis in adults is:',
-    mode: 'MCQ',
-    topic: 'Topic 01: General Physiology (2024)',
-    competencyCode: 'PY1.1(2024)',
-    competencyDesc: 'Describe and demonstrate cell membrane transport mechanisms & homeostasis',
-    maxMarks: 2,
-    optionA: 'Liver',
-    optionB: 'Spleen',
-    optionC: 'Red bone marrow',
-    optionD: 'Kidney',
-    correctOption: 'option_c',
-  },
-  {
-    id: 'py-q6',
-    qNo: 6,
-    part: 'PART B',
-    questionText: 'Write short notes on: a) Plasma (5 Marks), b) Serum (5 Marks)',
-    mode: 'DESC',
-    topic: 'Topic 02 : Haematology (2024)',
-    competencyCode: 'PY2.1(2024)',
-    competencyDesc: 'Describe the composition and functions of blood & erythropoiesis',
-    maxMarks: 10,
-    subQuestions: [
-      { id: 'sub-1', label: 'a)', questionText: 'Plasma composition and functions', marks: 5 },
-      { id: 'sub-2', label: 'b)', questionText: 'Serum differences and clinical significance', marks: 5 },
-    ],
-  },
-  {
-    id: 'py-q7',
-    qNo: 7,
-    part: 'PART B',
-    questionText: 'Define blood. Describe its composition with a neat diagram.',
-    mode: 'DESC',
-    topic: 'Topic 02 : Haematology (2024)',
-    competencyCode: 'PY2.1(2024)',
-    competencyDesc: 'Describe the composition and functions of blood & erythropoiesis',
-    maxMarks: 10,
-  },
-  {
-    id: 'py-q8',
-    qNo: 8,
-    part: 'PART B',
-    questionText: 'Describe the role of iron, vitamin B12 and folic acid in red blood cell production.',
-    mode: 'DESC',
-    topic: 'Topic 01: General Physiology (2024)',
-    competencyCode: 'PY1.1(2024)',
-    competencyDesc: 'Describe and demonstrate cell membrane transport mechanisms & homeostasis',
-    maxMarks: 10,
-  },
+const CHART_COLORS = [
+  '#4F46E5', '#EA580C', '#059669', '#D97706', '#DC2626',
+  '#7C3AED', '#2563EB', '#10B981', '#DB2777', '#9333EA',
+  '#0D9488', '#F59E0B', '#6366F1', '#84CC16', '#0891B2',
 ];
 
-// Default fallback questions for Anatomy papers
-const defaultAnatomyQuestions: PaperQuestion[] = [
-  {
-    id: 'an-q1',
-    qNo: 1,
-    part: 'PART A',
-    questionText: 'A 21-year-old patient presents with Erb-Duchenne paralysis. Which clinical feature is present:',
-    mode: 'MCQ',
-    competencyCode: 'AN10.11(2024)',
-    competencyDesc: 'Describe & demonstrate attachment, action and clinical anatomy of serratus anterior muscle',
-    maxMarks: 1,
-    optionA: 'Arm tending to lie in medial rotation ("waiter\'s tip")',
-    optionB: 'Paralysis of the rhomboid major',
-    optionC: 'Inability to elevate the arm above the horizontal',
-    optionD: 'Loss of sensation on the medial side of the arm',
-    correctOption: 'option_a',
-  },
-  {
-    id: 'an-q2',
-    qNo: 2,
-    part: 'PART A',
-    questionText: 'Which region of growing long bone contains arteries that resemble hairpin loops:',
-    mode: 'MCQ',
-    competencyCode: 'AN10.6(2024)',
-    competencyDesc: 'Explain the anatomical basis of clinical features of Erb’s palsy and Klumpke’s paralysis',
-    maxMarks: 1,
-    optionA: 'Epiphysis',
-    optionB: 'Diaphysis',
-    optionC: 'Epiphysial plate',
-    optionD: 'Metaphysis',
-    correctOption: 'option_d',
-  },
-  {
-    id: 'an-q3',
-    qNo: 3,
-    part: 'PART A',
-    questionText: 'Which bone exhibits membranocartilaginous (dual) ossification:',
-    mode: 'MCQ',
-    competencyCode: 'AN11.1(2024)',
-    competencyDesc: 'Describe and demonstrate muscle groups of upper arm with emphasis on biceps and triceps brachii',
-    maxMarks: 1,
-    optionA: 'Humerus',
-    optionB: 'Clavicle',
-    optionC: 'Femur',
-    optionD: 'Fibula',
-    correctOption: 'option_b',
-  },
-  {
-    id: 'an-q4',
-    qNo: 4,
-    part: 'PART A',
-    questionText: 'The floor of the Cubital Fossa is formed by:',
-    mode: 'MCQ',
-    competencyCode: 'AN11.5(2024)',
-    competencyDesc: 'Identify & describe boundaries and contents of cubital fossa',
-    maxMarks: 1,
-    optionA: 'Pronator teres and Supinator',
-    optionB: 'Brachialis and Supinator muscles',
-    optionC: 'Biceps tendon and Bicipital aponeurosis',
-    optionD: 'Brachioradialis and Flexor carpi radialis',
-    correctOption: 'option_b',
-  },
-];
+export default function TheoryResultReportPage() {
+  const pathname = usePathname();
+  const currentRole: 'admin' | 'faculty' = (pathname && pathname.includes('/dashboard/admin/')) ? 'admin' : 'faculty';
 
-export default function FacultyTheoryResultPage() {
-  // ── Master Meta States ────────────────────────────────────────────────
+  // ─── 1. Colleges State (Rule 1: colg_cd) ───────────────────────────────────
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [selectedColgCd, setSelectedColgCd] = useState<string>('1'); // '1' = CET, '2' = IMS
+  const [selectedCollegeSlug, setSelectedCollegeSlug] = useState<string>(getInitialTenantSlug());
+
+  // ─── Step 1: 7-Level Cascading Hierarchy (RestrictAPI.md Standard) ─────────
+  // Order: 1. College -> 2. Course -> 3. Branch -> 4. Batch -> 5. Semester -> 6. Department -> 7. Subject
+  const [courses, setCourses] = useState<CourseItem[]>([]);
+  const [selectedCourseCd, setSelectedCourseCd] = useState<string>('13'); // default BCA
+
+  const [branches, setBranches] = useState<BranchItem[]>([]);
+  const [selectedBranchCd, setSelectedBranchCd] = useState<string>('1');
+
+  const [batches, setBatches] = useState<BatchItem[]>([]);
+  const [selectedBatchCd, setSelectedBatchCd] = useState<string>('B2026-C13-1');
+
+  const [selectedSemCd, setSelectedSemCd] = useState<string>('1'); // Sem 1 to 8
+
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [selectedDept, setSelectedDept] = useState<string>('');
+  const [selectedDeptCd, setSelectedDeptCd] = useState<string>('13'); // BCA Dept
+
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
-  const [selectedSubject, setSelectedSubject] = useState<string>('');
-  const [batches, setBatches] = useState<Batch[]>([]);
-  const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
-  const [cbmeYears, setCbmeYears] = useState<CbmeYear[]>([]);
-  const [selectedCbmeYearId, setSelectedCbmeYearId] = useState<string>('');
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [selectedProfId, setSelectedProfId] = useState<string>('');
-  const [metaLoaded, setMetaLoaded] = useState<boolean>(false);
+  const [selectedSubjectCd, setSelectedSubjectCd] = useState<string>('88534'); // Web Technology
 
-  const [tenantName, setTenantName] = useState<string>('');
-  const [facultyDeptName, setFacultyDeptName] = useState<string>('Physiology Department');
-
-  // ── Paper States ──────────────────────────────────────────────────────
+  // ─── Step 2: Exam Papers ───────────────────────────────────────────────────
   const [allFetchedPapers, setAllFetchedPapers] = useState<ExamPaper[]>([]);
-  const [selectedPaperId, setSelectedPaperId] = useState<string>('');
+  const [selectedPaperCode, setSelectedPaperCode] = useState<string>('');
 
-  // ── Evaluated Students Data ───────────────────────────────────────────
+  // ─── Step 3: Evaluated Students Data ───────────────────────────────────────
   const [students, setStudents] = useState<StudentTheoryReport[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
 
-  // ── Modal State ───────────────────────────────────────────────────────
+  // ─── Analysis Modal State (4 Tabs: SubTopics | Tracking | Practical | Chart) ──
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [activeStudent, setActiveStudent] = useState<StudentTheoryReport | null>(null);
-  const [modalTab, setModalTab] = useState<'competencies' | 'attempted' | 'chart'>('competencies');
-  const [expandedCompetencies, setExpandedCompetencies] = useState<{ [comp: string]: boolean }>({});
+  const [modalTab, setModalTab] = useState<'subtopics' | 'tracking' | 'practical' | 'chart'>('subtopics');
+  const [expandedSubTopics, setExpandedSubTopics] = useState<{ [code: string]: boolean }>({});
+  const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
 
+  // ─── 1. Fetch Colleges on Mount ────────────────────────────────────────────
   useEffect(() => {
-    setTenantName(getTenantName());
-    fetchAllMetadata();
+    fetchColleges();
   }, []);
 
-  useEffect(() => {
-    if (subjectsForDept.length > 0) {
-      const exists = subjectsForDept.some(s => s.id === selectedSubject);
-      if (!exists) setSelectedSubject(subjectsForDept[0].id);
-    }
-  }, [selectedDept, allSubjects]);
-
-  useEffect(() => {
-    if (metaLoaded) fetchExamPapers();
-  }, [selectedDept, selectedSubject, selectedBatch, metaLoaded]);
-
-  useEffect(() => {
-    if (selectedBatch && activePaper) {
-      fetchEvaluatedTheoryReports();
-    }
-  }, [selectedBatch, selectedPaperId, allFetchedPapers]);
-
-  const fetchAllMetadata = async () => {
-    const slug = getTenantSlug();
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-    const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
-
+  const fetchColleges = async () => {
     try {
-      let userDeptId = typeof window !== 'undefined' ? localStorage.getItem('departmentId') || '' : '';
-      let userDeptNameStr = typeof window !== 'undefined' ? localStorage.getItem('departmentName') || '' : '';
-      let userSubjId = typeof window !== 'undefined' ? localStorage.getItem('subjectId') || '' : '';
-
-      const meRes = await fetch(`${API_BASE}/auth/me`, { headers: h }).catch(() => null);
-      if (meRes && meRes.ok) {
-        const json = await meRes.json();
-        const meData = json.data || json;
-        const profile = meData.profile || {};
-        userDeptId = userDeptId || profile.department_id || meData.departmentId || meData.department_id || '';
-        userDeptNameStr = userDeptNameStr || profile.department_name || meData.departmentName || meData.department_name || '';
-        userSubjId = userSubjId || profile.subject_id || meData.subjectId || meData.subject_id || '';
-        if (userDeptNameStr) setFacultyDeptName(userDeptNameStr);
-      }
-
-      const [dRes, sRes, bRes, linkRes, profRes] = await Promise.all([
-        fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/professional-linkers?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`${API_BASE}/college-master/professionals?tenant=${slug}`, { headers: h }).catch(() => null),
-      ]);
-
-      const parseList = (j: any) => Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-
-      let fetchedDepts: Department[] = [];
-      let fetchedSubjects: Subject[] = [];
-
-      if (dRes && dRes.ok) { fetchedDepts = parseList(await dRes.json()); setDepartments(fetchedDepts); }
-      if (sRes && sRes.ok) { fetchedSubjects = parseList(await sRes.json()); setAllSubjects(fetchedSubjects); }
-
-      if (fetchedDepts.length > 0) {
-        const cleanUserDept = (userDeptNameStr || facultyDeptName || '').toLowerCase().replace('department of ', '').trim();
-        const matched = (userDeptId ? fetchedDepts.find(d => d.id === userDeptId) : null) ||
-          (cleanUserDept ? fetchedDepts.find(d => d.name.toLowerCase().includes(cleanUserDept) || cleanUserDept.includes(d.name.toLowerCase())) : null) ||
-          fetchedDepts[0];
-
-        setSelectedDept(matched.id);
-
-        if (fetchedSubjects.length > 0) {
-          const deptSubjs = fetchedSubjects.filter(s => s.department_id === matched.id);
-          const matchedSubj = (userSubjId ? deptSubjs.find(s => s.id === userSubjId) || fetchedSubjects.find(s => s.id === userSubjId) : null) ||
-            deptSubjs.find(s => s.code === 'PY' || s.name.toUpperCase() === 'PHYSIOLOGY') ||
-            deptSubjs[0] ||
-            fetchedSubjects[0];
-          if (matchedSubj) setSelectedSubject(matchedSubj.id);
-        }
-      }
-
-      // Batches
-      if (bRes && bRes.ok) {
-        const bList = parseList(await bRes.json());
-        const mapped: Batch[] = bList.map((b: any) => ({
-          id: b.id,
-          code: b.code || `${b.year}-MBBS`,
-          year: b.year,
-          name: b.name || `${b.code} Batch (Year ${b.year})`,
-        }));
-        setBatches(mapped);
-        const latest = mapped.sort((a, b) => (b.year || 0) - (a.year || 0))[0];
-        if (latest) setSelectedBatch(latest);
-      }
-
-      // CBME Years
-      if (linkRes && linkRes.ok) {
-        const linkers = parseList(await linkRes.json());
-        const years: CbmeYear[] = linkers.map((l: any) => ({
-          id: l.id,
-          label: l.name ? `${l.name} (${l.academic_session || l.code})` : (l.academic_session || l.code),
-          year: l.academic_session || l.code,
-        }));
-        setCbmeYears(years);
-        if (years.length > 0) setSelectedCbmeYearId(years[0].id);
-      }
-
-      // Professional Phases
-      if (profRes && profRes.ok) {
-        const profs = parseList(await profRes.json());
-        setProfessionals(profs);
-        if (profs.length > 0) setSelectedProfId(profs[0].id);
-      }
-
-    } catch (e) {
-      console.error('Failed to fetch metadata', e);
-    } finally {
-      setMetaLoaded(true);
-    }
-  };
-
-  const subjectsForDept = useMemo(() => {
-    if (!selectedDept) return allSubjects;
-    const deptObj = departments.find(d => d.id === selectedDept);
-    if (!deptObj) return allSubjects;
-    const deptNameClean = deptObj.name.toLowerCase().replace('department of ', '').trim();
-    const matches = allSubjects.filter(s => {
-      if (s.department_id === selectedDept) return true;
-      const sName = s.name.toLowerCase();
-      if (deptNameClean && (sName.includes(deptNameClean) || deptNameClean.includes(sName))) return true;
-      return false;
-    });
-    return matches.length > 0 ? matches : allSubjects;
-  }, [allSubjects, selectedDept, departments]);
-
-  const fetchExamPapers = async () => {
-    const slug = getTenantSlug();
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-    const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
-
-    try {
-      const res = await fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers });
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch(`${API_BASE}/college-master/colleges`, { headers });
       if (res.ok) {
         const json = await res.json();
-        const rawList: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-        if (rawList.length > 0) {
-          const mapped: ExamPaper[] = rawList.map((p: any) => {
-            const paperQuestions = extractPaperQuestions(p);
-            const totalQMarks = paperQuestions.reduce((sum, q) => sum + q.maxMarks, 0);
-            return {
-              id: p.id,
-              code: p.code || 'MED-2025-PHY-T5',
-              name: p.name || 'MBBS Physiology Sessional Exam',
-              max_marks: Number(p.max_marks || totalQMarks || 40),
-              passing_marks: Number(p.passing_marks || 16),
-              duration_mins: Number(p.duration_minutes || p.duration_mins || 60),
-              status: p.status || 'Approved',
-              subject_id: p.subject_id,
-              subject_name: p.subject_name || 'PHYSIOLOGY',
-              topic_name: p.topic_name || 'General Physiology & Cell Membrane',
-              batch_code: p.batch_code || selectedBatch?.code || '2025',
-              questions: paperQuestions,
-            };
-          });
-          setAllFetchedPapers(mapped);
-          if (!selectedPaperId || !mapped.find(p => p.id === selectedPaperId)) {
-            setSelectedPaperId(mapped[0].id);
-          }
-          return;
+        const list: College[] = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+        setColleges(list);
+
+        const currentSlug = getInitialTenantSlug();
+        const found = list.find((c: College) => c.slug === currentSlug || String(c.code) === currentSlug || String(c.colg_cd) === currentSlug);
+        if (found) {
+          setSelectedCollegeSlug(found.slug);
+          setSelectedColgCd(String(found.colg_cd || found.code || '1'));
+        } else if (list.length > 0) {
+          setSelectedCollegeSlug(list[0].slug);
+          setSelectedColgCd(String(list[0].colg_cd || list[0].code || '1'));
         }
       }
     } catch (e) {
-      console.error('Failed to fetch papers', e);
+      console.error('Failed to fetch colleges', e);
     }
-
-    // Default Physiology paper fallback
-    const fallbackPaper: ExamPaper = {
-      id: 'paper-phys-01',
-      code: 'MED-2025-PHY-T5',
-      name: 'MBBS Physiology Sessional Exam',
-      max_marks: 40,
-      passing_marks: 16,
-      duration_mins: 60,
-      status: 'Approved',
-      subject_name: 'PHYSIOLOGY',
-      topic_name: 'General Physiology & Cell Membrane',
-      batch_code: selectedBatch?.code || '2025',
-      questions: defaultPhysiologyQuestions,
-    };
-    setAllFetchedPapers([fallbackPaper]);
-    setSelectedPaperId(fallbackPaper.id);
   };
 
-  // Helper to extract questions accurately from raw paper sections
-  const extractPaperQuestions = (paper: any): PaperQuestion[] => {
-    const questions: PaperQuestion[] = [];
-    const isAnatomy = (paper.name || paper.code || paper.subject_name || '').toUpperCase().includes('ANAT');
+  // ─── 2. Fetch Master Hierarchy Data (Strict Schema-per-Tenant) ─────────────
+  const fetchMetadata = async (slug: string) => {
+    setLoading(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: Record<string, string> = {
+        'x-tenant-slug': slug,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      };
+      const parse = (j: any) => Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
 
-    if (Array.isArray(paper.sections) && paper.sections.length > 0) {
-      let qIndex = 1;
-      paper.sections.forEach((sec: any) => {
-        if (sec.type === 'PRACTICAL') return;
+      const [cRes, brRes, bRes, dRes, sRes, pRes] = await Promise.all([
+        fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/college-master/branches?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers }).catch(() => null),
+      ]);
 
-        const rawQs = Array.isArray(sec.pickedQuestions) && sec.pickedQuestions.length > 0
-          ? sec.pickedQuestions
-          : Array.isArray(sec.questions) ? sec.questions : [];
+      // 1. Courses
+      if (cRes && cRes.ok) {
+        const cList: CourseItem[] = parse(await cRes.json());
+        setCourses(cList);
+      } else {
+        setCourses([
+          { code: 'BCA', course_cd: '13', name: 'Bachelor of Computer Applications' },
+          { code: 'B.TECH', course_cd: '1', name: 'Bachelor of Technology' },
+          { code: 'B.PHARM', course_cd: '2', name: 'Bachelor of Pharmacy' },
+          { code: 'MCA', course_cd: '3', name: 'Master of Computer Applications' },
+          { code: 'MBA', course_cd: '4', name: 'Master of Business Administration' },
+          { code: 'M.TECH', course_cd: '5', name: 'Master of Technology' },
+          { code: 'M. PHARM', course_cd: '6', name: 'Master of Pharmacy' },
+          { code: 'BBA', course_cd: '12', name: 'Bachelor of Business Administration' },
+        ]);
+      }
 
-        rawQs.forEach((q: any) => {
-          const compCode = q.competency_code || q.competencyCode || (isAnatomy ? 'AN10.11(2024)' : 'PY1.1(2024)');
-          
-          let subQs: { id: string; label: string; questionText: string; marks: number }[] = [];
-          if (Array.isArray(q.sub_questions)) subQs = q.sub_questions;
-          else if (Array.isArray(q.subQuestions)) subQs = q.subQuestions;
-          else if (typeof q.sub_questions === 'string') {
-            try { subQs = JSON.parse(q.sub_questions); } catch {}
-          }
+      // 2. Branches
+      if (brRes && brRes.ok) {
+        const brList: BranchItem[] = parse(await brRes.json());
+        setBranches(brList);
+      }
 
-          let maxM = Number(q.customMarks || q.defaultMarks || q.max_marks || q.maxMarks || 0);
-          if (maxM === 0) {
-            if (subQs.length > 0) {
-              maxM = subQs.reduce((sum, sq) => sum + Number(sq.marks || 0), 0);
-            }
-            if (maxM === 0) maxM = q.mode === 'MCQ' ? 2 : 10;
-          }
+      // 3. Batches
+      if (bRes && bRes.ok) {
+        const bList: BatchItem[] = parse(await bRes.json());
+        setBatches(bList);
+      }
 
-          questions.push({
-            id: q.id || q.questionId || `q-${qIndex}`,
-            qNo: qIndex++,
-            part: sec.type === 'MCQ' || (sec.name || '').includes('A') ? 'PART A' : 'PART B',
-            questionText: q.question_text || q.questionText || 'Medical Examination Question Prompt',
-            mode: q.mode || (sec.type === 'DESC' ? 'DESC' : 'MCQ'),
-            topic: q.topic || 'Medical Science Topic',
-            competencyCode: compCode,
-            competencyDesc: q.competency_desc || q.competencyDesc || (compCode.startsWith('PY1') ? 'Describe cell membrane transport mechanisms & homeostasis' : compCode.startsWith('PY2') ? 'Describe composition & functions of blood & erythropoiesis' : 'Human Anatomy standard'),
-            maxMarks: maxM,
-            optionA: q.option_a || q.optionA,
-            optionB: q.option_b || q.optionB,
-            optionC: q.option_c || q.optionC,
-            optionD: q.option_d || q.optionD,
-            correctOption: q.correct_option || q.correctOption || 'option_a',
-            subQuestions: subQs,
-          });
+      // 4. Departments
+      if (dRes && dRes.ok) {
+        const dList: Department[] = parse(await dRes.json());
+        setDepartments(dList);
+      }
+
+      // 5. Subjects
+      if (sRes && sRes.ok) {
+        const sList: Subject[] = parse(await sRes.json());
+        setAllSubjects(sList);
+      }
+
+      // 6. Exam Papers
+      if (pRes && pRes.ok) {
+        const pList = parse(await pRes.json());
+        const mappedPapers: ExamPaper[] = pList.map((p: any) => {
+          const questions = extractQuestionsFromSections(p.sections || []);
+          return {
+            id: p.id,
+            code: p.code || 'EXAM-PAPER',
+            name: p.name || 'Examination Paper',
+            max_marks: Number(p.max_marks || 100),
+            passing_marks: Number(p.passing_marks || 40),
+            duration_mins: Number(p.duration_minutes || p.duration_mins || 60),
+            status: p.status || 'Active',
+            subject_code: p.subject_code || p.subject_cd,
+            batch_code: p.batch_code || p.batch_cd,
+            sections: Array.isArray(p.sections) ? p.sections : [],
+            questions,
+          };
+        });
+        setAllFetchedPapers(mappedPapers);
+        if (mappedPapers.length > 0) {
+          setSelectedPaperCode(mappedPapers[0].code);
+        }
+      }
+    } catch (e) {
+      console.error('fetchMetadata error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCollegeSlug) {
+      fetchMetadata(selectedCollegeSlug);
+    }
+  }, [selectedCollegeSlug]);
+
+  // ─── Extract Questions Helper from Sections ────────────────────────────────
+  const extractQuestionsFromSections = (sections: any[]): PaperQuestion[] => {
+    const list: PaperQuestion[] = [];
+    let qCount = 1;
+    sections.forEach((sec: any) => {
+      if (sec.type === 'PRACTICAL') return;
+      const qArr = sec.selectedQuestions || sec.pickedQuestions || sec.questions || [];
+      qArr.forEach((q: any) => {
+        const subQs = q.sub_questions || q.subQuestions || [];
+        const compCode = q.sub_topic_code || q.competency_code || q.competencyCode || q.unit_code || 'CO1';
+        list.push({
+          id: q.id || q.questionId || `q-${qCount}`,
+          qNo: qCount++,
+          part: sec.type === 'MCQ' || (sec.name || '').includes('A') ? 'PART A' : 'PART B',
+          questionText: q.questionText || q.question_text || 'Examination Question',
+          mode: q.mode || (sec.type === 'DESC' ? 'DESC' : 'MCQ'),
+          topic: q.topic || 'Subject Topic',
+          subTopicCode: compCode,
+          subTopicDesc: q.sub_topic_name || q.competency_desc || q.competencyDesc || `SubTopic ${compCode}`,
+          maxMarks: Number(q.marks || q.customMarks || q.defaultMarks || (q.mode === 'MCQ' ? 2 : 10)),
+          optionA: q.option_a || q.optionA,
+          optionB: q.option_b || q.optionB,
+          optionC: q.option_c || q.optionC,
+          optionD: q.option_d || q.optionD,
+          correctOption: q.correct_option || q.correctOption || 'option_a',
+          subQuestions: Array.isArray(subQs) ? subQs : [],
         });
       });
-    }
-
-    if (questions.length > 0) return questions;
-    return isAnatomy ? defaultAnatomyQuestions : defaultPhysiologyQuestions;
+    });
+    return list;
   };
 
+  // ─── Filter Courses by Selected College (Rule 1 & Medical Exclusion for CET) ─
+  const isMedicalCollege = selectedColgCd === '2' || selectedCollegeSlug.includes('ims');
+
+  const filteredCourses = useMemo(() => {
+    return courses.filter(c => {
+      const cName = (c.name || '').toLowerCase();
+      const cCode = (c.code || '').toLowerCase();
+      const isMedCourse = cName.includes('mbbs') || cCode === 'mbbs' || cName.includes('medicine');
+      if (isMedicalCollege) {
+        return isMedCourse || c.colg_cd === '2';
+      } else {
+        return !isMedCourse;
+      }
+    });
+  }, [courses, isMedicalCollege]);
+
+  useEffect(() => {
+    if (filteredCourses.length > 0) {
+      const exists = filteredCourses.some(c => String(c.course_cd) === selectedCourseCd || c.code === selectedCourseCd);
+      if (!exists) {
+        setSelectedCourseCd(String(filteredCourses[0].course_cd || filteredCourses[0].code));
+      }
+    }
+  }, [filteredCourses, selectedCourseCd]);
+
+  // ─── Filter Branches by Selected Course ────────────────────────────────────
+  const filteredBranches = useMemo(() => {
+    const list = branches.filter(b => {
+      if (isMedicalCollege) {
+        return (b.name && b.name.includes('Department of')) || b.code === 'ANA' || b.code === 'PHY';
+      }
+      const isMed = b.code === 'ANA' || b.code === 'PHY' || (b.name && (b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology')));
+      if (isMed) return false;
+
+      if (!selectedCourseCd) return true;
+      return String(b.course_cd) === String(selectedCourseCd) || (b.course_name && b.course_name.toLowerCase().includes(selectedCourseCd.toLowerCase()));
+    });
+
+    if (list.length === 0) {
+      return [{ branch_cd: '1', code: '1', name: 'General Branch (1)' }];
+    }
+    return list;
+  }, [branches, selectedCourseCd, isMedicalCollege]);
+
+  useEffect(() => {
+    if (filteredBranches.length > 0) {
+      const exists = filteredBranches.some(b => b.branch_cd === selectedBranchCd || b.code === selectedBranchCd);
+      if (!exists) {
+        setSelectedBranchCd(filteredBranches[0].branch_cd || filteredBranches[0].code);
+      }
+    }
+  }, [filteredBranches, selectedBranchCd]);
+
+  // ─── Filter Batches by Selected Course & Branch ────────────────────────────
+  const filteredBatches = useMemo(() => {
+    return batches.filter(b => {
+      if (!selectedCourseCd) return true;
+      return String(b.course_cd) === String(selectedCourseCd) || (b.code && b.code.includes(`C${selectedCourseCd}`));
+    });
+  }, [batches, selectedCourseCd]);
+
+  useEffect(() => {
+    if (filteredBatches.length > 0) {
+      const exists = filteredBatches.some(b => b.code === selectedBatchCd || b.batch_cd === selectedBatchCd);
+      if (!exists) {
+        setSelectedBatchCd(filteredBatches[0].code || filteredBatches[0].batch_cd);
+      }
+    }
+  }, [filteredBatches, selectedBatchCd]);
+
+  // ─── Filter Departments (Strictly CET Engineering vs IMS Medical) ──────────
+  const filteredDepartments = useMemo(() => {
+    return departments.filter(d => {
+      const dName = (d.name || '').toLowerCase();
+      const isMed = dName.includes('anatomy') || dName.includes('physiology') || d.code === 'ANA' || d.code === 'PHY';
+      if (isMedicalCollege) {
+        return isMed;
+      }
+      if (isMed) return false;
+
+      if (!selectedCourseCd) return true;
+      return String(d.course_cd) === String(selectedCourseCd) || dName.includes(selectedCourseCd.toLowerCase());
+    });
+  }, [departments, selectedCourseCd, isMedicalCollege]);
+
+  useEffect(() => {
+    if (filteredDepartments.length > 0) {
+      const exists = filteredDepartments.some(d => d.name === selectedDeptCd || d.code === selectedDeptCd || String(d.dept_cd) === selectedDeptCd);
+      if (!exists) {
+        setSelectedDeptCd(filteredDepartments[0].name || filteredDepartments[0].code || String(filteredDepartments[0].dept_cd || ''));
+      }
+    }
+  }, [filteredDepartments, selectedDeptCd]);
+
+  // ─── Filter Subjects by Course, Department & Semester ──────────────────────
+  const filteredSubjects = useMemo(() => {
+    const matched = allSubjects.filter(s => {
+      const sName = (s.name || '').toLowerCase();
+      const sCode = (s.code || '').toLowerCase();
+      const isMed = sCode.startsWith('ana') || sCode.startsWith('phy') || sName.includes('anatomy') || sName.includes('physiology');
+      if (!isMedicalCollege && isMed) return false;
+
+      if (selectedCourseCd && s.course_cd && String(s.course_cd) !== String(selectedCourseCd)) {
+        return false;
+      }
+      return true;
+    });
+
+    return matched.length > 0 ? matched : allSubjects;
+  }, [allSubjects, selectedCourseCd, isMedicalCollege]);
+
+  useEffect(() => {
+    if (filteredSubjects.length > 0) {
+      const exists = filteredSubjects.some(s => s.code === selectedSubjectCd || String(s.subject_cd) === selectedSubjectCd);
+      if (!exists) {
+        setSelectedSubjectCd(filteredSubjects[0].code || String(filteredSubjects[0].subject_cd || ''));
+      }
+    }
+  }, [filteredSubjects, selectedSubjectCd]);
+
+  // ─── Filtered Exam Papers for Subject ──────────────────────────────────────
   const filteredPapers = useMemo(() => {
     if (allFetchedPapers.length === 0) return [];
-    const selSubjObj = allSubjects.find(s => s.id === selectedSubject);
-    const subjCode = (selSubjObj?.code || '').toLowerCase();
-    const subjName = (selSubjObj?.name || '').toLowerCase();
-    if (!subjCode && !subjName) return allFetchedPapers;
+    if (!selectedSubjectCd) return allFetchedPapers;
+
+    const selSubjObj = allSubjects.find(s => s.code === selectedSubjectCd || String(s.subject_cd) === selectedSubjectCd);
+    const subjCode = selSubjObj?.code?.toLowerCase() || selectedSubjectCd.toLowerCase();
+    const subjName = selSubjObj?.name?.toLowerCase() || '';
 
     const matched = allFetchedPapers.filter(p => {
-      if (p.subject_id === selectedSubject) return true;
-      if (!p.subject_id) return true;
-      const pCode = p.code.toLowerCase();
-      const pName = p.name.toLowerCase();
+      if (p.subject_code && p.subject_code.toLowerCase() === subjCode) return true;
+      const pCode = (p.code || '').toLowerCase();
+      const pName = (p.name || '').toLowerCase();
       if (subjCode && (pCode.includes(subjCode) || pName.includes(subjName))) return true;
       return false;
     });
+
     return matched.length > 0 ? matched : allFetchedPapers;
-  }, [allFetchedPapers, selectedSubject, allSubjects]);
+  }, [allFetchedPapers, selectedSubjectCd, allSubjects]);
 
-  const activePaper = useMemo(() =>
-    filteredPapers.find(p => p.id === selectedPaperId) || filteredPapers[0] || null,
-    [filteredPapers, selectedPaperId]
-  );
+  const activePaper = useMemo(() => {
+    return filteredPapers.find(p => p.code === selectedPaperCode) || filteredPapers[0] || allFetchedPapers[0] || null;
+  }, [filteredPapers, allFetchedPapers, selectedPaperCode]);
 
-  // Extract competencies present in the ACTIVE paper ONLY (prevents Anatomy appearing on Physiology paper)
-  const activePaperCompetencies = useMemo(() => {
-    if (!activePaper?.questions) return [];
-    const map = new Map<string, { code: string; totalQuestions: number; desc?: string }>();
-    activePaper.questions.forEach(q => {
-      if (!q.competencyCode) return;
-      const existing = map.get(q.competencyCode) || { code: q.competencyCode, totalQuestions: 0, desc: q.competencyDesc };
-      existing.totalQuestions += 1;
-      map.set(q.competencyCode, existing);
+  // ─── Dynamic SubTopics List from Active Paper ──────────────────────────────
+  const activePaperSubTopics = useMemo<SubTopicSummary[]>(() => {
+    if (!activePaper) return [];
+    const map = new Map<string, SubTopicSummary>();
+
+    (activePaper.questions || []).forEach((q) => {
+      const code = q.subTopicCode || 'CO1';
+      const desc = q.subTopicDesc || q.topic || `SubTopic ${code}`;
+      const subQs = q.subQuestions || [];
+      let qMax = Number(q.maxMarks || 2);
+      if (subQs.length > 0) {
+        qMax = subQs.reduce((sum, sq) => sum + Number(sq.marks || 2.5), 0);
+      }
+
+      const existing = map.get(code);
+      if (existing) {
+        existing.totalMaxMarks += qMax;
+        existing.questionCount += 1;
+      } else {
+        map.set(code, {
+          code,
+          desc,
+          totalMaxMarks: qMax,
+          questionCount: 1,
+        });
+      }
     });
-    return Array.from(map.values());
-  }, [activePaper]);
 
-  // Fetch all students from DB for Batch 2025 and evaluate with authentic database results
-  const fetchEvaluatedTheoryReports = async () => {
-    setLoading(true);
-    const slug = getTenantSlug();
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-    const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
-
-    // 1. Fetch saved results for selected paper from database
-    const savedResultsMap: { [key: string]: any } = {};
-    if (selectedPaperId) {
-      try {
-        const resResults = await fetch(`${API_BASE}/exams/results?paperId=${selectedPaperId}&tenant=${slug}`, { headers });
-        if (resResults.ok) {
-          const jsonR = await resResults.json();
-          const rList: any[] = Array.isArray(jsonR?.data) ? jsonR.data : Array.isArray(jsonR) ? jsonR : [];
-          rList.forEach(r => {
-            if (r.student_id) savedResultsMap[r.student_id] = r;
-            if (r.rollno) savedResultsMap[r.rollno] = r;
-            if (r.registration_no) savedResultsMap[r.registration_no] = r;
-            if (r.student_name) savedResultsMap[r.student_name.toLowerCase()] = r;
-          });
-        }
-      } catch (e) {
-        console.error('Error loading paper results in theory report:', e);
-      }
-    }
-
-    let dbStudents: any[] = [];
-    try {
-      let url = `${API_BASE}/student-master?tenant=${slug}`;
-      if (selectedBatch?.id) url += `&batchId=${selectedBatch.id}`;
-      const res = await fetch(url, { headers });
-      if (res.ok) {
-        const json = await res.json();
-        const rawList = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-        if (rawList.length > 0) {
-          dbStudents = rawList;
-        }
-      }
-    } catch {}
-
-    // Fallback list of batch 2025 students if API offline
-    if (dbStudents.length === 0) {
-      dbStudents = [
-        { id: 'st-1', name: 'Shahnawaz Ahmad', registration_no: '20260001', gender: 'Male' },
-        { id: 'st-2', name: 'Preeti Agarwal', registration_no: '20260002', gender: 'Female' },
-        { id: 'st-3', name: 'Ankit Verma', registration_no: '20260003', gender: 'Male' },
-        { id: 'st-4', name: 'Aarav Kumar Verma', registration_no: '20260004', gender: 'Male' },
-        { id: 'st-5', name: 'Ananya S Iyer', registration_no: '20260005', gender: 'Female' },
-        { id: 'st-6', name: 'Rohan Singh Kapoor', registration_no: '20260006', gender: 'Male' },
-        { id: 'st-7', name: 'Priya M Nair', registration_no: '20260007', gender: 'Female' },
-        { id: 'st-8', name: 'Kabir Rao Deshmukh', registration_no: '20260008', gender: 'Male' },
+    if (map.size === 0) {
+      return [
+        { code: 'CO1', desc: 'Web Technologies & Architecture', totalMaxMarks: 10, questionCount: 5 },
+        { code: 'PYTH1.1', desc: 'Python Data Structures & Methods', totalMaxMarks: 35, questionCount: 5 },
       ];
     }
 
-    const paperQs = activePaper?.questions || defaultPhysiologyQuestions;
-    const theoryMaxMarks = paperQs.reduce((sum, q) => sum + q.maxMarks, 0) || activePaper?.max_marks || 40;
-    const practicalMaxMarks = 10;
-    const totalPaperMarks = theoryMaxMarks + practicalMaxMarks; // 40 Theory + 10 Practical = 50 Grand Total
-    const passingMarks = activePaper?.passing_marks || (totalPaperMarks * 0.4);
+    return Array.from(map.values());
+  }, [activePaper]);
 
-    // Map each student using live database results
-    const compiledReports: StudentTheoryReport[] = dbStudents.map((st: any) => {
-      const stId = st.id;
-      const stRoll = st.registration_no || st.rollno || '';
-      const stName = (st.name || '').toLowerCase();
-      const saved = savedResultsMap[stId] || savedResultsMap[stRoll] || savedResultsMap[stName];
+  // ─── Fetch Evaluated Student Reports directly from PostgreSQL ──────────────
+  const fetchEvaluatedStudentReports = async () => {
+    setLoading(true);
+    const slug = selectedCollegeSlug;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const headers: Record<string, string> = {
+      'x-tenant-slug': slug,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    };
+    const parse = (j: any) => Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
 
-      const isEvaluated = Boolean(saved) || stName.includes('kabir');
-      const qMarksMap = saved?.question_marks ? (typeof saved.question_marks === 'string' ? JSON.parse(saved.question_marks) : saved.question_marks) : {};
-      const subMarksMap = saved?.sub_part_marks ? (typeof saved.sub_part_marks === 'string' ? JSON.parse(saved.sub_part_marks) : saved.sub_part_marks) : {};
-      const practicalM = saved ? Number(saved.practical_mark || 0) : (isEvaluated ? 9.0 : 0);
+    try {
+      let studentUrl = `${API_BASE}/student-master?tenant=${slug}`;
+      if (selectedCourseCd) studentUrl += `&courseId=${encodeURIComponent(selectedCourseCd)}`;
+      if (selectedBatchCd) studentUrl += `&batchId=${encodeURIComponent(selectedBatchCd)}`;
 
-      let totalScored = saved ? Number(saved.marks_obtained) : 0;
+      const [stMasterRes, resRes] = await Promise.all([
+        fetch(studentUrl, { headers }).catch(() => null),
+        fetch(`${API_BASE}/exams/results?tenant=${slug}`, { headers }).catch(() => null),
+      ]);
 
-      const attempts = paperQs.map((q) => {
-        let scored = Number(qMarksMap[q.id] ?? 0);
-        let subQuestions = q.subQuestions?.map((sq, idx) => {
-          const sqKey = sq.id || `${q.id}_sq_${idx}`;
-          const sqScored = Number(subMarksMap[sqKey] ?? subMarksMap[sq.id] ?? subMarksMap[String(idx + 1)] ?? 0);
+      let rawStudents: any[] = [];
+      if (stMasterRes && stMasterRes.ok) {
+        rawStudents = parse(await stMasterRes.json());
+      }
+
+      if (rawStudents.length === 0) {
+        const fallbackRes = await fetch(`${API_BASE}/users/students?tenant=${slug}&limit=100`, { headers }).catch(() => null);
+        if (fallbackRes && fallbackRes.ok) {
+          rawStudents = parse(await fallbackRes.json());
+        }
+      }
+
+      let existingResults: any[] = [];
+      if (resRes && resRes.ok) {
+        existingResults = parse(await resRes.json());
+      }
+
+      const paperMaxMarks = activePaper?.max_marks || 80;
+      const passingMarks = activePaper?.passing_marks || (paperMaxMarks * 0.4);
+      const paperQuestions = activePaper?.questions || [];
+
+      if (rawStudents.length > 0) {
+        const mapped: StudentTheoryReport[] = rawStudents.map((st: any, idx: number) => {
+          const studentRoll = st.rollno || st.registration_no || `ST-${idx + 1}`;
+          const studentReg = st.registration_no || st.rollno || studentRoll;
+
+          const matchedResult = existingResults.find((r: any) =>
+            (r.rollno && (r.rollno === studentRoll || r.rollno === studentReg)) ||
+            (r.registration_no && (r.registration_no === studentReg || r.registration_no === studentRoll)) ||
+            r.student_id === st.id ||
+            r.student_name === st.name
+          );
+
+          const isEvaluated = !!matchedResult;
+          const totalObt = matchedResult ? Math.max(0, Number(matchedResult.marks_obtained || 0)) : (isEvaluated ? 60 : 0);
+          const isPass = matchedResult ? !!matchedResult.is_pass : (totalObt >= passingMarks);
+          const qMarks: { [qId: string]: number } = matchedResult?.question_marks || {};
+          const subMarks: { [subKey: string]: number } = matchedResult?.sub_part_marks || {};
+          const practicalM = matchedResult?.practical_mark ? Number(matchedResult.practical_mark) : 0;
+          const practicalMaxMarks = 40;
+          const practicalPct = practicalMaxMarks > 0 ? (practicalM / practicalMaxMarks) * 100 : 0;
+
+          // 4 Practical Assessment Categories
+          const practicalCategories: PracticalCategory[] = [
+            {
+              id: 'cat-1',
+              name: 'Lab Performance & Experiment Execution',
+              icon: '🔬',
+              maxMarks: 15,
+              scoredMarks: isEvaluated ? Number(((practicalM / practicalMaxMarks) * 15).toFixed(2)) : 0,
+              percentage: practicalPct,
+              color: '#5B4BFF',
+            },
+            {
+              id: 'cat-2',
+              name: 'Viva Voce & Technical Defense',
+              icon: '🗣️',
+              maxMarks: 10,
+              scoredMarks: isEvaluated ? Number(((practicalM / practicalMaxMarks) * 10).toFixed(2)) : 0,
+              percentage: practicalPct,
+              color: '#F36C21',
+            },
+            {
+              id: 'cat-3',
+              name: 'Practical File & LogBook Evaluation',
+              icon: '📖',
+              maxMarks: 10,
+              scoredMarks: isEvaluated ? Number(((practicalM / practicalMaxMarks) * 10).toFixed(2)) : 0,
+              percentage: practicalPct,
+              color: '#00C48C',
+            },
+            {
+              id: 'cat-4',
+              name: 'Continuous Internal Assessment & Attendance',
+              icon: '⏱️',
+              maxMarks: 5,
+              scoredMarks: isEvaluated ? Number(((practicalM / practicalMaxMarks) * 5).toFixed(2)) : 0,
+              percentage: practicalPct,
+              color: '#FFB020',
+            },
+          ];
+
+          // Build dynamic subTopicResults map
+          const subTopicMap: {
+            [code: string]: { scored: number; totalMax: number; pct: number; questionCount: number; desc?: string };
+          } = {};
+
+          // Initialize with paper subtopics
+          activePaperSubTopics.forEach((stSummary) => {
+            subTopicMap[stSummary.code] = {
+              scored: 0,
+              totalMax: stSummary.totalMaxMarks,
+              pct: 0,
+              questionCount: stSummary.questionCount,
+              desc: stSummary.desc,
+            };
+          });
+
+          const attempts: any[] = [];
+
+          paperQuestions.forEach((q, qIdx) => {
+            const sCode = q.subTopicCode || 'CO1';
+            const qId = q.id || `q-${qIdx}`;
+            const subQs = q.subQuestions || [];
+            let qScored = 0;
+            let qMax = Number(q.maxMarks || 2);
+
+            if (subQs.length > 0) {
+              qMax = 0;
+              subQs.forEach((sq, sqIdx) => {
+                const subKey = `${qId}___${sq.id || sq.label || sqIdx}`;
+                const subScore = subMarks[subKey] !== undefined ? Number(subMarks[subKey]) : (subMarks[sq.id] !== undefined ? Number(subMarks[sq.id]) : (isEvaluated ? Number(sq.marks) : 0));
+                qScored += subScore;
+                qMax += Number(sq.marks || 2.5);
+              });
+            } else {
+              qScored = qMarks[qId] !== undefined ? Number(qMarks[qId]) : (isEvaluated ? qMax : 0);
+            }
+
+            if (!subTopicMap[sCode]) {
+              subTopicMap[sCode] = { scored: 0, totalMax: 0, pct: 0, questionCount: 0, desc: q.subTopicDesc };
+            }
+
+            subTopicMap[sCode].scored += qScored;
+            if (!activePaperSubTopics.find(a => a.code === sCode)) {
+              subTopicMap[sCode].totalMax += qMax;
+              subTopicMap[sCode].questionCount += 1;
+            }
+
+            const isCorrect = qScored >= (qMax * 0.5);
+
+            attempts.push({
+              questionId: qId,
+              qNo: q.qNo,
+              part: q.part,
+              questionText: q.questionText,
+              subTopicCode: sCode,
+              subTopicDesc: q.subTopicDesc,
+              optionA: q.optionA,
+              optionB: q.optionB,
+              optionC: q.optionC,
+              optionD: q.optionD,
+              correctOption: q.correctOption,
+              marksScored: qScored,
+              maxMarks: qMax,
+              isCorrect,
+              statusTag: isCorrect ? 'correct' : qScored > 0 ? 'partial' : 'wrong',
+              subQuestions: subQs.map((sq, sqIdx) => {
+                const subKey = `${qId}___${sq.id || sq.label || sqIdx}`;
+                const subScore = subMarks[subKey] !== undefined ? Number(subMarks[subKey]) : (subMarks[sq.id] !== undefined ? Number(subMarks[sq.id]) : (isEvaluated ? Number(sq.marks) : 0));
+                return {
+                  id: sq.id,
+                  label: sq.label,
+                  questionText: sq.questionText || sq.question_text || '',
+                  scored: subScore,
+                  max: Number(sq.marks || 2.5),
+                };
+              }),
+            });
+          });
+
+          // Compute percentages
+          Object.keys(subTopicMap).forEach(k => {
+            const item = subTopicMap[k];
+            item.pct = item.totalMax > 0 ? Math.round((item.scored / item.totalMax) * 100) : 0;
+          });
+
+          const completePct = paperMaxMarks > 0 ? Number(((totalObt / paperMaxMarks) * 100).toFixed(2)) : 0;
+
           return {
-            id: sq.id,
-            label: sq.label,
-            questionText: sq.questionText,
-            scored: sqScored,
-            max: sq.marks || 1,
+            id: st.id || studentRoll,
+            rollno: studentRoll,
+            registration_no: studentReg,
+            name: st.name || `Student ${idx + 1}`,
+            gender: st.gender || 'Male',
+            course: st.course_code || selectedCourseCd,
+            batch: st.batch_code || selectedBatchCd,
+            semester: `Sem ${selectedSemCd}`,
+            evaluated: isEvaluated,
+            marksObtained: totalObt,
+            maxMarks: paperMaxMarks,
+            percentage: completePct,
+            practicalMarks: practicalM,
+            practicalMax: practicalMaxMarks,
+            practicalPercentage: practicalPct,
+            practicalCategories,
+            isPass,
+            photo_url: st.photo_url,
+            questionMarks: qMarks,
+            subPartMarks: subMarks,
+            subTopicResults: subTopicMap,
+            questionAttempts: attempts,
           };
         });
 
-        if (Array.isArray(q.subQuestions) && q.subQuestions.length > 0 && subQuestions) {
-          const subSum = subQuestions.reduce((sum, sq) => sum + sq.scored, 0);
-          if (subSum > 0) scored = subSum;
-        }
-
-        const statusTag: 'correct' | 'wrong' | 'partial' = scored >= q.maxMarks ? 'correct' : (scored > 0 ? 'partial' : 'wrong');
-
-        return {
-          questionId: q.id,
-          qNo: q.qNo,
-          part: q.part,
-          questionText: q.questionText,
-          competencyCode: q.competencyCode,
-          competencyDesc: q.competencyDesc,
-          selectedOption: q.correctOption?.replace('option_', ''),
-          correctOption: q.correctOption?.replace('option_', '') || 'a',
-          options: undefined,
-          marksScored: scored,
-          maxMarks: q.maxMarks,
-          isCorrect: scored > 0,
-          statusTag,
-          subQuestions,
-        };
-      });
-
-      if (!saved && isEvaluated) {
-        totalScored = attempts.reduce((s, a) => s + a.marksScored, 0) + practicalM;
+        setStudents(mapped);
       }
-
-      // Build competency results matching Assessment Marks breakdown
-      const compResults: { [compCode: string]: { correct: number; total: number; pct: number; scoredMarks: number; maxMarks: number; desc?: string } } = {};
-      activePaperCompetencies.forEach(compObj => {
-        const compAttempts = attempts.filter(a => a.competencyCode === compObj.code);
-        const scoredMarks = compAttempts.reduce((s, a) => s + a.marksScored, 0);
-        const maxM = compAttempts.reduce((s, a) => s + a.maxMarks, 0);
-        const pct = maxM > 0 ? Math.min(100, Math.round((scoredMarks / maxM) * 100)) : 0;
-        compResults[compObj.code] = { 
-          correct: Math.round(scoredMarks), 
-          total: maxM, 
-          pct, 
-          scoredMarks, 
-          maxMarks: maxM, 
-          desc: compObj.desc 
-        };
-      });
-
-      return {
-        id: st.id,
-        rollno: st.registration_no ? `#${st.registration_no}` : (st.rollno ? `#${st.rollno}` : '#20260008'),
-        name: st.name,
-        gender: st.gender || 'Male',
-        course: st.course_code || 'MBBS',
-        batch: st.batch_code || selectedBatch?.code || '2025',
-        professional: st.professional_phase || '1st Professional MBBS (Phase I)',
-        evaluated: isEvaluated,
-        marksObtained: totalScored,
-        maxMarks: totalPaperMarks,
-        practicalMarks: practicalM,
-        practicalMax: practicalMaxMarks,
-        isPass: saved ? Boolean(saved.is_pass) : (totalScored >= passingMarks),
-        competencyResults: compResults,
-        questionAttempts: attempts,
-      };
-    });
-
-    setStudents(compiledReports);
-    setLoading(false);
+    } catch (e) {
+      console.error('fetchEvaluatedStudentReports error:', e);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => {
+    if (selectedCollegeSlug) {
+      fetchEvaluatedStudentReports();
+    }
+  }, [selectedCollegeSlug, selectedCourseCd, selectedBatchCd, selectedSemCd, selectedSubjectCd, selectedPaperCode]);
+
+  // ─── Filtered Search Roster ────────────────────────────────────────────────
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return students;
     const q = searchQuery.toLowerCase();
-    return students.filter(s => s.name.toLowerCase().includes(q) || s.rollno.toLowerCase().includes(q));
+    return students.filter(s =>
+      (s.name && s.name.toLowerCase().includes(q)) ||
+      (s.rollno && String(s.rollno).toLowerCase().includes(q)) ||
+      (s.registration_no && String(s.registration_no).toLowerCase().includes(q))
+    );
   }, [students, searchQuery]);
 
-  const handleOpenStudentModal = (student: StudentTheoryReport) => {
-    setActiveStudent(student);
-    setModalTab('competencies');
-    const expandedMap: { [c: string]: boolean } = {};
-    activePaperCompetencies.forEach(c => { expandedMap[c.code] = true; });
-    setExpandedCompetencies(expandedMap);
+  // ─── Open Student Analysis Modal ───────────────────────────────────────────
+  const handleOpenStudentAnalysis = (st: StudentTheoryReport) => {
+    setActiveStudent(st);
+    const expMap: { [c: string]: boolean } = {};
+    activePaperSubTopics.forEach(stSummary => { expMap[stSummary.code] = true; });
+    setExpandedSubTopics(expMap);
+    setModalTab('subtopics');
+    setHoveredSlice(null);
     setModalOpen(true);
   };
 
-  const toggleCompetencyAccordion = (code: string) => {
-    setExpandedCompetencies(prev => ({ ...prev, [code]: !prev[code] }));
+  const toggleSubTopicAccordion = (code: string) => {
+    setExpandedSubTopics(prev => ({ ...prev, [code]: !prev[code] }));
   };
 
-  const deptObj = departments.find(d => d.id === selectedDept);
-  const subjObj = subjectsForDept.find(s => s.id === selectedSubject);
+  const curCourseObj = courses.find(c => String(c.course_cd) === selectedCourseCd);
+  const curSubjObj = allSubjects.find(s => s.code === selectedSubjectCd || String(s.subject_cd) === selectedSubjectCd);
+
+  // ─── SVG Pie Slices Calculation with Radial Leader Lines & Labels ──────────
+  const pieChartSlices = useMemo(() => {
+    if (!activeStudent || activePaperSubTopics.length === 0) return [];
+    
+    const cx = 275;
+    const cy = 180;
+    const r = 95;
+
+    const dataItems = activePaperSubTopics.map((stObj, idx) => {
+      const stRes = activeStudent.subTopicResults ? activeStudent.subTopicResults[stObj.code] : null;
+      const scored = stRes ? stRes.scored : 0;
+      const totalMax = stRes ? stRes.totalMax : stObj.totalMaxMarks;
+      const pct = stRes ? stRes.pct : 0;
+      return {
+        code: stObj.code,
+        desc: stObj.desc,
+        scored,
+        totalMax,
+        pct,
+        val: Math.max(0.5, scored),
+        color: CHART_COLORS[idx % CHART_COLORS.length],
+      };
+    });
+
+    const totalSum = dataItems.reduce((acc, item) => acc + item.val, 0) || 1;
+    let currentAngle = 0;
+
+    return dataItems.map((item) => {
+      const sliceAngle = (item.val / totalSum) * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + sliceAngle;
+      currentAngle += sliceAngle;
+
+      const midAngle = startAngle + sliceAngle / 2;
+      const midRad = (midAngle - 90) * (Math.PI / 180);
+      const startRad = (startAngle - 90) * (Math.PI / 180);
+      const endRad = (endAngle - 90) * (Math.PI / 180);
+
+      // Arc points
+      const x1 = cx + r * Math.cos(startRad);
+      const y1 = cy + r * Math.sin(startRad);
+      const x2 = cx + r * Math.cos(endRad);
+      const y2 = cy + r * Math.sin(endRad);
+
+      const largeArc = sliceAngle > 180 ? 1 : 0;
+      const pathData = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+      // Leader line coordinates
+      const isRight = Math.cos(midRad) >= 0;
+      const lineStart = { x: cx + (r * 0.9) * Math.cos(midRad), y: cy + (r * 0.9) * Math.sin(midRad) };
+      const lineMid = { x: cx + (r + 28) * Math.cos(midRad), y: cy + (r + 28) * Math.sin(midRad) };
+      const lineEnd = { x: isRight ? lineMid.x + 22 : lineMid.x - 22, y: lineMid.y };
+      const textPos = { x: isRight ? lineEnd.x + 4 : lineEnd.x - 4, y: lineEnd.y + 3.5 };
+
+      return {
+        ...item,
+        pathData,
+        midAngle,
+        lineStart,
+        lineMid,
+        lineEnd,
+        textPos,
+        isRight,
+      };
+    });
+  }, [activeStudent, activePaperSubTopics]);
 
   return (
-    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans">
-      <Sidebar role="faculty" />
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0B1120] text-[#1B1E28] dark:text-slate-100 font-sans transition-colors duration-200">
+      <Sidebar role={currentRole} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="Faculty MIS Reports — Theory Assessment Results" />
-        <main className="p-6 space-y-6 flex-1">
+        <Header title={currentRole === 'admin' ? 'Admin MIS Reports — Theory Assessment Results' : 'Faculty MIS Reports — Theory Assessment Results'} />
+        
+        <main className="p-6 space-y-6 flex-1 bg-[#F6F8FC] dark:bg-[#0B1120]">
           {/* Top Reports Suite Navigation Tabs */}
           <FacultyReportsNav
             activeReport="theory"
+            role={currentRole}
             stats={{
               attendanceCount: 'Sessions',
               logbookCount: 'Ledger',
@@ -824,549 +932,596 @@ export default function FacultyTheoryResultPage() {
             }}
           />
 
-          {/* ── Main Title Banner Card ── */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {/* MAIN TITLE BANNER CARD */}
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          <div className="bg-gradient-to-r from-[#2D2575] via-[#3B3299] to-[#2D2575] text-white p-6 rounded-[22px] shadow-[0_8px_30px_rgba(45,37,117,0.2)] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] font-extrabold text-[#5B4BFF] uppercase tracking-widest">
-                  📊 MIS REPORT 3: THEORY RESULTS
+                <span className="text-[11px] font-black uppercase tracking-wider bg-[#F36C21] text-white px-3 py-1 rounded-full shadow-sm">
+                  ⚡ MIS REPORT 3: THEORY RESULTS &amp; SUBTOPICS
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/20">
-                  🏛️ {deptObj?.name || facultyDeptName}
+                <span className="text-white/40">•</span>
+                <span className="text-xs text-indigo-200 font-semibold">
+                  Course: {curCourseObj?.name || 'BCA (13)'}
                 </span>
-                {subjObj && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/20">
-                    📖 {subjObj.name} ({subjObj.code})
-                  </span>
-                )}
-                {selectedBatch && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/20">
-                    🎓 Batch: {selectedBatch.name || selectedBatch.code}
+                {curSubjObj && (
+                  <span className="text-xs font-bold text-amber-300">
+                    • Subject: {curSubjObj.name} ({curSubjObj.code})
                   </span>
                 )}
               </div>
-              <h2 className="text-xl font-black text-[#1B1E28] dark:text-white tracking-tight uppercase mt-1.5">
-                Evaluated Student Theory Results &amp; CBME Competency Ledger
+              <h2 className="text-2xl font-black text-white mt-2">
+                Evaluated Student Theory Results &amp; SubTopics Analysis Ledger
               </h2>
-              <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">
-                Subject-specific CBME competency performance matrix showing correct questions count vs total questions per competency.
+              <p className="text-xs text-indigo-100/80 mt-1">
+                Subject-specific SubTopics performance matrix showing dynamic subcode columns, practical evaluation categories, and complete percentage tracking.
               </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="px-4 py-2 rounded-xl text-xs font-black bg-[#5B4BFF] text-white shadow-md">
-                {students.length} Batch Students Loaded
+              <span className="px-4 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] text-white shadow-lg border border-white/20">
+                👥 {students.length} Evaluated Students
               </span>
             </div>
           </div>
 
-          {/* ── STEP 1: Context Filter Bar ── */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {/* STEP 1: 7-STEP HIERARCHICAL CASCADING BAR (Order: College->Course->Branch->Batch->Sem->Dept->Subj) */}
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
             <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-              <h3 className="text-xs font-black uppercase tracking-wider text-[#5B4BFF] flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-black">1</span>
-                STEP 1: SELECT CONTEXT: DEPARTMENT → SUBJECT → BATCH → CBME YEAR → PROFESSIONAL PHASE
+              <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">1</span>
+                STEP 1: SELECT HIERARCHY (1. COLLEGE → 2. COURSE → 3. BRANCH → 4. BATCH → 5. SEMESTER → 6. DEPARTMENT → 7. SUBJECT)
               </h3>
-              <span className="text-[11px] font-mono font-extrabold text-[#7867FF]">
-                {tenantName || getTenantSlug()}
+              <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-[#F36C21]/10 text-[#F36C21] border border-[#F36C21]/20">
+                Rule 1–5 Strict Standard
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-1 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 text-xs">
+              {/* 1. College (colg_cd) */}
               <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">Department *</label>
+                <label className="block text-[10px] font-bold text-[#F36C21] uppercase mb-1">1. College *</label>
                 <select
-                  value={selectedDept}
-                  onChange={e => { setSelectedDept(e.target.value); setSelectedSubject(''); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
+                  value={selectedColgCd}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedColgCd(val);
+                    const found = colleges.find(c => String(c.colg_cd || c.code) === val);
+                    if (found) setSelectedCollegeSlug(found.slug);
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  {departments.length === 0 ? <option value="">Loading...</option> : (
-                    departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)
+                  {colleges.map(c => (
+                    <option key={c.code || c.slug} value={String(c.colg_cd || c.code)}>
+                      [{c.colg_cd || c.code}] {(c.name || '').split(',')[0]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Course (course_cd) */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">2. Course *</label>
+                <select
+                  value={selectedCourseCd}
+                  onChange={(e) => setSelectedCourseCd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  {filteredCourses.map(c => (
+                    <option key={c.course_cd || c.code} value={String(c.course_cd || c.code)}>
+                      {c.name} ({c.course_cd || c.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 3. Branch (branch_cd) */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">3. Branch *</label>
+                <select
+                  value={selectedBranchCd}
+                  onChange={(e) => setSelectedBranchCd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  {filteredBranches.map(b => (
+                    <option key={b.branch_cd || b.code} value={b.branch_cd || b.code}>
+                      {b.name} ({b.branch_cd || b.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 4. Target Batch (batch_cd) */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">4. Batch *</label>
+                <select
+                  value={selectedBatchCd}
+                  onChange={(e) => setSelectedBatchCd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-black focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  {filteredBatches.length === 0 ? (
+                    <option value="">No batches found</option>
+                  ) : (
+                    filteredBatches.map(b => (
+                      <option key={b.code || b.batch_cd} value={b.code || b.batch_cd}>
+                        {b.name || `Batch ${b.year}`} ({b.code || b.batch_cd})
+                      </option>
+                    ))
                   )}
                 </select>
               </div>
 
+              {/* 5. Semester (sem_cd: 1–8) */}
               <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">Subject *</label>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">5. Semester *</label>
                 <select
-                  value={selectedSubject}
-                  onChange={e => setSelectedSubject(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
+                  value={selectedSemCd}
+                  onChange={(e) => setSelectedSemCd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  {subjectsForDept.length === 0 ? <option value="">Select Department</option> : (
-                    subjectsForDept.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                    <option key={s} value={String(s)}>Semester {s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 6. Department (dept_cd) */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">6. Department *</label>
+                <select
+                  value={selectedDeptCd}
+                  onChange={(e) => setSelectedDeptCd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  {filteredDepartments.length === 0 ? (
+                    <option value="">No departments</option>
+                  ) : (
+                    filteredDepartments.map(d => (
+                      <option key={d.name || d.code} value={d.name || d.code}>
+                        {d.name} {d.course_name ? `(${d.course_name})` : d.code ? `(${d.code})` : ''}
+                      </option>
+                    ))
                   )}
                 </select>
               </div>
 
+              {/* 7. Subject (subject_cd) */}
               <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">Target Batch *</label>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">7. Subject *</label>
                 <select
-                  value={selectedBatch?.id || ''}
-                  onChange={e => { const b = batches.find(b => b.id === e.target.value); setSelectedBatch(b || null); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
+                  value={selectedSubjectCd}
+                  onChange={(e) => setSelectedSubjectCd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  {batches.length === 0 ? <option value="">Loading...</option> : (
-                    batches.map(b => <option key={b.id} value={b.id}>{b.name || b.code}</option>)
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">CBME Year *</label>
-                <select
-                  value={selectedCbmeYearId}
-                  onChange={e => setSelectedCbmeYearId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
-                >
-                  {cbmeYears.length === 0 ? <option value="">Loading...</option> : (
-                    cbmeYears.map(y => <option key={y.id} value={y.id}>{y.label}</option>)
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">Professional Phase *</label>
-                <select
-                  value={selectedProfId}
-                  onChange={e => setSelectedProfId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
-                >
-                  {professionals.length === 0 ? <option value="">Loading...</option> : (
-                    professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)
+                  {filteredSubjects.length === 0 ? (
+                    <option value="">No subjects found</option>
+                  ) : (
+                    filteredSubjects.map(s => (
+                      <option key={s.code || s.name} value={s.code || String(s.subject_cd || '')}>
+                        {s.name} ({s.code || s.subject_cd})
+                      </option>
+                    ))
                   )}
                 </select>
               </div>
             </div>
           </div>
 
-          {/* ── STEP 2: Paper Cards (Exact match from screenshot) ── */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {/* STEP 2: ACTIVE EXAMINATION PAPERS */}
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-              <h3 className="text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-black">2</span>
-                STEP 2: SELECT EXAMINATION PAPER FOR THEORY RESULTS ({filteredPapers.length} Papers)
+              <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">2</span>
+                STEP 2: ACTIVE EXAMINATION PAPERS ({filteredPapers.length} Papers)
               </h3>
-              <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
-                ✓ Approved &amp; Evaluated
-              </span>
+              <span className="text-xs font-bold text-slate-500">Select paper to view evaluated results</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {filteredPapers.map(paper => {
-                const isActive = paper.id === activePaper?.id;
-                return (
-                  <div
-                    key={paper.id}
-                    onClick={() => setSelectedPaperId(paper.id)}
-                    className={`cursor-pointer transition-all duration-200 rounded-[22px] overflow-hidden flex flex-col justify-between ${
-                      isActive
-                        ? 'border-2 border-[#5B4BFF] shadow-lg shadow-indigo-500/10 bg-white dark:bg-slate-900'
-                        : 'border border-[#E7EAF3] dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#5B4BFF]/50 shadow-soft'
-                    }`}
-                  >
-                    {/* Top Purple Banner */}
-                    {isActive && (
-                      <div className="bg-[#2D2575] text-white px-4 py-2 flex items-center justify-between font-black text-[11px] uppercase tracking-wider">
-                        <span>SELECTED PAPER — THEORY RESULTS ACTIVE</span>
-                        <span className="text-[#F36C21] font-black">✓ ACTIVE</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {filteredPapers.length === 0 ? (
+                <div className="col-span-3 py-8 text-center text-slate-400 text-xs font-bold">
+                  No examination papers found for this subject.
+                </div>
+              ) : (
+                filteredPapers.map((paper) => {
+                  const isActive = paper.code === activePaper?.code;
+                  return (
+                    <div
+                      key={paper.code || paper.id}
+                      onClick={() => setSelectedPaperCode(paper.code)}
+                      className={`p-4 rounded-[18px] cursor-pointer transition-all duration-200 border relative ${
+                        isActive
+                          ? 'bg-[#5B4BFF]/5 dark:bg-[#5B4BFF]/15 border-[#5B4BFF] ring-2 ring-[#5B4BFF]/30 shadow-md'
+                          : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-slate-400'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <span className="text-[10px] font-mono text-[#5B4BFF] font-black">[{paper.code}]</span>
+                        {isActive ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00C48C] text-white shadow-sm">
+                            ✓ Selected Paper
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                            Select Paper
+                          </span>
+                        )}
                       </div>
-                    )}
-
-                    {/* Card Content Body */}
-                    <div className="p-5 flex items-start justify-between gap-4">
-                      <div className="shrink-0 space-y-1">
-                        <p className="text-lg sm:text-xl font-black text-[#F36C21] tracking-tight">
-                          {paper.duration_mins ? `${paper.duration_mins} MINS` : '60 MINS'}
-                        </p>
-                        <p className="text-[11px] font-extrabold uppercase text-[#4E5969] dark:text-slate-400">
-                          {paper.max_marks} MARKS
-                        </p>
-                        <p className="text-[10px] font-bold text-[#7B8794] uppercase mt-1">
-                          MON, AUG 10
-                        </p>
-                      </div>
-
-                      <div className="flex-1 min-w-0 space-y-2 text-right">
-                        <h4 className="text-xs sm:text-sm font-black text-[#1B1E28] dark:text-white uppercase truncate">
-                          {deptObj?.name || 'PHYSIOLOGY'} — {paper.name}
-                        </h4>
-
-                        <div className="inline-block px-3 py-1 rounded-full bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30 text-[10px] font-extrabold uppercase tracking-tight truncate max-w-full">
-                          THEORY "{paper.topic_name || 'General Physiology & Cell Membrane'}"
-                        </div>
-
-                        <div className="text-[11px] text-[#4E5969] dark:text-slate-400 font-bold space-y-0.5">
-                          <p>#{paper.batch_code || selectedBatch?.code || '2025'} • Room LT-1 Medical</p>
-                          <p className="text-[10px] text-[#7B8794]">
-                            🕒 [{paper.code}] • Pass: {paper.passing_marks} Marks
-                          </p>
-                        </div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white mt-1.5">{paper.name}</h4>
+                      <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                        <span>Duration: <strong>{paper.duration_mins || 60} mins</strong></span>
+                        <span>Max Marks: <strong className="text-[#00C48C]">{paper.max_marks}.00 Marks</strong></span>
                       </div>
                     </div>
-
-                    {/* Bottom Footer */}
-                    <div className="px-5 py-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between bg-[#F8FAFC]/70 dark:bg-slate-800/40">
-                      {isActive ? (
-                        <>
-                          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
-                            ● MARKED (1 Evaluated • {students.length - 1} Pending)
-                          </span>
-                          <span className="text-[#5B4BFF] font-black text-xs">
-                            ✓ Active Ledger
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#FFF8E6] text-[#FFB020] border border-[#FFB020]/30">
-                            ● COMPLETED
-                          </span>
-                          <span className="text-[#F36C21] font-black text-xs hover:underline">
-                            Select Paper →
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 
-          {/* ── STEP 3: Evaluated Students Theory Results Table ── */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {/* STEP 3: DYNAMIC SUBTOPICS MATRIX & EVALUATED STUDENTS LEDGER */}
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <div>
-                <h3 className="text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-black">3</span>
-                  STUDENT THEORY ASSESSMENT &amp; EVALUATION MATRIX ({filteredStudents.length} Students)
+                <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">3</span>
+                  STEP 3: EVALUATED STUDENTS PERFORMANCE &amp; SUBTOPICS ANALYSIS LEDGER ({filteredStudents.length} Students)
                 </h3>
-                <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">
-                  Showing subject-specific competencies ({activePaperCompetencies.map(c => c.code).join(', ')}). Format: <strong>Correct/Total Questions = Pct%</strong>.
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Subtopics columns calculate dynamically as <strong>&#123;scored&#125;/&#123;total_max&#125;=&#123;pct&#125;%</strong> with complete percentage tracking for all candidates.
                 </p>
               </div>
 
-              <div className="w-full sm:w-72">
+              <div className="flex items-center gap-3">
                 <input
                   type="text"
-                  placeholder="🔍 Search roll no or name..."
+                  placeholder="🔍 Search Roll No, Reg No, Name..."
                   value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold focus:border-[#5B4BFF] focus:outline-none shadow-sm"
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="px-3.5 py-2 text-xs rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#5B4BFF] placeholder-slate-400"
                 />
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+                >
+                  🖨️ Print Ledger
+                </button>
               </div>
             </div>
 
+            {/* Results Table with Dynamic SubTopic Columns and Complete Percentage Column */}
             {loading ? (
-              <div className="py-12 text-center text-[#4E5969] text-xs font-bold">Loading batch students...</div>
+              <div className="py-12 text-center text-slate-400 text-xs font-bold">Loading student evaluations...</div>
+            ) : filteredStudents.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 text-xs font-bold">No students found matching your search.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-[#E7EAF3] dark:border-slate-800 text-[10px] font-black text-[#1B1E28] dark:text-slate-300 uppercase tracking-wider bg-[#F8FAFC] dark:bg-slate-800/60">
-                      <th className="py-3.5 px-3 rounded-l-xl">Reg No</th>
-                      <th className="py-3.5 px-3">Student</th>
-                      <th className="py-3.5 px-3">Course</th>
-                      <th className="py-3.5 px-3">Batch</th>
-                      <th className="py-3.5 px-3">Professional</th>
-                      {/* Dynamic Competency Columns belonging strictly to active selected paper */}
-                      {activePaperCompetencies.map(comp => (
-                        <th key={comp.code} className="py-3.5 px-3 text-center text-[#5B4BFF] whitespace-nowrap">
-                          🎯 {comp.code}
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider bg-[#F6F8FC] dark:bg-slate-900/50">
+                      <th className="py-3 px-3 rounded-l-xl">Roll No</th>
+                      <th className="py-3 px-3">Student Name</th>
+
+                      {/* Dynamic SubTopics Columns */}
+                      {activePaperSubTopics.map((stCodeObj) => (
+                        <th key={stCodeObj.code} className="py-3 px-3 text-center">
+                          <span className="inline-block px-2 py-0.5 rounded font-mono font-black text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] border border-indigo-200 dark:border-indigo-800/40">
+                            🎯 {stCodeObj.code}
+                          </span>
                         </th>
                       ))}
-                      <th className="py-3.5 px-3 text-center text-purple-600">Practical</th>
-                      <th className="py-3.5 px-3 text-center text-[#00C48C]">Total / %</th>
-                      <th className="py-3.5 px-3 text-center">Status</th>
-                      <th className="py-3.5 px-3 text-right rounded-r-xl">Inspect</th>
+
+                      <th className="py-3 px-3 text-center">Theory Score</th>
+                      <th className="py-3 px-3 text-center">Practical</th>
+                      <th className="py-3 px-3 text-center">Total Marks</th>
+                      {/* Complete Percentage Column */}
+                      <th className="py-3 px-3 text-center">Percentage (%)</th>
+                      <th className="py-3 px-3 text-center">Status</th>
+                      <th className="py-3 px-3 text-right rounded-r-xl">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
-                    {filteredStudents.map(st => {
-                      const pct = st.maxMarks > 0 ? (st.marksObtained / st.maxMarks) * 100 : 0;
-                      return (
-                        <tr key={st.id} className="hover:bg-[#F1F4F9]/60 dark:hover:bg-slate-800/40 transition">
-                          <td className="py-3.5 px-3 font-mono font-black text-[#5B4BFF] whitespace-nowrap">
-                            {st.rollno}
-                          </td>
-                          <td className="py-3.5 px-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#5B4BFF] to-[#7867FF] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm">
-                                {st.name.charAt(0)}
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                    {filteredStudents.map((st) => (
+                      <tr key={st.rollno || st.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition">
+                        <td className="py-3.5 px-3 font-mono font-bold text-[#5B4BFF]">
+                          {st.rollno}
+                          {st.registration_no && st.registration_no !== st.rollno && (
+                            <span className="block text-[9px] font-mono text-slate-400">Reg: {st.registration_no}</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <div className="flex items-center gap-2.5">
+                            {st.photo_url ? (
+                              <img
+                                src={st.photo_url}
+                                alt={st.name}
+                                className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                                onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center font-black text-[10px]">
+                                {(st.name || '?').charAt(0)}
                               </div>
-                              <div>
-                                <h5 className="font-black text-[#1B1E28] dark:text-white text-xs">{st.name}</h5>
-                                <span className="text-[10px] text-[#7B8794]">{st.gender}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-3 font-bold text-[#1B1E28] dark:text-slate-200">{st.course}</td>
-                          <td className="py-3.5 px-3 font-mono font-bold text-[#F36C21]">{st.batch}</td>
-                          <td className="py-3.5 px-3 font-bold text-[#4E5969] dark:text-slate-300">{st.professional}</td>
+                            )}
+                            <span className="font-extrabold text-slate-900 dark:text-white">{st.name}</span>
+                          </div>
+                        </td>
 
-                          {/* Dynamic Competency Column Cells: Scored/Max=Pct% */}
-                          {activePaperCompetencies.map(comp => {
-                            const compData = st.competencyResults[comp.code] || { correct: 0, total: 0, pct: 0, scoredMarks: 0, maxMarks: 0 };
-                            const isGood = compData.pct >= 50;
+                        {/* Dynamic SubTopic Calculation: {scored}/{totalMax}={pct}% */}
+                        {activePaperSubTopics.map((stCodeObj) => {
+                          const resData = st.subTopicResults ? st.subTopicResults[stCodeObj.code] : null;
+                          if (!st.evaluated || !resData) {
                             return (
-                              <td key={comp.code} className="py-3.5 px-3 text-center whitespace-nowrap">
-                                {st.evaluated && compData.maxMarks > 0 ? (
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black border ${
-                                    isGood
-                                      ? 'bg-[#E6F9F3] text-[#00C48C] border-[#00C48C]/30'
-                                      : 'bg-[#FFF8E6] text-[#FFB020] border-[#FFB020]/30'
-                                  }`}>
-                                    {compData.scoredMarks}/{compData.maxMarks} = {compData.pct}%
-                                  </span>
-                                ) : (
-                                  <span className="text-[#4E5969] dark:text-slate-500 font-mono text-[11px] font-bold">—</span>
-                                )}
+                              <td key={stCodeObj.code} className="py-3.5 px-3 text-center text-slate-400 font-mono">
+                                —
                               </td>
                             );
-                          })}
+                          }
 
-                          {/* Practical Marks */}
-                          <td className="py-3.5 px-3 text-center font-mono font-bold text-purple-700 dark:text-purple-300">
-                            {st.evaluated ? `${st.practicalMarks} / ${st.practicalMax}` : `— / ${st.practicalMax}`}
-                          </td>
+                          const scored = Number(resData.scored || 0);
+                          const totalMax = Number(resData.totalMax || stCodeObj.totalMaxMarks || 1);
+                          const pct = resData.pct !== undefined ? resData.pct : Math.round((scored / totalMax) * 100);
 
-                          {/* Total Score & Percentage */}
-                          <td className="py-3.5 px-3 text-center font-mono font-black text-[#00C48C]">
-                            {st.evaluated ? (
-                              <>
-                                {st.marksObtained.toFixed(1)} / {st.maxMarks}
-                                <span className="block text-[10px] text-[#00C48C] font-black">({pct.toFixed(1)}%)</span>
-                              </>
-                            ) : (
-                              <span className="text-[#7B8794] font-medium">— / {st.maxMarks}</span>
-                            )}
-                          </td>
-
-                          {/* Pass/Fail Status */}
-                          <td className="py-3.5 px-3 text-center">
-                            {st.evaluated ? (
-                              <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                                st.isPass
-                                  ? 'bg-[#E6F9F3] text-[#00C48C] border-[#00C48C]/30'
-                                  : 'bg-[#FEECEB] text-[#F04438] border-[#F04438]/30'
-                              }`}>
-                                {st.isPass ? '✓ PASS' : '⚠️ FAIL'}
+                          return (
+                            <td key={stCodeObj.code} className="py-3.5 px-3 text-center">
+                              <span className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-black bg-emerald-50 dark:bg-emerald-950/60 text-[#00C48C] border border-emerald-200 dark:border-emerald-800/40 shadow-xs">
+                                {scored}/{totalMax}={pct}%
                               </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-[#FFF8E6] text-[#FFB020] border border-[#FFB020]/30">
-                                Pending
-                              </span>
-                            )}
-                          </td>
+                            </td>
+                          );
+                        })}
 
-                          {/* View Icon Action */}
-                          <td className="py-3.5 px-3 text-right">
-                            <button
-                              onClick={() => handleOpenStudentModal(st)}
-                              className="p-2 rounded-xl bg-[#EEF2FF] hover:bg-[#5B4BFF] text-[#5B4BFF] hover:text-white transition-all shadow-sm group"
-                              title="Inspect Paper Evaluation & Competencies"
-                            >
-                              <svg className="w-4 h-4 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                        <td className="py-3.5 px-3 text-center font-bold text-slate-800 dark:text-slate-200">
+                          {st.evaluated ? `${Math.max(0, (st.marksObtained || 0) - (st.practicalMarks || 0)).toFixed(2)}` : '—'}
+                        </td>
+                        <td className="py-3.5 px-3 text-center font-bold text-[#F36C21]">
+                          {st.evaluated && (st.practicalMarks || 0) > 0 ? `${(st.practicalMarks || 0).toFixed(2)}` : '0.00'}
+                        </td>
+                        <td className="py-3.5 px-3 text-center font-black text-slate-900 dark:text-white">
+                          {st.evaluated ? `${(st.marksObtained || 0).toFixed(2)} / ${st.maxMarks || 80}` : '—'}
+                        </td>
+
+                        {/* Complete Percentage Column */}
+                        <td className="py-3.5 px-3 text-center">
+                          {st.evaluated ? (
+                            <span className={`px-2.5 py-1 rounded-lg font-mono font-black text-[11px] border ${
+                              (st.percentage || 0) >= 75
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-[#00C48C] border-emerald-200 dark:border-emerald-800/40'
+                                : (st.percentage || 0) >= 50
+                                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] border-indigo-200 dark:border-indigo-800/40'
+                                : 'bg-rose-50 dark:bg-rose-950/60 text-[#F04438] border-rose-200 dark:border-rose-800/40'
+                            }`}>
+                              {(st.percentage || 0).toFixed(2)}%
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-mono">—</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-3 text-center">
+                          <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                            !st.evaluated
+                              ? 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400'
+                              : st.isPass
+                              ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400'
+                          }`}>
+                            {!st.evaluated ? 'Pending' : st.isPass ? 'Pass' : 'Fail'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenStudentAnalysis(st)}
+                            className="px-3.5 py-1.5 bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-bold rounded-xl text-xs transition shadow-sm"
+                          >
+                            View Analysis →
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
 
-          {/* ══════════════════════════════════════════════════════════════════ */}
-          {/* ── 3-TAB EVALUATION MODAL POPUP (Analysis of Selected Paper)    ── */}
-          {/* ══════════════════════════════════════════════════════════════════ */}
-          {modalOpen && activeStudent && activePaper && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-              <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[24px] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
-
-                {/* Modal Header */}
-                <div className="px-6 py-4 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between bg-[#F8FAFC] dark:bg-slate-800/80">
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {/* STUDENT ANALYSIS MODAL (4 TABS: SubTopics | Tracking | Practical | Chart) */}
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {modalOpen && activeStudent && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-[#1B1E28] rounded-[24px] max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700 animate-scaleUp">
+                
+                {/* 1. Modal Top Bar */}
+                <div className="p-6 border-b border-slate-200 dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-900 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#5B4BFF] text-white font-black text-sm flex items-center justify-center shadow-md">
-                      {activeStudent.name.charAt(0)}
-                    </div>
+                    {activeStudent.photo_url ? (
+                      <img src={activeStudent.photo_url} alt={activeStudent.name} className="w-12 h-12 rounded-2xl object-cover border-2 border-white shadow-md" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-2xl bg-[#5B4BFF] text-white flex items-center justify-center font-black text-lg shadow-md">
+                        {(activeStudent.name || '?').charAt(0)}
+                      </div>
+                    )}
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-black text-[#1B1E28] dark:text-white uppercase">{activeStudent.name}</h3>
-                        <span className="font-mono font-black text-xs text-[#5B4BFF]">({activeStudent.rollno})</span>
+                        <span className="font-mono font-extrabold text-xs text-[#5B4BFF]">{activeStudent.rollno}</span>
+                        <span className={`px-2 py-0.2 rounded text-[10px] font-extrabold uppercase ${activeStudent.isPass ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {activeStudent.isPass ? 'Pass' : 'Fail'}
+                        </span>
                       </div>
-                      <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">
-                        {activeStudent.course} • Batch {activeStudent.batch} • {activeStudent.professional} • Paper: [{activePaper.code}] {activePaper.name}
+                      <h3 className="text-base font-black text-slate-900 dark:text-white">{activeStudent.name}</h3>
+                      <p className="text-[11px] text-slate-500">
+                        {curCourseObj?.name || 'BCA'} • Batch: {selectedBatchCd} • Total Score: <strong>{(activeStudent.marksObtained || 0).toFixed(2)} / {activeStudent.maxMarks || 80} ({(activeStudent.percentage || 0).toFixed(2)}%)</strong>
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <span className="text-[10px] font-black uppercase text-[#7B8794] block">Paper Score</span>
-                      <span className="text-lg font-black text-[#00C48C]">
-                        {activeStudent.marksObtained.toFixed(1)} / {activeStudent.maxMarks}
-                        <span className="text-xs ml-1 text-[#F36C21] font-bold">
-                          ({((activeStudent.marksObtained / activeStudent.maxMarks) * 100).toFixed(1)}%)
-                        </span>
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setModalOpen(false)}
-                      className="w-9 h-9 rounded-xl bg-white dark:bg-slate-700 border border-[#E7EAF3] dark:border-slate-600 text-[#4E5969] hover:text-[#1B1E28] hover:bg-[#F1F4F9] flex items-center justify-center font-black transition-all shadow-sm ml-2"
-                    >
-                      ✕
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold flex items-center justify-center transition"
+                  >
+                    ✕
+                  </button>
                 </div>
 
-                {/* 3 Top Tabs Navigation */}
-                <div className="px-6 pt-3 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center gap-2 bg-white dark:bg-slate-900">
+                {/* 2. Modal 4 Tabs Bar (with Practical Assessment before Chart) */}
+                <div className="px-6 border-b border-slate-200 dark:border-slate-800 flex items-center gap-6 bg-slate-100 dark:bg-slate-950/80 overflow-x-auto">
                   <button
-                    onClick={() => setModalTab('competencies')}
-                    className={`px-5 py-2.5 rounded-t-xl text-xs font-black transition-all border-b-2 ${
-                      modalTab === 'competencies'
-                        ? 'border-[#5B4BFF] text-[#5B4BFF] bg-[#EEF2FF]/60'
-                        : 'border-transparent text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28]'
+                    type="button"
+                    onClick={() => setModalTab('subtopics')}
+                    className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+                      modalTab === 'subtopics' ? 'border-[#5B4BFF] text-[#5B4BFF]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
                     }`}
                   >
-                    1. Competencies Based
+                    <span>🎯</span>
+                    <span>1. Questions Comes Under Sections (SubTopics Analysis)</span>
                   </button>
-
                   <button
-                    onClick={() => setModalTab('attempted')}
-                    className={`px-5 py-2.5 rounded-t-xl text-xs font-black transition-all border-b-2 ${
-                      modalTab === 'attempted'
-                        ? 'border-[#5B4BFF] text-[#5B4BFF] bg-[#EEF2FF]/60'
-                        : 'border-transparent text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28]'
+                    type="button"
+                    onClick={() => setModalTab('tracking')}
+                    className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+                      modalTab === 'tracking' ? 'border-[#5B4BFF] text-[#5B4BFF]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
                     }`}
                   >
-                    2. Attempted Paper
+                    <span>📝</span>
+                    <span>2. Question Paper Tracking</span>
                   </button>
-
+                  {/* Tab 3: Practical Assessment (Before Chart) */}
                   <button
+                    type="button"
+                    onClick={() => setModalTab('practical')}
+                    className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+                      modalTab === 'practical' ? 'border-[#F36C21] text-[#F36C21]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>🧪</span>
+                    <span>3. Practical Assessment</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setModalTab('chart')}
-                    className={`px-5 py-2.5 rounded-t-xl text-xs font-black transition-all border-b-2 ${
-                      modalTab === 'chart'
-                        ? 'border-[#5B4BFF] text-[#5B4BFF] bg-[#EEF2FF]/60'
-                        : 'border-transparent text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28]'
+                    className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+                      modalTab === 'chart' ? 'border-[#5B4BFF] text-[#5B4BFF]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
                     }`}
                   >
-                    3. Competencies Progress Chart
+                    <span>📊</span>
+                    <span>4. Chart</span>
                   </button>
                 </div>
 
-                {/* Modal Body Container */}
-                <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-[#F8FAFC] dark:bg-slate-950">
-
-                  {/* ──────────────────────────────────────────────────────────── */}
-                  {/* TAB 1: COMPETENCIES BASED (With explicit sub-part rendering) */}
-                  {/* ──────────────────────────────────────────────────────────── */}
-                  {modalTab === 'competencies' && (
-                    <div className="space-y-3">
-                      {/* Top Paper Banner */}
-                      <div className="bg-[#15803D] text-white px-4 py-2.5 rounded-xl flex items-center justify-between text-xs font-black shadow-sm">
+                {/* 3. Modal Body Content */}
+                <div className="p-6 overflow-y-auto max-h-[64vh] space-y-4">
+                  
+                  {/* ───────────────────────────────────────────────────────────── */}
+                  {/* TAB 1: Questions Comes Under Sections (SubTopics Analysis) */}
+                  {/* ───────────────────────────────────────────────────────────── */}
+                  {modalTab === 'subtopics' && (
+                    <div className="space-y-4">
+                      {/* Paper Banner Header */}
+                      <div className="p-3.5 rounded-xl bg-emerald-800 text-white flex items-center justify-between text-xs font-bold shadow-sm">
                         <div className="flex items-center gap-2">
                           <span>📄</span>
-                          <span>{deptObj?.name || 'Physiology'} 1st Sessional Batch {activeStudent.batch}</span>
+                          <span>{activePaper?.name || 'Examination Paper'} ({activePaper?.code || selectedPaperCode})</span>
                         </div>
-                        <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                        <div className="flex items-center gap-2 text-emerald-100">
                           <span>📅</span>
-                          <span>29-01-2026</span>
+                          <span>Batch: {selectedBatchCd}</span>
                         </div>
                       </div>
 
-                      {/* Accordion Group by Paper Competencies */}
-                      {activePaperCompetencies.map((compObj, idx) => {
-                        const isExpanded = expandedCompetencies[compObj.code] ?? true;
-                        const matchingAttempts = activeStudent.questionAttempts.filter(a => a.competencyCode === compObj.code);
-                        const compData = activeStudent.competencyResults[compObj.code] || { correct: 0, total: compObj.totalQuestions, pct: 0, scoredMarks: 0, maxMarks: 0 };
+                      {/* SubTopic Groups */}
+                      {activePaperSubTopics.map((stSummary, idx) => {
+                        const isExp = expandedSubTopics[stSummary.code] !== false;
+                        const subData = activeStudent.subTopicResults ? activeStudent.subTopicResults[stSummary.code] : null;
+                        const scored = subData ? subData.scored : 0;
+                        const totalMax = subData ? subData.totalMax : stSummary.totalMaxMarks;
+                        const pct = subData ? subData.pct : 0;
 
-                        const bannerColors = [
-                          'bg-[#2D2575]',
-                          'bg-[#991B1B]',
-                          'bg-[#1E3A8A]',
-                          'bg-[#3730A3]',
-                          'bg-[#166534]',
-                          'bg-[#5B4BFF]',
-                        ];
-                        const bannerBg = bannerColors[idx % bannerColors.length];
+                        // Filter questions under this subtopic
+                        const subQuestions = (activeStudent.questionAttempts || []).filter(
+                          att => att.subTopicCode === stSummary.code
+                        );
+
+                        const colorClass = idx % 2 === 0
+                          ? 'bg-[#2D2575] text-white'
+                          : 'bg-rose-900 text-white';
 
                         return (
-                          <div key={compObj.code} className="rounded-xl overflow-hidden border border-[#E7EAF3] dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+                          <div key={stSummary.code} className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+                            {/* SubTopic Banner */}
                             <div
-                              onClick={() => toggleCompetencyAccordion(compObj.code)}
-                              className={`${bannerBg} text-white px-4 py-2.5 flex items-center justify-between cursor-pointer text-xs font-black transition-opacity hover:opacity-95`}
+                              onClick={() => toggleSubTopicAccordion(stSummary.code)}
+                              className={`p-3 cursor-pointer flex items-center justify-between gap-3 ${colorClass}`}
                             >
-                              <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
-                                <span className="w-4 h-4 rounded bg-white/20 flex items-center justify-center text-[10px]">
-                                  {isExpanded ? '−' : '+'}
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-xs font-black">
+                                  {isExp ? '−' : '+'}
                                 </span>
-                                <span className="truncate">{compObj.code} {compObj.desc || 'Medical Subject Competency'}</span>
+                                <span className="text-xs font-black">
+                                  {stSummary.code} {stSummary.desc ? `— ${stSummary.desc}` : ''}
+                                </span>
                               </div>
-                              <span className="text-[11px] font-mono shrink-0 bg-black/20 px-2 py-0.5 rounded">
-                                Questions: {compData.correct} / {compData.total} = {compData.pct}% ({compData.scoredMarks}/{compData.maxMarks} Marks)
-                              </span>
+                              <div className="flex items-center gap-3">
+                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-black bg-white/20 text-white border border-white/30">
+                                  {scored}/{totalMax} Marks ({pct}%)
+                                </span>
+                              </div>
                             </div>
 
-                            {isExpanded && (
-                              <div className="p-4 space-y-4">
-                                {matchingAttempts.map((att, aIdx) => (
-                                  <div key={aIdx} className="space-y-2 border-b border-[#E7EAF3] dark:border-slate-800 last:border-0 pb-4 last:pb-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-[#2D2575] text-white">
-                                        {att.part}
-                                      </span>
-                                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-[#0284C7] text-white">
-                                        Q. {att.qNo}
-                                      </span>
-                                      <span className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">
-                                        Note:- Each question contains {att.maxMarks} marks.
-                                      </span>
-                                    </div>
-
-                                    <div className="flex items-start justify-between gap-3 pt-1">
-                                      <p className="text-xs font-bold text-[#1B1E28] dark:text-white leading-relaxed flex-1">
-                                        ({att.qNo}). {att.questionText}
-                                      </p>
-
-                                      {/* Question Awarded Pill */}
-                                      <div className={`shrink-0 font-mono font-black text-xs px-2.5 py-0.5 rounded-full border ${
-                                        att.statusTag === 'correct'
-                                          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                                          : att.statusTag === 'wrong'
-                                          ? 'border-red-300 bg-red-50 text-red-600'
-                                          : 'border-amber-300 bg-amber-50 text-amber-700'
-                                      }`}>
-                                        ({att.marksScored.toFixed(1)}/{att.maxMarks})
-                                      </div>
-                                    </div>
-
-                                    {/* Render Sub-parts explicitly if present */}
-                                    {att.subQuestions && att.subQuestions.length > 0 && (
-                                      <div className="mt-2 pl-4 border-l-2 border-[#5B4BFF]/30 space-y-1.5 bg-[#F8FAFC] dark:bg-slate-800/40 p-2.5 rounded-r-xl">
-                                        <span className="text-[10px] font-black text-[#5B4BFF] uppercase tracking-wider block mb-1">
-                                          Sub-part Evaluation Breakdown:
+                            {/* SubTopic Questions List */}
+                            {isExp && (
+                              <div className="p-4 bg-white dark:bg-slate-900 space-y-3">
+                                {subQuestions.length === 0 ? (
+                                  <p className="text-xs text-slate-400 italic">No questions mapped to this subtopic.</p>
+                                ) : (
+                                  subQuestions.map((q) => (
+                                    <div key={q.questionId} className="p-3 rounded-lg bg-[#F6F8FC] dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+                                      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                        <span className="px-2 py-0.5 rounded font-black bg-[#5B4BFF] text-white">
+                                          {q.part}
                                         </span>
-                                        {att.subQuestions.map(sq => (
-                                          <div key={sq.id} className="flex items-center justify-between text-xs text-[#1B1E28] dark:text-slate-200">
-                                            <span className="font-bold">
-                                              {sq.label} {sq.questionText}
-                                            </span>
-                                            <span className="font-mono font-black text-[11px] text-[#F36C21]">
-                                              {sq.scored.toFixed(1)} / {sq.max} Marks
-                                            </span>
-                                          </div>
-                                        ))}
+                                        <span className="px-2 py-0.5 rounded font-black bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                                          Q. {q.qNo}
+                                        </span>
+                                        <span className="text-slate-500 dark:text-slate-400">
+                                          Note:- Tick (✓) the appropriate answer. Each question contains {q.maxMarks || 1} marks.
+                                        </span>
                                       </div>
-                                    )}
 
-                                  </div>
-                                ))}
+                                      <div className="flex items-start justify-between gap-3 pt-1">
+                                        <p className="font-bold text-slate-900 dark:text-white leading-relaxed flex-1">
+                                          <span className="text-slate-400 font-mono mr-1.5">Q. {q.qNo}</span>
+                                          {q.questionText}
+                                        </p>
+                                        <span className="px-2.5 py-1 rounded-full font-mono font-black text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800">
+                                          ({q.marksScored || 0}/{q.maxMarks || 1})
+                                        </span>
+                                      </div>
+
+                                      {/* Subparts if any */}
+                                      {q.subQuestions && q.subQuestions.length > 0 && (
+                                        <div className="pl-4 space-y-1.5 border-l-2 border-slate-300 dark:border-slate-700 pt-1">
+                                          {q.subQuestions.map((sq) => (
+                                            <div key={sq.id} className="flex items-center justify-between text-[11px] p-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                                              <span><strong>Q. {sq.label}</strong> {sq.questionText}</span>
+                                              <span className="font-mono font-bold text-rose-600">({sq.scored || 0}/{sq.max || 2.5})</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))
+                                )}
                               </div>
                             )}
                           </div>
@@ -1375,178 +1530,397 @@ export default function FacultyTheoryResultPage() {
                     </div>
                   )}
 
-                  {/* ──────────────────────────────────────────────────────────── */}
-                  {/* TAB 2: ATTEMPTED PAPER (With sub-parts and 0-mark indicators) */}
-                  {/* ──────────────────────────────────────────────────────────── */}
-                  {modalTab === 'attempted' && (
-                    <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
-                      <div className="text-center border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-                        <h4 className="text-xs font-black uppercase tracking-widest text-[#1B1E28] dark:text-white">PART A (MCQ) &amp; PART B (DESCRIPTIVE)</h4>
-                        <p className="text-[11px] text-[#4E5969] dark:text-slate-400 mt-0.5">
-                          Student attempt evaluated against official examination key.
-                        </p>
+                  {/* ───────────────────────────────────────────────────────────── */}
+                  {/* TAB 2: Question Paper Tracking */}
+                  {/* ───────────────────────────────────────────────────────────── */}
+                  {modalTab === 'tracking' && (
+                    <div className="space-y-6">
+                      {/* Group questions by Section */}
+                      {['PART A', 'PART B', 'PART C'].map((secName) => {
+                        const secQuestions = (activeStudent.questionAttempts || []).filter(q => q.part === secName);
+                        if (secQuestions.length === 0) return null;
+
+                        return (
+                          <div key={secName} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+                            <div className="border-b border-slate-200 dark:border-slate-800 pb-2 flex items-center justify-between">
+                              <h4 className="text-sm font-black text-center text-slate-900 dark:text-white uppercase tracking-wider w-full">
+                                {secName}
+                              </h4>
+                            </div>
+                            <p className="text-xs text-slate-500 font-medium">
+                              (1). Note:- Tick (✓) the appropriate answer. Each question contains marks as indicated.
+                            </p>
+
+                            <div className="space-y-4 pt-2">
+                              {secQuestions.map((q) => (
+                                <div key={q.questionId} className="space-y-2 text-xs border-b border-slate-100 dark:border-slate-800/80 pb-3 last:border-b-0">
+                                  <div className="flex items-start gap-2.5">
+                                    <span className={`text-base font-black ${q.isCorrect ? 'text-[#00C48C]' : 'text-[#F04438]'}`}>
+                                      {q.isCorrect ? '✓' : '✗'}
+                                    </span>
+                                    <div className="flex-1">
+                                      <p className="font-bold text-slate-900 dark:text-white">
+                                        <strong>({q.qNo}).</strong> {q.questionText}
+                                        <span className="ml-2 font-mono font-bold text-[#F04438]">
+                                          ({q.marksScored || 0}/{q.maxMarks || 1})
+                                        </span>
+                                      </p>
+
+                                      {/* MCQ Options 2x2 Grid */}
+                                      {q.optionA && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 pl-2">
+                                          <div className={`p-1.5 rounded-lg border ${q.correctOption === 'option_a' ? 'border-[#00C48C] bg-emerald-50/50 text-[#00C48C] font-bold' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                                            <strong>(a).</strong> {q.optionA}
+                                          </div>
+                                          <div className={`p-1.5 rounded-lg border ${q.correctOption === 'option_b' ? 'border-[#00C48C] bg-emerald-50/50 text-[#00C48C] font-bold' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                                            <strong>(b).</strong> {q.optionB}
+                                          </div>
+                                          <div className={`p-1.5 rounded-lg border ${q.correctOption === 'option_c' ? 'border-[#00C48C] bg-emerald-50/50 text-[#00C48C] font-bold' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                                            <strong>(c).</strong> {q.optionC}
+                                          </div>
+                                          <div className={`p-1.5 rounded-lg border ${q.correctOption === 'option_d' ? 'border-[#00C48C] bg-emerald-50/50 text-[#00C48C] font-bold' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                                            <strong>(d).</strong> {q.optionD}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Sub-parts */}
+                                      {q.subQuestions && q.subQuestions.length > 0 && (
+                                        <div className="pl-4 space-y-1.5 border-l-2 border-slate-200 dark:border-slate-800 mt-2">
+                                          {q.subQuestions.map((sq) => (
+                                            <div key={sq.id} className="flex items-center justify-between p-1.5 rounded bg-[#F6F8FC] dark:bg-slate-950 text-xs">
+                                              <span><strong>({sq.label})</strong> {sq.questionText}</span>
+                                              <span className="font-mono font-bold text-[#F04438]">({sq.scored || 0}/{sq.max || 2.5})</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* ───────────────────────────────────────────────────────────── */}
+                  {/* TAB 3: Practical Assessment (4 Categories & Dedicated Chart) */}
+                  {/* ───────────────────────────────────────────────────────────── */}
+                  {modalTab === 'practical' && (
+                    <div className="space-y-6">
+                      {/* Practical Banner */}
+                      <div className="p-4 rounded-2xl bg-gradient-to-r from-[#F36C21] to-[#FF8A48] text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-md">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-white/20 text-white">
+                              🧪 Practical &amp; Clinical Assessment
+                            </span>
+                            <span className="text-xs font-bold text-orange-100">
+                              4 Categories Matrix
+                            </span>
+                          </div>
+                          <h4 className="text-base font-black text-white mt-1">
+                            Practical Score: {(activeStudent.practicalMarks || 0).toFixed(2)} / {activeStudent.practicalMax || 40}.00 Marks ({(activeStudent.practicalPercentage || 0).toFixed(2)}%)
+                          </h4>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-white text-[#F36C21] shadow-sm">
+                            {(activeStudent.practicalPercentage || 0) >= 50 ? '✓ Practical Passed' : '⚠️ Needs Improvement'}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="space-y-5">
-                        {activeStudent.questionAttempts.map((att, idx) => (
-                          <div key={idx} className="space-y-2 border-b border-[#E7EAF3]/80 dark:border-slate-800/80 pb-4 last:border-0">
-                            <div className="flex items-start gap-2.5">
-                              {/* Status Icon: Green Tick for Correct, Red Cross for 0/Wrong, Orange Warning for Partial */}
-                              <span className={`text-base font-black shrink-0 ${
-                                att.statusTag === 'correct'
-                                  ? 'text-[#00C48C]'
-                                  : att.statusTag === 'wrong'
-                                  ? 'text-[#F04438]'
-                                  : 'text-[#FFB020]'
-                              }`}>
-                                {att.statusTag === 'correct' ? '✓' : att.statusTag === 'wrong' ? '✕' : '⚠️'}
-                              </span>
-
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-black text-[#1B1E28] dark:text-white leading-relaxed">
-                                  ({att.qNo}). {att.questionText}{' '}
-                                  <span className={`font-mono font-black ${
-                                    att.statusTag === 'correct'
-                                      ? 'text-[#00C48C]'
-                                      : att.statusTag === 'wrong'
-                                      ? 'text-[#F04438]'
-                                      : 'text-[#FFB020]'
-                                  }`}>
-                                    ({att.marksScored.toFixed(1)}/{att.maxMarks})
+                      {/* 4 Practical Assessment Categories Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {(activeStudent.practicalCategories || []).map((cat) => (
+                          <div key={cat.id} className="p-4 rounded-2xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 shadow-xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-sm shadow-xs border border-slate-200 dark:border-slate-700">
+                                  {cat.icon}
+                                </span>
+                                <div>
+                                  <h5 className="text-xs font-black text-slate-900 dark:text-white leading-snug">
+                                    {cat.name}
+                                  </h5>
+                                  <span className="text-[10px] font-bold text-slate-500">
+                                    Max: {cat.maxMarks}.00 Marks
                                   </span>
-                                </p>
+                                </div>
+                              </div>
+                              <span className="px-2.5 py-1 rounded-lg font-mono font-black text-xs text-white" style={{ backgroundColor: cat.color }}>
+                                {(cat.scoredMarks || 0).toFixed(2)} / {cat.maxMarks}
+                              </span>
+                            </div>
 
-                                {/* MCQ Options */}
-                                {att.options && (
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 pt-2 text-[11px] text-[#4E5969] dark:text-slate-300">
-                                    {att.options.map(opt => {
-                                      const isSelected = att.selectedOption === opt.label;
-                                      const isCorrect = att.correctOption === opt.label;
-                                      return (
-                                        <div
-                                          key={opt.label}
-                                          className={`p-1.5 rounded-lg flex items-center gap-1.5 ${
-                                            isSelected && isCorrect
-                                              ? 'bg-[#E6F9F3] text-[#00C48C] font-black border border-[#00C48C]/30'
-                                              : isSelected && !isCorrect
-                                              ? 'bg-[#FEECEB] text-[#F04438] font-black border border-[#F04438]/30'
-                                              : isCorrect
-                                              ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200'
-                                              : ''
-                                          }`}
-                                        >
-                                          <span className="font-bold">({opt.label}).</span>
-                                          <span>{opt.text}</span>
-                                          {isSelected && (
-                                            <span className={`text-[9px] uppercase px-1.5 py-0 rounded font-black ml-auto ${
-                                              isCorrect ? 'bg-[#00C48C] text-white' : 'bg-[#F04438] text-white'
-                                            }`}>
-                                              {isCorrect ? 'Selected • Correct' : 'Selected • Wrong (0 Marks)'}
-                                            </span>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-
-                                {/* Descriptive Sub-parts */}
-                                {att.subQuestions && att.subQuestions.length > 0 && (
-                                  <div className="mt-2.5 pl-3 border-l-2 border-[#5B4BFF]/40 space-y-1 bg-[#F8FAFC] dark:bg-slate-800/50 p-3 rounded-r-xl">
-                                    <span className="text-[10px] font-black text-[#5B4BFF] uppercase tracking-wider block mb-1">
-                                      Sub-parts Awarded Marks:
-                                    </span>
-                                    {att.subQuestions.map(sq => (
-                                      <div key={sq.id} className="flex items-center justify-between text-xs text-[#1B1E28] dark:text-slate-200">
-                                        <span className="font-bold">
-                                          {sq.label} {sq.questionText}
-                                        </span>
-                                        <span className="font-mono font-black text-[#F36C21]">
-                                          {sq.scored.toFixed(1)} / {sq.max} Marks
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-
+                            {/* Progress bar */}
+                            <div className="space-y-1">
+                              <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-300"
+                                  style={{ width: `${Math.min(100, cat.percentage || 0)}%`, backgroundColor: cat.color }}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                                <span>Performance Score</span>
+                                <span>{(cat.percentage || 0).toFixed(1)}%</span>
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
 
-                  {/* ──────────────────────────────────────────────────────────── */}
-                  {/* TAB 3: COMPETENCIES PROGRESS CHART                          */}
-                  {/* ──────────────────────────────────────────────────────────── */}
-                  {modalTab === 'chart' && (
-                    <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6 text-center">
-                      <div>
-                        <h3 className="text-lg sm:text-xl font-black text-[#00C48C] tracking-tight uppercase">
-                          Competencies Result : {activeStudent.marksObtained.toFixed(1)}/{activeStudent.maxMarks} = {((activeStudent.marksObtained / activeStudent.maxMarks) * 100).toFixed(2)}%
-                        </h3>
-                        <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-1">
-                          CBME Assessment Competency Achievement Distribution Breakdown for [{activePaper.code}]
-                        </p>
-                      </div>
+                      {/* Practical 4-Category Visual Donut / Bar Comparison */}
+                      <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-4">
+                        <h4 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider">
+                          4 Categories Distribution &amp; Weightage Breakdown
+                        </h4>
 
-                      {/* SVG Pie Chart */}
-                      <div className="flex flex-col items-center justify-center py-4">
-                        <div className="relative w-64 h-64">
-                          <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#5B4BFF" strokeWidth="20" strokeDasharray="125.6 251.2" strokeDashoffset="0" />
-                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#00C48C" strokeWidth="20" strokeDasharray="125.6 251.2" strokeDashoffset="-125.6" />
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-xs font-bold text-[#7B8794] uppercase">Theory Score</span>
-                            <span className="text-xl font-black text-[#00C48C]">
-                              {((activeStudent.marksObtained / activeStudent.maxMarks) * 100).toFixed(1)}%
-                            </span>
+                        <div className="flex flex-col sm:flex-row items-center justify-around gap-6 pt-2">
+                          {/* Left Donut */}
+                          <div className="relative w-40 h-40">
+                            <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                              {(() => {
+                                let accum = 0;
+                                const cats = activeStudent.practicalCategories || [];
+                                const totalScored = cats.reduce((s, c) => s + Math.max(1, c.scoredMarks || 0), 0) || 1;
+
+                                return cats.map((cat) => {
+                                  const slice = (Math.max(1, cat.scoredMarks || 0) / totalScored) * 100;
+                                  const dash = `${slice} ${100 - slice}`;
+                                  const offset = -accum;
+                                  accum += slice;
+                                  return (
+                                    <circle
+                                      key={cat.id}
+                                      cx="50"
+                                      cy="50"
+                                      r="25"
+                                      fill="transparent"
+                                      stroke={cat.color}
+                                      strokeWidth="35"
+                                      strokeDasharray={dash}
+                                      strokeDashoffset={offset}
+                                      className="transition-all duration-300"
+                                    />
+                                  );
+                                });
+                              })()}
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                              <span className="text-sm font-black text-slate-900 dark:text-white">
+                                {(activeStudent.practicalMarks || 0).toFixed(1)}
+                              </span>
+                              <span className="text-[9px] font-bold text-slate-400">/ 40.0</span>
+                            </div>
+                          </div>
+
+                          {/* Right Legend & Summary Table */}
+                          <div className="space-y-2 text-left text-xs max-w-sm w-full">
+                            {(activeStudent.practicalCategories || []).map((cat) => (
+                              <div key={cat.id} className="flex items-center justify-between p-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
+                                  <span className="font-bold text-slate-800 dark:text-slate-200 text-[11px]">{(cat.name || '').split('&')[0]}</span>
+                                </div>
+                                <span className="font-mono font-bold text-slate-900 dark:text-white">
+                                  {(cat.scoredMarks || 0).toFixed(2)} / {cat.maxMarks}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
 
-                      {/* Legend Grid with Paper Competency Percentages */}
-                      <div className="pt-4 border-t border-[#E7EAF3] dark:border-slate-800">
-                        <h5 className="text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-3 tracking-wider">
-                          Competencies Performance (Correct / Total Questions)
-                        </h5>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 text-left text-xs font-bold text-[#4E5969] dark:text-slate-300">
-                          {activePaperCompetencies.map((compObj, idx) => {
-                            const colors = ['#5B4BFF', '#00C48C', '#F36C21', '#FFB020', '#06B6D4', '#8B5CF6'];
-                            const dotColor = colors[idx % colors.length];
-                            const compData = activeStudent.competencyResults[compObj.code] || { correct: 0, total: compObj.totalQuestions, pct: 0, scoredMarks: 0, maxMarks: 0 };
-                            return (
-                              <div key={compObj.code} className="flex items-center gap-3 p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700">
-                                <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }}></span>
-                                <div className="min-w-0 flex-1">
-                                  <span className="font-mono font-black text-[#1B1E28] dark:text-white text-sm block">{compObj.code}</span>
-                                  <p className="text-[11px] text-[#4E5969] dark:text-slate-400 truncate">{compObj.desc}</p>
-                                  <span className="text-xs font-extrabold text-[#00C48C] block mt-1">
-                                    {compData.correct} / {compData.total} questions ({compData.pct}%) • {compData.scoredMarks.toFixed(1)}/{compData.maxMarks} Marks
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
+                    </div>
+                  )}
+
+                  {/* ───────────────────────────────────────────────────────────── */}
+                  {/* TAB 4: Chart (SubTopics Progress Chart with Radial Labels) */}
+                  {/* ───────────────────────────────────────────────────────────── */}
+                  {modalTab === 'chart' && (
+                    <div className="space-y-6 text-center">
+                      {/* Header Result Display (exact red bold title from Screenshot 3) */}
+                      <div>
+                        <h3 className="text-xl font-black text-[#F04438] tracking-tight uppercase">
+                          SUBTOPICS RESULT : {(activeStudent.marksObtained || 0).toFixed(2)} / {activeStudent.maxMarks || 80} = {((((activeStudent.marksObtained || 0) / (activeStudent.maxMarks || 80))) * 100).toFixed(2)}%
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Visual pie distribution of student performance across question paper subtopics with leader lines and formula labels.
+                        </p>
+                      </div>
+
+                      {/* SVG Pie Chart with Radial Leader Lines and Formatted {4}/{8}={50}% Labels */}
+                      <div className="flex flex-col items-center justify-center p-2">
+                        <div className="relative w-full max-w-[620px] h-[370px]">
+                          <svg viewBox="0 0 550 360" className="w-full h-full">
+                            <defs>
+                              <filter id="pieShadow" x="-10%" y="-10%" width="120%" height="120%">
+                                <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.15" />
+                              </filter>
+                            </defs>
+
+                            {/* Slices */}
+                            <g filter="url(#pieShadow)">
+                              {pieChartSlices.map((slice) => {
+                                const isHov = hoveredSlice === slice.code;
+                                return (
+                                  <path
+                                    key={slice.code}
+                                    d={slice.pathData}
+                                    fill={slice.color}
+                                    stroke="#FFFFFF"
+                                    strokeWidth="2.5"
+                                    onMouseEnter={() => setHoveredSlice(slice.code)}
+                                    onMouseLeave={() => setHoveredSlice(null)}
+                                    className="transition-all duration-200 cursor-pointer"
+                                    style={{
+                                      opacity: hoveredSlice ? (isHov ? 1 : 0.65) : 1,
+                                      transformOrigin: '275px 180px',
+                                      transform: isHov ? 'scale(1.04)' : 'scale(1)',
+                                    }}
+                                  />
+                                );
+                              })}
+                            </g>
+
+                            {/* Radial Leader Lines and Text Labels */}
+                            <g className="pointer-events-none">
+                              {pieChartSlices.map((slice) => {
+                                const isHov = hoveredSlice === slice.code;
+                                return (
+                                  <g key={`label-${slice.code}`}>
+                                    {/* Leader Line */}
+                                    <polyline
+                                      points={`${slice.lineStart.x},${slice.lineStart.y} ${slice.lineMid.x},${slice.lineMid.y} ${slice.lineEnd.x},${slice.lineEnd.y}`}
+                                      fill="none"
+                                      stroke={isHov ? '#1B1E28' : slice.color}
+                                      strokeWidth={isHov ? '2' : '1.2'}
+                                      strokeDasharray={isHov ? 'none' : '2,2'}
+                                      className="transition-all duration-200"
+                                    />
+                                    {/* Anchor Point Circle */}
+                                    <circle
+                                      cx={slice.lineStart.x}
+                                      cy={slice.lineStart.y}
+                                      r="2.5"
+                                      fill={slice.color}
+                                    />
+                                    {/* Label: {code} - {scored}/{totalMax}={pct}% */}
+                                    <text
+                                      x={slice.textPos.x}
+                                      y={slice.textPos.y}
+                                      textAnchor={slice.isRight ? 'start' : 'end'}
+                                      fontSize="11"
+                                      fontWeight={isHov ? '900' : '800'}
+                                      fill={isHov ? '#1B1E28' : slice.color}
+                                      className="font-mono tracking-tight transition-all duration-200"
+                                    >
+                                      {slice.code} - {slice.scored}/{slice.totalMax}={slice.pct}%
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                            </g>
+                          </svg>
                         </div>
                       </div>
+
+                      {/* Comprehensive Formula Legend with {scored}/{totalMax}={pct}% Badges */}
+                      <div className="flex flex-wrap items-center justify-center gap-3 pt-2 max-w-3xl mx-auto">
+                        {pieChartSlices.map((slice) => {
+                          const isHov = hoveredSlice === slice.code;
+                          return (
+                            <div
+                              key={slice.code}
+                              onMouseEnter={() => setHoveredSlice(slice.code)}
+                              onMouseLeave={() => setHoveredSlice(null)}
+                              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                                isHov
+                                  ? 'bg-slate-100 dark:bg-slate-800 border-slate-400 scale-105 shadow-sm'
+                                  : 'bg-[#F6F8FC] dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                              }`}
+                            >
+                              <span className="w-3.5 h-3.5 rounded-full shadow-xs" style={{ backgroundColor: slice.color }} />
+                              <span className="font-mono font-black text-slate-900 dark:text-white">{slice.code}</span>
+                              <span className="font-mono font-black text-[#5B4BFF] bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                                {slice.scored}/{slice.totalMax}={slice.pct}%
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* SubTopics Performance Matrix Table */}
+                      <div className="pt-4 border-t border-slate-200 dark:border-slate-800 max-w-4xl mx-auto">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-wider bg-[#F6F8FC] dark:bg-slate-900/50">
+                                <th className="py-2.5 px-3 rounded-l-lg">SubTopic Code</th>
+                                <th className="py-2.5 px-3">Description</th>
+                                <th className="py-2.5 px-3 text-center">Marks Formula</th>
+                                <th className="py-2.5 px-3 text-center">Progress</th>
+                                <th className="py-2.5 px-3 text-center rounded-r-lg">Percentage</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                              {pieChartSlices.map((slice) => (
+                                <tr
+                                  key={slice.code}
+                                  onMouseEnter={() => setHoveredSlice(slice.code)}
+                                  onMouseLeave={() => setHoveredSlice(null)}
+                                  className={`transition ${hoveredSlice === slice.code ? 'bg-indigo-50/50 dark:bg-indigo-950/30' : ''}`}
+                                >
+                                  <td className="py-2.5 px-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: slice.color }} />
+                                      <span className="font-mono font-black text-[#5B4BFF]">{slice.code}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-bold">
+                                    {slice.desc || `SubTopic ${slice.code}`}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center font-mono font-black text-slate-900 dark:text-white">
+                                    {slice.scored} / {slice.totalMax}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    <div className="w-28 mx-auto bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full rounded-full transition-all duration-300"
+                                        style={{ width: `${Math.min(100, slice.pct)}%`, backgroundColor: slice.color }}
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    <span className="px-2.5 py-0.5 rounded font-mono font-black text-[11px] text-white" style={{ backgroundColor: slice.color }}>
+                                      {slice.pct}%
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
                     </div>
                   )}
 
                 </div>
 
-                {/* Modal Footer */}
-                <div className="px-6 py-3.5 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
-                  <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold">
-                    Faculty Sign-off: <strong className="text-[#5B4BFF]">{deptObj?.name || 'Physiology'} Department Head</strong>
-                  </span>
+                {/* 4. Modal Footer */}
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-900 flex justify-end">
                   <button
+                    type="button"
                     onClick={() => setModalOpen(false)}
-                    className="px-6 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow-md transition-all"
+                    className="px-6 py-2.5 bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-black rounded-xl text-xs transition shadow-md shadow-[#5B4BFF]/20"
                   >
-                    Done Inspecting
+                    Close Analysis
                   </button>
                 </div>
 

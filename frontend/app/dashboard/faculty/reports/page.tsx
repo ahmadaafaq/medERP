@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import FacultyReportsNav from '../../../../components/FacultyReportsNav';
+
 
 interface College {
   id: string;
@@ -381,16 +383,20 @@ export default function FacultyMISReportsPage() {
     document.body.removeChild(link);
   };
 
+  const pathname = usePathname();
+  const currentRole: 'admin' | 'faculty' = (pathname && pathname.includes('/dashboard/admin/')) ? 'admin' : 'faculty';
+
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans">
-      <Sidebar role="faculty" />
+      <Sidebar role={currentRole} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="Faculty MIS Reports — Attendance Ledger" />
+        <Header title={currentRole === 'admin' ? 'Admin MIS Reports — Attendance Ledger' : 'Faculty MIS Reports — Attendance Ledger'} />
         
         <main className="p-6 space-y-6 flex-1">
           {/* Top Reports Suite Navigation Tabs */}
           <FacultyReportsNav
             activeReport="attendance"
+            role={currentRole}
             stats={{
               attendanceCount: stats.totalClasses > 0 ? `${stats.totalClasses} Sessions` : 'Active',
               logbookCount: 'Ledger',
