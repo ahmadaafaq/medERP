@@ -71,7 +71,7 @@ export class StudentMasterService {
 
         const params: any[] = [];
         let sql = `
-          SELECT s.id, s.name, s.rollno, s.registration_no, s.is_active, s.created_at, s.photo_url,
+          SELECT DISTINCT ON (s.id) s.id, s.name, s.rollno, s.registration_no, s.is_active, s.created_at, s.photo_url,
                  sa.college_name,
                  COALESCE(sa.course_code, s.course_cd) AS course_code,
                  sa.academic_session,
@@ -99,7 +99,9 @@ export class StudentMasterService {
             const pId = params.length;
             params.push(matchedColg.name);
             const pName = params.length;
-            sql += ` AND (sa.college_id::text = $${pId} OR sa.college_name ILIKE $${pName})`;
+            params.push(matchedColg.code || matchedColg.id);
+            const pCode = params.length;
+            sql += ` AND (sa.college_id::text = $${pId} OR sa.college_name ILIKE $${pName} OR sa.college_id::text = $${pCode})`;
           } else {
             params.push(colIdVal);
             sql += ` AND (sa.college_id::text = $${params.length} OR sa.college_name ILIKE $${params.length})`;
@@ -149,7 +151,7 @@ export class StudentMasterService {
           sql += ` AND sa.professional_id IS NOT NULL AND sa.professional_phase IS NOT NULL`;
         }
 
-        sql += ` ORDER BY s.created_at DESC`;
+        sql += ` ORDER BY s.id, s.created_at DESC`;
 
         const rows = await this.tenantSchemaService.queryInTenant(slug, sql, params);
         const col = colleges.find((c: any) => c.slug === slug);
@@ -165,6 +167,7 @@ export class StudentMasterService {
       }
     }
 
+    allResults.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
     return allResults;
   }
 

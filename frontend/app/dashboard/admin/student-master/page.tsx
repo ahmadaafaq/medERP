@@ -140,6 +140,8 @@ interface College {
   id: string;
   name: string;
   slug: string;
+  code?: string;
+  colg_cd?: string;
 }
 
 interface Course {
@@ -542,10 +544,20 @@ export default function StudentMasterPage() {
       const collegeList: College[] = cols.data || [];
       setColleges(collegeList);
 
-      // 2. Auto-load data from first active college if available
+      // 2. Auto-load data from active college (from localStorage or default srms-cet-bareilly)
       if (collegeList.length > 0) {
-        const firstCollege = collegeList[0];
-        const data = await loadTenantData(firstCollege.slug);
+        const savedSlug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant')) : null;
+        const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
+        const defaultCollege = collegeList.find(c =>
+          (savedSlug && (c.slug === savedSlug || c.id === savedSlug)) ||
+          (savedColgCd && (String((c as any).colg_cd) === savedColgCd || String(c.id) === savedColgCd || String(c.code) === savedColgCd)) ||
+          c.slug === 'srms-cet-bareilly' ||
+          String(c.code) === '1'
+        ) || collegeList[0];
+
+        setSelectedCollege(defaultCollege.id || defaultCollege.slug || 'all');
+
+        const data = await loadTenantData(defaultCollege.slug);
         setAllCourses(data.courses || []);
         setAllBatches(data.batches || []);
         setAllSessions(data.sessions || []);
@@ -565,6 +577,19 @@ export default function StudentMasterPage() {
         if (data.groups && data.groups.length > 0) {
           setTargetGroupId(data.groups[0].id);
         }
+
+        // Fetch students for the active college
+        fetchStudents({
+          overrideTenant: defaultCollege.slug,
+          collegeId: defaultCollege.id || defaultCollege.slug,
+          courseId: 'all',
+          batchId: 'all',
+          branchId: 'all',
+          sessionId: 'all',
+          residencyType: 'all',
+          groupId: 'all',
+          professionalPhase: 'all',
+        });
       }
     } catch (err) {
       console.error('Failed to fetch metadata', err);
@@ -572,10 +597,11 @@ export default function StudentMasterPage() {
   };
 
   const getActiveTenantSlug = () => {
+    const savedSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null;
     const activeCollege = selectedCollege !== 'all'
       ? colleges.find((c) => c.id === selectedCollege || c.slug === selectedCollege)
-      : colleges[0];
-    return activeCollege?.slug || 'srms-ims';
+      : colleges.find((c) => c.slug === savedSlug || c.slug === 'srms-cet-bareilly') || colleges[0];
+    return activeCollege?.slug || savedSlug || 'srms-cet-bareilly';
   };
 
   const fetchStudents = async (overrides?: {
