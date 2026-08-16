@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict a8qHeTBAnArFFIhhOqNK77mVov1hZOGT6oKkpKjhF6znIIIggmaEFBZ2sJrV9bC
+\restrict 9vtCbBsDnW8UQTiaQVOm29JdSW6Aros9S8BaeOdqYWd4usipwqeaz0xyzHoyMgV
 
 -- Dumped from database version 16.14
 -- Dumped by pg_dump version 16.14
@@ -535,6 +535,9 @@ DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".units_code_uq_idx;
+DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".topics_code_uq_idx;
+DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".subjects_code_uq_idx;
 DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".idx_students_batch;
@@ -546,6 +549,7 @@ DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".competencies_code_uq_idx;
 DROP INDEX IF EXISTS "tenant_srms-cet".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-cet".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-cet".idx_students_batch;
@@ -601,6 +605,8 @@ DROP INDEX IF EXISTS "tenant_aiims-delhi".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_aiims-delhi".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_aiims-delhi".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_aiims-delhi".idx_att_rec_student;
+DROP INDEX IF EXISTS public.tenants_slug_uniq;
+DROP INDEX IF EXISTS public.tenants_code_uniq;
 DROP INDEX IF EXISTS public.idx_audit_tenant_created;
 DROP INDEX IF EXISTS public.idx_audit_entity;
 ALTER TABLE IF EXISTS ONLY "tenant_unicamp-med".subject_offerings DROP CONSTRAINT IF EXISTS uq_subject_offering;
@@ -1655,6 +1661,7 @@ ALTER TABLE IF EXISTS ONLY "tenant_aiims-delhi".attendance_sessions DROP CONSTRA
 ALTER TABLE IF EXISTS ONLY "tenant_aiims-delhi".attendance_records DROP CONSTRAINT IF EXISTS attendance_records_session_id_student_id_key;
 ALTER TABLE IF EXISTS ONLY "tenant_aiims-delhi".attendance_records DROP CONSTRAINT IF EXISTS attendance_records_pkey;
 ALTER TABLE IF EXISTS ONLY "tenant_aiims-delhi".academic_sessions DROP CONSTRAINT IF EXISTS academic_sessions_pkey;
+ALTER TABLE IF EXISTS ONLY public.tenants DROP CONSTRAINT IF EXISTS tenants_pkey;
 ALTER TABLE IF EXISTS ONLY public.global_admins DROP CONSTRAINT IF EXISTS global_admins_pkey;
 ALTER TABLE IF EXISTS ONLY public.global_admins DROP CONSTRAINT IF EXISTS global_admins_email_key;
 ALTER TABLE IF EXISTS ONLY public.audit_logs DROP CONSTRAINT IF EXISTS audit_logs_pkey;
@@ -24554,34 +24561,20 @@ de5955a0-3e7a-4880-b3af-aad4d2c536d5	enterprise	9999	999	{"hostel": true, "logbo
 --
 
 COPY public.tenants (id, name, slug, domain, plan, logo_url, primary_color, smtp_host, smtp_port, smtp_user, smtp_pass_encrypted, is_active, schema_provisioned, created_at, updated_at, code) FROM stdin;
-13c02e33-1783-4ff7-9aa1-1358e02124b6	SRMS CETR,BAREILLY	srms-cetr-bareilly	srms-cetr-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.900283+00	2026-08-16 07:26:36.962236+00	2
-761e9045-cc93-47ca-915e-0bddbbaa4d81	SRMS CET, UNNAO	srms-cet-unnao	srms-cet-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.904482+00	2026-08-16 07:26:37.525251+00	3
-c612bf02-4721-4907-8ab7-72a662b56fc7	SRMS COLLEGE OF LAW	srms-college-of-law	srms-college-of-law.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.908321+00	2026-08-16 07:26:37.816253+00	4
-1c157dec-058f-4443-be92-140f8bf8bac8	SRMS IBS, LUCKNOW	srms-ibs-lucknow	srms-ibs-lucknow.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.911916+00	2026-08-16 07:26:38.0262+00	5
-94b71ecf-77ef-4436-97ee-8568253b7f41	SRMS IAHS,BAREILLY	srms-iahs-bareilly	srms-iahs-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.915599+00	2026-08-16 07:26:38.243323+00	6
-92787eb6-9ec6-4daf-9cf8-1da875d976dc	SRMS TRUST, BAREILLY	srms-trust-bareilly	srms-trust-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.919291+00	2026-08-16 07:26:38.461963+00	7
-366914bb-7547-4af7-bf8e-692b49474a2e	SRMS NURSING SCHOOL	srms-nursing-school	srms-nursing-school.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.923904+00	2026-08-16 07:26:38.681122+00	8
-3cc6a15c-6b62-4e80-9851-ac58a352cf72	SRMS NURSING COLLEGE	srms-nursing-college	srms-nursing-college.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.928317+00	2026-08-16 07:26:38.889646+00	9
-e6e311a7-76d3-4b76-b055-7ddceec8d0f3	SRMS RIDDHIMA,BAREILLY	srms-riddhima-bareilly	srms-riddhima-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.932472+00	2026-08-16 07:26:39.0948+00	10
-5f7ae960-6a43-4957-8a10-9a2234737da2	SRMS COLLEGE OF NURSING & PARAMEDICAL SCIENCES,UNNAO	srms-college-of-nursing-paramedical-sciences-unnao	srms-college-of-nursing-paramedical-sciences-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.941002+00	2026-08-16 07:26:39.382811+00	12
-806339cb-821e-44f8-b710-138c95634066	SRMS QUIZ PANEL	srms-quiz-panel	srms-quiz-panel.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.94495+00	2026-08-16 07:26:39.582122+00	13
-8a7f0788-3437-4d3b-ad9c-6cc4d6e4024d	SRMS CRICKET ACADEMY	srms-cricket-academy	srms-cricket-academy.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.948556+00	2026-08-16 07:26:39.755008+00	14
-74f9f5ee-89c7-4250-88e4-5d912b5070cf	SRMS IMS,BAREILLY	srms-ims	https:srms.ac.in/ims	Standard	\N	#6366F1	\N	587	\N	\N	t	t	2026-07-27 17:58:48.559489+00	2026-08-16 07:26:36.505409+00	11
-dba52d00-c45a-4b65-8ff4-2bd85fdea2b6	SRMS CET,BAREILLY	srms-cet-bareilly	srms-cet-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.894725+00	2026-08-16 07:57:18.617015+00	1
-13c02e33-1783-4ff7-9aa1-1358e02124b6	SRMS CETR,BAREILLY	srms-cetr-bareilly	srms-cetr-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.900283+00	2026-08-16 07:26:36.962236+00	2
-761e9045-cc93-47ca-915e-0bddbbaa4d81	SRMS CET, UNNAO	srms-cet-unnao	srms-cet-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.904482+00	2026-08-16 07:26:37.525251+00	3
-c612bf02-4721-4907-8ab7-72a662b56fc7	SRMS COLLEGE OF LAW	srms-college-of-law	srms-college-of-law.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.908321+00	2026-08-16 07:26:37.816253+00	4
-1c157dec-058f-4443-be92-140f8bf8bac8	SRMS IBS, LUCKNOW	srms-ibs-lucknow	srms-ibs-lucknow.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.911916+00	2026-08-16 07:26:38.0262+00	5
-94b71ecf-77ef-4436-97ee-8568253b7f41	SRMS IAHS,BAREILLY	srms-iahs-bareilly	srms-iahs-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.915599+00	2026-08-16 07:26:38.243323+00	6
-92787eb6-9ec6-4daf-9cf8-1da875d976dc	SRMS TRUST, BAREILLY	srms-trust-bareilly	srms-trust-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.919291+00	2026-08-16 07:26:38.461963+00	7
-366914bb-7547-4af7-bf8e-692b49474a2e	SRMS NURSING SCHOOL	srms-nursing-school	srms-nursing-school.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.923904+00	2026-08-16 07:26:38.681122+00	8
-3cc6a15c-6b62-4e80-9851-ac58a352cf72	SRMS NURSING COLLEGE	srms-nursing-college	srms-nursing-college.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.928317+00	2026-08-16 07:26:38.889646+00	9
-e6e311a7-76d3-4b76-b055-7ddceec8d0f3	SRMS RIDDHIMA,BAREILLY	srms-riddhima-bareilly	srms-riddhima-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.932472+00	2026-08-16 07:26:39.0948+00	10
-5f7ae960-6a43-4957-8a10-9a2234737da2	SRMS COLLEGE OF NURSING & PARAMEDICAL SCIENCES,UNNAO	srms-college-of-nursing-paramedical-sciences-unnao	srms-college-of-nursing-paramedical-sciences-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.941002+00	2026-08-16 07:26:39.382811+00	12
-806339cb-821e-44f8-b710-138c95634066	SRMS QUIZ PANEL	srms-quiz-panel	srms-quiz-panel.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.94495+00	2026-08-16 07:26:39.582122+00	13
-8a7f0788-3437-4d3b-ad9c-6cc4d6e4024d	SRMS CRICKET ACADEMY	srms-cricket-academy	srms-cricket-academy.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.948556+00	2026-08-16 07:26:39.755008+00	14
-74f9f5ee-89c7-4250-88e4-5d912b5070cf	SRMS IMS,BAREILLY	srms-ims	https:srms.ac.in/ims	Standard	\N	#6366F1	\N	587	\N	\N	t	t	2026-07-27 17:58:48.559489+00	2026-08-16 07:26:36.505409+00	11
-dba52d00-c45a-4b65-8ff4-2bd85fdea2b6	SRMS CET,BAREILLY	srms-cet-bareilly	srms-cet-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.894725+00	2026-08-16 07:57:18.617015+00	1
+dba52d00-c45a-4b65-8ff4-2bd85fdea2b6	SRMS CET,BAREILLY	srms-cet-bareilly	srms-cet-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.894725+00	2026-08-16 11:27:09.616301+00	1
+13c02e33-1783-4ff7-9aa1-1358e02124b6	SRMS CETR,BAREILLY	srms-cetr-bareilly	srms-cetr-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.900283+00	2026-08-16 11:27:09.629495+00	2
+761e9045-cc93-47ca-915e-0bddbbaa4d81	SRMS CET, UNNAO	srms-cet-unnao	srms-cet-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.904482+00	2026-08-16 11:27:09.6363+00	3
+c612bf02-4721-4907-8ab7-72a662b56fc7	SRMS COLLEGE OF LAW	srms-college-of-law	srms-college-of-law.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.908321+00	2026-08-16 11:27:09.642283+00	4
+1c157dec-058f-4443-be92-140f8bf8bac8	SRMS IBS, LUCKNOW	srms-ibs-lucknow	srms-ibs-lucknow.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.911916+00	2026-08-16 11:27:09.647995+00	5
+94b71ecf-77ef-4436-97ee-8568253b7f41	SRMS IAHS,BAREILLY	srms-iahs-bareilly	srms-iahs-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.915599+00	2026-08-16 11:27:09.655066+00	6
+92787eb6-9ec6-4daf-9cf8-1da875d976dc	SRMS TRUST, BAREILLY	srms-trust-bareilly	srms-trust-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.919291+00	2026-08-16 11:27:09.662142+00	7
+366914bb-7547-4af7-bf8e-692b49474a2e	SRMS NURSING SCHOOL	srms-nursing-school	srms-nursing-school.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.923904+00	2026-08-16 11:27:09.668324+00	8
+3cc6a15c-6b62-4e80-9851-ac58a352cf72	SRMS NURSING COLLEGE	srms-nursing-college	srms-nursing-college.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.928317+00	2026-08-16 11:27:09.675825+00	9
+e6e311a7-76d3-4b76-b055-7ddceec8d0f3	SRMS RIDDHIMA,BAREILLY	srms-riddhima-bareilly	srms-riddhima-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.932472+00	2026-08-16 11:27:09.681984+00	10
+74f9f5ee-89c7-4250-88e4-5d912b5070cf	SRMS IMS,BAREILLY	srms-ims	https:srms.ac.in/ims	Standard	\N	#6366F1	\N	587	\N	\N	t	t	2026-07-27 17:58:48.559489+00	2026-08-16 11:27:09.691604+00	11
+5f7ae960-6a43-4957-8a10-9a2234737da2	SRMS COLLEGE OF NURSING & PARAMEDICAL SCIENCES,UNNAO	srms-college-of-nursing-paramedical-sciences-unnao	srms-college-of-nursing-paramedical-sciences-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.941002+00	2026-08-16 11:27:09.697898+00	12
+806339cb-821e-44f8-b710-138c95634066	SRMS QUIZ PANEL	srms-quiz-panel	srms-quiz-panel.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.94495+00	2026-08-16 11:27:09.704085+00	13
+8a7f0788-3437-4d3b-ad9c-6cc4d6e4024d	SRMS CRICKET ACADEMY	srms-cricket-academy	srms-cricket-academy.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.948556+00	2026-08-16 11:27:09.709882+00	14
 \.
 
 
@@ -24616,8 +24609,6 @@ COPY "tenant_aiims-delhi".attendance_sessions (id, faculty_id, subject_id, batch
 COPY "tenant_aiims-delhi".batches (id, code, year, course_cd, department_id, start_date, end_date, is_active) FROM stdin;
 ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb	2023-MBBS	2023	MBBS	\N	\N	\N	t
 0eee1223-9593-4f93-add4-70faba5440f1	2025	2025	MBBS	\N	\N	\N	t
-ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb	2023-MBBS	2023	MBBS	\N	\N	\N	t
-0eee1223-9593-4f93-add4-70faba5440f1	2025	2025	MBBS	\N	\N	\N	t
 \.
 
 
@@ -24642,14 +24633,6 @@ COPY "tenant_aiims-delhi".chat_messages (id, group_id, sender_id, content, file_
 --
 
 COPY "tenant_aiims-delhi".competencies (id, subject_id, topic_id, linker_id, code, description, domain, level, is_core, is_active, created_at) FROM stdin;
-145a5d09-46e1-4320-921b-c2317b4c52ff	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.654445+00
-e3756e1d-fb5b-492d-85a6-a14d9a4eed3d	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:30.654445+00
-75804efd-7fcc-424b-9e6d-c96c44919922	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.654445+00
-c9fc3976-93da-477a-9b58-b73d83183952	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.654445+00
-b870491c-be56-48cc-951e-f9f834cf6d15	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.654445+00
-af937241-b861-4c6f-955f-b281fec033df	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:30.654445+00
-5ccc6d44-765e-488c-bfcb-856811556cfb	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.654445+00
-b092f168-d6d8-4850-9c03-f5f493f24d0a	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:30.654445+00
 145a5d09-46e1-4320-921b-c2317b4c52ff	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.654445+00
 e3756e1d-fb5b-492d-85a6-a14d9a4eed3d	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:30.654445+00
 75804efd-7fcc-424b-9e6d-c96c44919922	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.654445+00
@@ -24700,8 +24683,6 @@ d43a61bf-bc80-4105-8b27-c539dbdfb9dd	EL	Electives	t
 --
 
 COPY "tenant_aiims-delhi".departments (id, name, code, type, hod_user_id, is_active, created_at) FROM stdin;
-79465ef5-fafb-4843-8a8b-f154804e8e1a	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:37.401259+00
-a0f3905c-551f-438a-896a-2ae41d7cfe27	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:37.401259+00
 79465ef5-fafb-4843-8a8b-f154804e8e1a	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:37.401259+00
 a0f3905c-551f-438a-896a-2ae41d7cfe27	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:37.401259+00
 \.
@@ -25060,8 +25041,6 @@ COPY "tenant_aiims-delhi".subject_offerings (id, subject_id, prof_id, dtype_id, 
 COPY "tenant_aiims-delhi".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active) FROM stdin;
 700406a1-5566-40c4-a6b3-704573310bb4	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
 3050b32f-ae8d-4879-a2ea-d8c5f9ce23c1	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
-700406a1-5566-40c4-a6b3-704573310bb4	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
-3050b32f-ae8d-4879-a2ea-d8c5f9ce23c1	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
 \.
 
 
@@ -25158,8 +25137,6 @@ COPY "tenant_aiims-jodhpur".attendance_sessions (id, faculty_id, subject_id, bat
 COPY "tenant_aiims-jodhpur".batches (id, code, year, course_cd, department_id, start_date, end_date, is_active) FROM stdin;
 295c2f24-0424-4fb2-b44e-777c9f6a9dde	2023-MBBS	2023	MBBS	\N	\N	\N	t
 feee8ce7-ad2c-4aa4-96fb-c337734aca30	2025	2025	MBBS	\N	\N	\N	t
-295c2f24-0424-4fb2-b44e-777c9f6a9dde	2023-MBBS	2023	MBBS	\N	\N	\N	t
-feee8ce7-ad2c-4aa4-96fb-c337734aca30	2025	2025	MBBS	\N	\N	\N	t
 \.
 
 
@@ -25184,14 +25161,6 @@ COPY "tenant_aiims-jodhpur".chat_messages (id, group_id, sender_id, content, fil
 --
 
 COPY "tenant_aiims-jodhpur".competencies (id, subject_id, topic_id, linker_id, code, description, domain, level, is_core, is_active, created_at) FROM stdin;
-69c18280-fc51-4324-bf9d-c0e5f343f853	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.238844+00
-6f511f91-9cb4-42e7-9c00-90a5f93e1597	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:31.238844+00
-427dc550-1290-4f80-9736-0db278174ba7	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.238844+00
-20baa3c0-3e66-4b6f-af64-b4438c07bd7a	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.238844+00
-6448bd26-e224-4169-b475-e1e8909b0244	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.238844+00
-106cad8b-3628-4cb2-b5ec-3e35b9ed7458	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:31.238844+00
-8e569b95-ab81-4da7-941a-0e1266473323	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.238844+00
-0359f163-7562-486d-ab46-ff10232a5b0f	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:31.238844+00
 69c18280-fc51-4324-bf9d-c0e5f343f853	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.238844+00
 6f511f91-9cb4-42e7-9c00-90a5f93e1597	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:31.238844+00
 427dc550-1290-4f80-9736-0db278174ba7	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.238844+00
@@ -25242,8 +25211,6 @@ dcce70e0-01bb-415d-9261-c84b344a1b30	EL	Electives	t
 --
 
 COPY "tenant_aiims-jodhpur".departments (id, name, code, type, hod_user_id, is_active, created_at) FROM stdin;
-e128b010-92c7-48c2-bddd-3e3dce53ba3a	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:48.072637+00
-4e4635fd-4178-403f-91bd-e54d8428450e	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:48.072637+00
 e128b010-92c7-48c2-bddd-3e3dce53ba3a	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:48.072637+00
 4e4635fd-4178-403f-91bd-e54d8428450e	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:48.072637+00
 \.
@@ -25602,8 +25569,6 @@ COPY "tenant_aiims-jodhpur".subject_offerings (id, subject_id, prof_id, dtype_id
 COPY "tenant_aiims-jodhpur".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active) FROM stdin;
 a88628b9-54a3-4a13-bf1a-a55c1d41007b	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
 171bffdd-fedf-4ce7-ac86-b4a762f66b21	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
-a88628b9-54a3-4a13-bf1a-a55c1d41007b	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
-171bffdd-fedf-4ce7-ac86-b4a762f66b21	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
 \.
 
 
@@ -25700,8 +25665,6 @@ COPY "tenant_kmc-manipal".attendance_sessions (id, faculty_id, subject_id, batch
 COPY "tenant_kmc-manipal".batches (id, code, year, course_cd, department_id, start_date, end_date, is_active) FROM stdin;
 fcd54c1f-e497-4c11-a585-36f89a9f85d4	2023-MBBS	2023	MBBS	\N	\N	\N	t
 683ebcb7-86c5-482d-b05c-de2443c3af88	2025	2025	MBBS	\N	\N	\N	t
-fcd54c1f-e497-4c11-a585-36f89a9f85d4	2023-MBBS	2023	MBBS	\N	\N	\N	t
-683ebcb7-86c5-482d-b05c-de2443c3af88	2025	2025	MBBS	\N	\N	\N	t
 \.
 
 
@@ -25726,14 +25689,6 @@ COPY "tenant_kmc-manipal".chat_messages (id, group_id, sender_id, content, file_
 --
 
 COPY "tenant_kmc-manipal".competencies (id, subject_id, topic_id, linker_id, code, description, domain, level, is_core, is_active, created_at) FROM stdin;
-df09f420-72cf-47a6-9adc-09bfbdad0d7e	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.961119+00
-7105876a-bab6-4cdc-92de-26e1274eeb7a	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:30.961119+00
-474b35c2-f138-4ab7-b795-027db920149f	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.961119+00
-8b0d3d3e-232e-4512-8d4e-5cbd376f51f4	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.961119+00
-6285ea5b-a25c-423d-a49a-2040c3c3f7ed	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.961119+00
-5f25c048-8f57-49f0-bfd6-11ba99a6980e	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:30.961119+00
-cb2f6bff-52ae-4fbe-9f8d-0543d0d13b92	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.961119+00
-e5c707eb-48e7-454e-a594-8ea7fdd22890	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:30.961119+00
 df09f420-72cf-47a6-9adc-09bfbdad0d7e	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.961119+00
 7105876a-bab6-4cdc-92de-26e1274eeb7a	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:30.961119+00
 474b35c2-f138-4ab7-b795-027db920149f	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.961119+00
@@ -25784,8 +25739,6 @@ eafac62e-c8a8-4e72-ae9b-a21fbb673897	EL	Electives	t
 --
 
 COPY "tenant_kmc-manipal".departments (id, name, code, type, hod_user_id, is_active, created_at) FROM stdin;
-514ca131-6024-416a-83d2-f89eef938fc0	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:43.137408+00
-f5ab6fed-640b-4d16-aaeb-88ff4e9ae92f	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:43.137408+00
 514ca131-6024-416a-83d2-f89eef938fc0	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:43.137408+00
 f5ab6fed-640b-4d16-aaeb-88ff4e9ae92f	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:43.137408+00
 \.
@@ -26142,8 +26095,6 @@ COPY "tenant_kmc-manipal".subject_offerings (id, subject_id, prof_id, dtype_id, 
 --
 
 COPY "tenant_kmc-manipal".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active) FROM stdin;
-4f9a1c1b-fce4-42b2-b755-f11699268ca6	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
-c8e9ef76-8d69-4264-aeae-9005a7885bab	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
 4f9a1c1b-fce4-42b2-b755-f11699268ca6	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
 c8e9ef76-8d69-4264-aeae-9005a7885bab	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
 \.
@@ -26631,9 +26582,6 @@ COPY "tenant_srms-cet".batches (id, code, year, course_cd, department_id, start_
 6e64258e-43b4-4d82-8b88-9abdb1dae3cf	2026	2026	BTECH	\N	2026-07-01	2030-07-31	t
 2178e799-fcbd-465d-80d4-c7ba38285c42	2025	2025	MBBS	\N	\N	\N	t
 d3579503-9d84-477c-ade9-84a07acfa042	2023-MBBS	2023	MBBS	\N	\N	\N	t
-6e64258e-43b4-4d82-8b88-9abdb1dae3cf	2026	2026	BTECH	\N	2026-07-01	2030-07-31	t
-2178e799-fcbd-465d-80d4-c7ba38285c42	2025	2025	MBBS	\N	\N	\N	t
-d3579503-9d84-477c-ade9-84a07acfa042	2023-MBBS	2023	MBBS	\N	\N	\N	t
 \.
 
 
@@ -26666,14 +26614,6 @@ e82bb81b-928d-494c-b38f-10d534fdf9a9	\N	\N	\N	PY3.1	Describe cardiac action pote
 6159f861-f3d0-4e65-80c3-920d0eb58866	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:31.100901+00
 f7ccbbd4-22f0-41c1-a3b6-5adb61bf8d58	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.100901+00
 3a9dcd35-49c2-46b6-aad1-e538b71f116a	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:31.100901+00
-9eb78673-14a4-40e3-a05f-6436edd1ac3a	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.100901+00
-380c1648-a2ff-4d66-8a2d-c1c30dfa3f53	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:31.100901+00
-e82bb81b-928d-494c-b38f-10d534fdf9a9	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.100901+00
-527c79ab-2ae6-4e02-9f38-371494ce80dd	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.100901+00
-93d356f9-d446-48e8-a2f1-b4d09ed07c6d	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.100901+00
-6159f861-f3d0-4e65-80c3-920d0eb58866	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:31.100901+00
-f7ccbbd4-22f0-41c1-a3b6-5adb61bf8d58	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:31.100901+00
-3a9dcd35-49c2-46b6-aad1-e538b71f116a	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:31.100901+00
 \.
 
 
@@ -26682,10 +26622,6 @@ f7ccbbd4-22f0-41c1-a3b6-5adb61bf8d58	\N	\N	\N	AN2.3	Describe brachial plexus for
 --
 
 COPY "tenant_srms-cet".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-d79fdb4a-52dc-4dfa-84bd-bfc5968877d8	BTECH	Bachelor of Technology	UG	4.0	Semester Wise System	t	2026-08-13 18:13:19.428814+00	semester	\N	\N
-9ad6646e-ae5a-4bf8-bfd5-41c5610945a1	BPHARMA	Bachelor of Pharmacy	UG	4.0	Semester Wise System	t	2026-08-13 18:42:09.244715+00	semester	\N	\N
-9dc70438-3158-4126-bf28-3d4aea933800	BBA	Bachelor of Business Administrative	UG	3.0	Semester Wise System	t	2026-08-13 18:42:54.780974+00	semester	\N	\N
-46373c70-1e13-43b6-9d46-2a37c16ec149	BCA	Bachelor of Computer Application	UG	3.0	Semester Wise System	t	2026-08-13 18:43:26.091258+00	semester	\N	\N
 d79fdb4a-52dc-4dfa-84bd-bfc5968877d8	BTECH	Bachelor of Technology	UG	4.0	Semester Wise System	t	2026-08-13 18:13:19.428814+00	semester	\N	\N
 9ad6646e-ae5a-4bf8-bfd5-41c5610945a1	BPHARMA	Bachelor of Pharmacy	UG	4.0	Semester Wise System	t	2026-08-13 18:42:09.244715+00	semester	\N	\N
 9dc70438-3158-4126-bf28-3d4aea933800	BBA	Bachelor of Business Administrative	UG	3.0	Semester Wise System	t	2026-08-13 18:42:54.780974+00	semester	\N	\N
@@ -26724,13 +26660,6 @@ c448ce9b-2557-45d0-8961-f3bd81d23ac2	CM	Clinical / Lab	t
 --
 
 COPY "tenant_srms-cet".departments (id, name, code, type, hod_user_id, is_active, created_at) FROM stdin;
-45564399-e3f1-45ae-9c43-80814c46f052	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:45.425073+00
-7d6d2bc6-ce89-4ef7-a894-f408da2b4010	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:45.425073+00
-91101d92-359d-4305-be80-e1f6f10efe91	Computer Science and Engineering	CS	Computer Science	\N	t	2026-08-13 20:30:24.375012+00
-76be6692-7359-4d3e-80d4-da752289f5ff	Electronics	EC	Electronics	\N	t	2026-08-13 20:30:59.525968+00
-be4712c4-307d-4ab1-bcff-5e55f79c1721	Mechanical Engineering	ME	Core Engineering	\N	t	2026-08-13 20:31:23.146519+00
-27262620-a999-424e-bfbf-ab624769f802	Electical Engineering	EE	Core Engineering	\N	t	2026-08-13 20:32:04.445907+00
-0c31b0af-8b02-4896-949f-c296a6a762b3	Information and Technology	IT	Computer Science	\N	t	2026-08-13 20:32:29.399427+00
 45564399-e3f1-45ae-9c43-80814c46f052	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:45.425073+00
 7d6d2bc6-ce89-4ef7-a894-f408da2b4010	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:45.425073+00
 91101d92-359d-4305-be80-e1f6f10efe91	Computer Science and Engineering	CS	Computer Science	\N	t	2026-08-13 20:30:24.375012+00
@@ -27094,8 +27023,6 @@ COPY "tenant_srms-cet".subject_offerings (id, subject_id, prof_id, dtype_id, bat
 COPY "tenant_srms-cet".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active) FROM stdin;
 48255018-aebe-4ee9-9bd7-9e7d71256a7d	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
 b9bc95dc-0c2f-4b4b-bad3-00009b1a9136	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
-48255018-aebe-4ee9-9bd7-9e7d71256a7d	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
-b9bc95dc-0c2f-4b4b-bad3-00009b1a9136	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
 \.
 
 
@@ -27202,162 +27129,83 @@ COPY "tenant_srms-cet-bareilly".attendance_sessions (id, faculty_id, subject_id,
 COPY "tenant_srms-cet-bareilly".batches (id, code, year, course_cd, department_id, start_date, end_date, is_active, batch_cd, course_name, colg_cd, curr_bat_cd, name) FROM stdin;
 6473c379-3960-4a8b-9e52-3cc14e2280fe	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
 ef8d159e-af2d-477f-800b-998022782bd7	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-1c6244ae-1e75-4797-bc59-ea06606f36d7	B2020-C1-1	2020	1	\N	2022-04-11	2022-06-30	t	13	B.TECH.	1	13	Batch 2020
-97993a61-9462-49e4-8aa8-6f492be76513	B2021-C1-1	2021	1	\N	2022-04-11	2022-06-30	t	14	B.TECH.	1	14	Batch 2021
-16c2d4fd-ef15-4187-a897-285033fee60c	B2022-C1-1	2022	1	\N	2022-01-11	2022-01-11	t	15	B.TECH.	1	15	Batch 2022
-6f3202ee-4656-40dd-8200-df618f5fab1e	B2023-C1-1	2023	1	\N	2023-01-23	2023-01-23	t	16	B.TECH.	1	16	Batch 2023
-88f2e7a6-488a-434c-b511-61d99945ad75	B2024-C1-1	2024	1	\N	\N	\N	t	17	B.TECH.	1	17	Batch 2024
-e99457a6-88af-40de-a2bd-623d84ad2b56	B2025-C1-1	2025	1	\N	\N	\N	t	18	B.TECH.	1	18	Batch 2025
-5ec71089-4f51-4f51-8f5a-178428100324	B2026-C1-1	2026	1	\N	\N	\N	t	19	B.TECH.	1	19	Batch 2026
-4be53bed-19bf-4ea6-b980-7c64dfe377d9	B2019-C11-1	2019	11	\N	\N	\N	t	12	BA.LL.B	1	12	Batch 2019
-bd1b7e4f-1ae0-40d4-926c-4927b8d24505	B2024-C12-1	2024	12	\N	\N	\N	t	1	BBA	1	1	Batch 2024
-ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	B2025-C12-1	2025	12	\N	2024-12-31	2024-12-31	t	2	BBA	1	2	Batch 2025
-68568b2b-eb75-4386-b862-4377555a8aff	B2026-C12-1	2026	12	\N	\N	\N	t	3	BBA	1	3	Batch 2026
-34f1528f-3ec1-4e1e-bd57-ee0910a0a254	B2024-C13-1	2024	13	\N	2024-05-17	2024-05-17	t	1	BCA	1	1	Batch 2024
-a33c661d-1edc-4f10-a9e8-df8c5e517a75	B2025-C13-1	2025	13	\N	2024-12-31	2024-12-31	t	2	BCA	1	2	Batch 2025
-470242c7-d211-4390-9f20-03720a6b1f40	B2026-C13-1	2026	13	\N	\N	\N	t	3	BCA	1	3	Batch 2026
-9ace6646-5807-4906-8f12-1c194c061a7d	B2014-C2-1	2014	2	\N	\N	\N	t	7	B.PHARM.	1	7	Batch 2014
-1d169520-37e7-40e4-90ac-0f0d837f9a47	B2015-C2-1	2015	2	\N	\N	\N	t	8	B.PHARM.	1	8	Batch 2015
-27373e80-f71e-4343-9f99-e7695646e94f	B2016-C2-1	2016	2	\N	\N	\N	t	9	B.PHARM.	1	9	Batch 2016
-62f0e86b-97be-49d8-8709-faa592652169	B2017-C2-1	2017	2	\N	\N	\N	t	10	B.PHARM.	1	10	Batch 2017
-d801f9b7-b7b8-47de-956a-7614c4e03468	B2018-C2-1	2018	2	\N	2022-01-31	2022-03-31	t	11	B.PHARM.	1	11	Batch 2018
-2c58b148-4d76-4902-bceb-b9c66da4fffb	B2019-C2-1	2019	2	\N	2022-01-31	2022-03-31	t	12	B.PHARM.	1	12	Batch 2019
-5f5d4c62-69eb-4a49-ba55-a013bb6aeb0b	B2020-C2-1	2020	2	\N	2022-04-11	2022-06-30	t	13	B.PHARM.	1	13	Batch 2020
-cf5eec98-1e3f-441f-930d-c720b9840d09	B2021-C2-1	2021	2	\N	2022-04-11	2022-06-30	t	14	B.PHARM.	1	14	Batch 2021
-be7241da-4413-48ed-a844-8c3cbf6ef9ce	B2022-C2-1	2022	2	\N	2022-01-11	2022-01-11	t	15	B.PHARM.	1	15	Batch 2022
-5147d6d9-b4fd-4aca-bee8-855958e41808	B2023-C2-1	2023	2	\N	2023-01-23	2023-01-23	t	16	B.PHARM.	1	16	Batch 2023
-c5332fe4-1791-4738-9489-7c7ab8454b3a	B2024-C2-1	2024	2	\N	2024-01-09	2024-01-09	t	17	B.PHARM.	1	17	Batch 2024
-31875b33-728f-44a8-b474-09a6f3052716	B2025-C2-1	2025	2	\N	2024-12-31	2025-12-30	t	18	B.PHARM.	1	18	Batch 2025
-1e97d58c-4cdf-498b-82d2-cd0e99fc4c40	B2026-C2-1	2026	2	\N	\N	\N	t	19	B.PHARM.	1	19	Batch 2026
-63d6248e-66c9-4723-94d4-aa70fe1b465c	B2015-C3-1	2015	3	\N	\N	\N	t	7	MCA	1	7	Batch 2015
-8f0bc057-94c3-4276-b7a8-8fa4b869dbbe	B2016-C3-1	2016	3	\N	\N	\N	t	8	MCA	1	8	Batch 2016
-e2744b4b-4abf-48a8-bc2e-1b7e04df04fd	B2017-C3-1	2017	3	\N	\N	\N	t	9	MCA	1	9	Batch 2017
-20654b17-aec8-4153-b265-be7f22bbc64e	B2018-C3-1	2018	3	\N	\N	\N	t	10	MCA	1	10	Batch 2018
-f84d72dc-1cbe-4b67-bdbb-39377838425d	B2019-C3-1	2019	3	\N	\N	\N	t	11	MCA	1	11	Batch 2019
-a2c0875b-8852-478a-90d6-1173bb26701e	B2020-C3-1	2020	3	\N	2022-01-31	2022-05-31	t	12	MCA	1	12	Batch 2020
-ef8d30ab-9af9-462e-8599-885e57365829	B2021-C3-1	2021	3	\N	2022-04-11	2022-06-30	t	13	MCA	1	13	Batch 2021
-b08f4b6c-99ef-48ce-b702-1c2b8b5c8a43	B2022-C3-1	2022	3	\N	2022-01-11	2022-01-11	t	14	MCA	1	14	Batch 2022
-84a4d61a-e452-4abf-beed-ea5985ae1bd6	B2023-C3-1	2023	3	\N	2023-01-23	2023-01-23	t	15	MCA	1	15	Batch 2023
-10f8038b-abdf-407b-b4b8-b5f0991cf1ab	B2024-C3-1	2024	3	\N	2024-01-09	2024-01-09	t	16	MCA	1	16	Batch 2024
-ed3239ca-57ef-40c5-9804-0e9b28bfd795	B2025-C3-1	2025	3	\N	2024-12-31	2024-12-31	t	17	MCA	1	17	Batch 2025
-94a38e72-f080-4c8d-9128-23b028e33519	B2026-C3-1	2026	3	\N	\N	\N	t	18	MCA	1	18	Batch 2026
-f6bd9ba6-b9ca-4984-bae2-74754368a22f	B2016-C4-1	2016	4	\N	\N	\N	t	7	MBA	1	7	Batch 2016
-21a615e3-ed6a-49eb-9760-fbab87004060	B2017-C4-1	2017	4	\N	\N	\N	t	8	MBA	1	8	Batch 2017
-9d085fc7-6dda-4066-8269-997e31b66669	B2018-C4-1	2018	4	\N	\N	\N	t	9	MBA	1	9	Batch 2018
-51d56ef5-4c1d-4004-b25f-00c176df73fb	B2019-C4-1	2019	4	\N	\N	\N	t	10	MBA	1	10	Batch 2019
-466926a0-7c60-48bb-a887-86f4473edb6d	B2020-C4-1	2020	4	\N	2022-01-31	2022-05-31	t	11	MBA	1	11	Batch 2020
-9da5b0f3-11ba-469b-92c8-256032d6b6fe	B2021-C4-1	2021	4	\N	2022-04-11	2022-06-30	t	12	MBA	1	12	Batch 2021
-b13e313f-ea21-4e1b-bc15-a09180192398	B2022-C4-1	2022	4	\N	2022-01-11	2022-01-11	t	13	MBA	1	13	Batch 2022
-a347a0bd-3506-42f2-a491-7336ce2d03b6	B2023-C4-1	2023	4	\N	2023-01-23	2023-01-23	t	14	MBA	1	14	Batch 2023
-205e9de2-ba5e-4b1c-a5bd-2975397bc8b2	B2024-C4-1	2024	4	\N	2024-01-09	2024-01-09	t	15	MBA	1	15	Batch 2024
-a5bdbcab-ed9f-4f47-a18d-d20cc81fdf90	B2025-C4-1	2025	4	\N	2025-01-09	2025-01-09	t	16	MBA	1	16	Batch 2025
-c2b2783b-384a-4d36-88c6-2604bcbb8995	B2026-C4-1	2026	4	\N	\N	\N	t	17	MBA	1	17	Batch 2026
-270ef173-7bab-44b1-8c54-8ff71ac28cb1	B2013-C5-1	2013	5	\N	\N	\N	t	4	M.TECH.	1	4	Batch 2013
-4e154d2c-db47-4fc5-9a06-c8a3ec90a124	B2015-C5-1	2015	5	\N	\N	\N	t	6	M.TECH.	1	6	Batch 2015
-d984f398-fcbc-40a0-9968-cef17f924d7c	B2016-C5-1	2016	5	\N	\N	\N	t	7	M.TECH.	1	7	Batch 2016
-9b08e871-bf90-4c08-a6f1-fc2fddb6779e	B2017-C5-1	2017	5	\N	\N	\N	t	8	M.TECH.	1	8	Batch 2017
-d9bc9494-60bc-42bb-b11b-011108f54c71	B2018-C5-1	2018	5	\N	\N	\N	t	9	M.TECH.	1	9	Batch 2018
-4bd13f59-e529-490d-8d7f-1d7962573615	B2019-C5-1	2019	5	\N	\N	\N	t	10	M.TECH.	1	10	Batch 2019
-93635281-fb90-44b7-ad1b-bfb54adb609c	B2020-C5-1	2020	5	\N	\N	\N	t	11	M.TECH.	1	11	Batch 2020
-0846e45b-90bd-428d-8a90-17bfdfd958e6	B2021-C5-1	2021	5	\N	2022-04-11	2022-06-30	t	12	M.TECH.	1	12	Batch 2021
-8bb3f034-fdde-4f2c-91d2-952311b502d7	B2022-C5-1	2022	5	\N	\N	\N	t	13	M.TECH.	1	13	Batch 2022
-c3b3808f-2b75-4033-b1c5-871d51e70688	B2023-C5-1	2023	5	\N	2023-01-23	2023-01-23	t	14	M.TECH.	1	14	Batch 2023
-05a90dcf-2f69-4dd4-8ccf-167ca454be07	B2024-C5-1	2024	5	\N	2024-01-09	2024-01-09	t	15	M.TECH.	1	15	Batch 2024
-1ea065d3-8b18-40c9-9b4d-b32a28f84c01	B2025-C5-1	2025	5	\N	2024-12-31	2024-12-31	t	16	M.TECH.	1	16	Batch 2025
-ac120cdb-5365-47bb-beaa-b2f138f935fe	B2026-C5-1	2026	5	\N	\N	\N	t	17	M.TECH.	1	17	Batch 2026
-626e0ebf-44f0-4eca-bc19-7a749f5e2cd2	B2017-C6-1	2017	6	\N	\N	\N	t	7	M. PHARM.	1	7	Batch 2017
-5937cc2a-7d49-4975-9049-d96cbe9920c9	B2018-C6-1	2018	6	\N	\N	\N	t	8	M. PHARM.	1	8	Batch 2018
-085cc8e4-e985-4dcf-9eaa-75e28bc82944	B2019-C6-1	2019	6	\N	\N	\N	t	9	M. PHARM.	1	9	Batch 2019
-faa4bfee-d7d2-46bb-b52d-edaf12b8e78a	B2020-C6-1	2020	6	\N	\N	\N	t	10	M. PHARM.	1	10	Batch 2020
-a4d0fa8d-6d10-41db-81af-6d5ac67cb0d2	B2021-C6-1	2021	6	\N	2022-04-11	2022-06-30	t	11	M. PHARM.	1	11	Batch 2021
-93398ee4-1026-42d1-bcb2-dccf9cffd39f	B2022-C6-1	2022	6	\N	\N	\N	t	12	M. PHARM.	1	12	Batch 2022
-27e5db4a-0262-4248-af2d-b1658959f639	B2023-C6-1	2023	6	\N	2023-01-23	2023-01-23	t	13	M. PHARM.	1	13	Batch 2023
-1524a371-abfd-4ae2-b53a-da7e733ea943	B2024-C6-1	2024	6	\N	2024-01-09	2024-01-09	t	14	M. PHARM.	1	14	Batch 2024
-4b71d532-2826-483f-8a92-47e3fb9a7dfc	B2025-C6-1	2025	6	\N	\N	\N	t	15	M. PHARM.	1	15	Batch 2025
-741f1a86-92e9-4422-bf30-a5eba44162d3	B2026-C6-1	2026	6	\N	\N	\N	t	16	M. PHARM.	1	16	Batch 2026
-9ee54dc2-ee17-4edb-9823-698727f6cf96	B2016-C9-1	2016	9	\N	\N	\N	t	11	MCA (Lateral Entry)	1	11	Batch 2016
-2caf2d94-f811-4629-84b9-bfaef88514ab	B2017-C9-1	2017	9	\N	\N	\N	t	7	MCA (Lateral Entry)	1	7	Batch 2017
 99a4676c-916d-4082-b33b-d94933db5bea	B2022-C13-1	2022	13	\N	\N	\N	t	\N	BCA	1	\N	Batch 2022
+e99457a6-88af-40de-a2bd-623d84ad2b56	18	2025	1	\N	\N	\N	t	18	B.TECH.	1	18	Batch 2025
+5ec71089-4f51-4f51-8f5a-178428100324	19	2026	1	\N	\N	\N	t	19	B.TECH.	1	19	Batch 2026
+4be53bed-19bf-4ea6-b980-7c64dfe377d9	12	2019	11	\N	\N	\N	t	12	BA.LL.B	1	12	Batch 2019
+bd1b7e4f-1ae0-40d4-926c-4927b8d24505	1	2024	12	\N	\N	\N	t	1	BBA	1	1	Batch 2024
+ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	2	2025	12	\N	2024-12-31	2024-12-31	t	2	BBA	1	2	Batch 2025
+68568b2b-eb75-4386-b862-4377555a8aff	3	2026	12	\N	\N	\N	t	3	BBA	1	3	Batch 2026
+34f1528f-3ec1-4e1e-bd57-ee0910a0a254	1	2024	13	\N	2024-05-17	2024-05-17	t	1	BCA	1	1	Batch 2024
+a33c661d-1edc-4f10-a9e8-df8c5e517a75	2	2025	13	\N	2024-12-31	2024-12-31	t	2	BCA	1	2	Batch 2025
+470242c7-d211-4390-9f20-03720a6b1f40	3	2026	13	\N	\N	\N	t	3	BCA	1	3	Batch 2026
+9ace6646-5807-4906-8f12-1c194c061a7d	7	2014	2	\N	\N	\N	t	7	B.PHARM.	1	7	Batch 2014
+1d169520-37e7-40e4-90ac-0f0d837f9a47	8	2015	2	\N	\N	\N	t	8	B.PHARM.	1	8	Batch 2015
+27373e80-f71e-4343-9f99-e7695646e94f	9	2016	2	\N	\N	\N	t	9	B.PHARM.	1	9	Batch 2016
+62f0e86b-97be-49d8-8709-faa592652169	10	2017	2	\N	\N	\N	t	10	B.PHARM.	1	10	Batch 2017
+d801f9b7-b7b8-47de-956a-7614c4e03468	11	2018	2	\N	2022-01-31	2022-03-31	t	11	B.PHARM.	1	11	Batch 2018
+2c58b148-4d76-4902-bceb-b9c66da4fffb	12	2019	2	\N	2022-01-31	2022-03-31	t	12	B.PHARM.	1	12	Batch 2019
+5f5d4c62-69eb-4a49-ba55-a013bb6aeb0b	13	2020	2	\N	2022-04-11	2022-06-30	t	13	B.PHARM.	1	13	Batch 2020
+cf5eec98-1e3f-441f-930d-c720b9840d09	14	2021	2	\N	2022-04-11	2022-06-30	t	14	B.PHARM.	1	14	Batch 2021
+be7241da-4413-48ed-a844-8c3cbf6ef9ce	15	2022	2	\N	2022-01-11	2022-01-11	t	15	B.PHARM.	1	15	Batch 2022
+5147d6d9-b4fd-4aca-bee8-855958e41808	16	2023	2	\N	2023-01-23	2023-01-23	t	16	B.PHARM.	1	16	Batch 2023
+c5332fe4-1791-4738-9489-7c7ab8454b3a	17	2024	2	\N	2024-01-09	2024-01-09	t	17	B.PHARM.	1	17	Batch 2024
+31875b33-728f-44a8-b474-09a6f3052716	18	2025	2	\N	2024-12-31	2025-12-30	t	18	B.PHARM.	1	18	Batch 2025
+1e97d58c-4cdf-498b-82d2-cd0e99fc4c40	19	2026	2	\N	\N	\N	t	19	B.PHARM.	1	19	Batch 2026
+63d6248e-66c9-4723-94d4-aa70fe1b465c	7	2015	3	\N	\N	\N	t	7	MCA	1	7	Batch 2015
+8f0bc057-94c3-4276-b7a8-8fa4b869dbbe	8	2016	3	\N	\N	\N	t	8	MCA	1	8	Batch 2016
+e2744b4b-4abf-48a8-bc2e-1b7e04df04fd	9	2017	3	\N	\N	\N	t	9	MCA	1	9	Batch 2017
+20654b17-aec8-4153-b265-be7f22bbc64e	10	2018	3	\N	\N	\N	t	10	MCA	1	10	Batch 2018
+f84d72dc-1cbe-4b67-bdbb-39377838425d	11	2019	3	\N	\N	\N	t	11	MCA	1	11	Batch 2019
+a2c0875b-8852-478a-90d6-1173bb26701e	12	2020	3	\N	2022-01-31	2022-05-31	t	12	MCA	1	12	Batch 2020
+ef8d30ab-9af9-462e-8599-885e57365829	13	2021	3	\N	2022-04-11	2022-06-30	t	13	MCA	1	13	Batch 2021
+b08f4b6c-99ef-48ce-b702-1c2b8b5c8a43	14	2022	3	\N	2022-01-11	2022-01-11	t	14	MCA	1	14	Batch 2022
+84a4d61a-e452-4abf-beed-ea5985ae1bd6	15	2023	3	\N	2023-01-23	2023-01-23	t	15	MCA	1	15	Batch 2023
+10f8038b-abdf-407b-b4b8-b5f0991cf1ab	16	2024	3	\N	2024-01-09	2024-01-09	t	16	MCA	1	16	Batch 2024
+ed3239ca-57ef-40c5-9804-0e9b28bfd795	17	2025	3	\N	2024-12-31	2024-12-31	t	17	MCA	1	17	Batch 2025
+94a38e72-f080-4c8d-9128-23b028e33519	18	2026	3	\N	\N	\N	t	18	MCA	1	18	Batch 2026
+f6bd9ba6-b9ca-4984-bae2-74754368a22f	7	2016	4	\N	\N	\N	t	7	MBA	1	7	Batch 2016
+21a615e3-ed6a-49eb-9760-fbab87004060	8	2017	4	\N	\N	\N	t	8	MBA	1	8	Batch 2017
+9d085fc7-6dda-4066-8269-997e31b66669	9	2018	4	\N	\N	\N	t	9	MBA	1	9	Batch 2018
+51d56ef5-4c1d-4004-b25f-00c176df73fb	10	2019	4	\N	\N	\N	t	10	MBA	1	10	Batch 2019
+466926a0-7c60-48bb-a887-86f4473edb6d	11	2020	4	\N	2022-01-31	2022-05-31	t	11	MBA	1	11	Batch 2020
+9da5b0f3-11ba-469b-92c8-256032d6b6fe	12	2021	4	\N	2022-04-11	2022-06-30	t	12	MBA	1	12	Batch 2021
+b13e313f-ea21-4e1b-bc15-a09180192398	13	2022	4	\N	2022-01-11	2022-01-11	t	13	MBA	1	13	Batch 2022
+a347a0bd-3506-42f2-a491-7336ce2d03b6	14	2023	4	\N	2023-01-23	2023-01-23	t	14	MBA	1	14	Batch 2023
+205e9de2-ba5e-4b1c-a5bd-2975397bc8b2	15	2024	4	\N	2024-01-09	2024-01-09	t	15	MBA	1	15	Batch 2024
+a5bdbcab-ed9f-4f47-a18d-d20cc81fdf90	16	2025	4	\N	2025-01-09	2025-01-09	t	16	MBA	1	16	Batch 2025
+c2b2783b-384a-4d36-88c6-2604bcbb8995	17	2026	4	\N	\N	\N	t	17	MBA	1	17	Batch 2026
+270ef173-7bab-44b1-8c54-8ff71ac28cb1	4	2013	5	\N	\N	\N	t	4	M.TECH.	1	4	Batch 2013
+4e154d2c-db47-4fc5-9a06-c8a3ec90a124	6	2015	5	\N	\N	\N	t	6	M.TECH.	1	6	Batch 2015
+d984f398-fcbc-40a0-9968-cef17f924d7c	7	2016	5	\N	\N	\N	t	7	M.TECH.	1	7	Batch 2016
+9b08e871-bf90-4c08-a6f1-fc2fddb6779e	8	2017	5	\N	\N	\N	t	8	M.TECH.	1	8	Batch 2017
+d9bc9494-60bc-42bb-b11b-011108f54c71	9	2018	5	\N	\N	\N	t	9	M.TECH.	1	9	Batch 2018
+4bd13f59-e529-490d-8d7f-1d7962573615	10	2019	5	\N	\N	\N	t	10	M.TECH.	1	10	Batch 2019
+93635281-fb90-44b7-ad1b-bfb54adb609c	11	2020	5	\N	\N	\N	t	11	M.TECH.	1	11	Batch 2020
+0846e45b-90bd-428d-8a90-17bfdfd958e6	12	2021	5	\N	2022-04-11	2022-06-30	t	12	M.TECH.	1	12	Batch 2021
+8bb3f034-fdde-4f2c-91d2-952311b502d7	13	2022	5	\N	\N	\N	t	13	M.TECH.	1	13	Batch 2022
+c3b3808f-2b75-4033-b1c5-871d51e70688	14	2023	5	\N	2023-01-23	2023-01-23	t	14	M.TECH.	1	14	Batch 2023
+05a90dcf-2f69-4dd4-8ccf-167ca454be07	15	2024	5	\N	2024-01-09	2024-01-09	t	15	M.TECH.	1	15	Batch 2024
+1ea065d3-8b18-40c9-9b4d-b32a28f84c01	16	2025	5	\N	2024-12-31	2024-12-31	t	16	M.TECH.	1	16	Batch 2025
+ac120cdb-5365-47bb-beaa-b2f138f935fe	17	2026	5	\N	\N	\N	t	17	M.TECH.	1	17	Batch 2026
+626e0ebf-44f0-4eca-bc19-7a749f5e2cd2	7	2017	6	\N	\N	\N	t	7	M. PHARM.	1	7	Batch 2017
+5937cc2a-7d49-4975-9049-d96cbe9920c9	8	2018	6	\N	\N	\N	t	8	M. PHARM.	1	8	Batch 2018
+085cc8e4-e985-4dcf-9eaa-75e28bc82944	9	2019	6	\N	\N	\N	t	9	M. PHARM.	1	9	Batch 2019
+faa4bfee-d7d2-46bb-b52d-edaf12b8e78a	10	2020	6	\N	\N	\N	t	10	M. PHARM.	1	10	Batch 2020
+a4d0fa8d-6d10-41db-81af-6d5ac67cb0d2	11	2021	6	\N	2022-04-11	2022-06-30	t	11	M. PHARM.	1	11	Batch 2021
+93398ee4-1026-42d1-bcb2-dccf9cffd39f	12	2022	6	\N	\N	\N	t	12	M. PHARM.	1	12	Batch 2022
+27e5db4a-0262-4248-af2d-b1658959f639	13	2023	6	\N	2023-01-23	2023-01-23	t	13	M. PHARM.	1	13	Batch 2023
+1524a371-abfd-4ae2-b53a-da7e733ea943	14	2024	6	\N	2024-01-09	2024-01-09	t	14	M. PHARM.	1	14	Batch 2024
+4b71d532-2826-483f-8a92-47e3fb9a7dfc	15	2025	6	\N	\N	\N	t	15	M. PHARM.	1	15	Batch 2025
+741f1a86-92e9-4422-bf30-a5eba44162d3	16	2026	6	\N	\N	\N	t	16	M. PHARM.	1	16	Batch 2026
+9ee54dc2-ee17-4edb-9823-698727f6cf96	11	2016	9	\N	\N	\N	t	11	MCA (Lateral Entry)	1	11	Batch 2016
+2caf2d94-f811-4629-84b9-bfaef88514ab	7	2017	9	\N	\N	\N	t	7	MCA (Lateral Entry)	1	7	Batch 2017
 4fcb3c93-e61a-496f-94c9-cd7aeed2c8e0	B2023-C13-1	2023	13	\N	\N	\N	t	\N	BCA	1	\N	Batch 2023
-6473c379-3960-4a8b-9e52-3cc14e2280fe	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-ef8d159e-af2d-477f-800b-998022782bd7	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-1c6244ae-1e75-4797-bc59-ea06606f36d7	B2020-C1-1	2020	1	\N	2022-04-11	2022-06-30	t	13	B.TECH.	1	13	Batch 2020
-97993a61-9462-49e4-8aa8-6f492be76513	B2021-C1-1	2021	1	\N	2022-04-11	2022-06-30	t	14	B.TECH.	1	14	Batch 2021
-16c2d4fd-ef15-4187-a897-285033fee60c	B2022-C1-1	2022	1	\N	2022-01-11	2022-01-11	t	15	B.TECH.	1	15	Batch 2022
-6f3202ee-4656-40dd-8200-df618f5fab1e	B2023-C1-1	2023	1	\N	2023-01-23	2023-01-23	t	16	B.TECH.	1	16	Batch 2023
-88f2e7a6-488a-434c-b511-61d99945ad75	B2024-C1-1	2024	1	\N	\N	\N	t	17	B.TECH.	1	17	Batch 2024
-e99457a6-88af-40de-a2bd-623d84ad2b56	B2025-C1-1	2025	1	\N	\N	\N	t	18	B.TECH.	1	18	Batch 2025
-5ec71089-4f51-4f51-8f5a-178428100324	B2026-C1-1	2026	1	\N	\N	\N	t	19	B.TECH.	1	19	Batch 2026
-4be53bed-19bf-4ea6-b980-7c64dfe377d9	B2019-C11-1	2019	11	\N	\N	\N	t	12	BA.LL.B	1	12	Batch 2019
-bd1b7e4f-1ae0-40d4-926c-4927b8d24505	B2024-C12-1	2024	12	\N	\N	\N	t	1	BBA	1	1	Batch 2024
-ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	B2025-C12-1	2025	12	\N	2024-12-31	2024-12-31	t	2	BBA	1	2	Batch 2025
-68568b2b-eb75-4386-b862-4377555a8aff	B2026-C12-1	2026	12	\N	\N	\N	t	3	BBA	1	3	Batch 2026
-34f1528f-3ec1-4e1e-bd57-ee0910a0a254	B2024-C13-1	2024	13	\N	2024-05-17	2024-05-17	t	1	BCA	1	1	Batch 2024
-a33c661d-1edc-4f10-a9e8-df8c5e517a75	B2025-C13-1	2025	13	\N	2024-12-31	2024-12-31	t	2	BCA	1	2	Batch 2025
-470242c7-d211-4390-9f20-03720a6b1f40	B2026-C13-1	2026	13	\N	\N	\N	t	3	BCA	1	3	Batch 2026
-9ace6646-5807-4906-8f12-1c194c061a7d	B2014-C2-1	2014	2	\N	\N	\N	t	7	B.PHARM.	1	7	Batch 2014
-1d169520-37e7-40e4-90ac-0f0d837f9a47	B2015-C2-1	2015	2	\N	\N	\N	t	8	B.PHARM.	1	8	Batch 2015
-27373e80-f71e-4343-9f99-e7695646e94f	B2016-C2-1	2016	2	\N	\N	\N	t	9	B.PHARM.	1	9	Batch 2016
-62f0e86b-97be-49d8-8709-faa592652169	B2017-C2-1	2017	2	\N	\N	\N	t	10	B.PHARM.	1	10	Batch 2017
-d801f9b7-b7b8-47de-956a-7614c4e03468	B2018-C2-1	2018	2	\N	2022-01-31	2022-03-31	t	11	B.PHARM.	1	11	Batch 2018
-2c58b148-4d76-4902-bceb-b9c66da4fffb	B2019-C2-1	2019	2	\N	2022-01-31	2022-03-31	t	12	B.PHARM.	1	12	Batch 2019
-5f5d4c62-69eb-4a49-ba55-a013bb6aeb0b	B2020-C2-1	2020	2	\N	2022-04-11	2022-06-30	t	13	B.PHARM.	1	13	Batch 2020
-cf5eec98-1e3f-441f-930d-c720b9840d09	B2021-C2-1	2021	2	\N	2022-04-11	2022-06-30	t	14	B.PHARM.	1	14	Batch 2021
-be7241da-4413-48ed-a844-8c3cbf6ef9ce	B2022-C2-1	2022	2	\N	2022-01-11	2022-01-11	t	15	B.PHARM.	1	15	Batch 2022
-5147d6d9-b4fd-4aca-bee8-855958e41808	B2023-C2-1	2023	2	\N	2023-01-23	2023-01-23	t	16	B.PHARM.	1	16	Batch 2023
-c5332fe4-1791-4738-9489-7c7ab8454b3a	B2024-C2-1	2024	2	\N	2024-01-09	2024-01-09	t	17	B.PHARM.	1	17	Batch 2024
-31875b33-728f-44a8-b474-09a6f3052716	B2025-C2-1	2025	2	\N	2024-12-31	2025-12-30	t	18	B.PHARM.	1	18	Batch 2025
-1e97d58c-4cdf-498b-82d2-cd0e99fc4c40	B2026-C2-1	2026	2	\N	\N	\N	t	19	B.PHARM.	1	19	Batch 2026
-63d6248e-66c9-4723-94d4-aa70fe1b465c	B2015-C3-1	2015	3	\N	\N	\N	t	7	MCA	1	7	Batch 2015
-8f0bc057-94c3-4276-b7a8-8fa4b869dbbe	B2016-C3-1	2016	3	\N	\N	\N	t	8	MCA	1	8	Batch 2016
-e2744b4b-4abf-48a8-bc2e-1b7e04df04fd	B2017-C3-1	2017	3	\N	\N	\N	t	9	MCA	1	9	Batch 2017
-20654b17-aec8-4153-b265-be7f22bbc64e	B2018-C3-1	2018	3	\N	\N	\N	t	10	MCA	1	10	Batch 2018
-f84d72dc-1cbe-4b67-bdbb-39377838425d	B2019-C3-1	2019	3	\N	\N	\N	t	11	MCA	1	11	Batch 2019
-a2c0875b-8852-478a-90d6-1173bb26701e	B2020-C3-1	2020	3	\N	2022-01-31	2022-05-31	t	12	MCA	1	12	Batch 2020
-ef8d30ab-9af9-462e-8599-885e57365829	B2021-C3-1	2021	3	\N	2022-04-11	2022-06-30	t	13	MCA	1	13	Batch 2021
-b08f4b6c-99ef-48ce-b702-1c2b8b5c8a43	B2022-C3-1	2022	3	\N	2022-01-11	2022-01-11	t	14	MCA	1	14	Batch 2022
-84a4d61a-e452-4abf-beed-ea5985ae1bd6	B2023-C3-1	2023	3	\N	2023-01-23	2023-01-23	t	15	MCA	1	15	Batch 2023
-10f8038b-abdf-407b-b4b8-b5f0991cf1ab	B2024-C3-1	2024	3	\N	2024-01-09	2024-01-09	t	16	MCA	1	16	Batch 2024
-ed3239ca-57ef-40c5-9804-0e9b28bfd795	B2025-C3-1	2025	3	\N	2024-12-31	2024-12-31	t	17	MCA	1	17	Batch 2025
-94a38e72-f080-4c8d-9128-23b028e33519	B2026-C3-1	2026	3	\N	\N	\N	t	18	MCA	1	18	Batch 2026
-f6bd9ba6-b9ca-4984-bae2-74754368a22f	B2016-C4-1	2016	4	\N	\N	\N	t	7	MBA	1	7	Batch 2016
-21a615e3-ed6a-49eb-9760-fbab87004060	B2017-C4-1	2017	4	\N	\N	\N	t	8	MBA	1	8	Batch 2017
-9d085fc7-6dda-4066-8269-997e31b66669	B2018-C4-1	2018	4	\N	\N	\N	t	9	MBA	1	9	Batch 2018
-51d56ef5-4c1d-4004-b25f-00c176df73fb	B2019-C4-1	2019	4	\N	\N	\N	t	10	MBA	1	10	Batch 2019
-466926a0-7c60-48bb-a887-86f4473edb6d	B2020-C4-1	2020	4	\N	2022-01-31	2022-05-31	t	11	MBA	1	11	Batch 2020
-9da5b0f3-11ba-469b-92c8-256032d6b6fe	B2021-C4-1	2021	4	\N	2022-04-11	2022-06-30	t	12	MBA	1	12	Batch 2021
-b13e313f-ea21-4e1b-bc15-a09180192398	B2022-C4-1	2022	4	\N	2022-01-11	2022-01-11	t	13	MBA	1	13	Batch 2022
-a347a0bd-3506-42f2-a491-7336ce2d03b6	B2023-C4-1	2023	4	\N	2023-01-23	2023-01-23	t	14	MBA	1	14	Batch 2023
-205e9de2-ba5e-4b1c-a5bd-2975397bc8b2	B2024-C4-1	2024	4	\N	2024-01-09	2024-01-09	t	15	MBA	1	15	Batch 2024
-a5bdbcab-ed9f-4f47-a18d-d20cc81fdf90	B2025-C4-1	2025	4	\N	2025-01-09	2025-01-09	t	16	MBA	1	16	Batch 2025
-c2b2783b-384a-4d36-88c6-2604bcbb8995	B2026-C4-1	2026	4	\N	\N	\N	t	17	MBA	1	17	Batch 2026
-270ef173-7bab-44b1-8c54-8ff71ac28cb1	B2013-C5-1	2013	5	\N	\N	\N	t	4	M.TECH.	1	4	Batch 2013
-4e154d2c-db47-4fc5-9a06-c8a3ec90a124	B2015-C5-1	2015	5	\N	\N	\N	t	6	M.TECH.	1	6	Batch 2015
-d984f398-fcbc-40a0-9968-cef17f924d7c	B2016-C5-1	2016	5	\N	\N	\N	t	7	M.TECH.	1	7	Batch 2016
-9b08e871-bf90-4c08-a6f1-fc2fddb6779e	B2017-C5-1	2017	5	\N	\N	\N	t	8	M.TECH.	1	8	Batch 2017
-d9bc9494-60bc-42bb-b11b-011108f54c71	B2018-C5-1	2018	5	\N	\N	\N	t	9	M.TECH.	1	9	Batch 2018
-4bd13f59-e529-490d-8d7f-1d7962573615	B2019-C5-1	2019	5	\N	\N	\N	t	10	M.TECH.	1	10	Batch 2019
-93635281-fb90-44b7-ad1b-bfb54adb609c	B2020-C5-1	2020	5	\N	\N	\N	t	11	M.TECH.	1	11	Batch 2020
-0846e45b-90bd-428d-8a90-17bfdfd958e6	B2021-C5-1	2021	5	\N	2022-04-11	2022-06-30	t	12	M.TECH.	1	12	Batch 2021
-8bb3f034-fdde-4f2c-91d2-952311b502d7	B2022-C5-1	2022	5	\N	\N	\N	t	13	M.TECH.	1	13	Batch 2022
-c3b3808f-2b75-4033-b1c5-871d51e70688	B2023-C5-1	2023	5	\N	2023-01-23	2023-01-23	t	14	M.TECH.	1	14	Batch 2023
-05a90dcf-2f69-4dd4-8ccf-167ca454be07	B2024-C5-1	2024	5	\N	2024-01-09	2024-01-09	t	15	M.TECH.	1	15	Batch 2024
-1ea065d3-8b18-40c9-9b4d-b32a28f84c01	B2025-C5-1	2025	5	\N	2024-12-31	2024-12-31	t	16	M.TECH.	1	16	Batch 2025
-ac120cdb-5365-47bb-beaa-b2f138f935fe	B2026-C5-1	2026	5	\N	\N	\N	t	17	M.TECH.	1	17	Batch 2026
-626e0ebf-44f0-4eca-bc19-7a749f5e2cd2	B2017-C6-1	2017	6	\N	\N	\N	t	7	M. PHARM.	1	7	Batch 2017
-5937cc2a-7d49-4975-9049-d96cbe9920c9	B2018-C6-1	2018	6	\N	\N	\N	t	8	M. PHARM.	1	8	Batch 2018
-085cc8e4-e985-4dcf-9eaa-75e28bc82944	B2019-C6-1	2019	6	\N	\N	\N	t	9	M. PHARM.	1	9	Batch 2019
-faa4bfee-d7d2-46bb-b52d-edaf12b8e78a	B2020-C6-1	2020	6	\N	\N	\N	t	10	M. PHARM.	1	10	Batch 2020
-a4d0fa8d-6d10-41db-81af-6d5ac67cb0d2	B2021-C6-1	2021	6	\N	2022-04-11	2022-06-30	t	11	M. PHARM.	1	11	Batch 2021
-93398ee4-1026-42d1-bcb2-dccf9cffd39f	B2022-C6-1	2022	6	\N	\N	\N	t	12	M. PHARM.	1	12	Batch 2022
-27e5db4a-0262-4248-af2d-b1658959f639	B2023-C6-1	2023	6	\N	2023-01-23	2023-01-23	t	13	M. PHARM.	1	13	Batch 2023
-1524a371-abfd-4ae2-b53a-da7e733ea943	B2024-C6-1	2024	6	\N	2024-01-09	2024-01-09	t	14	M. PHARM.	1	14	Batch 2024
-4b71d532-2826-483f-8a92-47e3fb9a7dfc	B2025-C6-1	2025	6	\N	\N	\N	t	15	M. PHARM.	1	15	Batch 2025
-741f1a86-92e9-4422-bf30-a5eba44162d3	B2026-C6-1	2026	6	\N	\N	\N	t	16	M. PHARM.	1	16	Batch 2026
-9ee54dc2-ee17-4edb-9823-698727f6cf96	B2016-C9-1	2016	9	\N	\N	\N	t	11	MCA (Lateral Entry)	1	11	Batch 2016
-2caf2d94-f811-4629-84b9-bfaef88514ab	B2017-C9-1	2017	9	\N	\N	\N	t	7	MCA (Lateral Entry)	1	7	Batch 2017
-99a4676c-916d-4082-b33b-d94933db5bea	B2022-C13-1	2022	13	\N	\N	\N	t	\N	BCA	1	\N	Batch 2022
-4fcb3c93-e61a-496f-94c9-cd7aeed2c8e0	B2023-C13-1	2023	13	\N	\N	\N	t	\N	BCA	1	\N	Batch 2023
+1c6244ae-1e75-4797-bc59-ea06606f36d7	13	2020	1	\N	2022-04-11	2022-06-30	t	13	B.TECH.	1	13	Batch 2020
+97993a61-9462-49e4-8aa8-6f492be76513	14	2021	1	\N	2022-04-11	2022-06-30	t	14	B.TECH.	1	14	Batch 2021
+16c2d4fd-ef15-4187-a897-285033fee60c	15	2022	1	\N	2022-01-11	2022-01-11	t	15	B.TECH.	1	15	Batch 2022
+6f3202ee-4656-40dd-8200-df618f5fab1e	16	2023	1	\N	2023-01-23	2023-01-23	t	16	B.TECH.	1	16	Batch 2023
+88f2e7a6-488a-434c-b511-61d99945ad75	17	2024	1	\N	\N	\N	t	17	B.TECH.	1	17	Batch 2024
 \.
 
 
@@ -27387,27 +27235,14 @@ COPY "tenant_srms-cet-bareilly".competencies (id, subject_id, topic_id, linker_i
 580be2d2-3cc4-4839-b8b9-4cc364c22a98	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	189ab848-4e28-4044-a673-414906c6abdb	530f103c-8603-48f5-b24d-b7e5d23fd0e0	PYTH1.3	Data Variables and its types	Knowledge	Knows How	t	t	2026-08-15 14:11:39.670333+00	Data Variables and its types	KL-2 (Understand)	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	88534-CO1-T03	13	1	\N
 75baf0b8-8be3-4194-9a96-7c3c4698ca66	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	189ab848-4e28-4044-a673-414906c6abdb	530f103c-8603-48f5-b24d-b7e5d23fd0e0	PYTH1.4	id() and type() functions	Knowledge	Knows How	t	t	2026-08-15 14:11:39.674448+00	id() and type() functions	KL-2 (Understand)	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	88534-CO1-T03	13	1	\N
 3c4baf55-60f4-421b-a76f-817decde2cb0	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	189ab848-4e28-4044-a673-414906c6abdb	530f103c-8603-48f5-b24d-b7e5d23fd0e0	PYTH1.5	Coding Standards	Knowledge	Knows How	t	t	2026-08-15 14:11:39.678967+00	Coding Standards	KL-2 (Understand)	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	88534-CO1-T03	13	1	\N
-b009b1d4-844a-420b-b14e-2a77fd23016e	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-5379a0c2-ead5-4907-99c9-e828882ad787	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-b3369d5a-0c3f-4f20-a7c9-49608b2ea2b6	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a6281edf-94b8-4054-895a-dcda4a17ea03	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a289df43-8088-4266-ba32-f20930fa4cd2	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-d221dfeb-812e-49f1-935d-104481390620	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-c44901aa-a62a-48db-8228-67ff48cf909b	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-1a7856a9-5f19-4928-9027-62c22b0d83b2	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-4fa43569-1ff1-4912-9572-6838d4463247	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	189ab848-4e28-4044-a673-414906c6abdb	530f103c-8603-48f5-b24d-b7e5d23fd0e0	PYTH1.1	Introduction and Basics;	Knowledge	Knows How	t	t	2026-08-15 14:11:39.655468+00	Introduction and Basics	KL-2 (Understand)	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	88534-CO1-T03	13	1	\N
-1cc64029-0d57-471c-a8fc-1b74210d9c87	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	189ab848-4e28-4044-a673-414906c6abdb	530f103c-8603-48f5-b24d-b7e5d23fd0e0	PYTH1.2	Setting up path Python Data Variables & Operators:	Knowledge	Knows How	t	t	2026-08-15 14:11:39.666006+00	Setting up path Python Data Variables & Operators:	KL-2 (Understand)	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	88534-CO1-T03	13	1	\N
-580be2d2-3cc4-4839-b8b9-4cc364c22a98	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	189ab848-4e28-4044-a673-414906c6abdb	530f103c-8603-48f5-b24d-b7e5d23fd0e0	PYTH1.3	Data Variables and its types	Knowledge	Knows How	t	t	2026-08-15 14:11:39.670333+00	Data Variables and its types	KL-2 (Understand)	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	88534-CO1-T03	13	1	\N
-75baf0b8-8be3-4194-9a96-7c3c4698ca66	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	189ab848-4e28-4044-a673-414906c6abdb	530f103c-8603-48f5-b24d-b7e5d23fd0e0	PYTH1.4	id() and type() functions	Knowledge	Knows How	t	t	2026-08-15 14:11:39.674448+00	id() and type() functions	KL-2 (Understand)	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	88534-CO1-T03	13	1	\N
-3c4baf55-60f4-421b-a76f-817decde2cb0	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	189ab848-4e28-4044-a673-414906c6abdb	530f103c-8603-48f5-b24d-b7e5d23fd0e0	PYTH1.5	Coding Standards	Knowledge	Knows How	t	t	2026-08-15 14:11:39.678967+00	Coding Standards	KL-2 (Understand)	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	88534-CO1-T03	13	1	\N
-b009b1d4-844a-420b-b14e-2a77fd23016e	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-5379a0c2-ead5-4907-99c9-e828882ad787	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-b3369d5a-0c3f-4f20-a7c9-49608b2ea2b6	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a6281edf-94b8-4054-895a-dcda4a17ea03	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a289df43-8088-4266-ba32-f20930fa4cd2	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-d221dfeb-812e-49f1-935d-104481390620	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-c44901aa-a62a-48db-8228-67ff48cf909b	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-1a7856a9-5f19-4928-9027-62c22b0d83b2	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-15 18:06:24.436503+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
+692bf249-1018-40f7-a5c0-3418bcce7ab1	75143a10-e3c7-4de8-89c3-8b626bad5f1b	ba6577db-c8a2-46ed-80b9-b413a5c2afe9	\N	DS1.1	Stack Push, Pop, Peek Operations and Overflow/Underflow Conditions	COGNITIVE	Knows How	t	t	2026-08-16 10:51:56.923398+00	\N	KL-2 (Understand)	\N	bc516eae-bf7d-475a-99c2-38621097ecd5	\N	\N	13	1	\N
+5e8a75b9-eae7-4439-a44e-a05435c02f4e	75143a10-e3c7-4de8-89c3-8b626bad5f1b	ba6577db-c8a2-46ed-80b9-b413a5c2afe9	\N	DS1.2	Evaluation of Arithmetic Expressions using Stack (Infix to Postfix)	COGNITIVE	Knows How	t	t	2026-08-16 10:51:56.923398+00	\N	KL-3 (Apply)	\N	bc516eae-bf7d-475a-99c2-38621097ecd5	\N	\N	13	1	\N
+a1539055-71ec-4cf6-bf22-37aba7904af8	75143a10-e3c7-4de8-89c3-8b626bad5f1b	ba6577db-c8a2-46ed-80b9-b413a5c2afe9	\N	DS1.3	Circular Queue and Priority Queue Implementation	COGNITIVE	Knows How	t	t	2026-08-16 10:51:56.923398+00	\N	KL-3 (Apply)	\N	bc516eae-bf7d-475a-99c2-38621097ecd5	\N	\N	13	1	\N
+d036d8a2-6923-475d-9e94-2dbb57d222d9	75143a10-e3c7-4de8-89c3-8b626bad5f1b	d54b3d4b-c921-4fa2-936c-eaf6abf9a5f7	\N	DS2.1	Dynamic Memory Allocation and Node Structure for Singly Linked List	COGNITIVE	Knows How	t	t	2026-08-16 10:51:56.923398+00	\N	KL-3 (Apply)	\N	bc516eae-bf7d-475a-99c2-38621097ecd5	\N	\N	13	1	\N
+9705f301-e4b0-4fa1-a908-c5c61bff07a3	75143a10-e3c7-4de8-89c3-8b626bad5f1b	d54b3d4b-c921-4fa2-936c-eaf6abf9a5f7	\N	DS2.2	Insertion and Deletion at Beginning, End, and Middle of Doubly Linked List	COGNITIVE	Knows How	t	t	2026-08-16 10:51:56.923398+00	\N	KL-3 (Apply)	\N	bc516eae-bf7d-475a-99c2-38621097ecd5	\N	\N	13	1	\N
+4970d359-3376-4c96-b89e-b6c3d568f6d1	84724489-8aee-425a-8a39-56c668d4ca0b	e0c5d83d-c729-4eb4-a78c-0d90b8c3c618	\N	DBMS1.1	Writing Complex Multi-Table JOIN Queries (INNER, LEFT, RIGHT, FULL OUTER)	COGNITIVE	Knows How	t	t	2026-08-16 10:51:56.946671+00	\N	KL-3 (Apply)	\N	b220d727-4b75-4204-9972-bb1e9b5f065d	\N	\N	13	1	\N
+aa07f1e9-cdc5-40e2-b8ee-cdd2187fb568	84724489-8aee-425a-8a39-56c668d4ca0b	e0c5d83d-c729-4eb4-a78c-0d90b8c3c618	\N	DBMS1.2	Correlated Subqueries and Aggregate Functions with GROUP BY and HAVING	COGNITIVE	Knows How	t	t	2026-08-16 10:51:56.946671+00	\N	KL-3 (Apply)	\N	b220d727-4b75-4204-9972-bb1e9b5f065d	\N	\N	13	1	\N
+c4bd81ae-9107-4593-a1b4-e62b9fce0b30	84724489-8aee-425a-8a39-56c668d4ca0b	e0c5d83d-c729-4eb4-a78c-0d90b8c3c618	\N	DBMS1.3	Database Normalization from 1NF to BCNF and Functional Dependencies	COGNITIVE	Knows How	t	t	2026-08-16 10:51:56.946671+00	\N	KL-4 (Analyze)	\N	b220d727-4b75-4204-9972-bb1e9b5f065d	\N	\N	13	1	\N
 \.
 
 
@@ -27416,18 +27251,6 @@ c44901aa-a62a-48db-8228-67ff48cf909b	\N	\N	\N	AN2.3	Describe brachial plexus for
 --
 
 COPY "tenant_srms-cet-bareilly".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-6300b3a8-cb6f-45d0-a1e9-a5d1b5dc9d57	1	B.TECH.	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.14844+00	semester	1	UG
-2b7119de-454f-4d5e-8799-20069fc137a0	2	B.PHARM.	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.152879+00	semester	2	UG
-e8358b99-6368-44b4-a9a6-7a3f68b37609	3	MCA	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.156598+00	semester	3	PG
-5225410d-8a26-4b8c-9c64-da232d45ecfe	4	MBA	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.160507+00	semester	4	PG
-9e36c214-e1fc-4f09-bc42-2db714ed650e	5	M.TECH.	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.164162+00	semester	5	PG
-cbc0b730-4ddb-4b5c-aa30-8363d2d1a80f	6	M. PHARM.	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.167994+00	semester	6	PG
-8f809d1f-b13b-48e4-a9e4-0efa86f8e47b	7	B.Tech (Lateral Entry)	UG	4.0	Semester 1 (1st Year)	f	2026-08-14 14:33:34.172139+00	semester	7	UG
-edfdae3e-d06a-4070-aec7-aa3984cc1178	8	B.Pharma (Lateral Entry)	UG	4.0	Semester 1 (1st Year)	f	2026-08-14 14:33:34.175657+00	semester	8	UG
-6bd9cd62-e8e8-4981-b4bb-eeb08ee36287	9	MCA (Lateral Entry)	PG	2.0	Semester 1 (1st Year)	f	2026-08-14 14:33:34.179595+00	semester	9	PG
-346f2269-944d-4016-a872-98c7d5048538	11	BA.LL.B	UG	5.0	Semester 1 (1st Year)	f	2026-08-14 14:33:34.184395+00	semester	11	UG
-98b1a0ed-c6d4-4d0a-bfa3-d3c117dfa65f	12	BBA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.189445+00	semester	12	UG
-30e6cde5-9c63-4dd2-ac97-eb347d5d289f	13	BCA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.193317+00	semester	13	UG
 6300b3a8-cb6f-45d0-a1e9-a5d1b5dc9d57	1	B.TECH.	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.14844+00	semester	1	UG
 2b7119de-454f-4d5e-8799-20069fc137a0	2	B.PHARM.	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.152879+00	semester	2	UG
 e8358b99-6368-44b4-a9a6-7a3f68b37609	3	MCA	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.156598+00	semester	3	PG
@@ -27466,6 +27289,11 @@ dc0aea76-92c0-467f-8e7c-ffef41ac897c	PD	Pandemic Module	t
 1945daad-5a74-43a0-bbe2-863fc564bfb1	CM	Clinical / Lab	t
 41c5bc1f-508d-4458-83e9-cb1664179235	TU	Tutorial	t
 1e420f3c-0188-41d7-aa53-39f38623f0c6	EL	Electives	t
+f70ffa82-3009-4c35-bd35-e690c0e41b50	TH	Theory	t
+a7aa36bb-bb5a-4664-8301-1e41fb2853c3	PR	Practical	t
+1224b108-825e-47ee-b923-c370f99f7c2d	AE	AETCOM	t
+7f9903f1-28d6-4a15-ad66-2c7a73c1385d	PD	Pandemic Module	t
+bced0ca3-7287-450f-9e72-d432626a9129	CP	Clinical Posting	t
 \.
 
 
@@ -27484,62 +27312,11 @@ bfecfacd-e953-4bd1-b753-9df9b8776542	CSE(DATA SCIENCE)	4	Engineering	\N	t	2026-0
 dd638458-5139-4767-b4ae-3c798f39aeba	B.TECH.	6	Engineering	\N	t	2026-08-14 14:34:21.354092+00	6	1	B.TECH.	1
 88209255-6f85-47ef-9348-be72b915a036	(EN)	7	Engineering	\N	t	2026-08-14 14:34:21.363577+00	7	1	B.TECH.	1
 4ffe615e-a8f5-495c-86db-c1e006f73b5d	CSE(AI & ML)	8	Engineering	\N	t	2026-08-14 14:34:21.368179+00	8	1	B.TECH.	1
-1630189d-2cee-4931-aa89-fed3a225c653	BA.LL.B Department	1	Law	\N	t	2026-08-14 14:34:21.443684+00	1	11	BA.LL.B	1
-b9cfd9f5-f68f-4fc0-9aa0-55ded3bf649e	BBA Department	1	Management	\N	t	2026-08-14 14:34:21.520115+00	1	12	BBA	1
-8937c20c-91d9-47e3-b4b9-0884627d085b	BCA Department	1	General	\N	t	2026-08-14 14:34:21.601072+00	1	13	BCA	1
-1c4fb040-4894-4274-94dc-8d9616b50f32	B.PHARM. Department	1	Pharmacy	\N	t	2026-08-14 14:34:21.69189+00	1	2	B.PHARM.	1
-4e88bbb6-90ee-4400-8734-e4e76e8e887a	MCA Department	1	General	\N	t	2026-08-14 14:34:21.768792+00	1	3	MCA	1
-b4acc849-9816-4234-8801-163961637c14	MBA Department	1	Management	\N	t	2026-08-14 14:34:21.845069+00	1	4	MBA	1
-1fda1a6c-3bb4-43f3-a412-3ad4036698cc	CAD/CAM	1	Engineering	\N	t	2026-08-14 14:34:21.944716+00	1	5	M.TECH.	1
-61cbbe2a-6b90-4e75-8746-22ae7c80dbea	SOFTWARE ENGG	2	Engineering	\N	t	2026-08-14 14:34:21.949936+00	2	5	M.TECH.	1
-94314786-ae15-432b-9a27-10c3d5a800b1	MICROWAVE ENGG	3	Engineering	\N	t	2026-08-14 14:34:21.954328+00	3	5	M.TECH.	1
-f98e236b-785f-48e9-aaba-0e92de9e7bc8	ELECTRIC DRIVES	4	Engineering	\N	t	2026-08-14 14:34:21.958687+00	4	5	M.TECH.	1
-3a4f82a9-2642-4908-b559-08ba2897b2ca	COMPUTER SCIENCE & ENGINEERING	5	Engineering	\N	t	2026-08-14 14:34:21.96387+00	5	5	M.TECH.	1
-1df85701-a711-4e9a-96a0-ab999ec8dbd1	ELECTRONICS & COMMUNICATION ENGINEERING	6	Engineering	\N	t	2026-08-14 14:34:21.968876+00	6	5	M.TECH.	1
-94313703-80b9-433f-b2f2-8009f92f009f	ELECTRICAL ENGINEERING	7	Engineering	\N	t	2026-08-14 14:34:21.97338+00	7	5	M.TECH.	1
-570807ea-2bb5-42e3-8fe5-d84ead45fae3	PHARMACEUTICS	1	Pharmacy	\N	t	2026-08-14 14:34:22.058234+00	1	6	M. PHARM.	1
-ab68dc85-578d-4750-9e8a-abe1b63b6261	(CS)	1	Engineering	\N	t	2026-08-14 14:34:22.133923+00	1	7	B.Tech (Lateral Entry)	1
-f58cbe57-9b92-4bb2-abec-7bcfa385fd3c	(IT)	2	Engineering	\N	t	2026-08-14 14:34:22.137998+00	2	7	B.Tech (Lateral Entry)	1
-e25967b0-9567-4a81-b0e2-53e791f0472a	(ME)	3	Engineering	\N	t	2026-08-14 14:34:22.141915+00	3	7	B.Tech (Lateral Entry)	1
-48eceeaf-1a1e-420a-8ff3-50d0433be2d0	(EE)	4	Engineering	\N	t	2026-08-14 14:34:22.145765+00	4	7	B.Tech (Lateral Entry)	1
-0dd9efb6-89b6-4565-9fee-4b3be8915770	(EC)	5	Engineering	\N	t	2026-08-14 14:34:22.15026+00	5	7	B.Tech (Lateral Entry)	1
-c8a2a28c-6bbe-45c9-8f11-a3c24d761ddb	(EL)	6	Engineering	\N	t	2026-08-14 14:34:22.154375+00	6	7	B.Tech (Lateral Entry)	1
-8c0818f9-6e56-4aed-b9aa-d93c8da7402e	(EN)	7	Engineering	\N	t	2026-08-14 14:34:22.15823+00	7	7	B.Tech (Lateral Entry)	1
-3b90f44c-33f9-45d0-b0f1-229042db6897	B.Pharma (Lateral Entry) Department	1	Pharmacy	\N	t	2026-08-14 14:34:22.233447+00	1	8	B.Pharma (Lateral Entry)	1
-f707a747-4a38-4202-96a1-1c7235fc1a8b	MCA (Lateral Entry) Department	1	General	\N	t	2026-08-14 14:34:22.31814+00	1	9	MCA (Lateral Entry)	1
-c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:32.976988+00	\N	\N	\N	\N
-078d6a7c-ceac-4b9f-9eb1-951337750e4a	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:32.976988+00	\N	\N	\N	\N
-f3f3d7f5-db0e-4a8c-9b64-622a87ddc40b	(CSE)	1	Engineering	\N	t	2026-08-14 14:34:21.329448+00	1	1	B.TECH.	1
-24ae232d-d6f3-4d98-8334-42395cea034d	(IT)	2	Engineering	\N	t	2026-08-14 14:34:21.333519+00	2	1	B.TECH.	1
-3d67aa85-51a7-4732-a6e0-52c0582dbb64	(ME)	3	Engineering	\N	t	2026-08-14 14:34:21.338695+00	3	1	B.TECH.	1
-bfecfacd-e953-4bd1-b753-9df9b8776542	CSE(DATA SCIENCE)	4	Engineering	\N	t	2026-08-14 14:34:21.344005+00	4	1	B.TECH.	1
-0801383f-7367-460e-93f7-b9c0ecebe951	(ECE)	5	Engineering	\N	t	2026-08-14 14:34:21.348743+00	5	1	B.TECH.	1
-dd638458-5139-4767-b4ae-3c798f39aeba	B.TECH.	6	Engineering	\N	t	2026-08-14 14:34:21.354092+00	6	1	B.TECH.	1
-88209255-6f85-47ef-9348-be72b915a036	(EN)	7	Engineering	\N	t	2026-08-14 14:34:21.363577+00	7	1	B.TECH.	1
-4ffe615e-a8f5-495c-86db-c1e006f73b5d	CSE(AI & ML)	8	Engineering	\N	t	2026-08-14 14:34:21.368179+00	8	1	B.TECH.	1
-1630189d-2cee-4931-aa89-fed3a225c653	BA.LL.B Department	1	Law	\N	t	2026-08-14 14:34:21.443684+00	1	11	BA.LL.B	1
-b9cfd9f5-f68f-4fc0-9aa0-55ded3bf649e	BBA Department	1	Management	\N	t	2026-08-14 14:34:21.520115+00	1	12	BBA	1
-8937c20c-91d9-47e3-b4b9-0884627d085b	BCA Department	1	General	\N	t	2026-08-14 14:34:21.601072+00	1	13	BCA	1
-1c4fb040-4894-4274-94dc-8d9616b50f32	B.PHARM. Department	1	Pharmacy	\N	t	2026-08-14 14:34:21.69189+00	1	2	B.PHARM.	1
-4e88bbb6-90ee-4400-8734-e4e76e8e887a	MCA Department	1	General	\N	t	2026-08-14 14:34:21.768792+00	1	3	MCA	1
-b4acc849-9816-4234-8801-163961637c14	MBA Department	1	Management	\N	t	2026-08-14 14:34:21.845069+00	1	4	MBA	1
-1fda1a6c-3bb4-43f3-a412-3ad4036698cc	CAD/CAM	1	Engineering	\N	t	2026-08-14 14:34:21.944716+00	1	5	M.TECH.	1
-61cbbe2a-6b90-4e75-8746-22ae7c80dbea	SOFTWARE ENGG	2	Engineering	\N	t	2026-08-14 14:34:21.949936+00	2	5	M.TECH.	1
-94314786-ae15-432b-9a27-10c3d5a800b1	MICROWAVE ENGG	3	Engineering	\N	t	2026-08-14 14:34:21.954328+00	3	5	M.TECH.	1
-f98e236b-785f-48e9-aaba-0e92de9e7bc8	ELECTRIC DRIVES	4	Engineering	\N	t	2026-08-14 14:34:21.958687+00	4	5	M.TECH.	1
-3a4f82a9-2642-4908-b559-08ba2897b2ca	COMPUTER SCIENCE & ENGINEERING	5	Engineering	\N	t	2026-08-14 14:34:21.96387+00	5	5	M.TECH.	1
-1df85701-a711-4e9a-96a0-ab999ec8dbd1	ELECTRONICS & COMMUNICATION ENGINEERING	6	Engineering	\N	t	2026-08-14 14:34:21.968876+00	6	5	M.TECH.	1
-94313703-80b9-433f-b2f2-8009f92f009f	ELECTRICAL ENGINEERING	7	Engineering	\N	t	2026-08-14 14:34:21.97338+00	7	5	M.TECH.	1
-570807ea-2bb5-42e3-8fe5-d84ead45fae3	PHARMACEUTICS	1	Pharmacy	\N	t	2026-08-14 14:34:22.058234+00	1	6	M. PHARM.	1
-ab68dc85-578d-4750-9e8a-abe1b63b6261	(CS)	1	Engineering	\N	t	2026-08-14 14:34:22.133923+00	1	7	B.Tech (Lateral Entry)	1
-f58cbe57-9b92-4bb2-abec-7bcfa385fd3c	(IT)	2	Engineering	\N	t	2026-08-14 14:34:22.137998+00	2	7	B.Tech (Lateral Entry)	1
-e25967b0-9567-4a81-b0e2-53e791f0472a	(ME)	3	Engineering	\N	t	2026-08-14 14:34:22.141915+00	3	7	B.Tech (Lateral Entry)	1
-48eceeaf-1a1e-420a-8ff3-50d0433be2d0	(EE)	4	Engineering	\N	t	2026-08-14 14:34:22.145765+00	4	7	B.Tech (Lateral Entry)	1
-0dd9efb6-89b6-4565-9fee-4b3be8915770	(EC)	5	Engineering	\N	t	2026-08-14 14:34:22.15026+00	5	7	B.Tech (Lateral Entry)	1
-c8a2a28c-6bbe-45c9-8f11-a3c24d761ddb	(EL)	6	Engineering	\N	t	2026-08-14 14:34:22.154375+00	6	7	B.Tech (Lateral Entry)	1
-8c0818f9-6e56-4aed-b9aa-d93c8da7402e	(EN)	7	Engineering	\N	t	2026-08-14 14:34:22.15823+00	7	7	B.Tech (Lateral Entry)	1
-3b90f44c-33f9-45d0-b0f1-229042db6897	B.Pharma (Lateral Entry) Department	1	Pharmacy	\N	t	2026-08-14 14:34:22.233447+00	1	8	B.Pharma (Lateral Entry)	1
-f707a747-4a38-4202-96a1-1c7235fc1a8b	MCA (Lateral Entry) Department	1	General	\N	t	2026-08-14 14:34:22.31814+00	1	9	MCA (Lateral Entry)	1
+f4777969-543f-4648-b229-0621ad3d62f7	BCA General	1	General	\N	t	2026-08-16 08:57:32.176163+00	1	13	BCA	1
+bbe73a03-3e8a-4af9-a127-b80f2b5643c9	MCA General	1	General	\N	t	2026-08-16 08:57:32.184955+00	1	3	MCA	1
+16d94864-f87b-46ee-9a70-1a7fc76778f9	MBA General	1	General	\N	t	2026-08-16 08:57:32.189485+00	1	4	MBA	1
+30bd0b9a-a016-4562-991c-0fa652d1c04f	B.Pharm General	1	General	\N	t	2026-08-16 08:57:32.193768+00	1	2	B.PHARM.	1
+cfe93b3c-d745-42f8-be65-1284fa040dbe	BBA General	1	General	\N	t	2026-08-16 08:57:32.197533+00	1	12	BBA	1
 \.
 
 
@@ -27568,12 +27345,7 @@ cdae690c-a221-4a99-a23b-9eb947820bf3	EXAM-PAPER	EXAM-PAPER	\N	\N	\N	80.00	32.00	
 --
 
 COPY "tenant_srms-cet-bareilly".faculty (id, user_id, emp_id, name, department_id, subject_id, designation, qualification, specialization, joining_date, photo_url, phone, gender, experience, staff_type, is_active, created_at, updated_at) FROM stdin;
-e273fe73-bc2d-46a5-82fa-02faf8f9aae6	f72cce21-f5e0-4eaf-b2a1-2d1a9738a56a	EMP1001	Dr. Sanjay Singh	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-16 07:57:15.250958+00	2026-08-16 07:57:15.250958+00
-d3d9682a-dc29-4ede-a739-e9b3ddba20fa	8780cb5f-f365-4e6c-8aa0-50249f918bf1	EMP1002	Dr. Aparna Tyagi	078d6a7c-ceac-4b9f-9eb1-951337750e4a	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-16 07:57:15.250958+00	2026-08-16 07:57:15.250958+00
-879207b0-eaf4-43b0-b664-b6a854bbfe81	cb1d71b3-68ff-4a78-a882-1e50e63afc14	202516224	Shorab Ahmad	4e88bbb6-90ee-4400-8734-e4e76e8e887a	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	Assistant Professor	\N	\N	\N	data:image/jpeg;base64,/9j/4AAQSkZJRgABAAEBLAEsAAD//gAfTEVBRCBUZWNobm9sb2dpZXMgSW5jLiBWMS4wMQD/2wCEABQUFCAWIDIeHjIyJCQkMjYwMDAwNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYBFiAgKB4oMB4eMDYwKDA2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2Nv/EAaIAAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKCwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoLEAACAQMDAgQDBQUEBAAAAX0BAgMABBEFEiExQQYTUWEHInEUMoGRoQgjQrHBFVLR8CQzYnKCCQoWFxgZGiUmJygpKjQ1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4eLj5OXm5+jp6vHy8/T19vf4+foRAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/AABEIAlcBugMBEQACEQEDEQH/2gAMAwEAAhEDEQA/AOyoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKBhQIKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKAGsQBk0wHUgCgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKBhQIKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoGFAgoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgYUCCgAoGFAgoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAQ57daAFoAKACgAoAKACgAoAKACgAoAKACgAoAKBhQAUCCgAoAKBhQIKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoGFAgoGFAgoAKACgAoAKACgAoGFAgoAKACgYUwCkAUCCgBCcUDIGuY16kUrgJ9rj9RTAX7TH6igBRcJ6igB3nL60XAXzV9aADzF9aAF3ilcBdwouAu4UwDIoAM0CFoAKACgAoAKACgAoAKACgAoAKACgAoGFAgoAKBhQIKYwpCCgAoAKACgYUAFAgoGFAgoAKACgAoAKACgAoGFAgoGFABQAUAFAgoAKACgBCM8UAVGs4m6rTGMOnQntQAw6ZD6H8zSsAn9lxdsj8TRYBp0tOzMPxosA3+zB2ZvzosAv9nHs7UWAb/Z8g6SGnYQfYZh0k/T/69IYgtLgfxj8qLAL9nuR0cfrRYQeVdDutKwxcXY/u0xC7rsdh+dFgFEtyP4QfxoAXz7gfwfqKAF+1TDrGaAF+2SDqjUa9Nw9Q+3N3RvyotJb/AJhp0F+3jurfkaAF/tBO4YfgaAF/tCP3/I0a9Exh/aEfrRr1TXqA4X8XrQIcL2I/xCgBftcf94UDHfaY/UUAL9oT1FAC+enqKYC+avqKQC+YvrTAXePWkAu4UXANwoAMigAyKADIoAMigBc0wDNIApgLQIKQBTGFACUAFIApgFIBaACgAoEFABQAUAFACUxiUALQAUAJQAUDCgAoEFABQAUAFABQAUAJTAWkAmKYC0AGKQCYoAMCgBNg9KdwsHlr6CgLDTCh7D8qQDDbRHqo/IUANNnF/dFADTYw/wB0UAN/s+H0/U0ANOnReh/M0ANOmx9iw/GgBDpq9mYfjQAh070dqLAH2Bh/G1FhB9ik7SEfhSGIbKftJ+lADDaXI6OKQB9lu/7y0xEZivB6H8aLDE/0tewP40WAeJbpeqfqKQCi6uB1jNMQ77dKOsbflQMP7RYdUb8qAFGpjuCPwoAcNUj75oAeNSi9aAJBfxHvQBMtzG3QigCUMD0oAdTAKAFpCCgAoAKACgBKYxKBhQIKACgAoGFAgoAKACgAoAWgBKACgAoGFAgoGFABQIKACgAoAKACgAoGFABQIKAFoASgAoAKBiUwCgBc4pCHUgCgBDTAiJ5pgSUAJigAxSANooATaPSgBDGvoPyoAjNvGf4R+VMBhtIj/CPyoCxAbCPsKYD4ohE21elSBeFAC0ALQAUhBQAUAFACGmMx9Wv3skUxgEscc/T2IqJJvRNrzVv1TAoi/wBRxnyQR7f/ALVZ8kv+fkvuh/8AIBfy/P8AzD+1L4dYD+Ab/wCvQ4z6TfzSf6L+kUmuqf32/RijV7odbdv/AB7/AOJoSqL7SfrF/pJfkF10T+//AIAf21OOtu//AI9/8TRap/NH/wAAf/yYrrz+/wD4An9vuOsLD8T/APE07VP5o/8AgD/+TFp/X/DAPESj70bD8f8A9VNc63cX5crX48zt9zDQf/wkcP8Acf8AT/Glep/LH/wJ/wDyA9O7+7/gjh4ig/uuPwH+NF6n8sf/AAN//IBp/S/4I8eILf0Yfh/9elzVP5Y/+Bv9YL8wVu9v68rkg161P8RH/AT/AIUlOevND0s07/e4jsu6/H/IcNbtD/H/AOOt/hVc8v5JffD/AOTFp3X4/wCQ8aza/wB/9G/wo9pL/n3L74f/ACYf1/Wg8atan/lotXGTe8XH1t+jYh41K2P/AC0X8xSc1F2afyjJ/ilYdv6uhf7Qt/8Anon/AH0P8an2se0v/AJ//Ihb+roeLyE9HT/vof401UT0tL/wCa/OIDxcxnoy/mKTrQTs3Z3ts/ztb5lcst7P7h4lU9CPzFN1YLRyin6r/MVn2YocetL21P8Anj/4Ev8AMVvIXcKftYPVSjb1QC5FaJp6rYAzTEGaAFzQMM0AFABQAUCCgYUAFMBKACgAzQIM+lIZGsoYkDnHX0+lAhTj6UwH0DFpAFAgoGJTAWgAoASgBDQBB/H+FAiyKQC0ALQIKQBQAUAFACUxnL+IzxGPc/0pCOgi4UD2FL+v6/UpElH9dP6/QAo6f8H9bi/r+v8AgC4oATAo+Y7Ddoo/r+v+GCwhUHsKBEZhQ/wg/gKV+v8AX5DsN+ywnjYv/fI/wobYrDTYwH/lmn/fI/wp3/r+v8wsN/s+3/55p/3yP8KB2EOmWp/5Zr+VMQw6Ran/AJZj9R/WlcLEZ0S0/uf+PN/jRcLDDodr/dP/AH03+NAWG/2Fbdtw/Gi4WGHQID/E/wCY/wAKAsMPh2Ls7j8v8KYWG/8ACPJ2kYfl/wDWpAJ/YLj7szD8D/8AFUxB/Y046TsP++v/AIqs3ThLVxi33aTKu+7A6Vdj7s7fiW/xNT7Kn/JH/wABX+QrvuxP7OvweJs/Vm/wNNU4LVRirdbLT8Auw+x6kvSUfmf/AImkqUF8KtpbRtaXv0f4/LYfM32+5DvK1NR98E/8B/8AiaPZx7y/8Dn/APJCu/L7kMzqq+hx/uf/AFqPZx7y/wDA5/8AyQX/AKsg87VV6oD/AN8//FVajy3s3r3bf3czf9bhcd9s1JesQP4f4NUckv55f+Sf/IDv5fn/AJh/aV+vWHP0Vv8AE0ckv+fkvuh/8gK/9a/5h/a92OsDfk3+FU4y6Sf/AJLp6afnfS/XVFwOuTr96Bv1H/stTapvzR9OV/8AyQ7rs/v/AOAN/wCEgYHDREfj/wDY0WqfzR/8Af8A8mK6/r/hhR4iXvGw/EVVp9ZR/wDAX/8AJhckXxFF3Rx+X+IpN1FsotadWteulpfJX+buPT+l/wAEkGuW0vykMmeM9P5GmnNv3oxt5SbfyvFfmLTp/X4lq0uLfBSJu/I5/rWgF+RgBnrRd9P6/wAgKz6nbodrNgj1BqHNq/ut27W1221v96Ww1qINTtj/AMtF/PFSqn80ZL5X/wDSb/1tfWzt6feiQahbn/lon/fQ/wAaPax7S/8AAJ//ACIrf1df5jxeQHo6f99D/Gj2se0v/AJ//Ih/W6HieM9GH5in7WHV2/xJx+7mSv8AIdm9h/mL6ij2tP8Anj/4Ev8AMLPs/uF3ChVabdlOLfqv8xC1sAUAV/46BFkUgFoAKAFpCCgAoAKAEpjOV8QnLxD3P9KBHSIMAfQVH9fh6jHU/T+vxGFH9fL7rfmAtH9f1+ugCUvlt/Wn/DAFG+q6f15/1sACq3/p/wBfeAtT5r9P8/yASmu/5fmAUL+uv+X5XGGKP6/pXEFH9f1r/Wwwpf1+PoAUen+X9fmAU9f6/r/MQlH9df0s/wAxi0tf6/r+u4gp/wBf8AAo/roAULv/AF+IAaFrr/kIOlPb+vw6AFABRf8Ar+v1GFFwFpfp/X9WWggoX3r+v17DCn66f18wCl0uIMULXb+v69QEwKoA2j0FADdg9AaAEMEZ6qD+ApARmzgPWNPxUf4UBYVLOFDlUVT6gAH9KQA6MRx2qtAKUlhDNy6ZPrkjk/SiwiNdHtG/gwf95v8AGl5MBp0O29CP+BH+posMadAtz0LD6H/EGgLDD4eg7M/5j/4mgLDT4diHR3H5f4UCMnUbE2BTa7Hce/GMfSgDtIvuD6D+VMZJTGV/4zQIsikAtABQAtIQUAFABQAlMZy2u8zxD/PUUhHRr0qX3KQ+gAo06f5f1+YBR/XX/h/zAKX+f9dfyASnp+owNO33f1/X6iAcU/66jCltqIXNMBKW39f1+oCU9wFqf66f8ABKNv6/y/yAQnFJ2en+b/K/9MY3NDf/AA/9J/kAFsUvJ77vt+q/L7wEMgHWq2f9f8P6biIjcqO9Rza2S/L9d/kOwgulNDdt/wAPv+XrfTuFh32hfUfnRfrp6f1dfkFiVZA3SqTvr+n6iHZq79gFLYqb/wBb/wBfiAwyCnbdrf5hcjE3Y+tR5v8Ay1/zt/w4yZXDdKu9/wCv82v66iH0AFDABR/X9bALT/r+v6uIDTAbTEOqf6/4cYUtPIYlF/X+vuAXOKX9f1/TEBAqv6/pAMYd8Z9xT9LC/AAQwouMdS2/4cBaYCUvL+vxGcx4gOWiX3P9KCTpoxhR9BTGPpjKv8ZoEWhSAWgBaACkIKACgAoAbTGctrGDdxD6f+hUhHSij0KFAxSX9dP69FsAtPv0/ruAlGv9f1+gBR/X9dPzAKlJf1/wf+AAU722v/XkAUrK1v69NBhTv8n/AF/XcQUbf1/X9dgCkwEp7f1/Wn9WAKOu/oAh4qfT+vl/mMbkVDlbfX7tOvzHYjeZUGT+tNXa7L7v+D+IvzKEl+gOByanf4evVrT7t+g/Uoy3bN14FTbo7f1/wPv63FfsVPtA9c07dtBbD/PGMk0X6WDyAXI65HFO72t/X6DuPjvNpODzQ29P8v8AggXlvwPvUczS/wCHX5f11K0Y77cH5zSclfb8/wA+v9WFbsBvfSi/bTt1/D+vIRWa7+Yjt1/Gkt79v6uHUsw3g3c8VS07vTvq+2nX7/0D0/ryNRJlcfKapS26f1/XT7wtYlBqtP6X/A/4ACjimun9f1+Ah1P+v6/qwBmj+v8AhrbgIKf9f1/wRBQMKGAVPS/9f18wCjX+v6/W4C9KoQme1G2rAay/xL17j1ouGwoIPNO4Cij+v60GGaBHL65zNEP89RSEdQvApjHUDKo++aYi0KQC0ALQAUhBQAUAFADaYzltRy1/ED0+XH5ml+gjpQcUutv6/T9WUOo/r1AKP6/pXX5MBKOnb5f8MAUemn3/APAf9bgLRfv/AF/XqAdKN/8Ah/8Ahv67gJ0o3838v6/rcAxRf8P6/roAUbf8D+tPx9RgaSf9f8OIQ/56Uf1f/hv67ABFL8V5f1/wfzGMNS097bff97/RfMoz7i6CcDkisb28vl+XS1/0+T0sYk05c5JzVavV/r/X9dSfQg34qmSQvKeg/wA/lSshFB5z0NapdRXGb93fFMWo5HK9DkfjSaQaj3k9OKEgGpcsOGpuPYZKZSvINTYYq3mPrS5QuSJcbmz/AJ/z/jTsBfhlOc1LQzThl9f8/rUNP5X9fl/Whon0NaNuKSe17/P+tPmu3cViwDWqen9f5okdVr8f6+ZJHnmnt/X9fkMf1p7AKaN9P69QCptb0/P8gCn6hsHSl/X9eQBT22/y/pgKaYgBoGMYbTkdD1peS/QQoNP8hhTv/WwHL6zk3UI+n/oVIk6kVRQ6kBVX75+tMRaFIBaAFpAFABQIKACgBKYzlb3/AJCUf0X+tIR02Km9v6sUFF/6/pq/T/ggFDe1v6/IABo0Xb+uu4CU9tv6/H/IYopO2n9flbQQpouAlNW6bAHSn/X9bgFLZa/1+S/ABKXmA0tUvTt/X5DGGTHtSu3p/X+X+YbGVdX+Bhenr/hUt7r/AIH66h5nP3F2M8Gkk3uBB5pIzV8pJH9oHTP+f8/hRZ9gInnwMZBqreoiEzZ7VVhERf0/WmA0tTASkAUwJvM4weaQEXU0wJ4Pvc9DUsDVjx2qPUaLqSEVPKM04LjBxUWa/wCH/M0v3NZGDdKuOuq/X+uuiWwnoTjODWq13Ieg0Jihv+v61GPpb/1/w/8AXYAqvUAoASk11/QAo/rX/g3AKf8AVv8AhgCnYQh4/GiwxwNK39f1+ghhXbyOlMYZzS6f1+l/wA5fU8G9iH+7/wChUEnVCqKHUgKqfeP1piLQpALQAUALSEFABQAUANpjOWn51Re/A/kaQjp6S8/v/plBU7af167fk2AlG2/6/wDAYBR5df0+YBR/W/l9/wCfoMSnt5/15/oAtK9/u8vw/UQUxhT8u35fghAaF2/4H9fiAlLy/r8WAwgVPl/n/l+Go7mHqF0F+RD061E1dpPzY0znZp/ypqIr9Ckw9K1RBAWPSnYQygBcUANPFMAFACk0AANIA60wFPtSAAaYD1ODSA0om4qGBaVwKn5IZYSTBqXrcpdzRgucEVOy/r5en/D7jNiC4DfjVp3s7dlbf+vxQMtGte/9f194hKE/6/4f+kAtMBKPMAp/1/TELSGJ1p9f+HEApgHT6UgF6fSgBaAIipH0pbgcrfEtqEY9Nv8AM0COsWqKH0AVo+p+poEWRSAWgAoAWkIKACgAoAbTGcp11Q+3/wATSEdPUf1v/wAH7r/8AoU1X9f16gFSv+H/AMv6+bAOlGu39fp/XcAp9N/Xb9AChK2/5/jrf8dQEFHdX/r+u6+YC0LReX9f1/kMKLdP6/X7n9wgpr+un+X5WASkvy/rv/XoBn390IUODhj0o216i3ONnnOcnkmoSb3GVG+bnP4dKvbQkr5wMVQhh96foAlIApgFACg4pAGTQAZoAUce1AATmmAGkAoPPNMC3ExxwOlSxFgE/wCTU/11AlzikVYlEpHSp8wuatlccj/P86ltpr+lp3t+pR0iNkVrf5af1vpt/wAAB1Ve/wDS9fMBaYCUf11Qgo2/p/8ADDCgApoQUALQAfypfn94AR6UeQEaKy9807IZzl4hOoI2CAcfmM5pEnQq3pVIomoArw9/qaBFoUgCgBaACkIKACgAoAbTGcrAN2pv7Z/kKQjp6jXbp/Xb+vQsKF3W/wDXl/XcAqv6/rcBaWq/r/L9WIKXr+H/AAL2X9XQBR6gJTtbovuf9fou7AKP6/rp+YBRvp/X3aDExTt1/X/hxEcrbFye1HoBxt7eb2JboOBWb956CMSQlznqPT/61WtBMiLGqEMoAUUAKCO9AxppiCkA9ULdBSvbcZYFoxqOdFKLJPsf4VPtLD5CI2zCq50LlZH5LVXMhWY1kI61SfYVrDRxTETrLtFTYBfP9KLABmP0/WiwD0mA5OTSt2Av29wCRjioatuVc6+zlLDnJqk77/1/XoPYv07a3v8A1+f6d0A6nfX+vy/4ACUf1/X/AAwCZoX/AAf62/zAWmIKP6/rUYUwCgQopf11AXBoAYcgUwMbU7tLdRJwZDwo7jPf6UhFjTlkMIMudx59OvrTQ0aeOKYyCDpSsIs0AFABQAtIQUAFABQA00xnK2mDqUmPf+n9akR09Sl+WnX/AD+e5QU7+n9fl8wCjR/1/wAMAU15bf1/SAWl6/1+YB0o1f8AX9fmAlC0sunbRAFH9f1+ulgA07v+r/5f1uAlC8v6+4DL1Oby0xnk1L20F1OLmlB/CkkwKbEds/XmtCRhFADcZoAXFMAxSAekZfgUm7bjSb2LsNkT1rCVVdDRQNJLYJWDk5a9DTlRMsQB6VN9NWUhzRg80kyhPKFMVhrW4oUmOxWa39a0U/6/4YloqPbgdq3UjNwKjw7elaKV9DNxsQgY9qokdjNAg9qALlumKljO10zOz0oWi2GalNvvb8f6+5DFqfLT9AEzT8/6/wCD/W4wpL+un6/kvzELiqXyf9f1oAVXyAKXkAtMAo/rcQopABx370AczcLHcXgQnO3qCPTt9KQjeDkNg/hVDJyeKBkEHSmIs0gCgAoAWkIKACgAoAaaYzldO+a/lYcfe/mKQjpqlLr+Gn9f1uUApvs/8u3r/wAEYp4qVv8A1/X9aiCn/Xz/AK/pAFC2vr+P9fiGwYo/r+r+fqAUev6L9P1AKS2/r9LP5AFC/rr/AJ/5gIafX+v6/ADktclO7HtSerS+YtjliSTVkiZNACUAKqlulD0GvIsJbFvapcki1Fsux2X4mueVT5GqgupfjtwtYuTfUu1ti0FArPUYpFPf+v63ENUc03sMkAqbX/pffuMdj8qPOwDSKP6/r+vuHsMK1WnRfiL1IXiBHv7Vaf8ATEU3hxWil94rfcZ00ODk5rojK5zSVtiHGenSrIFC9+KYGtYRB2AHqKhgdtDF5a4p+livMnqfPZ/1/Wowo/H+vX/ggFVsAUv66f5f8MwEp3AdT32ATFP+v6uAUCFNJa9Rh0p/1/Xb5gNal5f1/XzA5+BVfUWY8kbv/rfpQSdC8YbHbFO/cBpjABp37DI4B8tAFmkAtABQIKQBQAUABoGMPSmBy+kjN1Mfc/8AoVIR01Rs/wCv1KDNFu+/9fL8fvAWj8l6f8OAlP8Arz/JJdvwuAtL+t9AEp9bgFP0AKXp+n6gFG2n+Xf+ugCUf1/X/DIDjddXD0WsyTmehqxCkhugxSGTRwk1DlYtRuXo4fWsXLsbKNi0iYrFs0SRbRcVkMnApLzAd0prXQPyCl6/1/Xb+nPUTb2qr/1YPIdQUKCKT/r+v61AQ016/wBaiuNNPUY00/66f15kkZHqKr5/kH9f1oVZYgRgdK0jJohoxiuDjnius5h6oemKBHSaPafMHPG2p316eg7HVDimULS/r+v+GAKNttgA0aLT/MANGq/r+kAlNCCqGLQIKBiUAJ0oAD05o/IRy+nHOoSH/e/nSEdXmmUNkPyn6UCGQj5aYiakMWgApCCgAoAKAA0DGN0pgcxonM8ze/8AU9ql6IR0tK/T+v1KCla97f1963/QBabX9eX4AFF9NP69P68wDpR+fr/w4BT/AK/p7gJRtv8A1/l6fMBaTX9dfxAKPw/r5AIaYHGa7kyH6UdSTmjVCLFtHvOfSs5OxcV+BpiICuZs6UrD8YNR0K/r/hh4qRkqHFTq/wCv0HsWA3pU2S32/r+vvELkGlqIdmq/r8gHdKWn/B/QPQQc0f11+f8AX6D31DFO9vL7wCj7vwAaTmmtP+AHoJ16VXncQ3B70/NC8hrDNBLMS5j2t6V2Qd0c8tB9vEZGCjvVNkne20QiQLjGBT3GWBT226DDpS3D1FqfLr/XqAUwCn6f193/AAQChf10AWmAlP8Ar+uwBSAKf5iEJo/r+rDENJ6/1/wwHL6Tzeyn/e/9CoJOrqihkv3T9KQBF0piJaQC0AFIAoEFABQAGgYxuhpgcxoQ/eS+mf6mpYI6ap9evrb8f+AMKa1/4f8Ar8GAUf1/w11f+tAChf1v+fT7gCmtP6/r/MAo2/r+vxAKNdn/AF/XoMKXnbS39baCCntfT8P607IBKW1/6f5f5gc5r0fyh/wo7eRLOKI5qxGjZrwa5qm6ubQNADt6Vz+f9f15m/8AXUDS/r+vxGJQMkUnp/n/AD6UrB6FjFTuIXFGn9d/6/ALjl6ZpiJMUtbf1/X/AAPUoTmh/mADrRr1/r/gf11sICKP66AMIpj/AMwo/r+vkIBV/wBf8AVxMYpr+v6/r1EzNuoua3jp/X9f8OYSRe0mDdLuI+7/ADrVf12MzrKpfP8AEoWh/wBf8MAtL/P+v60YBU+iYxarbv8Acvu2ELR/X9aMAprv2/r0AKaASmAUAJQAlHy/r52AQ8Cl/XQDl9FObqU/X/0Kgk6sVRQyX7poAWLpQSS0hi0gCmAUhBQAUAIaBkcn3T9KYHN+HxxJ9R/Wpf8AXQR0lR5L+vXb9H6lBVbu/b+uv6AHSjr/AF69n+YBQ3bX+vxf3fkAtFv+HAKf5f1/XUApAFHn/T/Tz/QApr11/X8QCjXb+vysBWuoBcRlD3HH1o/r+v8AhxHnNzCYZCrdjigkvWS/Lmuepq7GsC0cdqx+RuMzSt/X9f1+ZQvWl/X9bB6k6ip5hk6/561IDyKe2+mv538u2wheO1L+vxAd2p9R2Cjb+kJC0v66ff8A159RiY7UMX9f1/X+YmKfX/hwGFcVS1/ryF/X9f1+o3GKsQ4U1+Hr/X/BERzRBlzjkDiqT18n5/eQ1c0dJT5CfU10x2/4F/y/zMeps4qt9en9f16bjFp+f9flf9AFoQC0l/X9XAWj7/6+4Ap/1/X+ewBR/X9f8AQlMYUAFK/9af8AAYCU/QQUtv6/pjGt0oEcxoXM0p/z1NAjqqoojm+6aAHx9KCSSkMWgBKAFpAFAgoADQMr3H+rb/dP8qYHP+Hh8jn/AGh/Kpf9f1/XyBHR1P8AwP6/4ZjDFCsvL8P667oAAp/11a+X9egC0en9eX/At8wCn/X9dQEpbegC0f1/WoB0pdfXX+vz6gJVen9foAUv66X/AE/rYQUf1/W39aDOR1u12uHXo3X60ySvbriIVySerNo6IU1maf1/X9f8GPBP+f8AP+elMolVCPeobuMlC4qX6iJFOPap/rqVfqx+7FPf+v6/rULdBd1LX+rf1/X3Fhx/z/n/AD+dNN+aAQGn/Wv9f1+ACFwBS/r+v68gIGuFWnytk3SAXSeoquWQX0FFwtPlf9aE3QomVuhp2tuguPUg9Krr/X9dhEhHyn6U733/AOH/AK/zIfmaGm/6r8a6Vsv6/XuZ7XNOj+unrt0/rUAzVJdN/wCv8/MBwpt766f130AdT2/4P9f13AShf1/VwFpf1/WgBT8n/wAOIKYCUeYxMUvXT/L11/QAoAWl5/1/mBFJwp9gaXpvb5L8nv8A0gOb8PD5pD345/OrJOpplEU33aAJI+lAiSkIWgYUAFIQUAFAAaBlW7OInPop/lTAxPD4/dMfVv6VLBHQCl/Wn9ajFotu/wCvzADT8v6/r7gEo8gCh66/1+QBS06bdNl/X/DgH0oSf9Jfj/wPwAKNf8wCmlb+v61EFH9dX/X5DDNFun9fmBl6rHuhJ9MUnsJnP24/d49Ca5nu/wCv6/ryNIgwxxWXmaDS6r1pWuPYYbpUFPkbDmSIG1AVoqLJ50INRHcUnRfcPaInjvFas3SaNIyuWVmBqGmtSyXzQf8AP+fap5X0/r+tSX5EEspHT/P+f1q4xvuPYpvO1bKBDZRlkNbxijBsrBjW1kQTxlunNQ7eQ1cuoGbtWbt3RZowMRwayem39feUvMtEZBHrR08v6/T+kPcsWlyIYwO2etXzNabfj+qIUTZikDqCOhrZbLr9/wDXzJJae39P+r+Qgpry/r9AFof9f1/wRWFprsMKLWAXNH9biCmAlGwwpegBSf8AXb+vuEJnNPbX8/8AgsCKf7h9gaEBz3hwcSH3H9aYjqKZRDN938RQIkj6UASUgCgBaACkAUCCgBDQMp3xxBJ/un+VMDJ0AYgP+8f5CkCN6pXb+v687gFPf+v62HsLR93qAVO3pr5f8ABKf5eoC0f1u/8Ag/10ASj1/T/Jf8D8AFpeT+7+tP6uAU/66/1/XQBD+VDX5gJT/XQXoY91fKQUxkdKzlKycetvuv8A1+g0rmJBgKfrXPK/4f18i12IJ5CucUJXKZlsWzXSkjNkTBiOapWRLIyMVRIlAx6HmkNOxdiY5xmsZJG8WX4g2c9v8+1c0tjS5K0W4UXsMoumK2TIZRdGY8c+groVkjCV7kI461RBdWCULvHIwD+dZtx2ZSuTxXHTIyO/qKzcOxomaKc1i9DSxbQ5pf1/X9f8BEE/C4HrVLV/1/Vil+ZvWOfKFda2XojmfX1L1O39af1/wAuLS26/19/+QC0/Nf1/XmAU/wAQHUbgFH9f12AKP6/r/ggFACUaen3AFH5gJR0/r/ggQXBxG3+6f5e1AmYfh0fI59x/KmI6WmUQzdPxoESJ0oAkpAFABQAtIAoEFACGgZQ1I4tpP900wM/Qhi2z/tGpYI280v66DCjy/ANhaPy83e/3/hqAU/6/r+kAlJeQBTAKW234/wBfdpsAuKe3+X9WQBSv/X/Bv/XQAo82vwf9f1YCNzhTT7f1cRxjlg59D2rml19Wbx2JV4U/XPFZ36eQWKMvWqQNFSZ9vA5NbRVzNuxXjjadsdK0bUVdkayGywtEcN+BppqWwmraMmt7XzQS3yr61nOfLotX2Glcb9nw20HIqubS4+XoWoF2nHpWM9UdEV0NJQeMVymn9f1/X3FwjAo/H5hf7ig45J/T/P8A+qtF2X9f195LGRoYuSB/n/Oatu+n9f10JsQS20btlSVJ7cEfhVRm0tVf7/xM3DXc043CRhIxnjGT9Kz1b106/jffTT+rlpWKS2fzZrVy0sLltsXETbwP8/pWX9f1/X4lWsWVGD70f1+X9eQNeZFMOPx96fX+v6/rQpben9f1+huWP+rA9K61ey9P6/qxzPd+pe/z/nvSWm2vb+tv637L1Af54p7bfn/X/DgKKd+39f11uAtG39bgFNf1/TAKAFoASj5gFMBKQBST76f1/X+QFS9JEL/7rfyo/r+v6uIyvDw/dMf9r+lUgR0VMZBN0/GgRMnSgB9IAoAKAFpCCgAoAQ0xmbqxxayf7tAFXRBi1X6n+dQ/6/q6A2KNFvfT/hur/wCD08gClbSy+7f7v02GGKff+v6sAtF1/X9affuAUr6aPT+tu+4BRtv/AF83YAp2/wAu3n0a/AAotb1/T8QCj1/r0ukAUbdP6+4CneOVjJFD0uG5zLJmuJu39f1/Wp0IF5z9aXT/AIbzDr5Fd0zTuBRkgyea3jOyIcbiKmw8U27rUailsTGZmGDz/n6Vnypar+vxKtfcAWbtxRovUPIkZOOQKXNqCQkSc0pOxaRqxDiue/3f5/02OxKwAFNa/wDD/db+vvuP1KxTnP8An/P+faq2E/6/yEMYNVf+vvFYh8kjp/n/AD/nFXdP+kLUnUEVAEig0f8ADf1/XqN+ZIBij9fW35/127hIKF/X9eX5feT/AF/W5BIM5FNN7v5/1cZtWX+rxXXHZPy/Ff5+n6nM+vqXRVf1/Xr00F/XUWn/AF/W35gLT/rcBRS22/r+vQAo/r+nt8gCnf5AL0ouITpQvIYUr3ATFC8r/j+v/AAWn/XcChqXFtJ/umlvs/ut3/pMRS0Af6Of94/0qkCN2mMgm7fWgRMvSgB9IBaACkIKACgAoAQ0xmTrJxav+H8xQDGaNxar+P8AOpBGpU+a03/rp+gwp/1v/wAHT7wFov8ALp+H3/8ADAFCfb8/17dtHv0AMU1/Xb/IBTUr+tt/l/VugBTX9dP8vvsAULT+t/xsgCktPL+vn+ABTWn9f19/3gV7mPehX24o/r+un+YHMScfhXG1bRnSvL+v6/pEcIyWH0o2S/p+pPW48ris3rsUiF488U07f8MVYhMBNWp2Cw9YB3/z/n/9VLmf9f1/XURLtApX/r+vwCy/r+v6/JhXn2qb/eUIEAobbKNCNalf18/+HE7f1/X9dyRhVP8AD+v09AGEUl/X9f1+QCFKF/X9f0ughvSh/wBf1/Woh4FPyGPC96Nnt/XQQ8LS/D5/1/XkHkGMVd16f8H+rLruJlZhhj71a1XmI3LNdsYzXTHZd3/wX/TOd76lyq/r7v67+txBTWu/9fiAUWX9f8FsBaVur/rz23GLT17fP+uwgNMApev9f8EBfpR5MBCKPL+vzAKWu34/07/5gIad+/8AXp/wAM/VOLaTH92gTK+hAfZ+P7xqkCNqmMgm7fWgROvSgB1IBaQBQIKACgAoAQ0xmNrjbbVh6kD9aAHaUALZPp/WpYGnU/j6f1+v5DCi1/6ul662/UAp9LL71/TQBmlstfL+v82AtV/Xl/XoAUt7Nf1+nUBO9G3+S/r/AIcBaa0/pa/l+gCUm/6/pflfzAKen9f8H9NgEPSlr/X9fp8wZzV2pRyOmP8APrXNUXvX72t/X9f5axtaxWiXBJ9ajVIt7j+KyZSFxUprqMaFqvL+v6/rsP0FxgcUvkAgTPX/AD/nmi9gsNfAoH5DYxk5oegzQjHFLz/4b+tf+HEOZeKvv/W239fkIizg1P8AX9f194/63Fxmml0vp/Xz+75k7eYEZp/11+ZVxcUluL+v6/ryFp7f8P8AP+v6uf1/X9MdS/B3/P8A4f8A4AMAarX7u3/Df1f0JZEw+ato/wBbE3N6Fdqgegrq8v67dNjD8yWk/wDg/wBdfyYgp/1/T0+4BRQ9Lvb+vn+QegtHr/Xnv+YBR5/5gLRr/X/DgFG+tv6/LcBKrYAApP8ArX/hxC0l+P8AX9foMb0o/ryAy9YOLV/wH60xBogxar9T/OmgRrUxkEv3gKBE60APqRBTGJQAtIQUAFACGmMwtfP+jf8AAhQDLOmDFvH/ALoqG7f8Nf0/IC/Rr1/r9P0GLRo9/wDMAo9N/v8A6/AAo0e36foAUf1p/X/D9gFo+X9d3/VwDrR/X9W/4AgpvbQYUum+n9f16AFL19f62/y7gJR5ef8AW3X5AZGoxZG8fjUzjp6P+v67FRdn6mUnBPpXLbTX8v66f5Go01m/6/q/9fIpAD/n/P8An+VL+v1/r+mWiUUhjgP0ovrYQYwKq9+n9f1/W4ypK3bvxQl22/r+vT5hsPjAH+f8/wCelDvt/X9f0yS8jD6Ul5/59fW/3a+TK06EpNP0X9ai2K7rT232v/Wnz9LANB7Uv6/IHqPDUW+639f16/MHUf1/X9eZQv0oXbb+rEicVVvu/p/d/XcBRT0/r8vv6/5XJYq8nHvWqSvfX9fl/Vuhm9jdXoK6en+a1+7S3lcxHAU9LWX9X/Fb9/wAMUvJWv3W/wDW/wCYBVee39f13ELSvv8A8DT/AIfzAOlHr/X4JALT9BiUtvUQUen9f5/mMOlHXv8A1/X6gBzRt/X/AAUAUW7f1/XqBj65/wAerfUfzo36feIm0cf6Kn4/zNUgRqUxleT74oEWBSAdQISgYUALSEFABQAhpjMHxAcW4/3h/WkDL1iNsCDp8o/lUNro/wCr2e1tvwAuCjzX9fn/AJsYUvN6ff8A5/5AFO7XT+v69X+QCVXp/X3L/gfkA6l/Ss7/AOQBSt5fh/wOm++4gqtgCkv6/r/hxhT8v+G+e/zEFHp+v/DDEoV+v9f1/noGxWu/9Wahtpaa/wBadn9yHa5zx4Ncv9bf8PY19SEnBrN/1/X9ItD1Iqe67lIcKP6/r+upQ/pR939X/r/hgA0vLb+v6/XYLFKb5cH1rWOv9f1/XUgh+1qh2k1Xs29UhcyW5oJLkVhaxd7+hN5lNaX/AK/Dbf7kBnC/DSbAOPWtnTduZv8AMjmu7Itp83P+f8/0rPb9P6/rUrYmBqeuhQ7NVr37/wBf167B6DwRTt0/p/5f0xbDM1Vv62/roGvT+v6/rsKKa/Lfb+n1W/5mb0/rQvW9vnDnp2FdEYpJdf6/pmbZpitdu39fP/h/IzFxR9/r/Wr/AFAWj0+4QU/z/r1D1CkMKV+v5/1+oBR/XT+vzAKb7/1/X5ALRb+v6t+QBRp/Sv8A5eYhKLdr/wBfh/XcYUrf1+uv+TAxdd4tj9V/nTEy1pXFsn0qkCNHPamMrv8AfFAiyKQDqBBQMKQgoGFAgoAQ0xnPeITiFf8AeH8jSA0rIYhQH+6P5VL3/r/IEWqnXa39fhp/WwxaP7tvvXX16gFVtbX+uv8ASQBT8wFqdv60t+PyvYQlPpr/AF5afkMWi/f+vu6eqAKPX+vyAKFp/Wn9fL7xBVbf1+YBS0/r/g9wGOgYbT0pef5/1/wBmLdWiwgMDnJ71Eoq2hSk+pmNx/n/AOtXK1/V/wDgmqGAkH6VN7al37kivUNdepQ8NUhv/TEJpr+kBBKoYYrSN1/X9f5kmPNAfrXXGS2MJIdbzvHweR/KlKKeq3HGTWjNAXBfIHFYcljTm6CRwZOT17U3LoJP7zRUBRgcVnf7y0x2cVDsMAaoY7NNf1/wP6t18hN/1/XcM1Xl2/r+vmIcvJprS3+X9b/15QbduMIBXatl6GLJ/wCVH9dV+mohaP621/X5CFpr+kMDUv8Ar+v+GATPpRqt/Lpf9b/h94C0n/Xf8Lf11QBVa/1/X6AOAod/6/r9RDadwClft/X9eaGJR/X9bf19wBS6/wDDX/r+kBg68cW+PVh/WmhM0dM4to/90VSBF/NAyB/vj6UxFhaQDqACgBKAFpCCgAoAQ0xnNeIj8iD/AGv6UhG1BxGo9h/Kof8AwP66DRNR12/r9Pwt0GLR/X9dv60AKf6dP6v+ABTXl/X9eXz7gLS126/L/g7/ADAKf3/19wAKW+j/AK/P16ALR5sQmKP66f8AAVwFpv8AH+vMBKH5aefYBDR1/wCD/X6DKt3HujPqOamSuvw/L1+9htuc3IK5GunU2RWZtpxU2KTF38UrF3Y7zCDx0qeVNFegobH+f8/59qLf1/X9fMlsjLVdiG+hAwzVrQkbsFVqSTRLg4qWwLa/lUsrQkDVNvz/AK/yH5Ds0rf1/Xy+8dxoqreX9f18ix4OKVrbf1/X9aAOqlvtp6f16W+/Yhksa5IFaxV316bf8N8u/REO39f19xvqMDHpXQl0/wAzIWn5/wBf18hDqf8AX9dR+oUWt/X9MApeX/B/r5gJij+v6/r7gDtQwGn8qOmv9f15AOV80en9fp5iH0bgNov/AFqv+H/rcYlJa7bf1/TEJTX/AA+pRz3iFv3Kj1b+hoStp/X9eupLNmxGIEH+yP5VSBFvFMZXb/WfhQIsikA6gAoASgBaQBQIKAENMZy/iEn92Pc/0pCN6LhAPYVPX+v8iiWj16f11f5ALT37/j/SAWgQUv8AL+v6sMSjTpr6W9NP6QC0tr2/rysAVX+X9f1f8wFo6f1/TEFF/wCv6f8Aw4ABQv62/wAkAUxiUvTtf+v+GAYwyMUK3T9AOanXaxHoa5pqz/EtaooSAHpWf9f1/XqWiE8f4Uywz/n9aVgE3YosTcM5p/IQYHrQOxOuG4zzS23CxIiAcmlfsKw7co4z1/z6U131/r+v+H3AXI7UaeYxu/HFK39f1t/XQCRWpW/r9RoeOtHzt/X9f1oO49RWn39f6/rsS7l61XLDvjmtorft3X9P+vIhmwK1t/wP6+/yMxcU+39NfeIBQvP+vwQxc0AGaVraf1+Pb0AKS/r8e1gEp27/ANfiIQjNPyGN20v6/rUQ4Z9aPT+vvGLml/XT/gAGafn/AJf8F/18xiUdNL7f1pf+vIRzniE/u0H+1/ShCZv23+qX/dH8qpAiemMrt/rPwoEWRSAWgAoAKAFpAFAgoAQ0xnLa/wAyRD6/zFIR0K9Klq9/66en6/PoMeKPJf193/DegBmj/g/1/wAN9wxafn/X/DsApf15/wBfc+wBTtf+l+f/AA4C0td/w1/r8wCmn2/T/MBaPyAKFpp+W34f12EFO/8AX9IApMYZpvzEMNLYZjahEfvDvxWc1fW239f1/TGtzFkNc1v60NEVyP8AP+TTKuRNxVIGQvIRwvNWlfczb7EJuJB2q+Rdxcz7CfvG700ohqWUgkP3efzpaPQrVFowS/xcVFktiiPyCe9O/kSRGOQH5WNO0eqFr0FVZEPJ3VLt00HqaEZz1/rWO39f1/X3lJlgHNJen9X/AK/AbJRVr/Pv/W/mTsbVpHtXd3NdMFp5v+vw+XoZtlscVb/r+riFo/r+v6YBSt/X/DCA0a/1/Xz/AAGFFv6/4P8AkAUf11/zAKX9ef8AXzYCVYBgUrgFLrf/AIf8v6sAtL+v61/r8AChO/8AX3gJSWvTX5fhr+r2A5nxD/yz+p/pVknSQ8Iv0H8qoZLQMrH/AFlAi0KQDqACgBKAFpAFAgoAaaYzl9bP7+If56ikI6JelS+v+Q0Oo/r+vvGFL+unl6/p5gHTpR5Pr3/rT8gFFPr/AF/X6gFJpbry3/4Ov3gFDX+f9X/y8xC03/X6f1+KAWj8BhR6/p/Wu35AFV6f1/XkAUf1/W4gpgNY1P8AX9bjM2/YBOeO9ZS2b8l+frr839wdTnWIfBXoaw9dzT0K7UytCJyKdgbIMZq7kkgUGlcoXy/SndBbsWY3KH/P+f8APrU37X/AZKZi1AxVWk2idSXgdOn+f8+lR/W39f5/gBA4B/WnqL0BM9MdKGHkWkppfd69v6/RDLUEe5gK2im3r/Xbt/WqJZ0CjHFb/kjMfQITHFLyW/8AXy+6wBRbt/X9fIBaP6/r+vvGIaQBT/r+tGwFxS+7+v600AKX9f8AD/0vUBKP6/r+mGwU9gDFPfb/AIP5f1+IBUv+vz/ph6CYxTv/AF/TA5fX8box9f6U731EzqE4UfSqAfQMrf8ALQ0CLQpCHUDCkAUwCkAUCCgBpplHK6xzdxL9P/QqRJ0gFT5f15eRQ6lr3/T87f10AKV+n+X6/wCeoBTtr/w39W+/77AFG2iVvu6gL0pr+unztuAtLb0+f/D/ANb6AFP+vl8vy+8Badu/9f18xC4qgDpQAmaACkMYTU/13/4b7hGXfDcpB6YNZyf9f8F/iPysc8gCjb6ZrJ6u/wDX9f5lrTQjcen9P8//AK6F/W9/6/yGV2BqguRUwH5qbFeQ8LkUr2AXyzVJ+gh6w59aT07ATbAOnWpv3/IY/nt/n/P9akBAC3Wr0XTYVyXZ/nj/AD+lL5fff+v60DYkXj8Kd0IvWJDEMOn+fStYpt7f8D797/f+ks3RW6/D5EDxTAWkMTFFhCYpW/r+v69RhSsAYofR/wBfd/TAKPO4Bijzf4X/AK/ABKYC1P6f1/WgCdKf9aW/4H+YAKb03/r+vvATGKX9dbf5/PX1GctrpzNED/nkUyDql6CqGOoGVh980CLQpAOoEFIYUCCgYUCCgBpplHK6lzfxj/d/maRJ0oqH17fd/XUpBS03X6f5oYUn2vvv+P4fMQdOtV/XX/gALRp5X7aP9L9wFFNLTy9P63AXFX0swFxQIWgAzQAlACUv63GJS9NgGtR/X/DdfuAzrjnNYtL+vPy8/lfrsBz0gwx7c1lt/X9f12NERn09KYELrTX9fMRXIIqgHUiyVDj2/wA/5/zmoev9f1/XyHcnV/8AP+TU7APBzT+YEmB/n/Pel5f1/X9bCEwDT1T/AK/r+rsRKox0q1br/X9f1qIcevFO3X+kIrTkviNf4utJb+n9f8MDOgs4vLAA6AVsn1/L069vv/BkvyNMCtfT9Cdx4pjFpAFABQAUAIam3YBDT9P1AKTdv+DoAZpen9fdoAUuvn/Xy/MQVTdnqMQ0t9v+B+H+QBRt/X6COU1bm8jB5Hy8f8CqhHWCmMWmMqr98/WgRbFIBaAFpAFAgoGFAgoAaaZRy16udRjPX7vH50iTohxUta39CkLU21W1/wCtf6/EYtG+uvrr9/b8AFp6OwhwFXZIBaoAoAKQgpdd/kAUANpf1sAtN/1/VwENL+v6Qxre1H3X/rzApTAVlJvv+n47fgMxLyPa2fWsn20/r/P+tLFIoOMf5NK/mU0R7gRjvVEgVB4P+f8AP+TSXl/X9f0hDDHzx0pjDGP8/wCf8/jSKvYcDjp/n/P+e1K2oXHKTmhrcLkwbFFhEgz/AJ/z/n9aBkoOPrT0/r+v66EjZJAO/al6X3/r+uw9iOwjM0pcdF/nWltLde39feQ9TqY1xWyT0b/r5d/63EWgKv8AL+v63ELTAdSGFABQAUCCgYUAJiiwhKVv6/q/5DCp/r/hun3AJRv1/r7vy0AKLX/r/P8Ar8gE96On9f56fgM5bUvmvowP9n+dUQdYKYxaBlRPvn60xFsUhDqACkMKYBSAKACgQ00xnK3GH1NR6AfyJpCOjFT5v+v69PMsUD/P+RRv6/1f+r6/cA8LTt3/AK/r1JHYqxi0gCgBOlAhKWvb+u4wo2EIaPx+X/AsAgo/r+vQP6/roLimMWpta4hpo8l/X/DAVXFRJNvS3r+nz/rqP+v62M68TcmR2NYy03+X9L9f+AUtP6ZkMv8An/P+f0rK/wDX9f166mtio64q0S0Ir9v8/wCf8/R2JFDYpjE3f40P/gAKDSAePX/P+fSn6ASq3+f8/wCf5Uv6/r+v8wJM/hS26AIX9P8APpRr5/1/X9dX/X9aFSZ+3eriht/qdBplsY4gT1PPStLJ6vZmH9f8E21XitVp8v6/rf8AAZJTW1hC0ALQAUAFABQAUDCgAoAKBBilYBp/z0pW7DEo3/r/AIICdKX9bfr/AMMuzDyOXvPn1FB6bf6mqJOrFMYtAypH94/WmItikIWgYtIApiCkMKACgQ00yjk2+bVPp/8AE0iTp1U1KX9bFDwMVoIdSGFAgoGFAhtH9f1/wQCk139dv+AMU+1C/H+vIQmKF/W4BRb+rv8A4P3gGKQwo+X4AIaAIWGaX5ff6PutRFOaLcpXFZO+t/6+/wD4PrqyjBIx/wDqH+eK53obIicCkrr+v69B2KjJg8VqndE2IxkVWgWF3UrCHbs0W/q4WJFekwsSBv8APFIB2c0hjHbaP8800rv+tA2EtITPMAenU/5/z/Wtkuhm2dokYUYrW1rW/r+v63IJxVaBsOoAUUAFABQAUABoASgBaACgYUCCgAoAQipt1/r9QG0tv8/6SQzlpfm1NR6Y9fTNUSdZTKCgCpF1P1NMRbFIB1IApgJQAtIAoEFADTTKOWgG7VG74B/kKRJ1IqigpAFABQIKAEoGJijpr/X3gFL8P6/rcQUALS2+8ANP8AEpX/rQYUW6dP66bfMBM0rf1p9/9fcAwihpL+v8/wAw3IpBmpktG/l/Wn/AfkBzs/DkD1/z3rjaaevf+v61NovsV6Rf9f1/WhEy5pgRFaq9hWIyn+f8/wCf0qkwsJsoTCwqpihsmxIKGMfjFT+fyHYgbJNaKyEzotIttq+Yep6fSt0rK5g9WblXv/np/X4fcId0oAXGaYx1AgoAKACgAoAKACgAoAKADFABQAUAIRQM5RQDqn0/+JpEnV0ygNMCrDQItikAtABQAUALSAKACgQ00xnK2QzqMh9N39KQjqqYxM0DFoAKBBSASgYUfl8v6/AQUff/AF+IBR6/8ABaFp6AMJxS9N/6+/8AEZA9yqnA5NZufNpH+vTzKt3Kxu27Y/z+NZKT6fp9y/Nv8UFhVuzn5h+VVzNaL8bL12+7+rBYtI4kGRW0du3o/wCv63JaHMueKp/533/r+tBHN3sRWU56Vy1FbVdf6/rY0i+hVI/z/n8PyrnNv6+4aBnrSHuNKc00xkbLzVJiE20XHb+un9f1cUrg0JgKoxQydhWHFCAjSPewHrx/n/P8q2jq7L+v6/rchu2p2cCeWgX+6AK6fL/gf1/WpgT0f1/X9eowqtgH0WEFAC0AFAwoEFABQMKBBQAUAFABQAUDCgDlIstqje2f/QaRJ1dUUB6UhFSGmBbFIBaACgBaQBQAUAFAhppjOX03m/lP1/mKQjp6ZQUv66/0xAKYC0DCgQhpaDEov/X/AAwhaP6/p/8AAAKAFpO3X+vSwFS4Y9BWUu3Ttdfh/wAHXzKRSEZzUJddv+B38vQdx5i9aOW2336/p+Kt66Cu0KIs1XLfzf8AX9f5E6/MtwptGK0Xlp/Wu/8AXYZMRVelv+B+XoIy7+IEbu4rKorq/wDVvyvp0+4uLszGIz0rif8AX9ef9bmy/r+uxHtI/wA/59P880r/ANf1/X4F/mLmi3kK3QYQKd35lXEx/n/P+e9AeQY/z60X/rsSIF/z/n/Crv8A1/WwxGH+f8/5+lC/r+v6+ZJe0+De+49BW8F1tt+P9fmZS7HSgCtk2/L0/Lza6u33Gew6q8u39f1qIXFHr6/1ogHUxi0CCmAUAFAAaAClsAlMBaACgBaACgBKACgDlbMZ1Jz6Z/oKQjqaooG6UgK0HSmItCkAtAC0AFIQUDCgQUANNMZy2kc3cp75P/oX50hHUUxiGgYoo/rYBaACkISmMMUv6/rSwBS37WAWnt/X/DiCmBBImTWb1s+v9f1/VgIwuKh6aP8ARde/62vbTsOwuKpr07bL+vx/yABSSX/Afl+dhD04NWn0/wCB+H/B+8diU1V+t/vf6AQyIHGD0pWAwZovKbb+P4VxVI8r8mbRd9CsVrD5mg0g0DDHr/Oj0/IY0r/n6/jRcXmJsPX/AD/n096d+39f8P8AkMXGKW4hwTPTv/n0q1d6L/hxXsbtrD5S+5ruVkuVffe36M5m7u5e6f5NWn/S/X9Li2HClv6f1rf+vICGSbZ26UndO66/1pr/AF+BSRF9pJou9+n3u/8AwPUWgv2lumKSb/rRASCc5xT1S1v/AF5/8P8AoBMsgNWIeDmmAtAhKACgA+lAC0AFABmgAoAQ0AcrpvOoSn/e/nSEdXVFDX4B+lICvB0piLQpAOoAKAEoAWkIKACgBjdKYzmNE/18x7Z/9mNIDp6fqAlLvb+vy/MYoo9BC0wCkMQ0xCUv6/rf9AFpX7AFMYtAhhGaX9aDI8YqdPP+unb8NuwPuAFHVX36f07f8AQg4NLX07f1f+r7DEPtVPT+thDlkycGlzaeXe/9fnsOxJVb/f8A10/ERnXsJPzjt1+lY1I3Wi1Xq/X+v8y4uzMll7muPXZf1udPn/XkR0v6/UPRhio9RgeKLf1uA3Bp/h/X+Y2BFNeRJesYtzbj0X+dddONk5bdv+G/rr6mM3d2Ndea35um7/r7v6sZk9P8f6/rqIWn0v8Adf8A4YCqy5NHSz1u/wCrX/r1HuIIwKW/p/X9bfiTruL5QFUl/Wv3j1JhGPSl/X9eX3/oH9dR4QU/uf8AX3iFC4p36APpAJTGFAgoAKACgBKYC0AIaAOX0fm7lP8Avf8AoVSI6qqKGv8AdP0pAQQ9KYiyKQC0ALQAlAC0gCgQUAMboaYzmNC5llPqevPqaQjp6YxKX9f0kAA0xjqBCUgCmAYoAKn+v62AKfn/AF+AC0XtqA00rf11/VhsNxU2WlrfP+u4xuOaauv6/pf1pYBCKPTTs76+ur2ADSt/wf6/FIBpGam3l/w/z6/d690Ir7TtOPY1V9t38+vqP8yYjI55pvt/X9fJgY91BsOR0NclSHK+Y2i+hRIrB/0/xNENOKkr0E6Uf1/X9If9f1/X+YYpX/rT+v6+4FC5OBWkU29NyHpqzchj8qMDueTXfZqyXp/X9I5t9SdRQmtk9nt/Wt/68wsSir/4Pm/8/T8hCE7RT8+v5gR9ajbRb9v6vbQPIUelV5v9Pz/zAXFO/wDXcNiQUW/rb/MQ7FH9f1/wwBQAtMBBQMKQC9KYhKACgBKYBSGB6elHmI5fRObmU/X9WpCOqqiiOThT9KAIoelAiyKQC0AFABQAtIQUAFAEUpwpPsaYznPD3IkPfIpCOlplCGluIBQMdTASp20/r/P8wCn/AF5gFG4gJpAFFrf8D/gajAiq2EGKl/1/XX8AGUbeX3XGIRSWv9afn69QFo1QvUaKH5/8M/PT/gDYHrRqv6f/AAPlYBjoCKN+n4/5/wCdr9OoDY5CvytUrS9tV6P/AIP9b2H5kskYkGDzVNJq39agtDBlXy22ntXBKPK7f1/T/ry3TvuQmsdtP6/r/gFjcVQwFHmGpfs4gx3Ht0rqpx+1qv6/r9fPGUuhpjrXTbpuvv8ATS33dPUyH0KyV/8Agf16fkIa0mOKV76L56fgv89rDsM68mmk1/w3fX1+/b8kySmrbB6i0en9fn/wwC07df8Ag/kBIKLf1/X/AA4C0wCgBaQgpgJSGLR8hCUwCjbcAoDYKAGSHAJ9jTA5rw+MvKfp/M1IjqaZRHL9w0CI4hxTAsikAUALQAlAC0gCgQUAV7g4jY/7J/lTGYHh0ARuf9r+lL0A6SgBKLeYxBRv2EOoGBo9RBR/X9WQBQAGkxhR/Xl/X9MQtP8ArsMQ0CEo+QxtTrb+l+gBiml26f1/WgCGl933AJS72/r566fgFhRR6ff/AEtQIXWk1v8A1+r+dvzD+v6/qw9Gxwfzova1vu7f113D+v67EF3D5i5HUVM482i7vfvZ/wBehSfLqYnSuJx1s9P67HQnfX+v6/4YTvU2aXn/AF5ATQRGU4HTua2jDmeq0/pEN2RtRoEGPSuxJWSS/r5mPmSZC9aenT/g+gEbNngUr32frbf5/wBIW2i/r/IQLTtpr/X6/K1/UZKBj6U1bpv/AFd7b3/yF6i4o6ee39af5agg/wA9qPl99/8AL9Ri4/Cns7/1+P8AwBfkPpf1/X6AKRT/AK6gFAhaPMApgJigBaQCUAFMAp+QXCkBFLwh+hoA57w7/wAtD7j+tAjp6CiKb7hoENi6UwLApALQAUAFIAoEFABQBUvTiF/90/ypjMXw8P3Lf739BS2BHQigYlACil/X9L+mAtUIM0v6/q2gwpf1/X9WAKYCUfP+vv8A+GELR/X9f8EYtH9biEoAQ0AJStb+v6/MewCjS/8Aw39f8AANFrf1/wAABppbbf18v+AkAgNGnTT5C8xxGRRvr6/15fJfgMjxjiiy3/4P9fkA7pS+/Xzf9fK/+QGReQbG3Dof51hUV9f8tfz+ZpF9CCG3Mp9vWlGH2paL5DcmtjZSMRDA4xW9/X5L+v6+RkBc9qf36+v9W9P+CPzE2k9aaiv6/rX10BseEHWqStp/X6eu+giTFC0/r+vy+YBiiwBij+kMUUWX9WEHQ0Wv/X/B+7QBwo2/r+v66gLQIUUegwo2EFACU/IBaAEoAKAEz+VP1/IBaQENx/q2P+yf5UAYXh0fu3/3h/KgR0lBRDP9ygQRdKYicUhi0CCkAUAFABQAGgCjqDbbeQ+in09PemMytAXEBPqx/pSBG/T/AK/q4CZqbf1pp9w9hQcjimgFNH9f1/wQCh/1/SEhKLdwCj+u/wCgxaPL+vuEAoAM0dwCgANH4/1/XyASl6fh/wAPr8gE9qf3/j/X9agFD/r+v0/EP66DaTfn/X4f1p1ATpU3t/X9foMdVfP+v6+QbCGj0+e39P8ADzAXANLyt/XqBDJEJBtPShq/T77/ANfcFxyRhBhaqy08v68v60AcyUW7dPv/ABAAuKFp/X9fiA7FF/6/q4gpv5DDrQgCp8v6/T9fmICKH/X9dfmhi0L+v6/RiCn5L+vw/MYtCAU0wCkAU2IKX9bgFH5/1tcApgFABRoAdKACgCvdMEhcnsp/lR5gY/h0fuWPq39KAOhoGQ3H3aBBF0pgTikAtABSEFABQAUAFAGdqpxayf7ppjKOhf8AHsPqaQI26P6/q35jGtwKTv8A1/X+X6CEQmj+l5fh+mgySqEHSkAlH9f1/SAKPN/1/XoAUar+v+HAWjQBaP6/rqAlAAaAEoGJ0o0er/r7xBRf+tRiUef9fqIaetT87dvz2/rqPccKS7dOnn+P+X3C/rqFVb11/r1/rcYDil5f1/SAWqt/VkIXHFP+v66ABFGwCUttv8gCl/X9bjDNPUAp+a/r8GIKPUP66gaX9fL+v6QwHFH9f1u/+HEKKACj+v6/4YY6joISj+t7foAUeX9f5jDNP+v6/wCCIKQAKf8AX9f1qAtHoAUANpen6/0w9Rc0dAKOoHbbyH/ZP8qYFDw8MQE+rH+QoBG9QMguPu/jQIWPpTAnFIBaACkAUAFAgoADQMytYOLV/p/WmBX0Uf6Mv1P86QI2RQvT+vkMa1Jv+rAC0Lb/AIH9IB/Smv62AKP6/rUBMUev9f15ALR/X9f194hKGA6gApgFIYlH9f1sAnei3V7/ANf1oL+v61EpgFJdv6/UBP8AP+elH9f1/V/INhDUtdf6/r5AhAaPX9Px1/yKFpttX7af1v8Ap94hV5pIQ/FU+gCUwCkAU/6/r0GFT6/1/XcBMUXSelvy/r5gFO9v63AKP673/X8xCGgYopgKBRfW3+YhaWn9fiMKBBQAtHn/AF+gCUf1oMOtMQUeX6ALQAlAAaXn/X5gJ0p7/wBXAoaoQLaTP92kBW0Ef6MPqaYI2qBkFx0H1oEOj6UxE1IYUALQAUgCgQUABoGZGtf8er/h/MUwItH4tkHrn+ZpAjXGKX6jGOe1J/139e3z0EOXpTV1v/X6fMY+n/X9dAEpfP8Ar7wCn6f1+IgofoAtFv60/wCAACj+v6sMWj+v67iCgBKAEIpLv/X6DEqvP/MApPy/r7xBSf4fL9RjaXr/AF8n/kH9f1uN7079v6/T+t0AtTe+3/Dff/WoaDlqv6/p/wDBYD6r+uogpABpgNoAKS8n/X9dhiVXkL+v61QE1Nv6/r/gDFo2/r8tWIMU7/1r/kMOaNAX9f1qKKX9f1/wwvUdQwCj+uwBR/XQBKP6/r/hwCgYUAFAAKYgoAKAE70B5mZq/Fq+PTH60gGaGP8ARV+p/nTBGxQBXuOg+tAD46YEwpALQAlABQAtIQUABoGYuunFq3uR/OmAmmjbbx/SkBqqeKW/kMhJJNKy6+a6v+v6vcCZeKq39f0v67B6j6PMQlJ/1/X+X3MAxVAFT8v6/H8bAAp+n+YDqP66gFABR6AJRr/T/wCAAEUf1/VwEoQCUMAxR/X9aANNT1/pf8P94DT/AJ//AFUO6ev/AAPv3+5PXsMKejWq/r8fxAkU07f1/wAMIdR/X9f8MMKBBR/w/wDXQYgp+uwBS/r+raemoBT2EN/z/nFIYtH9Jfp/SAM/54pdP0/rcAp+f9f16gOFD0AKQgzimAUALS/roAU/IBKP6X9dP67jAUeYBR5CFNMBKAEpbf5aAZWtNi1f8B+ZFADtFXFqnvk/rTA1qAK1x0H1oAkTpTAlFIBaACgBKAFpCCgANAzC184tvqwpgWbBf9GT12ipa7/19+n3gi0DxU31v5eev9eT8+g9v+AMHWn+ny/H+uoaXJxxVaL1+QbDqBCCmAv0pff/AF+IBR8gAUv6/rr+QDqYBQAntTsAUgCgBKP67/cMKP6/r/hgEo8l/X6CQlJr8P6/pdQG1Nrr9P8Ah9vkMbTX3fL/ACdvUCVelHf/AD/4dCHVQBRvr/l/wRhRqAlPy/r+vUQUv6/r/hgCmMQjNJaf1/l/TEFPpb+vy/4ICUvIYoo/r+uq+dhC0/66/wBfoAtIYUvz/r5iCnr/AF/VvyGFLb+n+Qgp/wBf1cAoGFL+v6v/AF2AKf8AXUQUxAKYxKQGLrp/0Y/Vf50gLekqFtUx6ZpgaVAFa47fWgCRKYEtIBaACkIKYwpCCgBDQM5/xB/qAPVh/I02BoWfywIP9kfyqf6uCJPpU+qt21f+a/L0GAPPPeiye26/D87ff8hFgVe2n9fgMWnsACkwDOKNxCVLVtf6/Nf1sCFBot0/4H3f59Ri1W2ggo1AKNBhQIKX9b/1/mAnSi39bf187sBKf9f1p+QBSf8AXX9UMDSYDKL/ANf1/n9wDRQmnfb8P6/rcCVaa9Py/r+uoDqf9f1pp8wEFO9xAaP60GKKPUAoAKF5AJjNABS3QBQ/P+vv/wAgEph/X9ah0o/P+vmAdaNhC59an5ffr+dhi07aW/r/ACEFH9dRhQu4CHij+v6/4YAoe39f1/WghelHkAUwEzRt6ABo9NwMLX2xb49WFLYTNLTRi2jH+yKYy9QBWn6imBKlAiSkMWkIKBhQIKACgBDQM5zxEcRIPVv6GhgaUPyxIvoo/lU9en9f11t6jRKDmlqn/X+X6AA607q1/wAdL/15CLA6U1t/w3/DAKKe39fp+ewwPFF/6/rUBucUNiAGlr1/r7vzsMKV7fj/AF0/rYB9Py/D+v8AgAFMQCnsMKn8/wCvnb7wCq/roAlLYAoEhKf9f1/SHcQ1Pz/rz/r5iGUX/pf8PoFxMY6cUut9/wA9badh+hKvSqvpdi9BwpjEpen+YAaX9f0hCCqGOo2EFABQMKBCYoGL7UAFLcXmJQhgKLdf8/6/MQYpen9f12GLRt6f16iCn/X9f8MMQ0AJmj+uwhaP1D1DNP8Ar+mAlLz/AK/IQtH9f0tP1GYPiH/UL/vD+RoEatgMW8Y/2R/KmMuUAVp+ooAlSmBJSAWkIKACgAoAKAENAzmfEZ+WMf7R/lQxGsBiNcdgP84qXv8A1/wBiqxNSkr3vp5W/r8xodQ9H5X/AK9P6XqE61e+39fkIdR5L+v8/vAZnNPb9f62/ruUJRfv+Ihc0egDhSt+X9fd8t9hDxT9P6/D9RhRoIBTASgYtT/X9XASn/X9agJT8gCk7f13EJR8vT+tvxDcYaVlv+P9f8EYhpW0/r+v62Akj6Vd/wCtAY8UheoUxiGl5ANoejv9/wDWghRTGOoAKQgpgLS/MBKYwxQIMVP9b/5/8AYmabX9f8P+gCUC9B1GwBR5jA0n5/19+ggpgN+lN+YBmp9f8hhVCHA0tgOc8RH92g/2v6UCN20/1Kf7o/lTGWKAKs33hTAnWgB9IBaQgoAKACgAoAQ0xnK+Ij80Q+v9P84pMRuxjKge1Tpdp7/mUiNQVyDxUaJ31f6ffb/g9gH/AM6v8vT7tf68vMsTKaW65d/u/r/PzFsPzV6b9RiGk7f0v8tRbDTR6f8AB9X/AMN8x/1/X/BFUYo+L+n/AJf8DsIUGi1l/wAP/wAAB9G2i/r8Ri0/6/rsAUen9fIQUf18/wCvIApf1/W39dBiGn56gFF/6/r/ADQg/wA9qYCUnbrYP6/rQjIpPTX+vXbf5j9BKXm/6+X/AAX6APWq/H8Pz/MP6/r/AIA8Glv0/r8PkwCjT+rABp7/ANfgAlH5AJT/AK/r/hmA8Uv6/rb1EFMAoAWgAoGJQAtAhppen6/1+AwpPv8A1/XTa/oIKe39f8B/5ALR6jCgQlH9eX5jEofb+r/P+uoCUnZagOpgNzSen9f1/XcRzniE8IPc8UJ31Qjo4BhFHoB/KqGS0AVZvvimBOtAD6QC0gCgQUDCgQUAIaYzlNeGZ4h/nqKTEbwGMVPXXb+tf6+4Yj9QaT8n1su3z7/P/gj1A0vXX5WC5IDVXuv60/NX/rQX9bC0ea6+n9bfh1QBmjy2/rtpbT+uoxRzTtbr/Xz/ADtt1AeBTX9f8Nr+AhcUvTp/XVafINhRT9P1/LoMDTELS/r+tBhR/XUQlACmkvL+v69BiYxT9dxCU+wBR/XX/gANIo9fwAZ0rO3e34bf16gOGaNNVv22v+K3+Q/66i5qnp5P+t9AHA5o2/r/AIOgATRo/MQlMAo2Bi0AKKf9f1ohiigQUAFABSGLQITFMBKm3T+vwsAUd3/X5jFp/wBf13AKPz/r+uohtP0AWlt/X/AC42l/W39ffcYtNP8Ar+tfwEMai+tv6/4b7vQRzOunLRr7n+lK9xs6qMYUfQVQDqAK0v3x9KYE60CH0gFpAFABTASkMWgQhpjOU1ts3UK+mP1Yf4Um0tXohHQEisHUpv7cf/Al/n27FJDDyOKalFvl5l5JO7tvor32+/e4xgbNSmndX9O/zF/X9dSQGtl6W/r+txf1/X/DD81KdtbP7v8AIL9Aqv6/r/O79Bj1NGi8v6/r9BD81V/6/wCHGFHkAo60f11/r9O4C0v6/wCGEJ9Kf9f1/SGLR/W7AKP6/rz/AKuISj1AM0f1/WlhhR6iDFH9f1cBDR6af1/X/BAjIqW/61/r8fkx3AUL108/60/q9hBntR5r9F+lxgPahaetu/8AX3h+AE0/67/5/wCQvUUUt72fX+v6egbDqa3/AOD/AF+Qxe3FUA6lvsAUff8A1/XqIKP66gFAwoEFCAM4poAoAKnf+vu6agJxTVxi0/6/rQQhqf6/rYYgzVWF6hSa6/ov+HGBp+oFKeYLx3rKT0stP689v69AW2xz2rZMkXqf8RSju15LTte4jsF6CtgHUAVZPvj6UAWFoEPoGFIQUDCgQUAFACGmMyb/AEpL1g7MVIGOMUAUD4dXtIw/D/69IBn/AAj7jpMw/A//ABVK2lugXd79R39hTDpO35H/AOKqPZw/lj9yHd92J/Y10Ok7f+Pf/FUvZQ/kj9y/yFdjf7Kvh0mz9S3/ANej2VP+SP8A4Cv8guw/s/Ul6Sj8z/8AE0vYw/lXXbTdWe39ddx3f9JB9l1Mfxqfy/8Aiafs13l/4HL/ADC/p9yDy9VXuD/3z/gKXs495f8Agc//AJIV/wCrC7tVX+EH/vn/ABodJd5f+Bz/APkrBcX7Rqa/8s1P5f0aj2bStzy08o/rEd/Jfj/mBvtRX/liPyP/AMVT5Jfzy+6H/wAgK/l+f+Yh1K+XrAf++W/+vQ4Se05LTtH/AOR/X7gv5CjV7ofegb8mH/stSoTT0nddnFfo4/13Kuuz+/8A4A065MOsB/M//E1Vp/zR/wDAX/8AJiuvP7/+AH/CQEdYiPx/+xpWqfzR/wDAH/8AJhf+v6Q8eIk7o35imlLq4v0jbTr1lr17aW63SHf8JFD3V/0/xovUXSP/AIG//kB6d393/BHjxBB/df8AIf40r1P5Y/8AgT/+QDT+l/wRw123PXcPwp3qW2jf/E//AJD9Pmxaf1/w47+2rU/xY+qt/hU88+sHe/Rxa9dXHftYdvNDhrFrj7/P0P8AhRzS/kl/5J/8kH9dRRqlv2cfrVqWl5Jr1Sb/APJeb5dRrXb80hy39uf+Wi/mB/Op59L+95e7J7ei0T+XZq6aF1/4P9f8El+2wHpIv/fQqfaJatS/8Bqf/I2/D9R2b0RItzEejKfxFaJqWuu9tYtefVL79r+YttCUSL2I/Op9rDrKP/gS/wA0VZ9n9w/cPWj2tP8Anh/4Ev8APUmz/pEgYUe1p9Jx/wDAk/1CwZq1NSdk1tfR302vs+ugCE1dxCmj1/QLi0v6/rcAzTGFF/6/4bQQlL8PMYZpgLml/X/DiEo9P6/AYUev6iDNVuAhpXf9dfTVfkAh9DT9P6+5MP6/r/gGayBpCfTgVm733trt/Xr/AJh/w5jak265iX6fqw/wqIbv5fq/1/rYGdcK3AdQBVf/AFn4UwLC0hD6QwoEFAwoEFABQAUDExTAMUAGKQBimAYoAMUAGKADFIAxTAMUAGKADFABikAYpgJtoANooAQxqew/KgBhgjPVQfwFAEZs4W6xof8AgI/wpAMOn25/5Zp/3yP8KYDf7Ntv+eaf98igBh0q1P8AyzWkBGdFtD/B+rf40CGnQrT+4R/wJv8AGgBh0C1PQMPox/rQBEfDtv2Lj8R/hQMZ/wAI5D2Z/wBP8KAGnw6naRh+AoAb/YDj7szD8D/8VScU90n/AMEE2tg/sOcdLhv1/wDiqj2cHvGP3Id33f3i/wBkXY6XDfm3+NL2VP8Akj/4Cv8AIV33Y3+zL8dJvzLf4Gl7Gn/JH/wFf5BdgLHUl6SqfxP9Vp+yhtypa3001W21tr6Du1/Vxfs+qL/y0U/l/VaPZrvL/wADn/8AJBd+X3L/ACEK6qO4P/fP/wBal7KPeX/gc/8A5IV/6sg36qP4Qf8Avn/4qpdFPZzWlvjl+rY07dEH2jU16xg/l/RqvkfSTXoo/rFiv5fmH27UF6w/kCf60uSX88vuh/8AIBf+tRf7UvR1gP4Bv8DRySW0381G3/kqi/xQXF/te5727/8Aj3/xNO0+kor/ALdf4vnV/Ud15/f/AMADrUo6wP8Ar/8AE0rVP5o/+AP/AOTFp/T/AOAN/t4j70TD/P0FFqn80f8AwB//ACYX/r+kH/CQR90Yfl/jT9/yfzt28pPXW+1ttdx6f0iJtbiJztYZ9h/jWbVR9I/f+PwoNClJcLeXcTRggAgcgeue1aU1JXc7Xb6Nvp5ifZHcCtgFoAqt/rPwoAsigB1IQUAFABTGFIQUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAYoGGKADFABigBMUAGKADFABigAxQAYoATaKAE2D0FADTAh6qPyFADRbRKchFBHfAoAmpgFAFbHzmmBZFIBaQBQIKACgYUCCgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgBNoBzTAWkMKBBQAUAFAwoEFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQMKBBQAUAf//Z	8630153458	Male	6 Years	Faculty	t	2026-08-15 15:02:58.516888+00	2026-08-15 15:02:58.516888+00
-e273fe73-bc2d-46a5-82fa-02faf8f9aae6	f72cce21-f5e0-4eaf-b2a1-2d1a9738a56a	EMP1001	Dr. Sanjay Singh	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-16 07:57:15.250958+00	2026-08-16 07:57:15.250958+00
-d3d9682a-dc29-4ede-a739-e9b3ddba20fa	8780cb5f-f365-4e6c-8aa0-50249f918bf1	EMP1002	Dr. Aparna Tyagi	078d6a7c-ceac-4b9f-9eb1-951337750e4a	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-16 07:57:15.250958+00	2026-08-16 07:57:15.250958+00
-879207b0-eaf4-43b0-b664-b6a854bbfe81	cb1d71b3-68ff-4a78-a882-1e50e63afc14	202516224	Shorab Ahmad	4e88bbb6-90ee-4400-8734-e4e76e8e887a	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	Assistant Professor	\N	\N	\N	data:image/jpeg;base64,/9j/4AAQSkZJRgABAAEBLAEsAAD//gAfTEVBRCBUZWNobm9sb2dpZXMgSW5jLiBWMS4wMQD/2wCEABQUFCAWIDIeHjIyJCQkMjYwMDAwNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYBFiAgKB4oMB4eMDYwKDA2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2Nv/EAaIAAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKCwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoLEAACAQMDAgQDBQUEBAAAAX0BAgMABBEFEiExQQYTUWEHInEUMoGRoQgjQrHBFVLR8CQzYnKCCQoWFxgZGiUmJygpKjQ1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4eLj5OXm5+jp6vHy8/T19vf4+foRAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/AABEIAlcBugMBEQACEQEDEQH/2gAMAwEAAhEDEQA/AOyoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKBhQIKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKAGsQBk0wHUgCgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKBhQIKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoGFAgoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgYUCCgAoGFAgoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAQ57daAFoAKACgAoAKACgAoAKACgAoAKACgAoAKBhQAUCCgAoAKBhQIKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoGFAgoGFAgoAKACgAoAKACgAoGFAgoAKACgYUwCkAUCCgBCcUDIGuY16kUrgJ9rj9RTAX7TH6igBRcJ6igB3nL60XAXzV9aADzF9aAF3ilcBdwouAu4UwDIoAM0CFoAKACgAoAKACgAoAKACgAoAKACgAoGFAgoAKBhQIKYwpCCgAoAKACgYUAFAgoGFAgoAKACgAoAKACgAoGFAgoGFABQAUAFAgoAKACgBCM8UAVGs4m6rTGMOnQntQAw6ZD6H8zSsAn9lxdsj8TRYBp0tOzMPxosA3+zB2ZvzosAv9nHs7UWAb/Z8g6SGnYQfYZh0k/T/69IYgtLgfxj8qLAL9nuR0cfrRYQeVdDutKwxcXY/u0xC7rsdh+dFgFEtyP4QfxoAXz7gfwfqKAF+1TDrGaAF+2SDqjUa9Nw9Q+3N3RvyotJb/AJhp0F+3jurfkaAF/tBO4YfgaAF/tCP3/I0a9Exh/aEfrRr1TXqA4X8XrQIcL2I/xCgBftcf94UDHfaY/UUAL9oT1FAC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Y3+zL8dJvzLf4Gl7Gn/JH/wFf5BdgLHUl6SqfxP9Vp+yhtypa3001W21tr6Du1/Vxfs+qL/y0U/l/VaPZrvL/wADn/8AJBd+X3L/ACEK6qO4P/fP/wBal7KPeX/gc/8A5IV/6sg36qP4Qf8Avn/4qpdFPZzWlvjl+rY07dEH2jU16xg/l/RqvkfSTXoo/rFiv5fmH27UF6w/kCf60uSX88vuh/8AIBf+tRf7UvR1gP4Bv8DRySW0381G3/kqi/xQXF/te5727/8Aj3/xNO0+kor/ALdf4vnV/Ud15/f/AMADrUo6wP8Ar/8AE0rVP5o/+AP/AOTFp/T/AOAN/t4j70TD/P0FFqn80f8AwB//ACYX/r+kH/CQR90Yfl/jT9/yfzt28pPXW+1ttdx6f0iJtbiJztYZ9h/jWbVR9I/f+PwoNClJcLeXcTRggAgcgeue1aU1JXc7Xb6Nvp5ifZHcCtgFoAqt/rPwoAsigB1IQUAFABTGFIQUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAYoGGKADFABigBMUAGKADFABigAxQAYoATaKAE2D0FADTAh6qPyFADRbRKchFBHfAoAmpgFAFbHzmmBZFIBaQBQIKACgYUCCgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgBNoBzTAWkMKBBQAUAFAwoEFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQMKBBQAUAf//Z	8630153458	Male	6 Years	Faculty	t	2026-08-15 15:02:58.516888+00	2026-08-15 15:02:58.516888+00
+879207b0-eaf4-43b0-b664-b6a854bbfe81	cb1d71b3-68ff-4a78-a882-1e50e63afc14	202516224	Shorab Ahmad	f4777969-543f-4648-b229-0621ad3d62f7	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	Assistant Professor	\N	\N	\N	data:image/jpeg;base64,/9j/4AAQSkZJRgABAAEBLAEsAAD//gAfTEVBRCBUZWNobm9sb2dpZXMgSW5jLiBWMS4wMQD/2wCEABQUFCAWIDIeHjIyJCQkMjYwMDAwNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYBFiAgKB4oMB4eMDYwKDA2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2Nv/EAaIAAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKCwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoLEAACAQMDAgQDBQUEBAAAAX0BAgMABBEFEiExQQYTUWEHInEUMoGRoQgjQrHBFVLR8CQzYnKCCQoWFxgZGiUmJygpKjQ1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4eLj5OXm5+jp6vHy8/T19vf4+foRAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/AABEIAlcBugMBEQACEQEDEQH/2gAMAwEAAhEDEQA/AOyoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKBhQIKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKAGsQBk0wHUgCgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKBhQIKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoGFAgoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgYUCCgAoGFAgoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAQ57daAFoAKACgAoAKACgAoAKACgAoAKACgAoAKBhQAUCCgAoAKBhQIKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoGFAgoGFAgoAKACgAoAKACgAoGFAgoAKACgYUwCkAUCCgBCcUDIGuY16kUrgJ9rj9RTAX7TH6igBRcJ6igB3nL60XAXzV9aADzF9aAF3ilcBdwouAu4UwDIoAM0CFoAKACgAoAKACgAoAKACgAoAKACgAoGFAgoAKBhQIKYwpCCgAoAKACgYUAFAgoGFAgoAKACgAoAKACgAoGFAgoGFABQAUAFAgoAKACgBCM8UAVGs4m6rTGMOnQntQAw6ZD6H8zSsAn9lxdsj8TRYBp0tOzMPxosA3+zB2ZvzosAv9nHs7UWAb/Z8g6SGnYQfYZh0k/T/69IYgtLgfxj8qLAL9nuR0cfrRYQeVdDutKwxcXY/u0xC7rsdh+dFgFEtyP4QfxoAXz7gfwfqKAF+1TDrGaAF+2SDqjUa9Nw9Q+3N3RvyotJb/AJhp0F+3jurfkaAF/tBO4YfgaAF/tCP3/I0a9Exh/aEfrRr1TXqA4X8XrQIcL2I/xCgBftcf94UDHfaY/UUAL9oT1FAC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Y3+zL8dJvzLf4Gl7Gn/JH/wFf5BdgLHUl6SqfxP9Vp+yhtypa3001W21tr6Du1/Vxfs+qL/y0U/l/VaPZrvL/wADn/8AJBd+X3L/ACEK6qO4P/fP/wBal7KPeX/gc/8A5IV/6sg36qP4Qf8Avn/4qpdFPZzWlvjl+rY07dEH2jU16xg/l/RqvkfSTXoo/rFiv5fmH27UF6w/kCf60uSX88vuh/8AIBf+tRf7UvR1gP4Bv8DRySW0381G3/kqi/xQXF/te5727/8Aj3/xNO0+kor/ALdf4vnV/Ud15/f/AMADrUo6wP8Ar/8AE0rVP5o/+AP/AOTFp/T/AOAN/t4j70TD/P0FFqn80f8AwB//ACYX/r+kH/CQR90Yfl/jT9/yfzt28pPXW+1ttdx6f0iJtbiJztYZ9h/jWbVR9I/f+PwoNClJcLeXcTRggAgcgeue1aU1JXc7Xb6Nvp5ifZHcCtgFoAqt/rPwoAsigB1IQUAFABTGFIQUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAYoGGKADFABigBMUAGKADFABigAxQAYoATaKAE2D0FADTAh6qPyFADRbRKchFBHfAoAmpgFAFbHzmmBZFIBaQBQIKACgYUCCgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgAoAKACgBNoBzTAWkMKBBQAUAFAwoEFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQAUAFABQMKBBQAUAf//Z	8630153458	Male	6 Years Exp.	Faculty	t	2026-08-15 15:02:58.516888+00	2026-08-15 15:02:58.516888+00
 \.
 
 
@@ -27582,6 +27354,7 @@ d3d9682a-dc29-4ede-a739-e9b3ddba20fa	8780cb5f-f365-4e6c-8aa0-50249f918bf1	EMP100
 --
 
 COPY "tenant_srms-cet-bareilly".faculty_punch_logs (id, faculty_id, punch_time, punch_type, device_id, created_at) FROM stdin;
+6f701cce-024d-4c0d-927d-9df5e2ff0266	879207b0-eaf4-43b0-b664-b6a854bbfe81	2026-08-16 02:47:00+00	IN	SRMS-BIOMETRIC-01	2026-08-16 11:16:29.024493+00
 \.
 
 
@@ -27658,6 +27431,581 @@ dd964dc7-a327-4362-bc28-4d2cb02b7613	SL	Sick Leave	10
 1cf09767-e99f-4d7b-be50-f251d99e0c3f	EL	Earned Leave	30
 a4a07a83-eb73-4a92-990a-8f8506e9b23b	ML	Maternity Leave	180
 a2cddb87-1930-499e-aaff-df0a0b88d2a6	COL	Compensatory Off Leave	0
+be1ea940-0f36-40ba-9b04-cab87355b768	CL	Casual Leave	12
+a6cfeb27-5dd7-428c-ad81-a12efdc268c9	SL	Sick Leave	10
+f3c54630-acba-480f-aa61-5553a47df6c0	EL	Earned Leave	30
+3a2100d6-bd78-4dfe-a619-11a14ad9ec97	ML	Maternity Leave	180
+023f91b2-83a8-4043-89c3-7c91f9bd9739	COL	Compensatory Off Leave	0
+47ab6bdc-5ebf-4fbb-98ec-df16d243647b	CL	Casual Leave	12
+e944beb9-1049-4175-9030-0b8d61837616	SL	Sick Leave	10
+8f7fa919-7449-493d-aa04-3552d28311ef	EL	Earned Leave	30
+d8ad4bc1-2054-4641-8d6c-6107b79da589	ML	Maternity Leave	180
+2c8a1af3-16ea-4908-95e3-359de1545269	COL	Compensatory Off Leave	0
+5207993c-50ae-4f6b-a5d0-e52089371e7a	CL	Casual Leave	12
+b258080a-0272-4296-a9c3-e669a2f9b8e3	SL	Sick Leave	10
+44681d31-f330-4c15-b5df-31e575845ec8	EL	Earned Leave	30
+d2173c4c-9ece-412e-96f7-2f1e30f8a461	ML	Maternity Leave	180
+fd375898-1aca-47c8-94e2-5f5c88a7127f	COL	Compensatory Off Leave	0
+65a1d461-9b09-4143-9b7e-421d7b82dcea	CL	Casual Leave	12
+df10a3de-a164-4217-a191-8e280f05503f	SL	Sick Leave	10
+293f7ede-881b-442c-8bcd-c70c382db2e1	EL	Earned Leave	30
+ff887141-d176-4d0b-8eed-811ea3af12c3	ML	Maternity Leave	180
+263c2506-818e-4524-8178-118b3c8a67e6	COL	Compensatory Off Leave	0
+60f257b7-2f14-4e7d-9355-254e87391ba9	CL	Casual Leave	12
+ddf950a4-8df7-4935-9508-7ae46f919d1a	SL	Sick Leave	10
+7aad0044-e367-4169-834e-a5800753b303	EL	Earned Leave	30
+bf21902e-418e-4cc6-8db7-29090f56ddf1	ML	Maternity Leave	180
+d0780f3d-d3e4-49f7-9696-a90a1e1a2931	COL	Compensatory Off Leave	0
+95064172-a6af-4c23-9302-910c7a62c7ae	CL	Casual Leave	12
+58cc236a-33bf-469f-9f02-5225bfa2e797	SL	Sick Leave	10
+c7c9cbbd-bae8-4e47-b877-0870f7d2ad4f	EL	Earned Leave	30
+14e850b2-5050-40cb-8547-d0c9683179a3	ML	Maternity Leave	180
+635f9fac-b7d9-488f-843a-0a195c460d15	COL	Compensatory Off Leave	0
+73ae7cbf-3bc8-4cb4-ba4f-c61ac147b548	CL	Casual Leave	12
+2d829e5d-d6ec-4a1c-a479-9cb71563ff05	SL	Sick Leave	10
+01cf85a7-8284-46d1-8f85-88661cec9183	EL	Earned Leave	30
+04db5888-4e47-4df3-87d6-aefa5ebf15cd	ML	Maternity Leave	180
+f2960ce7-088b-4e8b-9d1b-96d8cbef93eb	COL	Compensatory Off Leave	0
+a5a26d4b-7778-4b2f-bb35-093b7dd98aa8	CL	Casual Leave	12
+3014a4ef-4b74-4f70-b7a0-d23c50388bed	SL	Sick Leave	10
+e6f459f7-6ce5-42a3-b3d4-da61d99f9c07	EL	Earned Leave	30
+faf72fa3-ad59-4a68-9059-9737e44a06e2	ML	Maternity Leave	180
+2b355006-0bb4-4063-a7b8-a0929fac982f	COL	Compensatory Off Leave	0
+9092687c-0a03-4c8f-8644-570e9a7b6d0b	CL	Casual Leave	12
+1d85e522-5051-4dda-b0dc-3595923e7f16	SL	Sick Leave	10
+ac0330a7-aa39-44ee-9220-dd1a00cff4a5	EL	Earned Leave	30
+442cc181-606a-43e6-b3f8-1bc882ad2f19	ML	Maternity Leave	180
+359a5452-8a1f-41a7-a4d1-86dd8527cb37	COL	Compensatory Off Leave	0
+db9214f0-8cc3-4236-8523-f50132da1d3c	CL	Casual Leave	12
+c66472bf-0ca5-4ccc-83a7-dfcf87368122	SL	Sick Leave	10
+d44701e6-a028-4fab-b0a1-2ddcad03f7db	EL	Earned Leave	30
+a61518be-aa21-4894-aab0-9bbd01352c36	ML	Maternity Leave	180
+23699ee7-52ca-4f9f-a86d-2279868c6d6a	COL	Compensatory Off Leave	0
+ac46eeb0-fe6f-44f9-a9f6-58788eb03589	CL	Casual Leave	12
+1ff8c5df-6e57-4cd2-9945-46ccbb49462b	SL	Sick Leave	10
+81f65e30-7866-4a51-a1d5-5cab26e502fd	EL	Earned Leave	30
+e46ea4f5-1651-49fa-9a46-9f4429c6d0ee	ML	Maternity Leave	180
+163d3e55-fa3b-4576-8b4d-9f94029b9419	COL	Compensatory Off Leave	0
+5d03bb00-6191-41f2-9217-181074b086e8	CL	Casual Leave	12
+316e2c93-81a2-4db8-b0fb-3994cf263bee	SL	Sick Leave	10
+c78f307b-8a28-42d8-8d81-862bc10377aa	EL	Earned Leave	30
+92cbabf9-2c42-4ee9-a56e-de53c8dd2b0f	ML	Maternity Leave	180
+5bb0e238-202d-4c0c-9acb-63250dd88160	COL	Compensatory Off Leave	0
+3c03671e-f0cf-4efd-a80f-38e84c59a45b	CL	Casual Leave	12
+91288265-d7c0-4fb3-a766-11dc4632a152	SL	Sick Leave	10
+189a920b-0517-486e-a880-1efeaaa5882c	EL	Earned Leave	30
+dd4ed3f4-362b-441f-b21b-3c8c8684fc47	ML	Maternity Leave	180
+535f8714-7cf3-482a-8b87-93f1ba1a154a	COL	Compensatory Off Leave	0
+6a76798c-bc30-4837-86ed-d8441a12f900	CL	Casual Leave	12
+11ac026c-f956-481f-87c5-5469281458bc	SL	Sick Leave	10
+a5ac0e64-be30-426b-8a51-f1f436ceb5de	EL	Earned Leave	30
+6abe84f0-24c3-48f3-975e-7b864ebb6bd9	ML	Maternity Leave	180
+b110944e-f0be-45e2-afcc-ffcc1d011321	COL	Compensatory Off Leave	0
+ae66854d-dc3d-4c53-be16-79ae95c0b47f	CL	Casual Leave	12
+43aab735-4aef-411c-9c56-cfd0782cfb0c	SL	Sick Leave	10
+6eb50d95-0702-49fd-8be5-5b50771adc1c	EL	Earned Leave	30
+b55ce5e0-ad8b-4c23-aa40-f94f1e7944f0	ML	Maternity Leave	180
+8c8e34e0-114e-48b4-b642-96b39d7d99ee	COL	Compensatory Off Leave	0
+a10313ab-e41d-45e7-a63c-9c2d26e46d7e	CL	Casual Leave	12
+e04605dd-cd4b-483d-90f1-b4e0907efe87	SL	Sick Leave	10
+664c0824-c773-46a0-b160-be61ef4a2602	EL	Earned Leave	30
+17412908-7171-423c-812c-08824d0680dc	ML	Maternity Leave	180
+a9545e97-e02e-4f9f-ac1e-be082e3e1f40	COL	Compensatory Off Leave	0
+2d3ed594-20ff-4f07-9d85-e50a207f373b	CL	Casual Leave	12
+55e73db9-7b50-4851-a6e3-37884da5cc02	SL	Sick Leave	10
+45b08c47-e235-46ab-bcbd-03eae8b75d96	EL	Earned Leave	30
+af87b3c2-4e74-4540-8e5c-4a9516c2c054	ML	Maternity Leave	180
+551883d7-3eb2-4f46-9980-88be3c4f1008	COL	Compensatory Off Leave	0
+81b75d19-3b7e-4ce7-8143-1c1c85f9209e	CL	Casual Leave	12
+8a2b93f6-e593-4348-bb8d-956217162727	SL	Sick Leave	10
+881e2d97-b93c-4c52-ae10-a2ea38d392c9	EL	Earned Leave	30
+9e1a2be9-46b7-415d-90ff-9e7b26712e55	ML	Maternity Leave	180
+e23ff789-f3d1-4648-8562-1e0a5298eef6	COL	Compensatory Off Leave	0
+c7a072f4-ecf5-4244-a467-2192fa755e25	CL	Casual Leave	12
+89bde2bc-d9b2-4414-8523-e5788a4cb092	SL	Sick Leave	10
+a1c1b34e-39c1-446b-a211-37e62bd735fe	EL	Earned Leave	30
+33a35d19-42a0-4784-8c75-40f403b6f40f	ML	Maternity Leave	180
+8bac8cb8-9829-41ef-ab62-a49672318617	COL	Compensatory Off Leave	0
+f2a93961-7850-4f8f-96f3-b09626fcfce0	CL	Casual Leave	12
+57563da1-f40d-42da-b852-522a94c7cb1b	SL	Sick Leave	10
+a76bb60d-8463-4051-a64f-af35eea5a0a4	EL	Earned Leave	30
+39d46e54-5347-4db1-91b9-c03e8ad9c012	ML	Maternity Leave	180
+43355e25-823a-4bc3-ac1f-ebaeedb0190e	COL	Compensatory Off Leave	0
+3dff4c96-e541-4efd-b092-17993c94b9e9	CL	Casual Leave	12
+a5abaa23-2b5b-436b-80ad-7d2ecc2e338f	SL	Sick Leave	10
+1a0d2a17-aed3-411f-a20b-a97a7a852fe4	EL	Earned Leave	30
+2b25bd5e-e654-47db-ac8c-86dd0a1299f7	ML	Maternity Leave	180
+6a06dd33-bde2-4188-b7a0-75f5094f606a	COL	Compensatory Off Leave	0
+a461c38f-18a5-4aac-a185-5401e89ae737	CL	Casual Leave	12
+5a73646e-d77c-4df2-8754-41387c1fc67c	SL	Sick Leave	10
+1fcf4c88-eaab-42a9-a473-44c38c4bdd1a	CL	Casual Leave	12
+02b91c27-1d39-4267-a7d7-07e08b3d02af	SL	Sick Leave	10
+14e8f2f8-61e5-479b-9d0e-c567a66bec3e	EL	Earned Leave	30
+01d6acb8-81ea-4f79-9b4a-44ee534c542f	ML	Maternity Leave	180
+421dc976-9793-49ae-8502-bfe05cae391c	COL	Compensatory Off Leave	0
+bf713ead-2c01-4961-9892-dfbb9685431f	CL	Casual Leave	12
+90e086c6-b8f4-487a-8d4e-fd2d6d883522	SL	Sick Leave	10
+664be2d1-dea1-4286-aeab-147b0ed63d57	EL	Earned Leave	30
+06b32926-4c89-4519-a327-ec7a123aa5db	ML	Maternity Leave	180
+d5684116-3422-4186-82bf-1b1c6aa5cf2c	COL	Compensatory Off Leave	0
+82341c8d-b802-4439-a2c8-eb2477e6ffae	EL	Earned Leave	30
+4c80cde4-e038-4d14-9408-71d4e78ed47b	ML	Maternity Leave	180
+9a387694-4406-4a06-9645-22191390a759	COL	Compensatory Off Leave	0
+a6a9e83a-c20a-4345-97c9-772d1a12bb3d	CL	Casual Leave	12
+531e68c3-3ba7-4377-a33f-fb2293579ae1	SL	Sick Leave	10
+3c0ba2e6-aeb5-4c20-a515-4fcaaf3d8d8b	EL	Earned Leave	30
+774b933a-61ad-4826-ae44-1b1611a1e0c8	ML	Maternity Leave	180
+f2e2f79c-0aa8-43e8-9126-37645df95891	COL	Compensatory Off Leave	0
+23b4fffe-0889-414e-a356-5e546ad96297	CL	Casual Leave	12
+42a1f4a5-4a9f-486e-b92a-44992602f5d4	SL	Sick Leave	10
+7aaec2f4-c8a1-43f8-b81b-f061c15bcc25	EL	Earned Leave	30
+1ef07eb7-30a7-4cc6-9aea-bab7cdf4bfe3	ML	Maternity Leave	180
+f43a8328-891a-4496-9719-2876e816cc8c	COL	Compensatory Off Leave	0
+056f2c6d-8da2-47c0-afe4-1d34c8d38397	CL	Casual Leave	12
+8dabfaef-d6b3-46bd-8ce7-846a90940fea	SL	Sick Leave	10
+116342d1-3294-43c3-a9fb-44106d6f3428	EL	Earned Leave	30
+9e163c6f-c0bb-42fb-9a85-7c2b21d7eb30	ML	Maternity Leave	180
+be0424c6-928e-43e5-acce-d6ee0cd40045	COL	Compensatory Off Leave	0
+80f36bb2-7783-4313-bd0f-4c4cd904d77d	CL	Casual Leave	12
+4a6bbb92-aab6-4678-be4a-175e8f092207	SL	Sick Leave	10
+23892297-53cf-4ed7-a158-4c2995098764	EL	Earned Leave	30
+68b8682b-a8fe-4a62-8872-104e5d792dfa	ML	Maternity Leave	180
+0a342b8f-da2f-490c-ad24-6649e6b632b3	COL	Compensatory Off Leave	0
+5d898fb6-a7da-4df9-82f6-78128b3f01f4	CL	Casual Leave	12
+2bb1e48c-3bbe-4d61-927d-6367c1a93ecf	SL	Sick Leave	10
+85c14cef-08f6-4aa8-a4ac-1993d21d1601	EL	Earned Leave	30
+4907a4b7-93dd-4dc4-95ef-c480a83bc373	ML	Maternity Leave	180
+bbbd227d-1ea8-419d-b10b-093598906f26	COL	Compensatory Off Leave	0
+bccb56d0-d727-4ea6-91b3-231f16b23048	CL	Casual Leave	12
+9d1b5e92-2744-4c30-a54e-8b2a63b47818	SL	Sick Leave	10
+f89ae62d-4d99-4a14-a71b-56765d3b172b	EL	Earned Leave	30
+13d64802-f758-4b16-b0f2-3fad827b593f	ML	Maternity Leave	180
+de14b7fd-e2ea-45d3-a8ce-3e49f8d7a7f4	COL	Compensatory Off Leave	0
+8e6e9eb1-d46e-4a3d-a2c8-cab3e6538f3c	CL	Casual Leave	12
+9c59e29f-022f-4d6f-8a2e-86114e5c8bb6	SL	Sick Leave	10
+f0c08915-e9b5-4b7f-aff1-520d80ecfc6b	EL	Earned Leave	30
+dd6f4175-2b57-456b-a42b-add25b3c60d6	ML	Maternity Leave	180
+c45f29bd-3d52-413c-bba8-f98d9f9188a9	COL	Compensatory Off Leave	0
+2c42ba30-c155-4424-8663-f7badb7cee2d	CL	Casual Leave	12
+79bc7514-da2b-4c14-ac9b-3d56bffa8dd1	SL	Sick Leave	10
+4376805f-804e-40df-98b7-742e75f11b3e	EL	Earned Leave	30
+bf14eb55-210a-4a19-8e27-a097bd6bd0bf	ML	Maternity Leave	180
+e4ebd7e1-b8da-4fb5-928e-1683bca4e639	COL	Compensatory Off Leave	0
+1be2796b-2740-4dad-bc51-3a1950866340	CL	Casual Leave	12
+a987c603-1c7f-47d7-88d4-94f9e9ac62ba	SL	Sick Leave	10
+e31cc39c-5ebb-45b2-8d58-ecbf1a8a764a	EL	Earned Leave	30
+8f6de28d-a251-4ecb-b598-ea1e453174ad	ML	Maternity Leave	180
+b724bc87-3390-419b-bda4-1bd5777248b1	COL	Compensatory Off Leave	0
+839d2d8c-13fe-4910-a73d-55ac10a3ab4b	CL	Casual Leave	12
+c513f0e4-1dbc-4f5e-a183-932bbf23f809	SL	Sick Leave	10
+d2bda566-5049-4a0d-9885-75436e08aaf2	EL	Earned Leave	30
+d0da509b-3a71-46fd-9ec3-fc49aea7a3d2	ML	Maternity Leave	180
+0eb18f27-d5d1-46d4-a067-f195591691d4	COL	Compensatory Off Leave	0
+abd98c44-d0e1-4511-8a8c-3aec2ab8d047	CL	Casual Leave	12
+02389516-704e-4c31-a67c-48f8754d44f1	SL	Sick Leave	10
+2a47ecb0-8d31-4cfb-9cdc-b24607d1007f	EL	Earned Leave	30
+8b7c60d2-02e8-468d-91a5-278e7c7b2e84	ML	Maternity Leave	180
+b492e019-3e74-45b3-8652-b6f43b229420	COL	Compensatory Off Leave	0
+876ca28b-b860-4deb-9b41-7e8d4572fda2	CL	Casual Leave	12
+85967533-ec60-4fa3-a494-7c315eb76fcc	SL	Sick Leave	10
+a6a784d3-6191-46a4-a87a-b0c8fd1c6218	EL	Earned Leave	30
+16d86453-a7fc-48b3-89ec-8e6b2741cdaf	ML	Maternity Leave	180
+50b5f231-04fd-4b77-90cd-f59b7d3d713d	COL	Compensatory Off Leave	0
+ce2298df-2fc7-47ed-85f0-2fec0fd284a7	CL	Casual Leave	12
+5869394f-214d-409b-a334-5463e3a1b959	SL	Sick Leave	10
+5a2745b1-f865-432f-8190-afd4c67a87bd	EL	Earned Leave	30
+baa9231e-5ff3-4700-9e48-079eb45fb316	ML	Maternity Leave	180
+af8d4975-24a6-4026-b6de-e01fbf224719	COL	Compensatory Off Leave	0
+86e8d660-2a1d-43b7-a872-df6f87610399	CL	Casual Leave	12
+a0e6725a-62f9-41fd-9670-e9c59b693633	SL	Sick Leave	10
+1b0c12fe-877c-4210-baa5-08f791040f84	EL	Earned Leave	30
+68dd8001-6f67-4119-adfc-31b00744bf65	ML	Maternity Leave	180
+37dc845c-7d1e-4f0c-99f7-4ced56d55325	COL	Compensatory Off Leave	0
+77d56b23-9c65-457a-9b08-e7f06aaa023f	CL	Casual Leave	12
+6e180021-905d-45ab-87c1-5ff6f920eea0	SL	Sick Leave	10
+a6b9e111-b047-4cf3-bac3-5f104185c41c	EL	Earned Leave	30
+e5f882ad-1239-42c9-84c5-55ed96e2b05c	ML	Maternity Leave	180
+61a53cfa-dfb0-406c-a2a8-892f3499c6ee	COL	Compensatory Off Leave	0
+e2e416ce-bc96-4916-87eb-cded4d7563f2	CL	Casual Leave	12
+17c2946d-d99f-4269-9d96-2394aab8f3c6	SL	Sick Leave	10
+fcd3e377-93d2-4c01-a2e3-e2be9fbc0bbe	EL	Earned Leave	30
+598a8d44-fa59-42bf-804b-e2c600d3c921	ML	Maternity Leave	180
+87a8a3a2-553e-4d44-a0eb-2f9e97b20eb0	COL	Compensatory Off Leave	0
+4a48492f-a7a6-4c88-8b35-fdc3f8eee912	CL	Casual Leave	12
+d6a0c4b5-7d5c-4be6-aae4-1dd2d2ae929e	SL	Sick Leave	10
+34e1b7df-c6bb-45f5-9e1c-fe47d8e06bf5	EL	Earned Leave	30
+37423a24-4966-4065-b67a-e659b190280a	ML	Maternity Leave	180
+36b7be78-4aa8-428a-bf60-e89709249c3a	COL	Compensatory Off Leave	0
+33ed4d71-d815-4e46-9acc-70db3841c9e5	CL	Casual Leave	12
+15f8e342-73e5-4bc6-928d-403a35d33bfa	SL	Sick Leave	10
+7e58dd8f-9274-4907-888d-d4cf107ec088	EL	Earned Leave	30
+40269e35-b077-43f4-a924-46448e2e36b5	ML	Maternity Leave	180
+0f0d927e-6137-4c60-a9a0-a01b8475c57d	CL	Casual Leave	12
+be7348bc-faa5-4871-b3f9-34f6d7cbe027	SL	Sick Leave	10
+3ec81758-4c4b-4c89-a3a6-0dd77a7a1092	EL	Earned Leave	30
+32f8221d-6a82-4650-88d2-6c2e79d9d77a	ML	Maternity Leave	180
+d1f6dd3b-8d63-4d29-ab33-d687f3c10ab7	COL	Compensatory Off Leave	0
+354c970a-1a63-4592-80cc-5252a9e5f999	CL	Casual Leave	12
+e9b8961f-333e-4076-b9d8-15a30ca75c56	SL	Sick Leave	10
+0fa4ae1f-83da-4750-983f-49ad6b494a6f	EL	Earned Leave	30
+879e5950-a848-4b17-8f31-0a56552b2d7d	ML	Maternity Leave	180
+34150687-2d28-4127-bac3-8272c607e965	COL	Compensatory Off Leave	0
+07763ca9-dc7f-4aeb-aecc-d4c018c6af68	CL	Casual Leave	12
+260f1799-3a1a-48b3-8a73-2bb58a2a4794	SL	Sick Leave	10
+cdce4291-c981-48ac-8aa6-6dfefdaf6f88	EL	Earned Leave	30
+5cbb7cd4-5df5-47c9-8080-c1bd2438f951	ML	Maternity Leave	180
+af34299f-c808-42db-87e0-59db43351ab2	COL	Compensatory Off Leave	0
+607ad809-a763-4340-8b16-b8893070181a	CL	Casual Leave	12
+5599381d-a547-4c04-b2da-6e823831e632	SL	Sick Leave	10
+4b1c8df2-f954-4d8d-b315-e6aa4a858c43	EL	Earned Leave	30
+1f3de5d2-3f2e-4db3-942a-2d0eabe6b89e	ML	Maternity Leave	180
+52926fb6-d8c9-4474-960b-af89eee208e5	COL	Compensatory Off Leave	0
+940abd9d-f0c4-4cb6-8a79-356a7caf22f8	CL	Casual Leave	12
+dc272bc1-4b61-49ef-8b72-1a194141d4f5	SL	Sick Leave	10
+fee82d06-dc14-4827-a490-a2aafe9764a0	EL	Earned Leave	30
+0984f7cf-2d84-435d-ae4f-55c5b9d7fb77	ML	Maternity Leave	180
+3ba082fb-a8ba-47d6-b3c0-fa6237673acf	COL	Compensatory Off Leave	0
+7c51de7c-2e05-4e61-9397-6027fdd54314	CL	Casual Leave	12
+435a4423-e772-4c1c-a79b-a19a7e9f13e9	SL	Sick Leave	10
+4b1d2426-0d77-4d06-ab96-d0c643f43d65	EL	Earned Leave	30
+3497d1ff-1435-4c91-a263-0116a33453e6	ML	Maternity Leave	180
+639f137d-82ca-437a-9fa6-dd5de512c3f6	COL	Compensatory Off Leave	0
+440d26d3-a01f-42b9-9bea-3364855cdbda	CL	Casual Leave	12
+2438619c-77d8-4d00-a4f7-9182e6cc211f	SL	Sick Leave	10
+85233ea0-b992-40bc-a696-debf8e40767c	EL	Earned Leave	30
+5bff3b70-74ba-4814-a236-deda5c0af8e0	ML	Maternity Leave	180
+0d04f55b-799a-4a7b-96a4-da64836107dc	COL	Compensatory Off Leave	0
+671121bf-d7a3-4839-88f4-8fdca3c68890	CL	Casual Leave	12
+8614e020-f158-4585-b16e-9413543266b1	SL	Sick Leave	10
+bcbb2f9e-bb46-4bf2-9cdc-7c3c4758dc91	EL	Earned Leave	30
+816d76f3-f13d-4b7a-85a1-8cb3ea0168b4	ML	Maternity Leave	180
+c2e62c8f-e786-48e6-83fd-3adf3426b590	COL	Compensatory Off Leave	0
+0c40a148-047e-4034-b495-d15055264b68	CL	Casual Leave	12
+69bc277e-0b2a-42dd-8022-9ea8ce6cbd4e	SL	Sick Leave	10
+a106caad-1358-41cb-80c5-06282156d06a	EL	Earned Leave	30
+07953e99-c409-4189-8450-e632ea4369cc	ML	Maternity Leave	180
+6d28c77d-cfb3-4548-be81-cd8787037818	COL	Compensatory Off Leave	0
+2c4c7ff2-a765-41cc-a9f5-70fd7f0a81b9	CL	Casual Leave	12
+f6ad41d7-5fff-4e61-9eb7-f492f8c75078	SL	Sick Leave	10
+f7da9824-b24d-42e1-8347-9866fe70bb25	EL	Earned Leave	30
+edf9e7bf-6ce6-469b-a350-e952e462234c	ML	Maternity Leave	180
+09fbff41-757d-4fac-b44e-fd76bd5e3af7	COL	Compensatory Off Leave	0
+f07c5a54-f58a-44d5-9260-d880914dda8a	CL	Casual Leave	12
+f2de88e4-9151-430e-86f1-22af98645d18	SL	Sick Leave	10
+51d51b95-301d-44a2-96a6-d39e1f5542b6	EL	Earned Leave	30
+21577aa6-8a9b-4594-aeeb-27ab514075ba	ML	Maternity Leave	180
+97d31772-9ccd-4931-9e97-fcd0bc295e7e	COL	Compensatory Off Leave	0
+c74093b1-2a5a-4310-a841-5848f10017b6	CL	Casual Leave	12
+9e291279-1688-4ed5-b022-2b6a2631ed9c	SL	Sick Leave	10
+f6253452-5550-4b5c-9e84-31883c9cc2ed	EL	Earned Leave	30
+356fd20b-869c-4543-8c63-401eb2d81f1c	ML	Maternity Leave	180
+74cf3d92-9434-4b39-86f2-df20f273e5ae	COL	Compensatory Off Leave	0
+0666964b-6812-4e98-95e1-010812d5bc92	CL	Casual Leave	12
+e3c234e5-0f28-4126-bb62-f1c3075dcfd1	SL	Sick Leave	10
+76ff9e75-0b18-434f-9dd4-71d8707b66cb	EL	Earned Leave	30
+5e47f1de-ec69-4c40-9bde-c2709f909626	ML	Maternity Leave	180
+9bde4c75-cb3b-411a-8054-d7e95ed0918a	COL	Compensatory Off Leave	0
+5a0b45b8-b085-40ed-808a-e623d9605555	CL	Casual Leave	12
+a842f552-32a7-4a94-8676-7d44c655936f	SL	Sick Leave	10
+a799430a-2b2d-480f-b8c5-61dd2b81a6fd	EL	Earned Leave	30
+14b18f84-ff57-4c3f-b371-55784904b8ce	ML	Maternity Leave	180
+5d5cb5ff-4915-409c-8719-55c5752e97bd	COL	Compensatory Off Leave	0
+c34eadd0-f562-4cff-989e-00700a267bbd	CL	Casual Leave	12
+83e31b38-6860-413c-abdd-e61751d12e07	SL	Sick Leave	10
+b07941dc-bac5-42ef-9bbb-9169119c2e3a	EL	Earned Leave	30
+44a71623-0201-4b8f-8b14-3d10cea63b4a	ML	Maternity Leave	180
+9dd1cc10-b091-44dc-b434-6b266f8787bd	COL	Compensatory Off Leave	0
+f2495dea-c88e-418f-bc3e-81a354bdfd97	CL	Casual Leave	12
+42e4d6e1-6d44-466b-b8aa-933ce3846c68	SL	Sick Leave	10
+ea32922c-1a25-4633-a446-fa94bbc2aab4	EL	Earned Leave	30
+e0d8f23c-fa1c-4370-a0d3-7276081b0095	ML	Maternity Leave	180
+681e8e58-ecea-4ce2-96e4-e22903c0a91e	COL	Compensatory Off Leave	0
+0896a6dc-fb39-4e93-acc6-d6c4d9013e6c	COL	Compensatory Off Leave	0
+62620cbc-eec9-4ee4-bb6e-35eeba4a106b	CL	Casual Leave	12
+82cd4994-24ba-4831-84da-6ef2aa8a3128	SL	Sick Leave	10
+49bfea78-c035-4778-bd1f-f222059ff595	EL	Earned Leave	30
+3d968068-7b96-4f4b-af9c-08ddb9e7c739	ML	Maternity Leave	180
+2bb5d5a3-4e2e-4358-95ec-356ea4d97f94	COL	Compensatory Off Leave	0
+d1d12a5f-df45-416c-a039-1772236cf7e6	CL	Casual Leave	12
+913bf7b2-2488-45f0-b8f2-773581b68ffc	SL	Sick Leave	10
+3e2cc8dd-a2de-446a-ad61-ad31a902c337	EL	Earned Leave	30
+6d10cc43-41fc-4918-bcb7-9ca3945aff64	ML	Maternity Leave	180
+16ebe49f-d579-4549-8288-58f9ab21137c	COL	Compensatory Off Leave	0
+cc8f2487-656b-415f-aa05-00b14088a3f5	CL	Casual Leave	12
+e503ed7f-4809-4fef-9322-3fb92ae732ce	SL	Sick Leave	10
+e11a5874-edc4-4d4c-9628-7740aa8c6119	EL	Earned Leave	30
+5a376340-de42-462e-b703-f48a95f0a34e	ML	Maternity Leave	180
+c9b165a1-0402-4956-8ebb-7866e3505355	COL	Compensatory Off Leave	0
+4c12d43d-7a69-494e-b01d-4d01a9c2cbc2	CL	Casual Leave	12
+9cae42a9-b97c-4243-9a3e-7d50e18153de	CL	Casual Leave	12
+16fe7833-b040-4a6e-869c-3a91c8831eeb	SL	Sick Leave	10
+39729007-1d08-4100-a489-13fea8cf2499	EL	Earned Leave	30
+4f8110bc-5471-4559-9dac-6894c2c8150b	ML	Maternity Leave	180
+0bd89cf7-cf38-4c74-9e40-e3af38b7f644	COL	Compensatory Off Leave	0
+dd379921-4f1d-48ae-bcc9-4581d07b8ee0	CL	Casual Leave	12
+a78d48a3-3c31-4c38-af19-aa417844ada6	SL	Sick Leave	10
+4c1915a4-ac17-4154-a4be-d3b6bec6f951	EL	Earned Leave	30
+1b3d9059-b9fd-4fb7-b4aa-8bb14c847d0a	ML	Maternity Leave	180
+26bf1e93-44e5-4a8c-85f2-ba4b6d575e3f	COL	Compensatory Off Leave	0
+22d1d248-7762-439b-9646-9394135840c5	CL	Casual Leave	12
+3c19f8a1-e1e9-4136-be9b-a0d676aeb039	SL	Sick Leave	10
+9ae881ed-71ea-472f-82bd-cb744aafe4da	EL	Earned Leave	30
+35f40e56-9109-4899-bff0-b6b929cbeff4	ML	Maternity Leave	180
+b0491b90-a8f4-4cd9-a9c9-2151ffa0ef60	COL	Compensatory Off Leave	0
+abf9822d-38c1-4883-923a-c2641d2feb0c	CL	Casual Leave	12
+cf0c58e9-948b-471b-a106-5819b74219a8	SL	Sick Leave	10
+2aa10f75-36b4-4675-adac-497ab570736a	EL	Earned Leave	30
+10a32600-2244-43b9-a2fe-addc84b1c53a	ML	Maternity Leave	180
+df5f2b3b-1eca-434f-93d5-d875b177a0f4	COL	Compensatory Off Leave	0
+fea57344-6d83-46b6-82a1-1514938f2b9d	SL	Sick Leave	10
+740ed443-643e-44b7-b5f7-705344d64056	EL	Earned Leave	30
+0cc4e8e4-6141-41bf-b870-ed138900b555	ML	Maternity Leave	180
+3d226e11-b2a4-49ff-b6de-e19d69faedfe	COL	Compensatory Off Leave	0
+fe208550-43a5-4670-bbd8-c8ca50539a17	CL	Casual Leave	12
+9148fc88-a911-4ea0-9307-418005dbf51e	SL	Sick Leave	10
+7ea097ec-27a6-4dc6-87f7-7776b5bf4b08	EL	Earned Leave	30
+e5a673d2-6836-42a9-83b3-18fa3e2a5fd3	ML	Maternity Leave	180
+17b40d2b-a3f6-4802-a711-118021930e7d	COL	Compensatory Off Leave	0
+e1d61dba-ba38-48c3-924e-eb62cc980c96	CL	Casual Leave	12
+3c4cf27a-574e-41a8-b142-c01c17e764a1	SL	Sick Leave	10
+40d85916-436b-440b-9a48-ce4931c0fcf6	EL	Earned Leave	30
+24fc286b-79e3-476d-871b-577bf802813f	ML	Maternity Leave	180
+14980235-69d5-4c4c-b479-e7c497f94318	COL	Compensatory Off Leave	0
+70348dff-0fdc-429f-95e6-00e7a259ae92	CL	Casual Leave	12
+1465dc39-b7a0-4a8d-82fc-a4aef87b588a	SL	Sick Leave	10
+0937e8e9-92fc-4bef-a234-cf92622c63fe	EL	Earned Leave	30
+b2905d00-5e3c-42c3-89c8-c3b2ae184518	ML	Maternity Leave	180
+fb4d86b4-c715-422f-a324-3fed2c720371	COL	Compensatory Off Leave	0
+bbd65cb7-e212-4ca9-bd8d-959aa2b37a52	CL	Casual Leave	12
+e65ade4d-da7c-42da-b330-81a98dea11ab	SL	Sick Leave	10
+0f93844f-6d74-4f3b-9e6e-5a60b2725f82	EL	Earned Leave	30
+2f41b4ac-44cf-4a09-9009-16f47a672208	ML	Maternity Leave	180
+08eb8367-48c7-4d27-910d-832e06f1f908	COL	Compensatory Off Leave	0
+7b57f4ca-5d2c-4c1a-8121-db026880e05e	CL	Casual Leave	12
+897467d9-934c-4e56-908e-276372c0e50e	SL	Sick Leave	10
+8fbcf6c5-d464-4350-9768-82324c7da426	EL	Earned Leave	30
+33412f61-3455-406a-bb06-3a6839b29e8b	ML	Maternity Leave	180
+dc8b5148-9446-405f-bdf7-ade223861e00	COL	Compensatory Off Leave	0
+156aa683-210c-4178-92ff-a6d886319fa8	CL	Casual Leave	12
+708778da-0d15-4a64-b8ea-5e487567fd57	SL	Sick Leave	10
+c9f45e4a-cda1-4d3b-9487-6e702e497cf7	EL	Earned Leave	30
+5471491f-0111-411d-94ef-4e44a8edb25a	ML	Maternity Leave	180
+1ca47770-0183-4bc5-88dd-cfa275ef34bf	COL	Compensatory Off Leave	0
+b455e642-6c77-432b-8871-16ecfda2b91a	CL	Casual Leave	12
+102e2aa2-160f-429c-85d4-cab6693c7261	SL	Sick Leave	10
+3264ff2c-2fa8-4c6b-a38d-0b677e273aca	EL	Earned Leave	30
+b8c285f8-0198-471d-a865-746e7bfd36cc	ML	Maternity Leave	180
+dbb997c3-7240-412b-a45a-b46971567172	COL	Compensatory Off Leave	0
+23ec8bf2-1b89-48b6-9392-147be4ee9676	CL	Casual Leave	12
+02636e8b-62e8-4ac3-8d97-610ae18b1931	SL	Sick Leave	10
+c9e39ee2-f738-42a6-8c3e-8d0965071dd8	EL	Earned Leave	30
+e26ae497-3a31-44b5-9d71-60df0fa79b39	ML	Maternity Leave	180
+6fbd36ed-dbef-421b-a545-774151cb56db	COL	Compensatory Off Leave	0
+6b0573cc-7016-43ed-b4f3-fceceb4bcd96	CL	Casual Leave	12
+085f6f10-734a-4f32-bab4-03da424b9001	SL	Sick Leave	10
+579eaf9f-9c10-4a1f-961c-b52977fe6369	EL	Earned Leave	30
+5ab6556f-2161-49fa-8037-c79ddd465df7	ML	Maternity Leave	180
+f694bf0f-a3c0-4976-bdd4-ea96617d4aca	COL	Compensatory Off Leave	0
+3ae25104-faaf-4afa-a091-72e3da54e1e2	CL	Casual Leave	12
+ccf55502-c169-4d77-bd8e-2e5e69d4bbd7	SL	Sick Leave	10
+a456aae4-eeae-4d56-84fe-50b4ab574069	EL	Earned Leave	30
+aaf770cd-c942-4db0-878c-c798b0373208	ML	Maternity Leave	180
+b067d3a1-6242-4d69-ba33-a95c317a37b7	COL	Compensatory Off Leave	0
+96c273a9-a1d9-4038-a172-e5b017bafd17	CL	Casual Leave	12
+46981a79-f6e2-48e3-ab8d-8a821c3896f7	SL	Sick Leave	10
+635cc966-bac2-498d-9c99-b5065696e4fb	EL	Earned Leave	30
+43b79f4e-da0a-4dbb-a05a-4a358de25d9e	ML	Maternity Leave	180
+5c510dcd-0c50-499e-a2cd-ddab0d2a1555	COL	Compensatory Off Leave	0
+7365ade8-24c8-49fc-bb33-a0387cd72d88	CL	Casual Leave	12
+9065efcb-560b-451e-9d3e-3f7857274390	SL	Sick Leave	10
+58eef84e-bc9b-44ff-aa8e-2415f97cc314	EL	Earned Leave	30
+6fee53ab-24ef-44e8-9b31-b8e67a669d80	ML	Maternity Leave	180
+c88afd77-ac7f-462e-ac03-281d4dfd83a2	COL	Compensatory Off Leave	0
+78fc8b0d-d0ef-46a1-8667-860745153a4a	CL	Casual Leave	12
+23f7735b-4bd3-44c0-84e5-1b2773f7f888	SL	Sick Leave	10
+31210cf3-ab1a-45af-af29-07573a76dca0	EL	Earned Leave	30
+3f45c5b8-5bce-4767-8aa2-649ac063fc3c	ML	Maternity Leave	180
+bd70ec46-8a2a-4bbd-ba2e-79009ddf5951	COL	Compensatory Off Leave	0
+c8fc5cfe-6dae-4647-a61c-1e30c0e5a0ff	CL	Casual Leave	12
+f19fd07a-120c-4b24-8ae8-6b6e326c5572	SL	Sick Leave	10
+964e75ee-950a-47a2-8d53-9fac2abdb6e0	EL	Earned Leave	30
+0d5be4bb-d163-4edb-8df3-25c01a30e81f	ML	Maternity Leave	180
+e3503f15-179b-482c-9b99-d120384042f8	COL	Compensatory Off Leave	0
+45278a91-e2d0-42c6-90b8-f1593d8dd628	CL	Casual Leave	12
+31b52724-6bd2-4dbb-bd66-d28685a587ab	SL	Sick Leave	10
+bfcac994-2bcc-4766-81c4-4a92ca0ffef3	EL	Earned Leave	30
+d556c572-e5a5-4d8d-8f7d-ae647c6c123e	ML	Maternity Leave	180
+73a0482d-b8e4-457d-a683-6589156f8ae8	COL	Compensatory Off Leave	0
+e297ddb2-48a8-474b-ad9f-4b10b6ce2aa1	CL	Casual Leave	12
+6202641e-19ca-4f30-89d9-159525ffa6b2	SL	Sick Leave	10
+908f6368-e1d8-42c3-bc7f-d14d6d3ddaaf	EL	Earned Leave	30
+04bc6316-2f07-4a03-951f-d80e068b8e4c	ML	Maternity Leave	180
+1e1ecfe7-6785-4b2e-a7eb-057bb6f0af7f	COL	Compensatory Off Leave	0
+b603969f-4aec-4d22-aea5-f12d4c7baf06	CL	Casual Leave	12
+9b4e1a68-da3c-422d-9c05-f398ca5760aa	SL	Sick Leave	10
+090dca6b-f31d-4219-91d0-fef118095a1d	EL	Earned Leave	30
+c93787e4-11ad-4546-aac5-ffd573c6b103	ML	Maternity Leave	180
+4ca60073-37ce-489f-8e5f-31fdbb3a009c	COL	Compensatory Off Leave	0
+cdff324c-8ccc-43a9-a0d1-5ab487d20b80	CL	Casual Leave	12
+8b43f397-d8de-4497-98dd-3e9a9a1fd022	SL	Sick Leave	10
+59046e5b-b8fd-46c7-8871-4059275ec7b6	EL	Earned Leave	30
+07b6d034-3bb9-4ee4-8b6e-c74221bc6e7f	ML	Maternity Leave	180
+4a07dfe4-66bc-498a-9301-f447c69e4df5	COL	Compensatory Off Leave	0
+fa305869-22e0-41ef-87bf-416be0ff4efa	CL	Casual Leave	12
+62157452-bc9b-4e6f-b8c9-36a6afeaef1c	SL	Sick Leave	10
+e0192520-88db-4a1f-be7d-aa2ad1b4cf14	EL	Earned Leave	30
+1dd18602-3b2e-499c-a94e-e99ce3f1ddb4	ML	Maternity Leave	180
+a4bd7c97-173f-47bf-af64-028b0585e982	COL	Compensatory Off Leave	0
+f1283bea-be68-444b-889e-48b879161476	CL	Casual Leave	12
+bfcfc405-86e6-4c87-853c-94d55049726d	SL	Sick Leave	10
+c3fa28cf-5330-4d6d-8b8f-a366ec8fd04e	EL	Earned Leave	30
+a7d541d2-91b2-4316-84a5-c72e3e27650d	ML	Maternity Leave	180
+6e165b5a-bee7-4f1b-966e-f69805219432	COL	Compensatory Off Leave	0
+0ae4c869-1bee-4657-a37b-8318d08d07a7	CL	Casual Leave	12
+ca8d6f82-5986-405a-b18c-85ebc848f57c	SL	Sick Leave	10
+5026bcac-8800-46fd-877b-63c5b47c7bb6	EL	Earned Leave	30
+c0814293-a2bf-48c7-9080-ccabeef1522e	ML	Maternity Leave	180
+e7c22227-93af-4643-bd8f-6cff72506a03	COL	Compensatory Off Leave	0
+dc9a6c44-efed-421a-80fb-1fae40147146	CL	Casual Leave	12
+08c9b797-c789-4650-b42a-3a99829a3b7a	SL	Sick Leave	10
+74151272-1250-4649-9518-532170398150	EL	Earned Leave	30
+1c7365f8-fab6-4755-8b4a-9a424e071500	ML	Maternity Leave	180
+a0959d5b-64cf-4fb5-83c7-82b0b3096bb4	COL	Compensatory Off Leave	0
+3e683f73-75cc-4236-bca2-018ad877ceb1	CL	Casual Leave	12
+2ee8d6a9-ee76-458c-be69-41349d80bfa7	SL	Sick Leave	10
+3ee224c6-3198-4dfb-9209-05c98396fc42	EL	Earned Leave	30
+fe830940-2995-4def-87cf-4d575dde8335	ML	Maternity Leave	180
+ea4c0514-1b61-4384-ba33-8f23c415634a	COL	Compensatory Off Leave	0
+dc4af4b8-abb2-4fba-8db8-dc067ee48080	CL	Casual Leave	12
+bfabd0cf-fce5-45d5-a230-b184d0ec1ef7	SL	Sick Leave	10
+4af5556c-c667-453a-951c-36c6061d96d4	EL	Earned Leave	30
+1c5f86bb-9ed9-4f49-b8d5-efeeeb66fafd	ML	Maternity Leave	180
+a58ec635-fadc-4394-b5b6-a0c65ea863ee	COL	Compensatory Off Leave	0
+af6dc992-727f-4893-a050-2d3e7f561628	CL	Casual Leave	12
+24b3f596-03e5-403f-bc07-702c1765614d	SL	Sick Leave	10
+41aec074-2fba-447a-942d-26cb3b76b39a	EL	Earned Leave	30
+f08e442f-be6f-46d2-a239-c73d014f1eaa	ML	Maternity Leave	180
+5a5d7c67-ace3-4503-9e99-c331080a5936	COL	Compensatory Off Leave	0
+3a905c2a-7e12-49af-85b2-6d898f88bd6b	CL	Casual Leave	12
+433579a0-51d6-461d-b06d-3774542c182a	SL	Sick Leave	10
+67f8336a-d3ab-4591-be23-6fd7756a167d	EL	Earned Leave	30
+6f81afe2-cc43-4462-8885-1584b419782b	ML	Maternity Leave	180
+2154f480-9891-450c-8bc9-19913a83fbdf	COL	Compensatory Off Leave	0
+6942840b-af0d-4251-a96e-353e82a53011	CL	Casual Leave	12
+80cdbd0c-a0ff-4bba-be6e-b5204a1b52bc	SL	Sick Leave	10
+bf7694f4-497f-4e13-a50e-d2082948df83	EL	Earned Leave	30
+6159c5de-803d-4482-a4e5-bd782bda28af	ML	Maternity Leave	180
+1a28ccd0-d107-4434-aa87-b5bf4f9e482c	COL	Compensatory Off Leave	0
+bc0fe32c-bd0a-4137-9328-257c76a2ae0f	CL	Casual Leave	12
+f00ece6b-d16b-4ad7-b78c-22f4bb83ef8c	SL	Sick Leave	10
+08055280-e60f-442f-9e96-ceb17fcebdc8	EL	Earned Leave	30
+7c3f6ec9-2ecc-4af6-a2a5-7ce106d94af9	ML	Maternity Leave	180
+584595c6-0a26-417d-abf4-5c7b07ba0491	COL	Compensatory Off Leave	0
+d69cdd37-1623-4c41-ac08-e6fb63266c12	CL	Casual Leave	12
+0b60a7d6-ed81-41ae-bdff-f3b55b453b21	SL	Sick Leave	10
+4049db7c-10fb-49be-a06b-23764f68db31	EL	Earned Leave	30
+b8be58b9-9746-4d35-87df-edc9304f3f8a	ML	Maternity Leave	180
+0a201a48-2c65-4cbb-816b-4daef4c1f478	COL	Compensatory Off Leave	0
+8b31b3b5-31c1-4b92-8953-4e593db513aa	CL	Casual Leave	12
+1bdd637a-f56c-408a-b1a0-1904204802e8	SL	Sick Leave	10
+f7e8bff0-da54-4259-8b45-3fc909ef155a	EL	Earned Leave	30
+7643a093-0b23-4a3b-8e35-4fcdb923e4e9	ML	Maternity Leave	180
+9c0d3327-46f4-4f9d-8c9d-4c3655c394db	COL	Compensatory Off Leave	0
+df97073d-6b1f-4934-ae94-004cfb488c99	CL	Casual Leave	12
+2bec91cc-e36a-4bee-8391-754db3701d3f	SL	Sick Leave	10
+ba66b7fb-0f2b-425a-86b1-3b6afefee181	EL	Earned Leave	30
+f39f1142-2c7f-43ba-b333-dded73213070	ML	Maternity Leave	180
+6cccd344-94ee-4621-8b44-a4b140281614	COL	Compensatory Off Leave	0
+136c6952-ca4a-44b4-8142-03e8a786b221	CL	Casual Leave	12
+5e49e482-ce29-4506-82a9-eec3b3045cdf	SL	Sick Leave	10
+88ed376e-c465-46f6-a953-d54410629f07	EL	Earned Leave	30
+e1d9d501-f94a-431c-89e9-8f6fe5d0eb03	ML	Maternity Leave	180
+79bfa27f-342f-4ac6-8ced-7d389a6374b9	COL	Compensatory Off Leave	0
+f2f6a9dd-b35d-45ea-80a5-2672469f2bc6	CL	Casual Leave	12
+587e8533-9d54-4531-95dc-ed430722e0aa	SL	Sick Leave	10
+f720f9b9-1cc7-4065-a12c-26b2edc33163	EL	Earned Leave	30
+0f193dd9-8f16-4908-ac62-f9883680b5cf	ML	Maternity Leave	180
+8d21e4bd-44fc-4669-af45-4278cd13becd	COL	Compensatory Off Leave	0
+a4e52b34-cacb-47e1-a16e-18f0b6f12475	CL	Casual Leave	12
+091e749c-58a1-4436-942f-c56f309bbc5e	SL	Sick Leave	10
+dc7176cb-5edf-422c-ae5c-a3272b8eaf3c	EL	Earned Leave	30
+4483fcfb-a896-4da0-893c-99cabc81bb54	ML	Maternity Leave	180
+1996512f-c589-402a-bc8f-266b14db7c6b	COL	Compensatory Off Leave	0
+bd126c94-a5d0-49c9-ba07-d2c2ee6e9fbb	CL	Casual Leave	12
+1dde2fe7-e76b-4abc-9b34-0698bf830c20	SL	Sick Leave	10
+78c6a80d-1385-48e6-8541-3cd7614cabb2	EL	Earned Leave	30
+527da4ff-d4f3-4de9-a80b-37197a92a702	ML	Maternity Leave	180
+a1f6ccd8-f996-4d49-8177-b888c5c53435	COL	Compensatory Off Leave	0
+8f80ea75-d073-4c6c-925e-8cc213b8ece9	CL	Casual Leave	12
+027e9183-48c7-43d2-b5b5-262ae6ad9c10	SL	Sick Leave	10
+5a602a9b-7062-42bb-a3ad-8ddc8cc75de6	EL	Earned Leave	30
+0ca739ff-4ef3-4bbd-9980-3645cc6a7cc0	ML	Maternity Leave	180
+8b8ca89d-6622-4d28-9c86-f70caae58ecd	COL	Compensatory Off Leave	0
+e5b38a24-8e74-4da7-84ed-9666703dc917	CL	Casual Leave	12
+98ecec9e-c2b2-4fe4-93f7-4e846d7484ca	SL	Sick Leave	10
+dce2551e-e889-49e3-a70c-040d499487fb	EL	Earned Leave	30
+268f74f1-6a60-45af-8cc0-2fd0d575cb37	ML	Maternity Leave	180
+cb446a51-564b-46bd-9af3-9bc22a71a82b	COL	Compensatory Off Leave	0
+e626c67c-9020-4a3c-988f-0c7ce9d0f98e	CL	Casual Leave	12
+b3bcd49f-8840-42e3-9ee5-75af5630ceb3	SL	Sick Leave	10
+abd3a97e-ecb5-4913-b088-546bc8793240	EL	Earned Leave	30
+174aa0bc-3d37-4756-91b7-84abd8eda8e8	ML	Maternity Leave	180
+578fda14-0edf-4e86-b8c1-beff42d377e7	COL	Compensatory Off Leave	0
+a0c2c662-9be2-4f91-b01f-e4c0e7b53ef2	CL	Casual Leave	12
+4b598050-befc-4e57-ba3e-ae6ed50c552a	SL	Sick Leave	10
+63cf5515-7bc3-48bf-8118-ab03fa68ff7c	EL	Earned Leave	30
+509c548e-1b00-4107-89fe-c38437ef90a1	ML	Maternity Leave	180
+d2b78f8c-a21c-45a9-8f35-f073abb84529	COL	Compensatory Off Leave	0
+a5cc67af-7f2b-460a-a3f3-c26b959491e3	CL	Casual Leave	12
+c859c9cf-b800-4e12-b658-1b9f8f1ff22a	SL	Sick Leave	10
+59afda5d-3541-490c-b175-09c06f111c85	EL	Earned Leave	30
+c61f4cc1-862b-4ed9-a60b-d75352f23a2f	ML	Maternity Leave	180
+4eaa2a16-cae5-4622-b828-eefb359f13cc	COL	Compensatory Off Leave	0
+ef10d5b7-51b0-49f7-8182-c978e289482b	CL	Casual Leave	12
+f898112b-ed38-40dd-982a-5f99d1da9578	SL	Sick Leave	10
+9fde0703-b0b7-4650-bbfb-5aa1575cc16d	EL	Earned Leave	30
+90ad0d7f-bbef-4c87-a838-174f4c81a56e	ML	Maternity Leave	180
+341845e8-c711-43eb-be12-ee1a38fa8402	COL	Compensatory Off Leave	0
+6af72042-2cde-4508-ad92-bec3d036db11	CL	Casual Leave	12
+1334e869-2835-432b-959b-a2a0eb8d82fe	SL	Sick Leave	10
+5931985b-56b6-4690-82ad-db114a0b10df	EL	Earned Leave	30
+8671b5be-abb0-48f3-900b-2a3f9057f150	ML	Maternity Leave	180
+62534cb1-301a-4708-a284-eaa380a50c65	COL	Compensatory Off Leave	0
+97c28788-c6a4-4398-bc37-0ff6f17e2a63	CL	Casual Leave	12
+62639946-89c3-47de-8d69-124e5cb6380a	SL	Sick Leave	10
+bbb17f2b-3f41-427a-804d-a3e5f500f14b	EL	Earned Leave	30
+b2d76e01-33fb-40a1-b5e5-6575a5229a6d	ML	Maternity Leave	180
+6bbc13f6-3348-47bd-909d-f66051baf833	COL	Compensatory Off Leave	0
+dd1b6d11-7fa8-4575-9216-a35580e8f9da	CL	Casual Leave	12
+d4a867d0-c3ea-4ba4-9f5d-f75052e91693	SL	Sick Leave	10
+9c2bf64a-0c92-4308-9039-a8e829da268c	EL	Earned Leave	30
+ef355e4c-70fb-4b85-9fbd-b1a3ae95c37f	ML	Maternity Leave	180
+8096e4ce-f41f-4a0b-b593-3a22703a4954	COL	Compensatory Off Leave	0
+23bf789a-630e-4c3d-979d-d8d7d3fbc429	CL	Casual Leave	12
+3c239232-6095-448f-b25d-d135a0e487da	SL	Sick Leave	10
+d65f1b48-5066-45c4-aede-9394653adbfd	EL	Earned Leave	30
+c28b28be-b35d-4cd9-b7e1-0e98bbea4dd0	ML	Maternity Leave	180
+3cc9f427-9a8e-4668-91f8-f71161bbe8fd	COL	Compensatory Off Leave	0
+eb79d910-8719-49b1-9719-7c02ba33fed3	CL	Casual Leave	12
+d072ce9e-aa85-4ff6-98b2-2727cc1691e3	SL	Sick Leave	10
+8cb43de0-2358-445d-a86e-96909ef8c72e	EL	Earned Leave	30
+ff82e654-7b03-46b2-a604-e1e8787ddc3b	ML	Maternity Leave	180
+7bd18f01-e56f-426c-aef7-82a93534aad0	COL	Compensatory Off Leave	0
+7657807f-5256-4744-821b-9fbc54ff56d1	CL	Casual Leave	12
+2a4bb8e2-8129-4051-8168-81a7741f6874	SL	Sick Leave	10
+23a867f9-d86c-44fe-b8f8-86f7291eaf1b	EL	Earned Leave	30
+66cbd155-c0e6-4076-8ad5-bf58c4283bb1	ML	Maternity Leave	180
+2da24ea3-c02d-47c1-b382-a22916b325c3	COL	Compensatory Off Leave	0
+09b0e7bb-7d1d-48fa-a3ef-e152080010f2	CL	Casual Leave	12
+d61bbd2d-ee7e-4e38-9e2c-a405063b37e6	SL	Sick Leave	10
+a06a605c-fc8b-4e30-8aca-cde0ed044b04	EL	Earned Leave	30
+0245fe70-cf3a-4988-b1d2-939a511330c4	ML	Maternity Leave	180
+cc505de1-8e54-40c3-b1b6-debbcc4fb040	COL	Compensatory Off Leave	0
+681218e3-2ce5-4225-b82f-6dc1302db26d	CL	Casual Leave	12
+46aa1b3e-2716-40e9-9aba-a1d63c62069d	SL	Sick Leave	10
+c7cea245-9d9a-460c-a944-170c1158ac21	EL	Earned Leave	30
+974cddab-30e0-4b3b-b70b-270c1dfb2389	ML	Maternity Leave	180
+3e9c928e-dc91-4b0a-b984-751374dcb35a	COL	Compensatory Off Leave	0
 \.
 
 
@@ -27714,8 +28062,7 @@ COPY "tenant_srms-cet-bareilly".notifications (id, recipient_id, title, body, ty
 --
 
 COPY "tenant_srms-cet-bareilly".professional_linkers (id, code, name, course_cd, professional_phase, academic_session, description, is_active, created_at) FROM stdin;
-530f103c-8603-48f5-b24d-b7e5d23fd0e0	2026	ENGINEERING & MANAGEMENT	ENG	I	2026-2027	MANAGEMENT & ENGINEERING	t	2026-08-15 11:06:45.600028+00
-530f103c-8603-48f5-b24d-b7e5d23fd0e0	2026	ENGINEERING & MANAGEMENT	ENG	I	2026-2027	MANAGEMENT & ENGINEERING	t	2026-08-15 11:06:45.600028+00
+7b3bcf20-52b5-4869-85c6-f5d28269971b	2026	MGMT-ENG	2026	M&E	2026	Management & Engineering	t	2026-08-16 09:11:50.986796+00
 \.
 
 
@@ -29208,10 +29555,9 @@ COPY "tenant_srms-cet-bareilly".student_phase_progressions (id, student_id, batc
 --
 
 COPY "tenant_srms-cet-bareilly".student_results (id, student_id, paper_id, marks_obtained, is_pass, attempt_number, entered_by, created_at, question_marks, sub_part_marks, practical_mark, eval_status, updated_at) FROM stdin;
-6f9fd006-dbdb-4b71-bd66-61f89c535016	a038cc72-0e31-4aa4-91de-199542982a56	cdae690c-a221-4a99-a23b-9eb947820bf3	75.50	t	1	\N	2026-08-16 06:45:56.223389+00	{"q-0": 2}	{"q-1___a": 2.5}	0.00	EVALUATED	2026-08-16 06:45:56.223389+00
-3f139846-f44c-4b47-8e93-bf2cffce5409	a038cc72-0e31-4aa4-91de-199542982a56	cb9fbf49-9f0b-45a0-943c-ca905792c543	65.00	t	1	\N	2026-08-16 07:40:48.248346+00	{"23279a21-1e3d-4252-8386-24a2ae0b2f49": 0, "27e4ea29-c237-4511-8c7b-0d16aaba55cb": 2, "5c975005-aa31-485d-92f9-90305995ecfe": 0, "73970ac1-5ff6-474f-a02c-c62e5c97cc6b": 2, "922fe003-735e-4eef-bfba-1a1c37b1bd43": 2}	{"0a2b83d6-1481-4de8-9518-ac27c5ae3478___1": 0, "0a2b83d6-1481-4de8-9518-ac27c5ae3478___2": 2, "0a2b83d6-1481-4de8-9518-ac27c5ae3478___3": 1.5, "0a2b83d6-1481-4de8-9518-ac27c5ae3478___4": 2, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___1": 1, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___2": 1, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___3": 2, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___4": 2, "6995039e-c3e0-4657-8f04-f5141dc36158___1": 2, "6995039e-c3e0-4657-8f04-f5141dc36158___2": 2, "6995039e-c3e0-4657-8f04-f5141dc36158___3": 1, "6995039e-c3e0-4657-8f04-f5141dc36158___4": 1.5, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___1": 2, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___2": 2, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___3": 1, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___4": 1}	35.00	EVALUATED	2026-08-16 06:49:19.932631+00
-6f9fd006-dbdb-4b71-bd66-61f89c535016	a038cc72-0e31-4aa4-91de-199542982a56	cdae690c-a221-4a99-a23b-9eb947820bf3	75.50	t	1	\N	2026-08-16 06:45:56.223389+00	{"q-0": 2}	{"q-1___a": 2.5}	0.00	EVALUATED	2026-08-16 06:45:56.223389+00
-3f139846-f44c-4b47-8e93-bf2cffce5409	a038cc72-0e31-4aa4-91de-199542982a56	cb9fbf49-9f0b-45a0-943c-ca905792c543	65.00	t	1	\N	2026-08-16 07:40:48.248346+00	{"23279a21-1e3d-4252-8386-24a2ae0b2f49": 0, "27e4ea29-c237-4511-8c7b-0d16aaba55cb": 2, "5c975005-aa31-485d-92f9-90305995ecfe": 0, "73970ac1-5ff6-474f-a02c-c62e5c97cc6b": 2, "922fe003-735e-4eef-bfba-1a1c37b1bd43": 2}	{"0a2b83d6-1481-4de8-9518-ac27c5ae3478___1": 0, "0a2b83d6-1481-4de8-9518-ac27c5ae3478___2": 2, "0a2b83d6-1481-4de8-9518-ac27c5ae3478___3": 1.5, "0a2b83d6-1481-4de8-9518-ac27c5ae3478___4": 2, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___1": 1, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___2": 1, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___3": 2, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___4": 2, "6995039e-c3e0-4657-8f04-f5141dc36158___1": 2, "6995039e-c3e0-4657-8f04-f5141dc36158___2": 2, "6995039e-c3e0-4657-8f04-f5141dc36158___3": 1, "6995039e-c3e0-4657-8f04-f5141dc36158___4": 1.5, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___1": 2, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___2": 2, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___3": 1, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___4": 1}	35.00	EVALUATED	2026-08-16 06:49:19.932631+00
+516a5f23-5e6c-4cae-9ac3-87ce14870e06	b1cce9ef-2696-41e2-9834-275dba417c8a	cb9fbf49-9f0b-45a0-943c-ca905792c543	74.50	t	1	\N	2026-08-16 11:25:31.890854+00	{}	{}	0.00	EVALUATED	2026-08-16 11:25:31.890854+00
+5eaf470e-0d84-4f9b-9dd6-a53d163ab19e	e5e55f18-e827-4978-8872-bc37f7db030a	cb9fbf49-9f0b-45a0-943c-ca905792c543	68.00	t	1	\N	2026-08-16 11:25:31.907104+00	{}	{}	0.00	EVALUATED	2026-08-16 11:25:31.907104+00
+bf412d8d-524c-402f-9559-b201ea343203	2653e41f-92af-42af-8745-1c4e3790d19b	cb9fbf49-9f0b-45a0-943c-ca905792c543	78.00	t	1	\N	2026-08-16 11:25:31.912254+00	{}	{}	0.00	EVALUATED	2026-08-16 11:25:31.912254+00
 \.
 
 
@@ -29560,22 +29906,12 @@ COPY "tenant_srms-cet-bareilly".subject_offerings (id, subject_id, prof_id, dtyp
 --
 
 COPY "tenant_srms-cet-bareilly".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
-6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-aa8085d5-c34d-4dc1-93af-e814ed071939	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-75143a10-e3c7-4de8-89c3-8b626bad5f1b	BCA-101	Data Structures & Algorithms	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
 d562b601-3692-4af9-af60-cf8669625c29	BCA-102	Programming in C Language	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
-84724489-8aee-425a-8a39-56c668d4ca0b	BCA-103	Database Management Systems (DBMS)	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
 d83d155d-e472-48fe-b984-ce042b505949	BCA-104	Operating System Concepts	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
 e5b6eced-5523-4213-bca4-5cde0727d282	BCA-105	Computer Networks & Security	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
 d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	Web Technology	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	4	Combined	f	t	13	BCA	1
-6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-aa8085d5-c34d-4dc1-93af-e814ed071939	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 75143a10-e3c7-4de8-89c3-8b626bad5f1b	BCA-101	Data Structures & Algorithms	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
-d562b601-3692-4af9-af60-cf8669625c29	BCA-102	Programming in C Language	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
 84724489-8aee-425a-8a39-56c668d4ca0b	BCA-103	Database Management Systems (DBMS)	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
-d83d155d-e472-48fe-b984-ce042b505949	BCA-104	Operating System Concepts	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
-e5b6eced-5523-4213-bca4-5cde0727d282	BCA-105	Computer Networks & Security	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	0	\N	f	t	13	\N	1
-d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	Web Technology	8937c20c-91d9-47e3-b4b9-0884627d085b	\N	4	Combined	f	t	13	BCA	1
 \.
 
 
@@ -29584,22 +29920,13 @@ d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	Web Technology	8937c20c-91d9-47e3-b4b
 --
 
 COPY "tenant_srms-cet-bareilly".timetable_slots (id, faculty_id, subject_id, department_id, batch_id, day_of_week, start_time, end_time, room, slot_type, effective_from, effective_until, group_name, topic, competency_codes) FROM stdin;
-31ad1dee-c963-490b-82e7-66ff4525c175	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	1	09:00:00	10:00:00	Lecture Hall 1	LECTURE	\N	\N	\N	Excitation-Contraction Coupling in Muscle	PY2.1
-da708011-71e4-406e-b24f-358e178e6cd8	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	1	14:00:00	16:00:00	Physiology Lab A	PRACTICAL	\N	\N	\N	Spirometry & Pulmonary Function Tests	PY2.5
-0cb8c7a2-7065-471a-bbb9-cc96f19db182	d3d9682a-dc29-4ede-a739-e9b3ddba20fa	aa8085d5-c34d-4dc1-93af-e814ed071939	078d6a7c-ceac-4b9f-9eb1-951337750e4a	6473c379-3960-4a8b-9e52-3cc14e2280fe	1	10:00:00	11:00:00	Dissection Hall 2	LECTURE	\N	\N	\N	Upper Limb Osteology & Scapula Attachments	AN1.1
-7b26ca04-bd56-4aca-bf65-9198775da621	d3d9682a-dc29-4ede-a739-e9b3ddba20fa	aa8085d5-c34d-4dc1-93af-e814ed071939	078d6a7c-ceac-4b9f-9eb1-951337750e4a	6473c379-3960-4a8b-9e52-3cc14e2280fe	2	09:00:00	10:00:00	Dissection Hall 1	LECTURE	\N	\N	\N	Brachial Plexus Anatomy & Nerve Lesions	AN2.3
-1f6127b8-1d69-47a1-9a1b-858656032c45	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	2	10:00:00	11:00:00	Lecture Hall 1	LECTURE	\N	\N	\N	Cardiac Action Potential & ECG Waves	PY3.1
-8e5d25d9-25b7-413d-b5ab-c8dd4367f2aa	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	3	10:00:00	11:00:00	Lecture Hall 1	LECTURE	\N	\N	\N	Renal Clearance & Glomerular Filtration	PY4.2
-82694e05-6f0c-41e1-adc2-a82d9009cee8	d3d9682a-dc29-4ede-a739-e9b3ddba20fa	aa8085d5-c34d-4dc1-93af-e814ed071939	078d6a7c-ceac-4b9f-9eb1-951337750e4a	6473c379-3960-4a8b-9e52-3cc14e2280fe	4	10:00:00	11:00:00	Dissection Hall 1	LECTURE	\N	\N	\N	Scapular Region & Shoulder Abduction	AN10.1
-f4f127aa-5905-4834-a390-5e2616ef0b09	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	5	10:00:00	12:00:00	Physiology Lab B	PRACTICAL	\N	\N	\N	Synaptic Transmission & Neurotransmitters	PY5.1
-31ad1dee-c963-490b-82e7-66ff4525c175	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	1	09:00:00	10:00:00	Lecture Hall 1	LECTURE	\N	\N	\N	Excitation-Contraction Coupling in Muscle	PY2.1
-da708011-71e4-406e-b24f-358e178e6cd8	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	1	14:00:00	16:00:00	Physiology Lab A	PRACTICAL	\N	\N	\N	Spirometry & Pulmonary Function Tests	PY2.5
-0cb8c7a2-7065-471a-bbb9-cc96f19db182	d3d9682a-dc29-4ede-a739-e9b3ddba20fa	aa8085d5-c34d-4dc1-93af-e814ed071939	078d6a7c-ceac-4b9f-9eb1-951337750e4a	6473c379-3960-4a8b-9e52-3cc14e2280fe	1	10:00:00	11:00:00	Dissection Hall 2	LECTURE	\N	\N	\N	Upper Limb Osteology & Scapula Attachments	AN1.1
-7b26ca04-bd56-4aca-bf65-9198775da621	d3d9682a-dc29-4ede-a739-e9b3ddba20fa	aa8085d5-c34d-4dc1-93af-e814ed071939	078d6a7c-ceac-4b9f-9eb1-951337750e4a	6473c379-3960-4a8b-9e52-3cc14e2280fe	2	09:00:00	10:00:00	Dissection Hall 1	LECTURE	\N	\N	\N	Brachial Plexus Anatomy & Nerve Lesions	AN2.3
-1f6127b8-1d69-47a1-9a1b-858656032c45	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	2	10:00:00	11:00:00	Lecture Hall 1	LECTURE	\N	\N	\N	Cardiac Action Potential & ECG Waves	PY3.1
-8e5d25d9-25b7-413d-b5ab-c8dd4367f2aa	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	3	10:00:00	11:00:00	Lecture Hall 1	LECTURE	\N	\N	\N	Renal Clearance & Glomerular Filtration	PY4.2
-82694e05-6f0c-41e1-adc2-a82d9009cee8	d3d9682a-dc29-4ede-a739-e9b3ddba20fa	aa8085d5-c34d-4dc1-93af-e814ed071939	078d6a7c-ceac-4b9f-9eb1-951337750e4a	6473c379-3960-4a8b-9e52-3cc14e2280fe	4	10:00:00	11:00:00	Dissection Hall 1	LECTURE	\N	\N	\N	Scapular Region & Shoulder Abduction	AN10.1
-f4f127aa-5905-4834-a390-5e2616ef0b09	e273fe73-bc2d-46a5-82fa-02faf8f9aae6	6f9ec1d8-c24a-4967-a81b-22955fcb5c0e	c5b8c0a4-cfe2-4580-b91f-93a97f3b502f	6473c379-3960-4a8b-9e52-3cc14e2280fe	5	10:00:00	12:00:00	Physiology Lab B	PRACTICAL	\N	\N	\N	Synaptic Transmission & Neurotransmitters	PY5.1
+02c4bd61-61bc-47f7-b434-27688b087ad4	879207b0-eaf4-43b0-b664-b6a854bbfe81	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	\N	\N	1	09:00:00	10:00:00	Lab 3 (Web Tech)	\N	\N	\N	\N	\N	\N
+55bd1845-6429-485b-8da8-7acfc7918290	879207b0-eaf4-43b0-b664-b6a854bbfe81	75143a10-e3c7-4de8-89c3-8b626bad5f1b	\N	\N	1	10:15:00	11:15:00	Room 204 (BCA 3rd Sem)	\N	\N	\N	\N	\N	\N
+1ca8cd74-1aff-44f3-b89c-3355f357f7c3	879207b0-eaf4-43b0-b664-b6a854bbfe81	84724489-8aee-425a-8a39-56c668d4ca0b	\N	\N	2	09:00:00	10:00:00	Room 204 (BCA 3rd Sem)	\N	\N	\N	\N	\N	\N
+8f89b141-0070-4110-9cf3-c46412736dee	879207b0-eaf4-43b0-b664-b6a854bbfe81	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	\N	\N	2	11:30:00	12:30:00	Lab 3 (Python/Web)	\N	\N	\N	\N	\N	\N
+7bec2022-6a0d-401a-8a39-c5624d1c2cd5	879207b0-eaf4-43b0-b664-b6a854bbfe81	75143a10-e3c7-4de8-89c3-8b626bad5f1b	\N	\N	3	10:00:00	11:00:00	Room 204 (BCA 3rd Sem)	\N	\N	\N	\N	\N	\N
+665e2d8c-a8cc-49d6-b4ff-382c9cd51571	879207b0-eaf4-43b0-b664-b6a854bbfe81	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	\N	\N	4	09:00:00	10:00:00	Lab 3 (Web Tech)	\N	\N	\N	\N	\N	\N
+d55a391f-b5d8-442b-93d3-f9a1bd6f5a1b	879207b0-eaf4-43b0-b664-b6a854bbfe81	84724489-8aee-425a-8a39-56c668d4ca0b	\N	\N	5	14:00:00	15:30:00	Database Lab 2	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -29611,9 +29938,9 @@ COPY "tenant_srms-cet-bareilly".topics (id, subject_id, linker_id, code, name, d
 189ab848-4e28-4044-a673-414906c6abdb	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	530f103c-8603-48f5-b24d-b7e5d23fd0e0	88534-CO1-T03	Introduction to Python:	Introduction to Python:	2	t	2026-08-15 13:06:32.548043+00	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	13	1	\N	KL-1 (Remember)
 21097713-9d42-4b4d-8fd2-39a4bb3d7d20	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	530f103c-8603-48f5-b24d-b7e5d23fd0e0	88534-CO1-T04	Python	Python	2	t	2026-08-15 13:08:06.140582+00	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	13	1	\N	KL-1 (Remember)
 098e3811-37c6-4ca2-852d-ae24b3c5b9b7	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	530f103c-8603-48f5-b24d-b7e5d23fd0e0	88534-CO1-T05	Control Structures	Control Structures	2	t	2026-08-15 14:06:37.240623+00	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	13	1	\N	KL-1 (Remember)
-189ab848-4e28-4044-a673-414906c6abdb	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	530f103c-8603-48f5-b24d-b7e5d23fd0e0	88534-CO1-T03	Introduction to Python:	Introduction to Python:	2	t	2026-08-15 13:06:32.548043+00	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	13	1	\N	KL-1 (Remember)
-21097713-9d42-4b4d-8fd2-39a4bb3d7d20	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	530f103c-8603-48f5-b24d-b7e5d23fd0e0	88534-CO1-T04	Python	Python	2	t	2026-08-15 13:08:06.140582+00	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	13	1	\N	KL-1 (Remember)
-098e3811-37c6-4ca2-852d-ae24b3c5b9b7	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	530f103c-8603-48f5-b24d-b7e5d23fd0e0	88534-CO1-T05	Control Structures	Control Structures	2	t	2026-08-15 14:06:37.240623+00	88534	61a2a3af-724d-4b6d-8f99-19186535abed	CO1	13	1	\N	KL-1 (Remember)
+ba6577db-c8a2-46ed-80b9-b413a5c2afe9	75143a10-e3c7-4de8-89c3-8b626bad5f1b	\N	DS-T01	Stacks and Queues	LIFO/FIFO Principles, Array and Linked List Representations, Infix to Postfix conversion	1	t	2026-08-16 10:49:40.327833+00	\N	bc516eae-bf7d-475a-99c2-38621097ecd5	\N	13	1	\N	KL-3 (Apply)
+d54b3d4b-c921-4fa2-936c-eaf6abf9a5f7	75143a10-e3c7-4de8-89c3-8b626bad5f1b	\N	DS-T02	Linked Lists Operations	Singly, Doubly, and Circular Linked Lists with Insertion, Deletion, and Traversal	1	t	2026-08-16 10:49:40.335227+00	\N	bc516eae-bf7d-475a-99c2-38621097ecd5	\N	13	1	\N	KL-3 (Apply)
+e0c5d83d-c729-4eb4-a78c-0d90b8c3c618	84724489-8aee-425a-8a39-56c668d4ca0b	\N	DBMS-T01	SQL Queries & Subqueries	SELECT, GROUP BY, HAVING, Nested Subqueries and Complex Joins	1	t	2026-08-16 10:51:56.941953+00	\N	b220d727-4b75-4204-9972-bb1e9b5f065d	\N	13	1	\N	KL-3 (Apply)
 \.
 
 
@@ -29627,11 +29954,9 @@ c77ad059-25eb-475f-875f-48ecd51d49bc	CO2	CO2	Express proficiency in the handling
 139316a5-5601-4bf1-8695-aacc0382e4d1	CO3	CO3	Determine the methods to create and manipulate Python\nprograms by utilizing the data structures like lists, dictionaries,\ntuples and sets.	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	13	BCA	1	ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	2025	KL-3 (Apply)	3	10	t	2026-08-15 12:32:51.152489+00	2026-08-15 12:32:51.152489+00
 2c7e45d8-53e2-4a2e-8326-629eea1282fd	CO4	CO4	Use OO concepts while programming in Python	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	13	BCA	1	ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	2025	KL-3 (Apply)	4	10	t	2026-08-15 12:33:59.296746+00	2026-08-15 12:33:59.296746+00
 dcf3696e-1d67-4358-8eb7-88151145b163	CO5	CO5	Work with Python using GUI.	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	13	BCA	1	ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	2025	KL-2 (Understand)	5	10	t	2026-08-15 12:34:32.522991+00	2026-08-15 12:34:32.522991+00
-61a2a3af-724d-4b6d-8f99-19186535abed	CO1	CO1	Interpret the fundamental Python syntax and semantics and be\nfluent in the use of Python control flow statements.	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	13	BCA	1	ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	2025	KL-1 (Remember)	1	10	t	2026-08-15 12:31:18.582869+00	2026-08-15 12:31:18.582869+00
-c77ad059-25eb-475f-875f-48ecd51d49bc	CO2	CO2	Express proficiency in the handling of strings and functions	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	13	BCA	1	ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	2025	KL-2 (Understand)	2	10	t	2026-08-15 12:32:04.794554+00	2026-08-15 12:32:04.794554+00
-139316a5-5601-4bf1-8695-aacc0382e4d1	CO3	CO3	Determine the methods to create and manipulate Python\nprograms by utilizing the data structures like lists, dictionaries,\ntuples and sets.	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	13	BCA	1	ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	2025	KL-3 (Apply)	3	10	t	2026-08-15 12:32:51.152489+00	2026-08-15 12:32:51.152489+00
-2c7e45d8-53e2-4a2e-8326-629eea1282fd	CO4	CO4	Use OO concepts while programming in Python	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	13	BCA	1	ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	2025	KL-3 (Apply)	4	10	t	2026-08-15 12:33:59.296746+00	2026-08-15 12:33:59.296746+00
-dcf3696e-1d67-4358-8eb7-88151145b163	CO5	CO5	Work with Python using GUI.	d3eb5821-3e7b-420b-9a0c-bbb1019b8da3	88534	13	BCA	1	ca8e9ca6-4253-4a18-8e28-5c344f7d71f0	2025	KL-2 (Understand)	5	10	t	2026-08-15 12:34:32.522991+00	2026-08-15 12:34:32.522991+00
+bc516eae-bf7d-475a-99c2-38621097ecd5	DS-U1	Unit 1: Linear Data Structures	Arrays, Stacks, Queues and Linked Lists implementation and operations	75143a10-e3c7-4de8-89c3-8b626bad5f1b	\N	13	\N	1	\N	\N	KL-3 (Apply)	1	12	t	2026-08-16 10:49:40.314466+00	2026-08-16 10:49:40.314466+00
+ee0aeee0-3da0-4d3f-bbe5-df8c7cc5a225	DS-U2	Unit 2: Non-Linear Data Structures	Binary Trees, Binary Search Trees, AVL Trees and Graphs	75143a10-e3c7-4de8-89c3-8b626bad5f1b	\N	13	\N	1	\N	\N	KL-4 (Analyze)	2	14	t	2026-08-16 10:49:40.32286+00	2026-08-16 10:49:40.32286+00
+b220d727-4b75-4204-9972-bb1e9b5f065d	DBMS-U1	Unit 1: Relational Model & SQL	Relational Algebra, SQL Queries, Joins, Aggregations, and Constraints	84724489-8aee-425a-8a39-56c668d4ca0b	\N	13	\N	1	\N	\N	KL-3 (Apply)	1	14	t	2026-08-16 10:51:56.936768+00	2026-08-16 10:51:56.936768+00
 \.
 
 
@@ -29640,7 +29965,6 @@ dcf3696e-1d67-4358-8eb7-88151145b163	CO5	CO5	Work with Python using GUI.	d3eb582
 --
 
 COPY "tenant_srms-cet-bareilly".users (id, email, password_hash, role, is_active, onboarding_completed, onboarding_step, must_change_password, failed_login_count, locked_until, last_login_at, password_reset_token, password_reset_expires, created_at, updated_at) FROM stdin;
-97355546-43cd-46ed-8615-f30af6dff1a6	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
 f153646e-65ef-4bd2-9727-ef5877267179	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
 21069e4c-e470-44fd-a449-bc6d2cbca35e	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
 66a4ee8f-78ab-4750-82ba-55df8192c598	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
@@ -29741,7 +30065,6 @@ a1e1dde8-e815-4265-9994-f3b4baa5dfe7	apaikshashrivastava@gmail.com	$2b$12$eImiTX
 df3dffce-7a99-4a19-b678-d5d60e086913	arhan.satendra13@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
 94899dd9-df6b-4de1-b350-2690f72f465f	arjunk27021@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
 7a08537d-02e7-46de-8522-95848c168174	2025107356@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-1cf04680-7d8c-4b28-833d-e0d5c5dfd1c4	arshadnaim646@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
 029f1e51-b12c-45f3-a7df-3953116d4ee2	arshitayadav61@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
 01d51a80-83ff-4bf9-9ab2-ff42f51eac75	arveshy597@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
 836c4c02-6e6b-4081-a69d-40daa59a329b	asheeshkumar05072008@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
@@ -29803,173 +30126,8 @@ b7d6ee48-e959-423d-af99-984a47c55463	vaibhavgautam1407@gmail.com	$2b$12$eImiTXuW
 73eb6815-703d-47dd-b60b-244bdcbaf105	rachnamishra639581@gimal.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
 e8fe6d8d-0fac-4e03-bec6-1a6e89ad564b	rajputvandana846@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
 fa15da20-d7f3-4f44-961d-1f8e06f38f30	2025107684@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-f72cce21-f5e0-4eaf-b2a1-2d1a9738a56a	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-16 07:57:15.250958+00	2026-08-16 07:57:15.250958+00
-8780cb5f-f365-4e6c-8aa0-50249f918bf1	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-16 07:57:15.250958+00	2026-08-16 07:57:15.250958+00
-97355546-43cd-46ed-8615-f30af6dff1a6	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
-f153646e-65ef-4bd2-9727-ef5877267179	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
-21069e4c-e470-44fd-a449-bc6d2cbca35e	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
-66a4ee8f-78ab-4750-82ba-55df8192c598	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
-083f5199-cf74-49d0-9cf6-645b4ee1f675	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
-a0ef42a7-faf6-4a63-a202-0591bd164034	pnaditya75@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-16b85cbe-de57-45ab-b599-77e88fb1cc35	aksharasaxena49@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-17cc87ff-2aae-45e7-a6ca-50b08aa99bce	aniketvarshney72@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-5779973b-3916-4a88-8655-49d66708b5e9	anshikaaa047@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-5480cbb6-a625-4e6b-9add-da4b605ed76e	deekshagangwar160107@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-9ec888b7-7fee-4ebd-b130-22278ee34178	haniinstudies@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-c59d5eb5-0305-4360-8f16-79921fc2562a	rathoreishant4@gmail.co	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-c650fead-2708-4a07-be40-2b5e01ff3621	ishu36577@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-eb743624-c6c7-4f92-ac8b-6df99f8fee38	laraibashfaq231@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-069b5c4f-5580-450f-8866-8338d892aded	premsingh243635k@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-f06a625e-ca2e-4994-add5-069364710188	sachinpal8872@gmqil.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-a4372529-4b35-4f72-aaa3-90d2c9db0f47	ssingh010702@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-18c79c63-cdb7-4065-989a-548276801710	vamakshi07@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-5b01b13f-910a-4c4b-b29a-09ac452b8b33	afreen4067@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-2350ea8c-f3c1-4b7a-83cd-308672378186	aunj8492@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-e288d782-3006-493b-88a4-17dc239bd10f	asifkha893790@gmail.come	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-3191895a-5226-476a-a2ee-663268c2133b	ps8301276@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-28cd6804-959a-465e-b54f-8ceb7edeca52	yadavshashi12776@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-f84f1b0f-f817-46f4-b96b-960bd0dc8fe0	faizkhan598022@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-6efbabf0-5d77-4ed5-86d2-ee337ead7d4b	ishatamta4@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-fbc81cda-cfd6-4f7d-adf3-c52398f8c793	kapilupadhyay8865@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-cb1d71b3-68ff-4a78-a882-1e50e63afc14	ahmadsohrab66@gmail.com	$2b$12$w8gtuhpxQHT1d8/B7LTAtOLnFmpIi1cokVoCDBx65iYBAjcvM7usu	FACULTY	t	f	0	t	0	\N	2026-08-16 06:04:38.335088+00	\N	\N	2026-08-15 15:02:58.498103+00	2026-08-15 15:02:58.498103+00
-e4775e92-1b58-49f3-aff3-3236c39a7c51	afake0404@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-a76ebbe8-885c-4427-adb5-cf21176f04df	dixitpramudit@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-50c169a2-84b9-422a-ae35-8e0874d7152e	prateekgangwar05@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-758f47bb-be87-4647-b1a1-1ab12e4d43eb	priyanshurathour045@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-4de40253-31ee-46f1-9a3e-5d1051084ac8	radhikasaxena2516@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-3f080cb6-2990-49d0-ab15-fc566e6155ee	sabbuansari96574@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-91b6c738-69e7-4259-be6e-716a471b5a13	sachingangwar1042005@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-350be22b-1340-49cd-88d7-7621954202c8	shreyasharma9tha@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-6b5fe463-0930-4d3c-8cf8-8e2712569935	siyaagarwal8533@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-e43264f1-263c-4b62-9899-ed9c4f7602d7	vv5347018@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-a80839c1-3d73-42b2-a58d-9391e6e68950	visheshmaurya452@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-cbc6833a-de30-4519-9f79-eb2e17687166	vivekgangwar448@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-12c9c30c-7a75-4694-b23e-e994185caeba	vikkysharma7505@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-cb90628a-5a1b-44fa-8282-fb031c6dd3db	anmolupadhaya30@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-b2c8d9d1-0eb5-470a-8336-1d7ade0185e2	anshika.thakur1014@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-f40bfcda-c73b-48d1-a049-8858f603d432	shamsimahim@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-bcd27ffa-7034-4bfd-bd5e-ca0f34ce0aef	sakibkhan35859@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-fea4bf46-f934-42de-be0d-a39d58d22d81	gargsimran546@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-c229d0d0-5bf0-4c31-bda9-9de191105e5d	khizrafatima.1517@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-d9eea27a-6596-47c9-8a9a-d87a15cd1413	ankitasinghxia@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-b96787c4-7154-4b13-baa3-466a70321b90	agarwalarush917@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-7702a504-8639-4836-ac53-df4e5d2be02b	divybly@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-0738c0f1-b499-46e4-813c-725185398e3e	krastogi732@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-ba61aaa6-722c-457e-917a-49923f0e88bd	guptanavya0901@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-2aac5b43-ce09-42c8-8ab1-2d9fa7351cb2	rachkanc@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-2a6a1a18-802f-4b57-8ec2-63ede8687425	rajrishabh525@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-1bfa5320-64e0-44c6-8656-e01bff0fa198	rishabhshngl121@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-34aa06fd-f74e-4372-867b-ecfa9b99773f	2300140100104@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-4e5069a3-6db1-4128-9b10-6d1d9115d656	sujaysrivastava18@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-1b544440-a22a-4168-a3e7-9481583676f8	yashasvijo2701@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-6158dbaf-8dca-4ab2-8b04-192877aec3ee	abhas1012@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-9232b646-a882-4437-a167-9cfb0e368347	abhinandanyadav.fmssrms@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-36f6ad2e-8d14-4a94-90d6-1356e7d0bcee	tyagiakash680@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-023cd745-308e-4816-a2e7-8b65c48e7d7e	archismanpalit22@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-6673ddfa-4771-4b80-88e8-aae58b495e40	fariahussain010@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-5eec0250-7dd8-4afb-a870-0e8bf47ce183	mojeeshansaifi@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-61d6794b-34b7-44c9-a05d-63bfbef5dbc1	laibamirza08@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-4704f811-1575-4563-8f86-b3dfb312b56d	khanliyakat29053@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-17de94c8-2bfa-4218-bd64-d72ef003fe86	manikshrivastav@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-f30cc8b9-433a-4c0d-bda6-41da479666ca	moareeb88@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-176d7467-cdef-4f24-be0f-cb983cf55012	nancyabrol04@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-374f8208-1406-4afa-b247-8f68238f462a	nee	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-ceb55a6e-588f-4b7b-9071-9390393e6fa5	parassharmasrms@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-5d2cc0b3-bf85-44a0-86de-51296ed48c2d	prakharbhartibly@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-efd9e1e9-27b7-4144-a787-b8fd72539ab3	saxenaridhima45@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-a0e571ee-98bb-4f26-bc25-132019b4f9bc	utkarshbhardwaj941@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-a94d5b7e-9478-48f1-ae71-acadac9b5c2c	bansal.vanshika.srms@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-ac15e4c7-875a-47ba-a8c3-35b978c7c6dd	vanshikatiwari.srms@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-c9ee86b7-b704-4847-b0e3-0dfa2000f92e	yadavvanshika110@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-9dafbb6b-8753-49db-95d8-c51c1eca8b56	vishalgangwarsrms@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-76aa2fa2-caeb-4584-8a01-bdd71560c4d9	yaminibudhalakoti@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-2ac40c9c-0ab6-487d-b4ae-bb2602dd3f26	amanhusain768@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-6cdee4a6-0b94-4431-9d00-912506b38b4e	paliamitpali06@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-dd6a5b41-95a1-438c-8dfb-dde3e36fc4d7	anjalisharma20055@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-74b84884-fdc2-4ab9-abc8-72ae452eb3cc	deepaksharma15333@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-544aa42a-acac-4e23-8f94-d7ab315afcc1	gmaurya200@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-531553fa-f9c9-43a0-8d3f-9c30dbfa98da	gaurimaheshwari93154@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-d3ed876d-e44c-446a-9dd4-8ec17b24beb0	harshitapandey274@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-e6175b88-a631-475e-9153-a4eb69eaa338	guptakaushiki007@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-f576feb0-a25a-4093-96cd-735455f86a54	sayyedlaiba04081995@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-0814fbb4-1e8a-4588-8183-5f4e414ff489	saifofficial0778@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-9104e627-3a59-49e4-9de3-bbf49a5d8c66	muskanmohitkhan1428@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-4dbac41e-310e-46c3-90b2-8777ebcf2076	navneetkumaryadav1112@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-719d7874-1892-4c86-8ec4-5a78234d7417	spriyanshie44@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-6058d8e7-2729-4374-b870-08965c7dec75	sumitkumar976102@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-8486a96b-7711-4e59-b78d-6dc616ee20f7	yashi6905@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 18:31:54.224846+00
-712e708b-3b0f-4458-a928-5daaf9d3e207	rathoreshivansh465@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-cc052826-ca4d-4cf3-b272-dbc780c805ac	anabiakhan14888@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-6ddf72b7-bdac-4734-8708-19c1d0bc2ae1	anmolkatiyar729@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-2ea6a69e-ef06-4b0b-81d4-36d9ed70b10c	vanshbly7@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-a1e1dde8-e815-4265-9994-f3b4baa5dfe7	apaikshashrivastava@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-df3dffce-7a99-4a19-b678-d5d60e086913	arhan.satendra13@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-94899dd9-df6b-4de1-b350-2690f72f465f	arjunk27021@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-7a08537d-02e7-46de-8522-95848c168174	2025107356@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-1cf04680-7d8c-4b28-833d-e0d5c5dfd1c4	arshadnaim646@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-029f1e51-b12c-45f3-a7df-3953116d4ee2	arshitayadav61@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-01d51a80-83ff-4bf9-9ab2-ff42f51eac75	arveshy597@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-836c4c02-6e6b-4081-a69d-40daa59a329b	asheeshkumar05072008@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-21cb763c-ec41-4f4d-a941-022ab521c9c1	ayushkurmi458@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-7678f2f7-bc02-4ac7-843b-8374a3e37ab3	aayshiyashi88@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-1b621a32-1304-4379-8c92-12e933529fb3	azazansari123bly@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-973277fd-b79b-4b84-988a-d8d19e443c7e	bhuvanbishwas963@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-e2f2847a-46fe-485f-a395-7d65c54d8d58	sonamishra2008@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-8bbc94ba-b993-4855-bc88-cc281215e42e	2025108123@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-0be3c9e0-e12f-43f5-9704-ecd61da0120a	2025108023@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-8b674561-d780-4bd1-99ed-01c02eed078d	2025107771@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-5995ae43-d52a-4603-ad42-81f10bd04bb9	bhatnagarharshita51@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-d06968f1-e73a-48fd-9af4-8cc8724dc76d	jaspreetsingh78938@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-45f0154c-8648-49c5-8898-eff6167f1825	jatinpratapsingh40@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-ec708310-3a4b-426f-a91c-3858c151a500	kanaksaini219@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-5a7d4f34-ba98-4ced-9742-02774dbb0835	singhshamu01@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-a46d5868-b9e5-4652-ab72-1b8d41f5cb64	2025107756@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-54c74dff-1a5c-4784-9f5b-9f755f949445	krishsingh1607@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-3ec1ead5-2738-40e1-8cd8-a8aab8ccbfeb	jaiswalkrishna598@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-c192f05a-49dd-41cb-9354-26aa656e1d99	krishnapandey20078077@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-8b61b665-6c20-43be-ad2e-ca2d7ec6335f	kritikag953@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-071481ee-5dd0-426a-8f18-5de37ce42945	kushagra9258671715@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-7cbc5f7f-8b5b-4e6a-92d4-c49b9c1eb9e7	mandirachauhan2730@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-2ad37bb7-6616-4b6e-9651-c9754828e529	mofarman109@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-12303090-6b45-4c62-835c-8e1571107b7f	mohdarman114119@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-9e70826e-f555-4a89-b8e7-73165de9f7af	mohdbilal19221@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-ea9eb0b4-4080-4223-857e-2ba084302cdf	arshiqkhan95@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-c4363da0-61ad-4bc4-a16e-00a1692f704a	musailraza932@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-730c7d48-f6a3-4d38-8f58-d1a68ec829ff	geniuspbt@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-f7af3088-5764-4a60-929f-8de067a3fa13	2025108194@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-c4dc3c07-64cc-4f36-9968-e63e16b83c74	2025108376@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-024fa5b3-57ea-471a-8ecb-088fbb3c3766	mousibkha@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-698b8825-5ac4-4fa8-9e00-b63e63a0a975	muskan2006gaur@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-2d0ca38e-2e5f-47ed-9b92-dbdd3eb91394	muskanshinghalft@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-d2d925d7-a1c1-470d-b482-b0fb39f74ecf	pradhannaitik799@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-048907c9-ba4d-4373-a297-3b226edcd11a	khannisha3737@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-e3df4209-de74-44db-8a07-e75557e9a076	2025107942@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-0bc6e52a-89a1-4ac8-91a3-cc32f1310630	palaks1267@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-118b2028-e390-41d7-a0b7-6c44c3101570	tyagipranjal100@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-5819db7a-54af-41f8-a334-0ff6ccb96de0	pandeypriyanshu0017@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-6ba47af3-8e33-4a16-88d7-5334cd17536c	vmishra062006@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-09351030-ac66-4ac9-8d3e-4817f0326fc6	rastogirishi121@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-d07080c7-a1ad-490b-a4c5-1a98ae5beb40	ritikdev573@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-694a6f00-d2de-49c5-8ed4-9ecd1aca99e9	2025107696@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-885bf638-9ab8-49ef-845c-11859507dd10	sachingungwar@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-de7c3eb8-0609-4b5c-9552-773c64e16019	sahilansari42452@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-21627fec-6fab-4c73-8f96-bcf158a5ee2d	shivsarthak74@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-0b380a91-e51c-4728-9999-61633d6413c4	sarthaksharma8790@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-2b333e76-ea22-41e1-ab7a-9a3e322c6921	saurabhganwar7478@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-db4ed56c-bbf3-4b70-801e-73bcbaa5d541	2025107580@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-383987ec-2b9c-4cc8-999d-e841cd420983	shivanshrajput301@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-d3b07d77-b60f-4b78-bc80-69d629e68a36	taazmohd980@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-61b143ba-34a8-4b2a-923f-9d1d569675f2	devidattpandey62@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-7b332331-f61c-4477-9a82-58593a28f367	katiyartanu384@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-ada939a1-b705-4913-b7c2-9ce6b390ead0	udit123sd@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-a5b9b62c-10cd-4a2a-aad8-b31c706f33e5	vansh2008l@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-f0fb13d1-6e20-4f67-b164-a09063c7f6ec	vadanshiagarwal@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-b7d6ee48-e959-423d-af99-984a47c55463	vaibhavgautam1407@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-73eb6815-703d-47dd-b60b-244bdcbaf105	rachnamishra639581@gimal.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-e8fe6d8d-0fac-4e03-bec6-1a6e89ad564b	rajputvandana846@gmail.com	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 18:31:54.224846+00	2026-08-15 19:02:37.328837+00
-fa15da20-d7f3-4f44-961d-1f8e06f38f30	2025107684@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	t	0	\N	\N	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
-f72cce21-f5e0-4eaf-b2a1-2d1a9738a56a	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-16 07:57:15.250958+00	2026-08-16 07:57:15.250958+00
-8780cb5f-f365-4e6c-8aa0-50249f918bf1	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-16 07:57:15.250958+00	2026-08-16 07:57:15.250958+00
+97355546-43cd-46ed-8615-f30af6dff1a6	admin@srms.edu	$2b$12$306JnvcVJ0MafXf.ZGwajOMDpH/Na4JHmUqV4uei/nRfBlsvQADcu	COLLEGE_ADMIN	t	t	0	f	0	\N	2026-08-16 10:32:07.608576+00	\N	\N	2026-08-14 14:33:32.976988+00	2026-08-14 14:33:32.976988+00
+1cf04680-7d8c-4b28-833d-e0d5c5dfd1c4	arshadnaim646@gmail.com	$2b$12$KvNMovwkYA5yqQt08Xh4Zuij9Qa19Hre1J/cU8Hnd5lflye5QgtYy	STUDENT	t	t	0	t	0	\N	2026-08-16 08:25:49.839794+00	\N	\N	2026-08-15 19:02:37.328837+00	2026-08-15 19:02:37.328837+00
 \.
 
 
@@ -30013,17 +30171,6 @@ c8630db3-2417-44e8-ad05-2bc2a4f30524	11	2018	1	\N	2022-01-31	2022-03-31	t	11	B.T
 4c955d1f-37b0-4024-9f6c-bd83b41e6f79	12	2019	1	\N	\N	\N	t	12	B.TECH	3	12	Batch 2019
 b5aa62ce-3009-455a-810e-77978d18fa5b	13	2020	1	\N	\N	\N	t	13	B.TECH	3	13	Batch 2020
 8ddbc66f-05bd-470a-888e-1c479fbb5f68	14	2021	1	\N	\N	\N	t	14	B.TECH	3	14	Batch 2021
-84ecf564-ff7a-49d1-b198-4d137f19e341	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-c28e840f-0eef-4319-8cdc-bda2aed2f5a5	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-f58016b8-69f1-4b3b-927b-eae3094dd612	6	2013	1	\N	\N	\N	t	6	B.TECH	3	6	Batch 2013
-7855bcaa-9731-4bb9-a5b8-3fe54791d518	7	2014	1	\N	\N	\N	t	7	B.TECH	3	7	Batch 2014
-e49fbbdc-bcd2-40ad-8adb-9971224d9cc6	8	2015	1	\N	\N	\N	t	8	B.TECH	3	8	Batch 2015
-11e53cf4-d5d9-4def-b052-68bb50f8c67f	9	2016	1	\N	\N	\N	t	9	B.TECH	3	9	Batch 2016
-f6baa713-f910-4053-bc2e-d6aad98996a4	10	2017	1	\N	\N	\N	t	10	B.TECH	3	10	Batch 2017
-c8630db3-2417-44e8-ad05-2bc2a4f30524	11	2018	1	\N	2022-01-31	2022-03-31	t	11	B.TECH	3	11	Batch 2018
-4c955d1f-37b0-4024-9f6c-bd83b41e6f79	12	2019	1	\N	\N	\N	t	12	B.TECH	3	12	Batch 2019
-b5aa62ce-3009-455a-810e-77978d18fa5b	13	2020	1	\N	\N	\N	t	13	B.TECH	3	13	Batch 2020
-8ddbc66f-05bd-470a-888e-1c479fbb5f68	14	2021	1	\N	\N	\N	t	14	B.TECH	3	14	Batch 2021
 \.
 
 
@@ -30056,14 +30203,6 @@ d5a089d1-1a2e-492c-9306-15f5fd3a1abf	\N	\N	\N	PY2.5	Perform and interpret spirom
 fd7de3f5-26aa-44f7-9cb7-a99ea091607b	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 417beb5c-7b66-4957-a4cc-773d02da7ae9	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 561fb0a5-6f07-4e9f-b49d-2da2e6a5d0c6	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-d031fcaa-3351-4812-9fee-49155a11bbef	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-d5a089d1-1a2e-492c-9306-15f5fd3a1abf	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-8d0cc826-969e-48e0-9a8f-f07087783d8c	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-92d0e59c-47f4-4ce8-88e0-948cb1a2b28e	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-757caa42-03b8-4108-bb5b-812ef25d19d4	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-fd7de3f5-26aa-44f7-9cb7-a99ea091607b	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-417beb5c-7b66-4957-a4cc-773d02da7ae9	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-561fb0a5-6f07-4e9f-b49d-2da2e6a5d0c6	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:35.279755+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -30072,7 +30211,6 @@ fd7de3f5-26aa-44f7-9cb7-a99ea091607b	\N	\N	\N	AN1.1	Describe osteology of upper 
 --
 
 COPY "tenant_srms-cet-unnao".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-4c57f72f-7e5c-425f-a17c-b984d526900b	1	B.TECH	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:36.202106+00	semester	1	UG
 4c57f72f-7e5c-425f-a17c-b984d526900b	1	B.TECH	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:36.202106+00	semester	1	UG
 \.
 
@@ -30117,15 +30255,6 @@ a1f767ef-82bd-4953-b26b-cb0198addbb9	(ME)	3	Engineering	\N	t	2026-08-14 14:34:22
 394fe811-3442-443d-8cb1-8677d9450ce5	(EC)	5	Engineering	\N	t	2026-08-14 14:34:22.959988+00	5	1	B.TECH	3
 e05c3b06-7b2f-4a9c-9bdb-05843e7a942a	(EL)	6	Engineering	\N	t	2026-08-14 14:34:22.963754+00	6	1	B.TECH	3
 90d1ac87-7207-403b-936e-7991062009b7	(EN)	7	Engineering	\N	t	2026-08-14 14:34:22.967773+00	7	1	B.TECH	3
-fe8b3def-8565-4807-90a3-89d068d46762	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:35.279755+00	\N	\N	\N	\N
-70d11e3a-9f6e-4e2e-8d9e-62e1dbd368b5	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:35.279755+00	\N	\N	\N	\N
-4e564779-ecd4-4560-b973-3153b6b73579	(CS)	1	Engineering	\N	t	2026-08-14 14:34:22.94468+00	1	1	B.TECH	3
-25b480ab-c879-4d76-9027-de06017c926b	(IT)	2	Engineering	\N	t	2026-08-14 14:34:22.949171+00	2	1	B.TECH	3
-a1f767ef-82bd-4953-b26b-cb0198addbb9	(ME)	3	Engineering	\N	t	2026-08-14 14:34:22.95278+00	3	1	B.TECH	3
-4d23f9dd-10c2-4ee1-bac0-d46bd8045f57	(EE)	4	Engineering	\N	t	2026-08-14 14:34:22.956232+00	4	1	B.TECH	3
-394fe811-3442-443d-8cb1-8677d9450ce5	(EC)	5	Engineering	\N	t	2026-08-14 14:34:22.959988+00	5	1	B.TECH	3
-e05c3b06-7b2f-4a9c-9bdb-05843e7a942a	(EL)	6	Engineering	\N	t	2026-08-14 14:34:22.963754+00	6	1	B.TECH	3
-90d1ac87-7207-403b-936e-7991062009b7	(EN)	7	Engineering	\N	t	2026-08-14 14:34:22.967773+00	7	1	B.TECH	3
 \.
 
 
@@ -30150,10 +30279,6 @@ COPY "tenant_srms-cet-unnao".examination_papers (id, code, name, subject_id, bat
 --
 
 COPY "tenant_srms-cet-unnao".faculty (id, user_id, emp_id, name, department_id, subject_id, designation, qualification, specialization, joining_date, photo_url, phone, gender, experience, staff_type, is_active, created_at, updated_at) FROM stdin;
-5f8f18bc-b12d-4667-a9ac-14a4a062c3af	42c6e705-c9ad-401b-a57b-8d261e91e3fe	EMP1001	Dr. Sanjay Singh	fe8b3def-8565-4807-90a3-89d068d46762	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
-595bcf38-0fdb-4c6c-8867-f8f0fd976360	f5520335-1438-4449-9178-01d31d932f9e	EMP1002	Dr. Aparna Tyagi	70d11e3a-9f6e-4e2e-8d9e-62e1dbd368b5	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
-5f8f18bc-b12d-4667-a9ac-14a4a062c3af	42c6e705-c9ad-401b-a57b-8d261e91e3fe	EMP1001	Dr. Sanjay Singh	fe8b3def-8565-4807-90a3-89d068d46762	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
-595bcf38-0fdb-4c6c-8867-f8f0fd976360	f5520335-1438-4449-9178-01d31d932f9e	EMP1002	Dr. Aparna Tyagi	70d11e3a-9f6e-4e2e-8d9e-62e1dbd368b5	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 \.
 
 
@@ -30236,6 +30361,96 @@ fe9c063e-fbb3-4bcf-a8a1-075e0c8faa91	CL	Casual Leave	12
 2f60197c-69e6-4c61-81d0-4df5a1d37d33	EL	Earned Leave	30
 d442045d-05ac-4015-bb10-5cf0237bab46	ML	Maternity Leave	180
 f056599f-7492-4108-97eb-789691f73ada	COL	Compensatory Off Leave	0
+103439d5-37da-4fa2-9a07-0c5d541c62e5	CL	Casual Leave	12
+665070d5-1e9b-4d6b-a427-6ab83a4fc88e	SL	Sick Leave	10
+31097bcb-df33-4e18-911b-5dec0b84259f	EL	Earned Leave	30
+2122368e-c7ba-4e3f-bc16-1ed7b090c021	ML	Maternity Leave	180
+198154f3-7d9b-49af-ae20-89e9564d40c8	COL	Compensatory Off Leave	0
+3748e491-1d47-4bc7-8554-e72fddee7cdc	CL	Casual Leave	12
+4367afd9-9730-4499-90fe-425d58bb93cd	SL	Sick Leave	10
+704d0873-15d5-4642-85af-910956d90c20	EL	Earned Leave	30
+eec45603-2da3-4142-a44c-67eb561d0fae	ML	Maternity Leave	180
+1bf0670c-720e-4c75-af1d-6343e5eceaf0	COL	Compensatory Off Leave	0
+8d7d4355-9b28-4cdb-808a-738f7e6fd363	CL	Casual Leave	12
+ff6e778e-df31-455f-b4d8-5d6b07d33442	SL	Sick Leave	10
+6c5b9217-832c-4881-87d4-cd25f825f3b9	EL	Earned Leave	30
+a85360d4-b8ab-4fec-9035-72c1f4e4b708	ML	Maternity Leave	180
+25a311c5-7131-476b-be8a-cf9bcde0708b	COL	Compensatory Off Leave	0
+67b4642e-be4a-49e1-ad0b-ab6854deae38	CL	Casual Leave	12
+f840428a-ec20-4188-94a7-a39f451b3ab8	SL	Sick Leave	10
+2527435d-2ce4-4d21-8216-91ad5a8c079d	EL	Earned Leave	30
+588380de-c293-4bdf-b8c9-71b1192588a2	ML	Maternity Leave	180
+7ce9cd52-4a58-4e76-8806-4efb9268b49e	COL	Compensatory Off Leave	0
+b99f848b-20d1-48fc-a83d-6108346be429	CL	Casual Leave	12
+722845b2-5366-4011-a972-620618caee73	SL	Sick Leave	10
+ed130596-2570-43f5-a2ac-121274750844	EL	Earned Leave	30
+35cebfda-841e-4fb3-beda-71f3e25266b7	ML	Maternity Leave	180
+a00ac9c2-e91b-4c4f-acc8-6061fb434900	COL	Compensatory Off Leave	0
+aa2e340d-b8db-48d2-934f-b2f6a4ae937d	CL	Casual Leave	12
+fa1ef344-09b0-4980-a206-2ce4acf64565	SL	Sick Leave	10
+5223df0f-1398-4bf1-96ff-b6ea876ddea4	EL	Earned Leave	30
+6c210a6f-b729-409f-b650-e822b4504adf	ML	Maternity Leave	180
+43aa5389-0c37-4da8-ba88-738df5bbb202	COL	Compensatory Off Leave	0
+d3f313e6-0085-49c4-b1d9-7c0e8485a826	CL	Casual Leave	12
+2a884f6a-61de-4d25-8512-018927ca6757	SL	Sick Leave	10
+c6e7e46b-aae1-4dad-a8c7-60424b949cfc	EL	Earned Leave	30
+8533c3e3-4355-4f6f-a300-5663bba66a36	ML	Maternity Leave	180
+d4e33a30-57ad-4169-9962-9d05565ffb57	COL	Compensatory Off Leave	0
+36880b5d-fd0b-4623-9a0c-1ac3a547bff8	CL	Casual Leave	12
+cbf3be68-d0b8-4567-bac6-b52baf802498	SL	Sick Leave	10
+4b037935-2dc7-465c-8dd4-84f725480702	EL	Earned Leave	30
+7fe870f1-01bc-48d4-b668-a71d63808d22	ML	Maternity Leave	180
+e3c62476-fed5-42c2-bcc2-4c78c91d7486	COL	Compensatory Off Leave	0
+86104f3e-f7f0-4de9-a537-76ce15df68bd	CL	Casual Leave	12
+d9f09d7b-6406-4104-800d-209d23b3b038	SL	Sick Leave	10
+3d0076eb-6a53-42dc-bd5b-5886d0a0c33d	EL	Earned Leave	30
+994c9567-20cc-4d93-951b-06bdab8dc842	ML	Maternity Leave	180
+58cac632-ed0a-4b55-a2db-0f1d8f96875a	COL	Compensatory Off Leave	0
+6e3ea7be-2849-4f1d-8656-6800d9a75c4e	CL	Casual Leave	12
+b9e106c0-99a3-472d-ae3f-fa0c833c5e90	SL	Sick Leave	10
+1e455340-125f-4ec7-8b0b-1add9561e4fd	EL	Earned Leave	30
+08710060-ed71-46f1-b417-953c59ec4e2d	ML	Maternity Leave	180
+83f8a392-18ad-49ff-9ee4-cfac1e641fcb	COL	Compensatory Off Leave	0
+1317dd71-b9d3-456b-92c8-c87129f950ba	CL	Casual Leave	12
+111df10f-0ee3-491f-9f54-834f9f1dfb38	SL	Sick Leave	10
+19f24f07-44b4-4a24-8aff-24cb1558578d	EL	Earned Leave	30
+a5c8770a-3a87-49b9-8c4d-9b64f9ee7476	ML	Maternity Leave	180
+a327f34e-0a19-418c-bcf1-03bb15010baf	COL	Compensatory Off Leave	0
+c39e4156-1b66-4d74-8a2d-0825ad5f410b	CL	Casual Leave	12
+38fb5234-84a1-478f-85c8-2a12caf644aa	SL	Sick Leave	10
+5f5cfff0-b0f2-44cc-a88b-a43f1bd8ae18	EL	Earned Leave	30
+6e9d9bf7-7f74-47d3-8c97-cfb06fccf39c	ML	Maternity Leave	180
+5437236f-a7a3-47c9-81ad-b1aaf81ca400	COL	Compensatory Off Leave	0
+66236695-c741-4698-8775-83a70ba8d041	CL	Casual Leave	12
+f6d03d22-14bb-4615-8d6e-3c434b805526	SL	Sick Leave	10
+a17142e1-5258-4abe-ae3d-669c3f5492ba	EL	Earned Leave	30
+fa3cf697-7f00-40ee-bc7a-f4675fa05330	ML	Maternity Leave	180
+3e6628e1-956c-4a3f-9893-1def2199a85b	COL	Compensatory Off Leave	0
+1fa1b755-f640-4f42-8812-75017514fc8a	CL	Casual Leave	12
+b810a3d5-1a00-4f55-8f0b-b3131a301217	SL	Sick Leave	10
+5af277e2-df44-4dd1-92cb-64f08d1d3f26	EL	Earned Leave	30
+f7cca097-01b1-4cde-9b5b-d961936c9104	ML	Maternity Leave	180
+935d39d2-2e45-4a66-b691-7f75757ce193	COL	Compensatory Off Leave	0
+d98ce165-e0bf-4eea-be5b-18a27cae9618	CL	Casual Leave	12
+7f91607d-6ec6-42dc-bbf2-d6d8ba1c1828	SL	Sick Leave	10
+046472b2-623e-4743-9bd3-8a9c3f1ad758	EL	Earned Leave	30
+fb8868c9-84d3-4e38-b45e-e47984630618	ML	Maternity Leave	180
+af005f7e-91af-462a-8e62-d7aad07cea49	COL	Compensatory Off Leave	0
+26b36e99-646f-470b-a1bf-eb7a0e22eb01	CL	Casual Leave	12
+c9807658-e9c7-485a-a4f1-a4de691be863	SL	Sick Leave	10
+2796b33d-f84a-4850-914f-42aff82d5206	EL	Earned Leave	30
+0b650f8c-b185-4bb7-b81a-d086a2dfe39c	ML	Maternity Leave	180
+c0fc7708-6075-4b38-80df-c388efc53631	COL	Compensatory Off Leave	0
+d2ecb2eb-0528-4ecd-a1ed-f1de1ef0ff05	CL	Casual Leave	12
+6f9e36d1-eb20-4df0-b0ba-c4404988b4b8	SL	Sick Leave	10
+9501febe-eaf1-449f-89d9-c769e2afe458	EL	Earned Leave	30
+417a3e96-304b-4da8-9f60-125fa8f3642d	ML	Maternity Leave	180
+85b3f0ee-8765-40df-9d60-fc6680d5f3db	COL	Compensatory Off Leave	0
+dcdb20cd-1725-47bd-8d51-3c54a82721db	CL	Casual Leave	12
+b9e7c249-bda2-479a-ba7e-cefa784ed55e	SL	Sick Leave	10
+6e42a3bf-ce66-4cf1-85fb-9b64a3b39177	EL	Earned Leave	30
+cb1b369a-4f95-47f8-a642-ff94ec0306fd	ML	Maternity Leave	180
+b231f1c9-9c3e-4de9-b818-f2cbab7c9d9a	COL	Compensatory Off Leave	0
 \.
 
 
@@ -30482,8 +30697,6 @@ COPY "tenant_srms-cet-unnao".subject_offerings (id, subject_id, prof_id, dtype_i
 COPY "tenant_srms-cet-unnao".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 efc8429b-4983-48c7-974f-78735e3434eb	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 22989b62-13be-4428-9897-df738cd066c0	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-efc8429b-4983-48c7-974f-78735e3434eb	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-22989b62-13be-4428-9897-df738cd066c0	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -30535,15 +30748,11 @@ COPY "tenant_srms-cet-unnao".users (id, email, password_hash, role, is_active, o
 80e8d7ba-c51a-4fae-9d9a-0288251aa16e	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 7afc78f0-009a-4b42-8390-463b3f45952a	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 837fd4f3-acb1-442f-b6b1-f21150cd1d13	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
-42c6e705-c9ad-401b-a57b-8d261e91e3fe	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
-f5520335-1438-4449-9178-01d31d932f9e	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 2a084226-ce38-4d06-98f2-74a329c9b0fd	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 64430d63-31ce-467b-98ab-08aafcdf8ef9	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 80e8d7ba-c51a-4fae-9d9a-0288251aa16e	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 7afc78f0-009a-4b42-8390-463b3f45952a	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 837fd4f3-acb1-442f-b6b1-f21150cd1d13	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
-42c6e705-c9ad-401b-a57b-8d261e91e3fe	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
-f5520335-1438-4449-9178-01d31d932f9e	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 2a084226-ce38-4d06-98f2-74a329c9b0fd	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 64430d63-31ce-467b-98ab-08aafcdf8ef9	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:35.279755+00	2026-08-14 14:33:35.279755+00
 \.
@@ -30603,31 +30812,6 @@ be30c4c6-e723-405e-b2df-7d0a6515d3f3	B2026-C2-2	2026	2	\N	\N	\N	t	3	BHMCT	2	3	Ba
 4e490207-896d-4e35-8c3d-f88983aae0c7	B2024-C4-2	2024	4	\N	\N	\N	t	1	BBA	2	1	Batch 2024
 24eaeae3-9830-42c2-a47b-5a3067d20164	B2025-C4-2	2025	4	\N	\N	\N	t	2	BBA	2	2	Batch 2025
 8274eaab-d3ef-48d5-9606-24ffd9dfbc28	B2026-C4-2	2026	4	\N	\N	\N	t	3	BBA	2	3	Batch 2026
-9374f811-5217-4b09-a033-b6cb0b90e3b2	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-fc591be6-f0de-4086-850c-0edd07f0f935	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-90f46f3a-969f-4e69-a5a8-52c0e86a3773	B2013-C1-2	2013	1	\N	\N	\N	t	6	B.TECH.	2	6	Batch 2013
-218dd751-8e74-4081-9633-5b32ad28c4b3	B2014-C1-2	2014	1	\N	\N	\N	t	7	B.TECH.	2	7	Batch 2014
-aa6df07b-ec5a-40e1-98e3-6ec4e0fff337	B2015-C1-2	2015	1	\N	\N	\N	t	8	B.TECH.	2	8	Batch 2015
-880f4c1c-22e1-47e2-8a3b-c4aa38afe3be	B2016-C1-2	2016	1	\N	\N	\N	t	9	B.TECH.	2	9	Batch 2016
-7f1d1fb7-9edb-4430-b34b-8860f7dd8e4c	B2017-C1-2	2017	1	\N	\N	\N	t	10	B.TECH.	2	10	Batch 2017
-9c0f297a-d11f-4a9d-aa5e-27721a351736	B2018-C1-2	2018	1	\N	2022-01-31	2022-03-31	t	11	B.TECH.	2	11	Batch 2018
-01cc9c92-4062-4f74-ba1b-41abb1992e22	B2019-C1-2	2019	1	\N	2022-01-31	2022-03-31	t	12	B.TECH.	2	12	Batch 2019
-3cb7ec46-0070-4032-982e-f5707db30fc1	B2020-C1-2	2020	1	\N	2022-04-11	2022-06-30	t	13	B.TECH.	2	13	Batch 2020
-bcd598c1-af82-4577-a427-11d9d5bf568f	B2021-C1-2	2021	1	\N	2022-04-11	2022-06-30	t	14	B.TECH.	2	14	Batch 2021
-6bdc5f13-7e20-4d0f-b185-a1936c176ccb	B2022-C1-2	2022	1	\N	2022-01-11	2022-01-11	t	15	B.TECH.	2	15	Batch 2022
-6978044e-86d8-4da7-ac6f-69f2e106e217	B2023-C1-2	2023	1	\N	2023-02-28	2023-02-28	t	16	B.TECH.	2	16	Batch 2023
-4799233d-bb68-4eed-8def-40e07a6f3140	B2024-C1-2	2024	1	\N	2024-01-09	2024-01-09	t	17	B.TECH.	2	17	Batch 2024
-a0319016-39c7-48d1-8c0f-8b6c31de0e11	B2025-C1-2	2025	1	\N	\N	\N	t	18	B.TECH.	2	18	Batch 2025
-b3d61b4b-23b6-4802-97dd-523228f74dec	B2026-C1-2	2026	1	\N	\N	\N	t	19	B.TECH.	2	19	Batch 2026
-b4f9ecac-ef41-4cf2-ace1-221806c8c94e	B2024-C2-2	2024	2	\N	\N	\N	t	1	BHMCT	2	1	Batch 2024
-c430a469-5940-4fec-8d90-f977174851fb	B2025-C2-2	2025	2	\N	\N	\N	t	2	BHMCT	2	2	Batch 2025
-be30c4c6-e723-405e-b2df-7d0a6515d3f3	B2026-C2-2	2026	2	\N	\N	\N	t	3	BHMCT	2	3	Batch 2026
-3e1047a8-7f46-4d96-bffb-206e4a2b6c2b	B2024-C3-2	2024	3	\N	\N	\N	t	1	BCA	2	1	Batch 2024
-404b3593-db86-4a71-b485-b105e7f7f91f	B2025-C3-2	2025	3	\N	\N	\N	t	2	BCA	2	2	Batch 2025
-8519b7f8-e38b-4f3e-a8ca-e1ab8ff091d8	B2026-C3-2	2026	3	\N	\N	\N	t	3	BCA	2	3	Batch 2026
-4e490207-896d-4e35-8c3d-f88983aae0c7	B2024-C4-2	2024	4	\N	\N	\N	t	1	BBA	2	1	Batch 2024
-24eaeae3-9830-42c2-a47b-5a3067d20164	B2025-C4-2	2025	4	\N	\N	\N	t	2	BBA	2	2	Batch 2025
-8274eaab-d3ef-48d5-9606-24ffd9dfbc28	B2026-C4-2	2026	4	\N	\N	\N	t	3	BBA	2	3	Batch 2026
 \.
 
 
@@ -30660,14 +30844,6 @@ feed046d-d18c-4b03-9fd3-20f4cb42993c	\N	\N	\N	PY4.2	Describe renal clearance and
 912afe80-4ead-4b33-b8b8-64aef2e45d5b	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 c949943d-036d-4584-9721-1f8ae8a99ce4	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 25d380fe-365f-4f0c-a97b-97c3901cd4cd	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a774abc8-7a2b-4c5c-a59a-aca15c2facbc	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-659457ac-1e22-4a6d-bbc7-744b44de0902	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-0c5c9432-59a4-435a-a16a-1a19c4d591fb	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-feed046d-d18c-4b03-9fd3-20f4cb42993c	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-5d4b24a1-15ed-4701-abbb-5e8dc540307e	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-912afe80-4ead-4b33-b8b8-64aef2e45d5b	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-c949943d-036d-4584-9721-1f8ae8a99ce4	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-25d380fe-365f-4f0c-a97b-97c3901cd4cd	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:34.196346+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -30676,10 +30852,6 @@ c949943d-036d-4584-9721-1f8ae8a99ce4	\N	\N	\N	AN2.3	Describe brachial plexus for
 --
 
 COPY "tenant_srms-cetr-bareilly".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-89d2c780-9dfd-48da-98fb-98da366bc9d1	1	B.TECH.	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:35.263964+00	semester	1	UG
-e563bbe2-ec13-41c0-bee9-48157c0d140a	2	BHMCT	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:35.268489+00	semester	2	UG
-bfb47f5a-cf86-4f3c-863c-d00930d53fdc	3	BCA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:35.272505+00	semester	3	UG
-6a00cd78-6b73-49a1-8302-7afca224d74e	4	BBA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:35.276732+00	semester	4	UG
 89d2c780-9dfd-48da-98fb-98da366bc9d1	1	B.TECH.	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:35.263964+00	semester	1	UG
 e563bbe2-ec13-41c0-bee9-48157c0d140a	2	BHMCT	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:35.268489+00	semester	2	UG
 bfb47f5a-cf86-4f3c-863c-d00930d53fdc	3	BCA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:35.272505+00	semester	3	UG
@@ -30728,26 +30900,6 @@ d85a362a-a948-40a4-a15c-bc943118a8fe	(EC)	5	Engineering	\N	t	2026-08-14 14:34:22
 a0086dbd-bacc-435e-a983-1a279e5d19e9	(EL)	6	Engineering	\N	t	2026-08-14 14:34:22.521449+00	6	1	B.TECH.	2
 43686eb1-6963-42cc-9f7b-6fb63a097371	(EN)	7	Engineering	\N	t	2026-08-14 14:34:22.524971+00	7	1	B.TECH.	2
 ead69cfe-88d7-487d-a534-71b07f34d11f	CSE(CYBER SECURITY)	8	Engineering	\N	t	2026-08-14 14:34:22.528435+00	8	1	B.TECH.	2
-eed849f3-be8f-45f5-9a96-d160f8a13382	NA	1	General	\N	t	2026-08-14 14:34:22.607038+00	1	2	BHMCT	2
-81ea96fb-2ab2-4dc4-9107-16d418e62082	DIPLOMA IN FOOD & BEVERAGES SERVICES	3	General	\N	t	2026-08-14 14:34:22.610818+00	3	2	BHMCT	2
-5c737f33-8c73-4f53-b94d-5e9314b0b3c7	DIPLOMA IN ROOM DIVISION MANAGEMENT	4	General	\N	t	2026-08-14 14:34:22.619519+00	4	2	BHMCT	2
-4a8aebab-d187-4aaa-a4c3-a48b432c2864	NA	2	General	\N	t	2026-08-14 14:34:22.688016+00	2	3	BCA	2
-ff2a5d2a-c11f-48d8-9b76-6a2f04ccd6f3	NA	3	Management	\N	t	2026-08-14 14:34:22.755342+00	3	4	BBA	2
-e717112c-7e30-443b-ab34-13ec07ae5cac	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:34.196346+00	\N	\N	\N	\N
-62edddb0-0684-4f6e-8153-a256183656d9	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:34.196346+00	\N	\N	\N	\N
-a3b15df6-8683-417d-9da4-e06a40ba56de	(CS)	1	Engineering	\N	t	2026-08-14 14:34:22.504182+00	1	1	B.TECH.	2
-433f2a47-e545-4a54-b8ca-3e5e17bfb136	(IT)	2	Engineering	\N	t	2026-08-14 14:34:22.507928+00	2	1	B.TECH.	2
-b9ecbce8-fc71-4567-a797-6d89c0b5706f	(ME)	3	Engineering	\N	t	2026-08-14 14:34:22.511281+00	3	1	B.TECH.	2
-824c6669-fc1d-4a13-be04-61c34814e11f	(EE)	4	Engineering	\N	t	2026-08-14 14:34:22.514783+00	4	1	B.TECH.	2
-d85a362a-a948-40a4-a15c-bc943118a8fe	(EC)	5	Engineering	\N	t	2026-08-14 14:34:22.51817+00	5	1	B.TECH.	2
-a0086dbd-bacc-435e-a983-1a279e5d19e9	(EL)	6	Engineering	\N	t	2026-08-14 14:34:22.521449+00	6	1	B.TECH.	2
-43686eb1-6963-42cc-9f7b-6fb63a097371	(EN)	7	Engineering	\N	t	2026-08-14 14:34:22.524971+00	7	1	B.TECH.	2
-ead69cfe-88d7-487d-a534-71b07f34d11f	CSE(CYBER SECURITY)	8	Engineering	\N	t	2026-08-14 14:34:22.528435+00	8	1	B.TECH.	2
-eed849f3-be8f-45f5-9a96-d160f8a13382	NA	1	General	\N	t	2026-08-14 14:34:22.607038+00	1	2	BHMCT	2
-81ea96fb-2ab2-4dc4-9107-16d418e62082	DIPLOMA IN FOOD & BEVERAGES SERVICES	3	General	\N	t	2026-08-14 14:34:22.610818+00	3	2	BHMCT	2
-5c737f33-8c73-4f53-b94d-5e9314b0b3c7	DIPLOMA IN ROOM DIVISION MANAGEMENT	4	General	\N	t	2026-08-14 14:34:22.619519+00	4	2	BHMCT	2
-4a8aebab-d187-4aaa-a4c3-a48b432c2864	NA	2	General	\N	t	2026-08-14 14:34:22.688016+00	2	3	BCA	2
-ff2a5d2a-c11f-48d8-9b76-6a2f04ccd6f3	NA	3	Management	\N	t	2026-08-14 14:34:22.755342+00	3	4	BBA	2
 \.
 
 
@@ -30858,6 +31010,91 @@ f96b5942-9d17-49b4-9caa-60d23d79dfd6	ML	Maternity Leave	180
 95ff288b-f7eb-444c-8977-e8aa23419b92	EL	Earned Leave	30
 f96b5942-9d17-49b4-9caa-60d23d79dfd6	ML	Maternity Leave	180
 443c8989-2d1e-4fed-9f6c-15e52f263225	COL	Compensatory Off Leave	0
+8167654c-5ced-4f36-b09a-8f1e127d8885	CL	Casual Leave	12
+11e7d0d3-8097-4889-bbaa-8fa4a972eaab	SL	Sick Leave	10
+591f57b4-580d-4c01-ad94-479640689502	EL	Earned Leave	30
+f3029427-b38f-44fc-8565-5cbee5fd67b7	ML	Maternity Leave	180
+67713a76-85e4-4966-954b-7c146d2c830f	COL	Compensatory Off Leave	0
+e571fbc2-31b6-48e9-bfa7-e47bfeca2404	CL	Casual Leave	12
+48b16a2c-beeb-4e7c-9026-7c010ae8bb2d	SL	Sick Leave	10
+12fd5eca-a057-4a30-9713-df5ab41b7b72	EL	Earned Leave	30
+e215d096-087e-42ad-9753-65f8d3237009	ML	Maternity Leave	180
+45a164e8-e94c-440f-9be4-e4f4f49455a4	COL	Compensatory Off Leave	0
+50431221-c2b5-46a6-81e9-eae0215094b3	CL	Casual Leave	12
+6e3118f6-eea7-4229-945c-ee9ff935b31b	SL	Sick Leave	10
+1dbb72fa-ceb6-49d6-8b98-aa17570e76c2	EL	Earned Leave	30
+082c243b-5852-4cdb-b0f1-0133f0d375b6	ML	Maternity Leave	180
+722724f9-c2d4-470b-98ef-99a4ef869f5d	COL	Compensatory Off Leave	0
+0ba882c0-266c-4661-af5d-144e6bd4b53c	CL	Casual Leave	12
+87c96e44-c803-46f7-be79-c25cb5ed6727	SL	Sick Leave	10
+982c083b-68d9-44c8-b433-109c4e105bb2	EL	Earned Leave	30
+829faa90-4637-4597-8e7e-9410df7a02c1	ML	Maternity Leave	180
+3b907c19-6133-4967-a2ac-e9f9a0551b05	COL	Compensatory Off Leave	0
+e163cde1-e273-4cf0-bbde-22fea84be2d0	CL	Casual Leave	12
+6c571931-21be-4ae9-9d46-f6ad264917e9	SL	Sick Leave	10
+70cb811e-dff3-4cd3-ad1a-138036c7c754	EL	Earned Leave	30
+efb60a7c-902b-45ca-b2d0-5b07bf8cf168	ML	Maternity Leave	180
+214d017c-f73a-42ce-9f48-e3b2d34424ac	COL	Compensatory Off Leave	0
+e8a814d7-a9e2-484c-8eb3-948ca00a7374	CL	Casual Leave	12
+d076bd63-80f4-4dce-8f30-fc85610ebfce	SL	Sick Leave	10
+3fbaa000-3620-4dc7-8317-9337ec0fe660	EL	Earned Leave	30
+927e5236-175f-4ed0-9003-68fdb4c7a6bf	ML	Maternity Leave	180
+81eed306-64bd-4cc8-a21c-0bd5880ba519	COL	Compensatory Off Leave	0
+731c4d66-57a7-4e2b-95b4-429893a99441	CL	Casual Leave	12
+66b57a78-b739-4266-826e-dd182a5f5507	SL	Sick Leave	10
+33888d83-ad9e-4f00-b645-224c48831ced	EL	Earned Leave	30
+c1a4239d-d61b-42a1-8c3d-4cee540734e1	ML	Maternity Leave	180
+100c0981-ff23-4fbd-85e7-f9fec756d858	COL	Compensatory Off Leave	0
+87235851-40e2-4033-a61d-0a8467f18741	CL	Casual Leave	12
+6e88cad3-d727-47cd-9059-ecf15c64d205	SL	Sick Leave	10
+56d2c7b8-0cb9-432c-8943-50a1b41f7c99	EL	Earned Leave	30
+9229521f-7593-4a41-b916-5d31fe1f45c9	ML	Maternity Leave	180
+485b1405-26cf-4833-8c11-558a2309d592	COL	Compensatory Off Leave	0
+babeb614-ab83-489b-a0f3-e0370b7de1de	CL	Casual Leave	12
+23dceb54-ca26-4c56-bba0-03d1d8aed1ea	SL	Sick Leave	10
+0217faf5-874d-44d5-b274-32b74f387aa0	EL	Earned Leave	30
+a69c15ea-b4be-4d42-9da5-c7167f0053b5	ML	Maternity Leave	180
+349b9a30-2b7b-4713-a48e-e476e65083a2	COL	Compensatory Off Leave	0
+8a5f3da5-8bac-47fb-820e-86c802827cc7	CL	Casual Leave	12
+3a28e833-215b-45ad-a524-6173b7261d46	SL	Sick Leave	10
+9e8b890e-8c65-4c14-aa95-638ebc7707e7	EL	Earned Leave	30
+e45e8ed5-7d36-4863-a4a8-3120e0a917b2	ML	Maternity Leave	180
+d3591075-2819-4a35-9877-a07d2524e69b	COL	Compensatory Off Leave	0
+d9d92049-625a-406d-b2a8-23fae2477c92	CL	Casual Leave	12
+9ab38c5b-257c-49a9-a00c-31606604e3ff	SL	Sick Leave	10
+2c49da93-7d82-4ccc-9e70-be1baaf36d70	EL	Earned Leave	30
+2f201258-f5a9-4d41-978c-f4f45d53f8f8	ML	Maternity Leave	180
+237d021c-207e-46c2-b03c-43d0104e4df1	COL	Compensatory Off Leave	0
+a276cb7f-0cbf-40b7-93cb-3d38e767361c	CL	Casual Leave	12
+e40fe108-a67d-4628-8925-e241c67a848b	SL	Sick Leave	10
+8c0b76b2-cc06-42be-bf10-876d784d4d4a	EL	Earned Leave	30
+705b41c9-f9b4-4b16-a6e6-ea3cea3d9bd5	ML	Maternity Leave	180
+03d4eff3-2336-4e1e-ab12-51ac9fec5fb0	COL	Compensatory Off Leave	0
+f69e7c5d-e232-4ffd-83dd-5ddad0ee6598	CL	Casual Leave	12
+3b7ead92-979c-4b20-80ee-07fa6130dc3c	SL	Sick Leave	10
+a3118e2c-d122-4b91-b3fb-2637f750af93	EL	Earned Leave	30
+6571afa4-971e-4089-a066-36f7986206cc	ML	Maternity Leave	180
+4173b319-9365-4efc-a1c0-92bdf6882004	COL	Compensatory Off Leave	0
+e71d7d2e-0622-487f-aea6-30c3af996d42	CL	Casual Leave	12
+cd0ef2a2-f4a8-4627-b4e7-70484eee211b	SL	Sick Leave	10
+5c0853e1-8d53-4149-b656-7c61f886ea80	EL	Earned Leave	30
+da1094cd-0e66-4603-809e-0836354183a9	CL	Casual Leave	12
+34d50787-89cf-43ec-95bc-ad6c545a514b	SL	Sick Leave	10
+2fd1761e-79d8-46e2-bb75-ba3e1f2c6cf6	EL	Earned Leave	30
+e6036548-7786-472e-b7e7-d1bd3176aa13	ML	Maternity Leave	180
+6f34923b-4d53-4724-a6d9-3eaa86603f73	COL	Compensatory Off Leave	0
+25fc4460-d835-45ec-b3c8-db7554a6bbe1	ML	Maternity Leave	180
+1f36c077-cff8-4f09-a3ad-10ced98da47f	COL	Compensatory Off Leave	0
+73f942fc-d46c-475a-8ca2-a512f107da0e	CL	Casual Leave	12
+cb3cca8e-49f8-4380-bdc0-9b893fe3f558	SL	Sick Leave	10
+9125a6a5-d2b6-4888-87b7-8d69f6bbbf84	EL	Earned Leave	30
+0b20267b-5d9e-4fbf-9bb4-770435f6061b	ML	Maternity Leave	180
+ad15a589-1da0-43b5-8c51-1670f7619f88	COL	Compensatory Off Leave	0
+4c56c151-6b50-42c3-a7bf-71fb1bab2dbe	CL	Casual Leave	12
+eb26b84a-9ae1-4153-b6c0-d06899f5f430	SL	Sick Leave	10
+a98ad3a9-ac34-4d27-93d7-f0f64fecb33d	EL	Earned Leave	30
+a0c9f764-4b1e-4eb5-a2e4-20534f2783e1	ML	Maternity Leave	180
+6bd4a845-5901-4667-a221-2a98d6f6c5e1	COL	Compensatory Off Leave	0
 \.
 
 
@@ -31104,8 +31341,6 @@ COPY "tenant_srms-cetr-bareilly".subject_offerings (id, subject_id, prof_id, dty
 COPY "tenant_srms-cetr-bareilly".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 64b7a1be-b13f-4fbd-8a1e-f45c0310fdd7	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 5ff808ce-b448-4b20-96d7-bf78ad28fba1	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-64b7a1be-b13f-4fbd-8a1e-f45c0310fdd7	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-5ff808ce-b448-4b20-96d7-bf78ad28fba1	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -31210,16 +31445,6 @@ dd913210-b734-4f12-b118-5135351edcfc	B2019-C2-4	2019	2	\N	2022-05-15	2022-12-30	
 7e4ba7c0-fb76-465f-81e7-a5e7d3ef7bd6	B2020-C2-4	2020	2	\N	2022-05-15	2022-12-30	t	2	LL.B.	4	2	Batch 2020
 830c61d3-d904-495c-8b30-b959ec5cd9d5	B2021-C2-4	2021	2	\N	2022-05-15	2022-12-30	t	3	LL.B.	4	3	Batch 2021
 c9686d53-197c-4990-84ff-a6161a448ceb	B2022-C2-4	2022	2	\N	2022-04-18	2022-12-30	t	4	LL.B.	4	4	Batch 2022
-6a7dc286-71c0-4d25-ae81-4953589b7088	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-3ab22025-1846-41f7-8e15-19944f002ef0	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-2fbab221-2c4d-461c-aea7-0d3bbb4b9d45	B2019-C1-4	2019	1	\N	2022-05-15	2022-12-30	t	1	B.A. LL.B.	4	1	Batch 2019
-c0d395fa-b9a6-44c7-a598-8506e1553125	B2020-C1-4	2020	1	\N	2022-05-15	2022-12-30	t	2	B.A. LL.B.	4	2	Batch 2020
-6da0a3eb-1a68-4801-8ca3-f8a4419567d2	B2021-C1-4	2021	1	\N	2022-05-15	2022-12-30	t	3	B.A. LL.B.	4	3	Batch 2021
-16b223d4-9b09-4038-8270-4ab360ba4060	B2022-C1-4	2022	1	\N	2022-04-18	2022-12-30	t	4	B.A. LL.B.	4	4	Batch 2022
-dd913210-b734-4f12-b118-5135351edcfc	B2019-C2-4	2019	2	\N	2022-05-15	2022-12-30	t	1	LL.B.	4	1	Batch 2019
-7e4ba7c0-fb76-465f-81e7-a5e7d3ef7bd6	B2020-C2-4	2020	2	\N	2022-05-15	2022-12-30	t	2	LL.B.	4	2	Batch 2020
-830c61d3-d904-495c-8b30-b959ec5cd9d5	B2021-C2-4	2021	2	\N	2022-05-15	2022-12-30	t	3	LL.B.	4	3	Batch 2021
-c9686d53-197c-4990-84ff-a6161a448ceb	B2022-C2-4	2022	2	\N	2022-04-18	2022-12-30	t	4	LL.B.	4	4	Batch 2022
 \.
 
 
@@ -31252,14 +31477,6 @@ a9b55651-a8b6-402b-a357-885b8d273ca4	\N	\N	\N	PY5.1	Describe synaptic transmissi
 80c1fb81-cce8-4679-8db6-39b4e80129ef	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 cd67fda5-fcec-4974-b419-71dc4d82c032	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 afaeeb83-5ee4-4dc4-b87e-cdc36c44fe7a	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-7256de86-4508-4e28-8d72-f8eb906b7348	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-31d37760-0b8f-4994-a99d-38fb4aa30199	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-6dfca5da-2f2a-48f5-a0f3-d86fbc5dbf00	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-03857a51-1cbe-4a90-87a9-9ffef19d24e0	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a9b55651-a8b6-402b-a357-885b8d273ca4	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-80c1fb81-cce8-4679-8db6-39b4e80129ef	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-cd67fda5-fcec-4974-b419-71dc4d82c032	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-afaeeb83-5ee4-4dc4-b87e-cdc36c44fe7a	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:36.206338+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -31268,8 +31485,6 @@ afaeeb83-5ee4-4dc4-b87e-cdc36c44fe7a	\N	\N	\N	AN10.1	Describe scapular region mu
 --
 
 COPY "tenant_srms-college-of-law".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-c09d6b2d-2328-4239-bc95-bf2bd13979d1	1	B.A. LL.B.	UG	5.0	Semester 1 (1st Year)	t	2026-08-14 14:33:37.183852+00	semester	1	UG
-88e53d06-c94d-4e68-800c-1b267b6292e2	2	LL.B.	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:37.188092+00	semester	2	UG
 c09d6b2d-2328-4239-bc95-bf2bd13979d1	1	B.A. LL.B.	UG	5.0	Semester 1 (1st Year)	t	2026-08-14 14:33:37.183852+00	semester	1	UG
 88e53d06-c94d-4e68-800c-1b267b6292e2	2	LL.B.	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:37.188092+00	semester	2	UG
 \.
@@ -31309,11 +31524,7 @@ COPY "tenant_srms-college-of-law".departments (id, name, code, type, hod_user_id
 cc15aa6e-d4c9-4d6e-b05e-18b402c23edd	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:36.206338+00	\N	\N	\N	\N
 6aa42266-e6dc-4d8c-baee-7f83104da9a3	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:36.206338+00	\N	\N	\N	\N
 af8fcc04-d7cc-44b0-ac10-a17a8ae17d07	B.A. LL.B. Department	1	Law	\N	t	2026-08-14 14:34:23.177336+00	1	1	B.A. LL.B.	4
-2a9f8a03-ed3d-4541-a2b6-02d3bae6bffe	LL.B. Department	1	Law	\N	t	2026-08-14 14:34:23.259356+00	1	2	LL.B.	4
-cc15aa6e-d4c9-4d6e-b05e-18b402c23edd	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:36.206338+00	\N	\N	\N	\N
-6aa42266-e6dc-4d8c-baee-7f83104da9a3	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:36.206338+00	\N	\N	\N	\N
-af8fcc04-d7cc-44b0-ac10-a17a8ae17d07	B.A. LL.B. Department	1	Law	\N	t	2026-08-14 14:34:23.177336+00	1	1	B.A. LL.B.	4
-2a9f8a03-ed3d-4541-a2b6-02d3bae6bffe	LL.B. Department	1	Law	\N	t	2026-08-14 14:34:23.259356+00	1	2	LL.B.	4
+84fd1d20-520f-4242-b461-b449db05958f	B.Pharm General	1	General	\N	t	2026-08-16 08:57:32.236716+00	1	2	B.PHARM.	4
 \.
 
 
@@ -31338,10 +31549,6 @@ COPY "tenant_srms-college-of-law".examination_papers (id, code, name, subject_id
 --
 
 COPY "tenant_srms-college-of-law".faculty (id, user_id, emp_id, name, department_id, subject_id, designation, qualification, specialization, joining_date, photo_url, phone, gender, experience, staff_type, is_active, created_at, updated_at) FROM stdin;
-0b692cac-bfa2-47f8-af1b-97571c0af175	dcd79ad9-e181-439b-8e97-edb73b1c357d	EMP1001	Dr. Sanjay Singh	cc15aa6e-d4c9-4d6e-b05e-18b402c23edd	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
-eb709765-6f46-4ddd-920a-1a91f4fa41e2	42e45bd6-4dd1-474f-9d0c-c1658c130b90	EMP1002	Dr. Aparna Tyagi	6aa42266-e6dc-4d8c-baee-7f83104da9a3	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
-0b692cac-bfa2-47f8-af1b-97571c0af175	dcd79ad9-e181-439b-8e97-edb73b1c357d	EMP1001	Dr. Sanjay Singh	cc15aa6e-d4c9-4d6e-b05e-18b402c23edd	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
-eb709765-6f46-4ddd-920a-1a91f4fa41e2	42e45bd6-4dd1-474f-9d0c-c1658c130b90	EMP1002	Dr. Aparna Tyagi	6aa42266-e6dc-4d8c-baee-7f83104da9a3	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 \.
 
 
@@ -31424,6 +31631,91 @@ COPY "tenant_srms-college-of-law".leave_types (id, code, name, max_days_per_year
 2586d336-ef60-4095-967d-f3f00a4be216	EL	Earned Leave	30
 2b063639-4236-4b9a-b3a6-156564cb21ed	ML	Maternity Leave	180
 63993788-1aa3-44e7-8c50-5992be89a15d	COL	Compensatory Off Leave	0
+8880a6a1-a040-4bfc-917e-aaebfb7e42a8	CL	Casual Leave	12
+56221bc2-2d19-48fa-8963-1fcf0649bbf3	SL	Sick Leave	10
+ad966ac1-fc34-411f-8585-e99519e0df84	EL	Earned Leave	30
+706d7789-911f-4fdb-9f9e-52dfb6d1a2e0	ML	Maternity Leave	180
+258924a2-4af4-4ae0-abdd-265f18a30cda	COL	Compensatory Off Leave	0
+7db0087f-6b45-478d-bdc5-212d7e5e536f	CL	Casual Leave	12
+9586d261-7a4e-4f1e-8802-a921a05375f9	SL	Sick Leave	10
+525c3ebf-9e22-41d1-8758-7d5f417d9916	EL	Earned Leave	30
+d980ff9b-73d0-4338-9fc8-c0a9a6914780	ML	Maternity Leave	180
+8452adff-7921-4d0d-83ac-292df769ea78	COL	Compensatory Off Leave	0
+3ac3e1d2-3195-4ee6-ab87-49a73fe1cd07	CL	Casual Leave	12
+6046cb96-375e-4f6f-b47d-39df88ea80a4	SL	Sick Leave	10
+0320a3a3-ce73-44b3-b7b5-e537b39da7ef	EL	Earned Leave	30
+cefcccd4-d1c9-4238-b384-0685c11a63b6	ML	Maternity Leave	180
+085b5818-f80e-4370-afdd-e3957c7fc512	COL	Compensatory Off Leave	0
+4d207959-ee1d-47c7-bdbb-09c39ed2ccb7	CL	Casual Leave	12
+984cf1e1-2583-4e11-84e9-c17fffdb8e55	SL	Sick Leave	10
+8ff09b03-6128-4213-9d66-56af43a47a96	EL	Earned Leave	30
+cf80d95b-e519-44f9-a86a-efe1fcc48b58	ML	Maternity Leave	180
+a84fcd85-dfc8-4692-aa24-d29cf677fa9e	COL	Compensatory Off Leave	0
+a14b04a9-3957-4ea3-b9e4-3f91443c8666	CL	Casual Leave	12
+8018a668-7706-4b20-a787-5712137a17e7	SL	Sick Leave	10
+6bbc07ea-1192-45d2-98e5-bf782b973b32	EL	Earned Leave	30
+66756b8a-0675-4b5a-967a-5cf496646c23	ML	Maternity Leave	180
+cbbf6a3c-bc27-4d84-ab01-1de4394896f0	COL	Compensatory Off Leave	0
+07a4cefe-f51b-460a-88df-b4bfb728bac0	CL	Casual Leave	12
+71d71f2a-bf6f-4fd9-835e-3ada7b6a2a5d	SL	Sick Leave	10
+af8243e2-bd06-4b61-9be8-92ab90b6336b	EL	Earned Leave	30
+a097fb70-a6a0-4839-8573-b67bd8e3d923	ML	Maternity Leave	180
+662d27f4-3673-402c-bf39-75d9bcb87a5d	COL	Compensatory Off Leave	0
+e5e47511-ae4a-426b-ae97-6e33fb302ed7	CL	Casual Leave	12
+6d1531a0-fc7c-4cdf-9c16-20476936c79d	SL	Sick Leave	10
+d6faa9aa-630f-49a7-98be-5d8969ba45f9	EL	Earned Leave	30
+34e238b6-e497-493f-9969-9a5cbea6e677	ML	Maternity Leave	180
+f00729f8-3399-4730-8b3a-290255a6d27c	COL	Compensatory Off Leave	0
+c88c0925-cc26-4daf-a23d-b8b475f33de5	CL	Casual Leave	12
+30fab129-6b6f-495c-b4ee-74bc6c35c4c9	SL	Sick Leave	10
+0496aaf1-c3fa-4216-aa4a-98c117a0e849	EL	Earned Leave	30
+66042139-1107-46e6-8669-4f01d0e5790e	ML	Maternity Leave	180
+e7ecd6a8-0f31-4350-8c57-449769f56242	COL	Compensatory Off Leave	0
+391bc223-5316-47b0-b44d-524d09496fcd	CL	Casual Leave	12
+77406490-5863-4a05-ac98-6e3ef7c007f6	SL	Sick Leave	10
+62fcd34d-1953-49d9-8b3e-f22ddef5de50	EL	Earned Leave	30
+8dc372de-8527-4002-988f-91724e06f0b2	ML	Maternity Leave	180
+5e076ba7-ae03-4b74-8bea-79a9342511b4	COL	Compensatory Off Leave	0
+ba04b3bc-bddf-4046-9ca3-88634489a7b4	CL	Casual Leave	12
+ca10f42f-0fbe-4f91-a163-120d0a0945de	SL	Sick Leave	10
+0cb7e6cf-cc68-4212-af8e-c10f05584f51	EL	Earned Leave	30
+867660af-2bd8-4ceb-9cfb-25d76fa424f1	ML	Maternity Leave	180
+39230e9e-8dff-44fa-acfc-851eeeb72635	COL	Compensatory Off Leave	0
+09a26323-e749-459e-8421-50df3edd3572	CL	Casual Leave	12
+6ae3508c-7ded-4568-a409-654a658402f7	SL	Sick Leave	10
+dcd622e4-fbe6-4282-ab81-fdfd362f348d	EL	Earned Leave	30
+9d1418a9-7785-43e3-bdff-62de2b777f13	ML	Maternity Leave	180
+3d350ab0-4678-45b7-9e7a-cc805d780531	COL	Compensatory Off Leave	0
+880c2828-8935-48ee-99d8-a1be704a3c46	CL	Casual Leave	12
+0dc97a6c-560b-4815-8425-9b798d25ef48	SL	Sick Leave	10
+76c630e5-9075-4143-a8ec-89225b37561d	EL	Earned Leave	30
+40864392-2ce0-422a-b9e6-53ee0f91f782	ML	Maternity Leave	180
+797434e6-83b3-4e50-be6b-847ea30feec0	COL	Compensatory Off Leave	0
+1bbd9eca-5402-4ac2-8f04-a723178237c0	CL	Casual Leave	12
+adb20f89-27df-4484-8e7c-bb215a2f4f6e	SL	Sick Leave	10
+827900e6-b222-4689-bbda-88fd92af336f	EL	Earned Leave	30
+f65a29c1-79e3-47bb-b630-f18411ac28f2	ML	Maternity Leave	180
+eb9ab420-4317-4dc7-82ec-28748a08b074	COL	Compensatory Off Leave	0
+96c51c1e-c15c-4ec3-993d-a5d162c915fd	CL	Casual Leave	12
+824f9789-dada-4cd4-9007-4c93a9b3f13b	SL	Sick Leave	10
+907b46c3-aae6-45fe-99b2-43a27f1ec691	EL	Earned Leave	30
+130afe23-d9f0-47fc-8a70-0811dc50cdfc	CL	Casual Leave	12
+1200024c-fa19-4a29-8bd7-4c501722e622	SL	Sick Leave	10
+c8b663d8-3f4e-4998-9656-6f0a239459e1	EL	Earned Leave	30
+7c8fd53e-9521-4b9e-8214-0f137045f379	ML	Maternity Leave	180
+24d2b167-e7a5-4729-80dc-1cf558a85090	COL	Compensatory Off Leave	0
+08d17209-f14b-4693-89c4-c4feb8dd200d	ML	Maternity Leave	180
+b60887dc-d2a1-4afd-b1c3-afe5c7f5a387	COL	Compensatory Off Leave	0
+7c7ccc16-96ae-479a-83e6-bc6628df0ff6	CL	Casual Leave	12
+b1ed1dc1-af07-4206-b575-06c5b29c00f5	SL	Sick Leave	10
+3852c608-a661-4408-9325-b96614e62eb9	EL	Earned Leave	30
+da58bdaa-5165-4e3a-a8b5-7e3cd4b3358e	ML	Maternity Leave	180
+18885f69-f3a4-48fa-9dad-6493eba49337	COL	Compensatory Off Leave	0
+357ead9b-181b-4329-825c-6bceb47745ae	CL	Casual Leave	12
+eb33370f-fefe-4aea-84e9-c26c7e8e90af	SL	Sick Leave	10
+a5b87c86-6477-43ac-8d08-abf5faa28605	EL	Earned Leave	30
+3fb98da1-0d9a-4f79-8c10-d30538832ba8	ML	Maternity Leave	180
+5cbc2785-ddbc-428e-a9cb-061f21d84ccd	COL	Compensatory Off Leave	0
 \.
 
 
@@ -31670,8 +31962,6 @@ COPY "tenant_srms-college-of-law".subject_offerings (id, subject_id, prof_id, dt
 COPY "tenant_srms-college-of-law".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 1785bbd2-ef33-4c1a-9689-9a2fd9f023e7	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 df4ed1b3-036a-404d-9305-1bcc3433d75c	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-1785bbd2-ef33-4c1a-9689-9a2fd9f023e7	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-df4ed1b3-036a-404d-9305-1bcc3433d75c	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -31723,15 +32013,11 @@ COPY "tenant_srms-college-of-law".users (id, email, password_hash, role, is_acti
 e5113060-286d-48da-8c32-efccc851bfb6	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 40f65820-dfa8-46bc-ae43-8c82d9954883	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 8117fe1e-3887-465d-859c-a6a7e3ff232b	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
-dcd79ad9-e181-439b-8e97-edb73b1c357d	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
-42e45bd6-4dd1-474f-9d0c-c1658c130b90	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 38d96991-d802-4239-a170-1da71ca2eba4	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 2cb90930-57c5-47f5-86c6-d89b108058ec	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 e5113060-286d-48da-8c32-efccc851bfb6	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 40f65820-dfa8-46bc-ae43-8c82d9954883	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 8117fe1e-3887-465d-859c-a6a7e3ff232b	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
-dcd79ad9-e181-439b-8e97-edb73b1c357d	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
-42e45bd6-4dd1-474f-9d0c-c1658c130b90	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 38d96991-d802-4239-a170-1da71ca2eba4	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 2cb90930-57c5-47f5-86c6-d89b108058ec	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:36.206338+00	2026-08-14 14:33:36.206338+00
 \.
@@ -31793,33 +32079,6 @@ af965409-1e13-4205-b1eb-79c42075a001	B2021-C6-12	2021	6	\N	2022-09-19	2022-09-19
 c0ac6290-6de7-45e7-9e54-3ad1b34bfd99	B2023-C6-12	2023	6	\N	2022-09-19	2022-09-19	t	13	PARAMEDICAL DIPLOMA COURSE - UNNAO	12	13	Batch 2023
 ee19d99f-980f-47b4-b14d-6e18a1b0be90	B2024-C6-12	2024	6	\N	2024-01-09	2024-01-24	t	14	PARAMEDICAL DIPLOMA COURSE - UNNAO	12	14	Batch 2024
 2fbd0a20-fd53-4515-b3b3-019a580dd6a6	B2025-C6-12	2025	6	\N	2025-06-30	2027-11-29	t	15	PARAMEDICAL DIPLOMA COURSE - UNNAO	12	15	Batch 2025
-01ecc9c8-53a0-4678-aa8b-3cc859e78e9a	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-488bf0e6-f1f8-443a-9551-c67feabc5519	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-f5a472ff-f44e-41a4-bbdd-b1aefd8d1be1	B2018-C1-12	2018	1	\N	\N	\N	t	12	GNM	12	12	Batch 2018
-b6516446-c280-4bde-a3e2-d3251d80e919	B2019-C1-12	2019	1	\N	\N	\N	t	13	GNM	12	13	Batch 2019
-763a7ac7-6c7e-4eec-85ed-adf23c06433b	B2020-C1-12	2020	1	\N	\N	\N	t	14	GNM	12	14	Batch 2020
-5a5b88f6-91d1-476d-8027-48b1399da566	B2021-C1-12	2021	1	\N	\N	\N	t	15	GNM	12	15	Batch 2021
-1071b726-6444-47fe-aee6-5a47d5bbf00c	B2022-C1-12	2022	1	\N	2022-04-30	2022-12-30	t	16	GNM	12	16	Batch 2022
-13770f65-7103-4d4a-8d62-756301177935	B2023-C1-12	2023	1	\N	2022-04-30	2022-12-30	t	17	GNM	12	17	Batch 2023
-c3899713-953f-48f8-9e93-a17c6315b25e	B2024-C1-12	2024	1	\N	2024-01-09	2024-01-24	t	18	GNM	12	18	Batch 2024
-3cb74266-c616-4f35-8fd0-11b1b95cc51b	B2025-C1-12	2025	1	\N	\N	\N	t	19	GNM	12	19	Batch 2025
-99b490d9-df48-4b0d-beb8-dc5e6ca17438	B2026-C1-12	2026	1	\N	\N	\N	t	20	GNM	12	20	Batch 2026
-d5fc645b-3f76-4b0a-80a0-26832680972b	B2019-C4-12	2019	4	\N	\N	\N	t	1	ANM	12	1	Batch 2019
-2e8f4a3d-6ff5-4640-bb38-9564c8cd1ccc	B2020-C4-12	2020	4	\N	\N	\N	t	2	ANM	12	2	Batch 2020
-204209b3-9c5e-4220-82a6-77cfa389efa4	B2021-C4-12	2021	4	\N	\N	\N	t	3	ANM	12	3	Batch 2021
-7fa31e96-6f13-40fd-a449-5da2e47014f9	B2022-C4-12	2022	4	\N	2022-04-30	2022-12-30	t	4	ANM	12	4	Batch 2022
-e6be3498-b085-4e70-af66-633fb59d6572	B2023-C4-12	2023	4	\N	2022-04-30	2022-12-30	t	5	ANM	12	5	Batch 2023
-051fbce2-d8fc-49dd-aa8c-0e8050c3308a	B2024-C4-12	2024	4	\N	\N	\N	t	6	ANM	12	6	Batch 2024
-a118feee-1a6c-406b-b43c-1ef1008dc46f	B2025-C4-12	2025	4	\N	\N	\N	t	7	ANM	12	7	Batch 2025
-8f6229c0-7776-4393-a8b6-129901a892c4	B2026-C4-12	2026	4	\N	\N	\N	t	8	ANM	12	8	Batch 2026
-78a727df-57f2-4f00-82e1-65888af9c6f0	B2021-C5-12	2021	5	\N	\N	\N	t	11	NURSING DIPLOMA - UNNAO	12	11	Batch 2021
-401420c4-739c-4c72-8d7b-2bfa19b07492	B2023-C5-12	2023	5	\N	2022-04-30	2022-12-30	t	12	NURSING DIPLOMA - UNNAO	12	12	Batch 2023
-b2824b10-e9d4-4db7-9b99-0a45ef84c1a6	B2024-C5-12	2024	5	\N	2024-01-09	2024-01-24	t	14	NURSING DIPLOMA - UNNAO	12	14	Batch 2024
-af965409-1e13-4205-b1eb-79c42075a001	B2021-C6-12	2021	6	\N	2022-09-19	2022-09-19	t	11	PARAMEDICAL DIPLOMA COURSE - UNNAO	12	11	Batch 2021
-00accf5a-90c9-4711-8052-592477c1e9e5	B2022-C6-12	2022	6	\N	2022-09-19	2022-09-19	t	12	PARAMEDICAL DIPLOMA COURSE - UNNAO	12	12	Batch 2022
-c0ac6290-6de7-45e7-9e54-3ad1b34bfd99	B2023-C6-12	2023	6	\N	2022-09-19	2022-09-19	t	13	PARAMEDICAL DIPLOMA COURSE - UNNAO	12	13	Batch 2023
-ee19d99f-980f-47b4-b14d-6e18a1b0be90	B2024-C6-12	2024	6	\N	2024-01-09	2024-01-24	t	14	PARAMEDICAL DIPLOMA COURSE - UNNAO	12	14	Batch 2024
-2fbd0a20-fd53-4515-b3b3-019a580dd6a6	B2025-C6-12	2025	6	\N	2025-06-30	2027-11-29	t	15	PARAMEDICAL DIPLOMA COURSE - UNNAO	12	15	Batch 2025
 \.
 
 
@@ -31852,14 +32111,6 @@ a87bcb78-7d3c-49ca-ad09-2374db24162b	\N	\N	\N	PY4.2	Describe renal clearance and
 64bb2f14-39b5-4b26-82b4-252be1fb3931	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 5791731b-f45e-4c4b-8d80-c17dca2571a9	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 f4446269-305b-4c70-a4f0-49a17f087076	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-105b80b2-a96a-4679-a573-399c8d2bc2da	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-07f8e84f-a7cd-4db3-9adb-86ac0146c1b2	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-5547c0a3-1dfc-407e-a9ca-7931acfe45c1	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a87bcb78-7d3c-49ca-ad09-2374db24162b	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-0a602745-9d71-42b9-b703-96b2c0c1bdca	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-64bb2f14-39b5-4b26-82b4-252be1fb3931	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-5791731b-f45e-4c4b-8d80-c17dca2571a9	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-f4446269-305b-4c70-a4f0-49a17f087076	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:44.041225+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -31869,10 +32120,7 @@ f4446269-305b-4c70-a4f0-49a17f087076	\N	\N	\N	AN10.1	Describe scapular region mu
 
 COPY "tenant_srms-college-of-nursing-paramedical-sciences-unnao".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
 21453bd8-8fa8-4066-9290-4567f2bbbcce	1	GNM	Diploma	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:45.095241+00	semester	1	Diploma
-f4a54656-8b6d-4fcc-b26d-510a141b55e0	4	ANM	Diploma	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:45.110489+00	semester	4	Diploma
-eb44a9c6-3861-4e97-9a5d-2ed6a649ca86	5	NURSING DIPLOMA - UNNAO	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:45.114711+00	semester	5	UG
-16423740-9cc2-48ec-b569-251c1f9f8d8d	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:45.103276+00	semester	6	UG
-21453bd8-8fa8-4066-9290-4567f2bbbcce	1	GNM	Diploma	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:45.095241+00	semester	1	Diploma
+34d02b05-3b2c-4c56-8d41-be5ac0a3e234	3	PARAMEDICAL DIPLOMA COURSE	UG	3.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.72462+00	semester	3	UG
 f4a54656-8b6d-4fcc-b26d-510a141b55e0	4	ANM	Diploma	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:45.110489+00	semester	4	Diploma
 eb44a9c6-3861-4e97-9a5d-2ed6a649ca86	5	NURSING DIPLOMA - UNNAO	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:45.114711+00	semester	5	UG
 16423740-9cc2-48ec-b569-251c1f9f8d8d	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:45.103276+00	semester	6	UG
@@ -31913,21 +32161,7 @@ COPY "tenant_srms-college-of-nursing-paramedical-sciences-unnao".departments (id
 52f4288d-4933-403c-be80-f320eed87c0e	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:44.041225+00	\N	\N	\N	\N
 090b11c8-734c-478e-811d-d449e309b00f	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:44.041225+00	\N	\N	\N	\N
 5b92da2f-61a2-4686-afe0-857e887389b2	NURSING COURSE	1	General	\N	t	2026-08-14 14:34:27.451835+00	1	1	GNM	12
-46b469f3-6ce3-4d51-b436-3c5d3675f2f0	ANM Department	1	General	\N	t	2026-08-14 14:34:27.568753+00	1	4	ANM	12
-c9fd7ccb-4e63-493a-a88c-beb58ff4b99b	GNM	1	General	\N	t	2026-08-14 14:34:27.656667+00	1	5	NURSING DIPLOMA - UNNAO	12
 3cf68a20-c4a0-4832-9070-a9f6d08525a3	ANM	2	General	\N	t	2026-08-14 14:34:27.664841+00	2	5	NURSING DIPLOMA - UNNAO	12
-cde00cc6-b90c-4e32-89d7-7b18c1049137	DPT	1	General	\N	t	2026-08-14 14:34:27.751333+00	1	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	12
-63e1dda5-1163-4c60-88fd-23a2b652718b	DOTT	2	General	\N	t	2026-08-14 14:34:27.757603+00	2	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	12
-8e199773-6ce0-464a-a6cd-b1465f604f76	DOPT	3	General	\N	t	2026-08-14 14:34:27.762157+00	3	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	12
-0d909975-68ce-420e-8b87-3816555aa4a1	DCTT	4	General	\N	t	2026-08-14 14:34:27.766123+00	4	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	12
-52f4288d-4933-403c-be80-f320eed87c0e	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:44.041225+00	\N	\N	\N	\N
-090b11c8-734c-478e-811d-d449e309b00f	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:44.041225+00	\N	\N	\N	\N
-5b92da2f-61a2-4686-afe0-857e887389b2	NURSING COURSE	1	General	\N	t	2026-08-14 14:34:27.451835+00	1	1	GNM	12
-46b469f3-6ce3-4d51-b436-3c5d3675f2f0	ANM Department	1	General	\N	t	2026-08-14 14:34:27.568753+00	1	4	ANM	12
-c9fd7ccb-4e63-493a-a88c-beb58ff4b99b	GNM	1	General	\N	t	2026-08-14 14:34:27.656667+00	1	5	NURSING DIPLOMA - UNNAO	12
-3cf68a20-c4a0-4832-9070-a9f6d08525a3	ANM	2	General	\N	t	2026-08-14 14:34:27.664841+00	2	5	NURSING DIPLOMA - UNNAO	12
-cde00cc6-b90c-4e32-89d7-7b18c1049137	DPT	1	General	\N	t	2026-08-14 14:34:27.751333+00	1	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	12
-63e1dda5-1163-4c60-88fd-23a2b652718b	DOTT	2	General	\N	t	2026-08-14 14:34:27.757603+00	2	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	12
 8e199773-6ce0-464a-a6cd-b1465f604f76	DOPT	3	General	\N	t	2026-08-14 14:34:27.762157+00	3	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	12
 0d909975-68ce-420e-8b87-3816555aa4a1	DCTT	4	General	\N	t	2026-08-14 14:34:27.766123+00	4	6	PARAMEDICAL DIPLOMA COURSE - UNNAO	12
 \.
@@ -32040,6 +32274,91 @@ c2468bc3-1ff6-43c2-8841-4f74034c0275	CL	Casual Leave	12
 98f59ebd-72cf-4ee3-a576-cc4051d0aefa	EL	Earned Leave	30
 8f08a393-fe8f-40ce-83d2-ca6973761318	ML	Maternity Leave	180
 e7046373-9d39-4ae2-b1fc-51d88fa8def6	COL	Compensatory Off Leave	0
+fd2c1429-6d8e-468d-a50c-9f8a4b9c8467	CL	Casual Leave	12
+114877f9-72b5-44c5-b370-7b9d1f4a1ace	SL	Sick Leave	10
+a07d6a69-d1e0-4be6-a8ff-6e1be4c3f011	EL	Earned Leave	30
+6d230982-bc51-4eea-b699-04ee8fe4cb20	ML	Maternity Leave	180
+df751191-34ed-49a1-a565-e9b354535f64	COL	Compensatory Off Leave	0
+701ae767-0223-4abb-9c71-8f1c5f05d81f	CL	Casual Leave	12
+eca77138-29bd-4f74-9f0f-83bd40601478	SL	Sick Leave	10
+538f7b0a-f6c0-477e-9ebc-dbe165342a61	EL	Earned Leave	30
+c642ad6a-8bd1-40c5-bb30-8110bdbe51ad	ML	Maternity Leave	180
+191abcb4-09ec-49ef-9bc5-0998f27ca651	COL	Compensatory Off Leave	0
+147e5794-1b8d-4be0-99d7-6888c751302d	CL	Casual Leave	12
+54cc6376-9a65-42db-b2d3-fcdfb1cadc04	SL	Sick Leave	10
+90403de5-dc27-4dd8-a0fc-50e5e0224b94	EL	Earned Leave	30
+27df66e4-cd1f-43fd-b5da-adb42fa7f234	ML	Maternity Leave	180
+5e488e84-e8ad-46bf-9e03-92cb2c2eb742	COL	Compensatory Off Leave	0
+099158b0-73ca-4b05-9c45-90cf4c96fb17	CL	Casual Leave	12
+e4f3a473-b478-49ac-b2c7-26bb29c80199	SL	Sick Leave	10
+9a0e52d7-f47f-41c8-86d5-8f8fe4e9db0d	EL	Earned Leave	30
+a80b60d8-11dd-4eea-a61d-179155ece1b2	ML	Maternity Leave	180
+609ae246-79bc-4f4b-b332-2ac7f9978f4c	COL	Compensatory Off Leave	0
+81bc1aba-70ad-4419-92b2-7b0caf0ff65d	CL	Casual Leave	12
+64db092b-a751-4ab2-8c2c-6d0f3a789635	SL	Sick Leave	10
+e7834286-49f4-40f4-81cf-e983d5b57bee	EL	Earned Leave	30
+a3e73274-aa38-4dfa-8090-40dba89f0fe2	ML	Maternity Leave	180
+09bf4e45-f564-4197-817e-aec32ced7689	COL	Compensatory Off Leave	0
+a1ba3258-4767-4b53-bb58-b47dae42b61a	CL	Casual Leave	12
+ad850eba-f689-4b18-b43a-29128c8fc6af	SL	Sick Leave	10
+65473c07-f6bc-4953-be4f-ab1ea9d247c1	EL	Earned Leave	30
+80e22866-5adc-4c99-b5b3-924e22df34b5	ML	Maternity Leave	180
+b07d7f2f-fef3-4620-8b16-ca874a209073	COL	Compensatory Off Leave	0
+80644442-ecfc-443c-8584-99df27d0a671	CL	Casual Leave	12
+6a55decb-43d6-4d3d-bc25-153d6e93ac11	SL	Sick Leave	10
+ff6a5bc5-60f4-4a10-b417-d5e683ee2f07	EL	Earned Leave	30
+d1013a7b-84fc-4822-8469-a26fcb947708	ML	Maternity Leave	180
+fbc0c4ed-58b9-41c3-8c36-c257eac09dc0	COL	Compensatory Off Leave	0
+df243f73-d4ce-44f8-88b9-df87ae69990c	CL	Casual Leave	12
+f70bbdfe-d797-443d-b40c-4761074a40ee	SL	Sick Leave	10
+bb26a8eb-ce4b-4d06-a313-14f1fa7d6d68	EL	Earned Leave	30
+8555ad9b-99b1-4069-9538-72823fa2f61f	ML	Maternity Leave	180
+811858f1-a656-4812-981c-0fd376ce95c7	COL	Compensatory Off Leave	0
+c97f9bac-3331-4ded-8957-e864c4863025	CL	Casual Leave	12
+9aaacda0-c5b4-45da-8e43-0ebce49e7ce6	SL	Sick Leave	10
+bb74da3a-71b2-42fb-9db2-5a96ab13401c	EL	Earned Leave	30
+e1b61eab-dd86-4479-b0b2-16e76664e713	ML	Maternity Leave	180
+68476496-4d13-4392-98ca-dcf8cb2f504a	COL	Compensatory Off Leave	0
+f988b05b-a6fe-4ac5-a430-3e8c8a207fd9	CL	Casual Leave	12
+f689912e-3371-4779-91aa-4cb30f822a86	SL	Sick Leave	10
+4169c90b-bc5c-43f5-9360-53a316edba90	EL	Earned Leave	30
+b0baf16a-c7ab-41bd-8b06-ae6c9514110d	ML	Maternity Leave	180
+2c78e894-4f70-493e-b57f-89bf8cac632d	COL	Compensatory Off Leave	0
+8261f36d-07fc-4e0e-a318-f6c3bab6bb97	CL	Casual Leave	12
+501629cc-74aa-4ea1-bb10-fcf97abf3ca1	SL	Sick Leave	10
+5127f418-02e5-4eb3-9227-5d3074920612	EL	Earned Leave	30
+08743e02-704f-459d-8274-b8ad9f47bb2e	ML	Maternity Leave	180
+d4d8433d-5707-48b8-9035-6df8a4a0defc	COL	Compensatory Off Leave	0
+fdd37b1b-fdff-4c54-8e1a-2b0b4f921788	CL	Casual Leave	12
+fb0e89a4-006b-4ac8-b6b3-e4f1ad6904a7	SL	Sick Leave	10
+7e3b2aca-bb66-4afc-935f-2dd986274a01	EL	Earned Leave	30
+d8d0d5c9-e6be-4667-b2b6-3ccd54dc7db2	ML	Maternity Leave	180
+e378d959-93dc-4a8b-a505-8cbfc50f0b84	COL	Compensatory Off Leave	0
+dd0b9637-02c8-473e-a5eb-220cd5cdc8de	CL	Casual Leave	12
+265da2c4-feb5-4c7b-8eff-4e3cbba6a69d	SL	Sick Leave	10
+db34bd8b-87f0-4cdb-8b79-9ca84f39c42f	EL	Earned Leave	30
+b3c6b7bb-b7d8-49f3-be35-0049df280a94	ML	Maternity Leave	180
+e744b9e8-e95f-42c3-bcda-d60971e3449c	COL	Compensatory Off Leave	0
+d707742e-6e73-4e8e-8819-aa207dc18e9e	CL	Casual Leave	12
+91b04dd4-41d5-49b3-b31e-acd339b5fadf	SL	Sick Leave	10
+d8b8a8c0-219a-402e-abb0-fc16dce1fe95	EL	Earned Leave	30
+dcc03d45-5fa7-464e-8e84-e49a8b62ae75	CL	Casual Leave	12
+c3e33d1c-f0b3-48d2-8de5-cd506c95cb40	SL	Sick Leave	10
+2c2cf963-524b-4e66-8146-e262680b0fa4	EL	Earned Leave	30
+e5dfc1c2-67c3-4d07-88fc-d4607adc6ec9	ML	Maternity Leave	180
+ec9532a5-9b32-40d8-a325-e057127aae92	COL	Compensatory Off Leave	0
+ed26430f-c684-4c8a-9f0c-bd884b2a21e1	ML	Maternity Leave	180
+1331f151-821c-4c9c-b824-b540cc8cbbca	COL	Compensatory Off Leave	0
+7edffe44-d8ad-4177-be4b-50adef13d4e1	CL	Casual Leave	12
+8069eda6-1956-454d-bdd1-c1e53a1ebffb	SL	Sick Leave	10
+6ca6ad72-461e-4700-8648-e614900113ec	EL	Earned Leave	30
+f3256054-c77b-4620-8ece-2be83b898714	ML	Maternity Leave	180
+26346d52-6302-41f9-ae97-a62980dd436e	COL	Compensatory Off Leave	0
+9cd6de49-866e-4492-ba9b-5ae215e17534	CL	Casual Leave	12
+804838d9-8996-416a-bcf5-43deeb286513	SL	Sick Leave	10
+52496def-d712-4e41-a570-3239d664dc29	EL	Earned Leave	30
+3faef8ea-1b82-441d-ac01-9970c35ff471	ML	Maternity Leave	180
+b4f60655-e7e6-4550-91ca-7fc5d523056c	COL	Compensatory Off Leave	0
 \.
 
 
@@ -32286,8 +32605,6 @@ COPY "tenant_srms-college-of-nursing-paramedical-sciences-unnao".subject_offerin
 COPY "tenant_srms-college-of-nursing-paramedical-sciences-unnao".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 ac610c43-0cb5-4d6c-a038-ca1a08da12e0	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 d82a0633-7833-42cc-adbb-e3960fbaf797	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-ac610c43-0cb5-4d6c-a038-ca1a08da12e0	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-d82a0633-7833-42cc-adbb-e3960fbaf797	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -32389,13 +32706,6 @@ d932d29e-5a9e-4829-99d7-90695dc06485	2	2023	1	\N	\N	\N	t	2	CRICKET ACADEMY	14	2	
 2a831d25-19d5-4302-afa2-a0a0ec47bcf1	3	2024	1	\N	2024-01-09	2024-01-24	t	3	CRICKET ACADEMY	14	3	Batch 2024
 01592bb6-b730-4b51-bbd2-dc35ce7a0dc0	4	2025	1	\N	\N	\N	t	4	CRICKET ACADEMY	14	4	Batch 2025
 bd3f4e0b-30d7-4459-91d0-4ad300c90c7a	5	2026	1	\N	\N	\N	t	5	CRICKET ACADEMY	14	5	Batch 2026
-bb5dcbe8-fd12-415e-b71b-cd6072fda38c	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-fa833b8c-6adc-4e0f-a604-1316bc08b343	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-e64a08b9-9584-4173-963c-6c70feb765fd	1	2022	1	\N	2022-09-21	2022-09-21	t	1	CRICKET ACADEMY	14	1	Batch 2022
-d932d29e-5a9e-4829-99d7-90695dc06485	2	2023	1	\N	\N	\N	t	2	CRICKET ACADEMY	14	2	Batch 2023
-2a831d25-19d5-4302-afa2-a0a0ec47bcf1	3	2024	1	\N	2024-01-09	2024-01-24	t	3	CRICKET ACADEMY	14	3	Batch 2024
-01592bb6-b730-4b51-bbd2-dc35ce7a0dc0	4	2025	1	\N	\N	\N	t	4	CRICKET ACADEMY	14	4	Batch 2025
-bd3f4e0b-30d7-4459-91d0-4ad300c90c7a	5	2026	1	\N	\N	\N	t	5	CRICKET ACADEMY	14	5	Batch 2026
 \.
 
 
@@ -32428,14 +32738,6 @@ f4fdc86f-a743-4b55-9aad-e90412e2c586	\N	\N	\N	PY4.2	Describe renal clearance and
 ac12df66-3a12-4299-8545-7a11bede1c5b	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 67bf4b11-1e07-4832-ada7-3bbeb555fb1c	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 8c68b67b-f16f-4c74-b381-c434d66f820f	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-e89e992b-9713-49ea-9c49-48bc6b873327	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-6aa4f861-01fd-4d53-9d05-ceaa8816ac63	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-fdfe2c0b-fc7d-4d65-9cf0-de2417206b1e	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-f4fdc86f-a743-4b55-9aad-e90412e2c586	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-890ac57f-8ce0-4f77-9652-9cb6def6e4a9	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-ac12df66-3a12-4299-8545-7a11bede1c5b	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-67bf4b11-1e07-4832-ada7-3bbeb555fb1c	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-8c68b67b-f16f-4c74-b381-c434d66f820f	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:46.140297+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -32444,7 +32746,6 @@ ac12df66-3a12-4299-8545-7a11bede1c5b	\N	\N	\N	AN1.1	Describe osteology of upper 
 --
 
 COPY "tenant_srms-cricket-academy".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-3c0cb11f-23a3-4171-9396-65768a884e35	1	CRICKET ACADEMY	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:47.16697+00	semester	1	Certificate
 3c0cb11f-23a3-4171-9396-65768a884e35	1	CRICKET ACADEMY	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:47.16697+00	semester	1	Certificate
 \.
 
@@ -32480,9 +32781,6 @@ e551b7c8-abbe-4092-8693-b1c999ffc73a	TU	Tutorial	t
 --
 
 COPY "tenant_srms-cricket-academy".departments (id, name, code, type, hod_user_id, is_active, created_at, branch_cd, course_cd, course_name, colg_cd) FROM stdin;
-7b34fb44-afeb-41a6-8ae7-b8d5e832aab3	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:46.140297+00	\N	\N	\N	\N
-3e186f75-2118-4db1-87c7-a7a4ae12a04f	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:46.140297+00	\N	\N	\N	\N
-55e4c4c3-492a-452b-bad5-c14e2f2e6608	CRICKET ACADEMY	1	General	\N	t	2026-08-14 14:34:28.172638+00	1	1	CRICKET ACADEMY	14
 7b34fb44-afeb-41a6-8ae7-b8d5e832aab3	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:46.140297+00	\N	\N	\N	\N
 3e186f75-2118-4db1-87c7-a7a4ae12a04f	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:46.140297+00	\N	\N	\N	\N
 55e4c4c3-492a-452b-bad5-c14e2f2e6608	CRICKET ACADEMY	1	General	\N	t	2026-08-14 14:34:28.172638+00	1	1	CRICKET ACADEMY	14
@@ -32596,6 +32894,91 @@ b7a52934-94d4-48fe-9c1d-a6142ee4fb85	SL	Sick Leave	10
 33ad6366-7979-407e-bc61-4e5868047463	EL	Earned Leave	30
 0635cd5b-5f16-420b-a840-e86c9c3f01ad	ML	Maternity Leave	180
 9d55f1c3-6b01-46e4-92bc-3db11edf53b9	COL	Compensatory Off Leave	0
+528e3910-2ea9-4d1b-9047-2a2c3a846a43	CL	Casual Leave	12
+eefc176a-c738-4b7a-bc5a-58de64bf61c4	SL	Sick Leave	10
+37ea51c8-f43f-493f-adbc-338724b38c40	EL	Earned Leave	30
+e355cebb-488f-4b88-bf44-df37e7fecc0d	ML	Maternity Leave	180
+cc160d58-f4f3-4ffe-8d57-f443fa644aed	COL	Compensatory Off Leave	0
+63378e2b-9974-4385-a708-59c2d207abce	CL	Casual Leave	12
+2673a135-0bd1-417c-b995-58ada5f46a3f	SL	Sick Leave	10
+99b79ce8-5e9c-4429-89d4-13d5dece603b	EL	Earned Leave	30
+2ddb1598-fa53-40a5-adff-e1d457749d6b	ML	Maternity Leave	180
+423da293-87a2-46ba-8bd3-f3e9c98d9256	COL	Compensatory Off Leave	0
+64ec555a-3348-4f9a-9ac9-2881a477d080	CL	Casual Leave	12
+0ca537c8-1bdf-43d8-8ac5-3ccca8f38a0b	SL	Sick Leave	10
+fc05cef8-69c7-4f83-a0c2-0985532cab21	EL	Earned Leave	30
+4532a1a1-5f46-4530-b591-e3fd7f77d283	ML	Maternity Leave	180
+31d5c83e-6670-4d21-9794-123cf3b2178d	COL	Compensatory Off Leave	0
+53c98f0a-1df3-4ae8-8f84-f2df88030681	CL	Casual Leave	12
+733b361d-9c9a-4a03-b178-2eead460e22f	SL	Sick Leave	10
+f2ebdc5a-d3b1-4668-b7d9-09039daf2f03	EL	Earned Leave	30
+8c7c8c86-d0b3-4720-86f5-e777078be18a	ML	Maternity Leave	180
+677837e1-8e7e-434c-b8d2-4ddabc9ac0f0	COL	Compensatory Off Leave	0
+6191572d-9669-4f94-915d-66466c4631c1	CL	Casual Leave	12
+897d8c88-617f-40e3-bbc7-c4526003c03a	SL	Sick Leave	10
+2a69b71f-38c6-4551-9390-76718b817f69	EL	Earned Leave	30
+2b27f50a-0760-4d03-be4f-475aa649ceeb	ML	Maternity Leave	180
+8e9414cf-2579-4af4-ad35-3b5f8b0cd02f	COL	Compensatory Off Leave	0
+43211f57-92cd-4188-92ec-d4766759dc0d	CL	Casual Leave	12
+c861ceab-020b-4679-ba02-90814cf949a2	SL	Sick Leave	10
+906206ef-bcd5-4ea4-b4a9-728e4b3a6176	EL	Earned Leave	30
+29ba8ee7-ea39-4f79-adb1-e393c09183cc	ML	Maternity Leave	180
+512faa9c-6160-457a-aa23-6ca79c608457	COL	Compensatory Off Leave	0
+bff9bfba-a087-4815-b588-0779c93ab941	CL	Casual Leave	12
+067c0e3f-3b86-4397-a33e-826ca94ec2a7	SL	Sick Leave	10
+864ea194-9798-41df-ba41-e2916a396d7e	EL	Earned Leave	30
+4bc4d70e-3061-4d73-adda-309c91ff45ee	ML	Maternity Leave	180
+f125e749-72e0-414a-a277-397f3db1fd8c	COL	Compensatory Off Leave	0
+822af167-3f44-4225-85df-c3c0a4383c5a	CL	Casual Leave	12
+9fb68f4f-18c7-479b-9d00-54b7377aacf4	SL	Sick Leave	10
+fd96166a-9561-4220-a0a1-3da715516e7a	EL	Earned Leave	30
+c1c87f66-e338-4427-a878-4305a74279cf	ML	Maternity Leave	180
+909174a5-4c51-41fa-b3c6-392f59deb1bb	COL	Compensatory Off Leave	0
+5b8e6408-386d-4229-854c-16e06c9e7865	CL	Casual Leave	12
+55386501-8818-4044-bf39-06ee7da232d9	SL	Sick Leave	10
+84456681-55d0-43fe-baef-eaa239ddd23c	EL	Earned Leave	30
+572a060e-40b8-4b9b-bc0c-fd60d9d6df13	ML	Maternity Leave	180
+7ba4e447-d5d2-4cf5-b32e-ad059c2f539f	COL	Compensatory Off Leave	0
+32011d64-96ce-405d-84c7-3c347963818e	CL	Casual Leave	12
+0b788a04-7d6a-4148-bab0-1d2e74b0a9bd	SL	Sick Leave	10
+5aa48e0f-1c13-4378-9fb3-2036a2d33453	EL	Earned Leave	30
+c0710523-f04c-4454-8559-9367bda9a9c1	ML	Maternity Leave	180
+b8792068-1d29-4042-9455-11e91be40dc8	COL	Compensatory Off Leave	0
+070494e2-ce7a-47f3-b1cc-ee7e7fb29e10	CL	Casual Leave	12
+bef8d375-3c60-4664-aa9d-541466993b1f	SL	Sick Leave	10
+6d30764d-5b36-499f-b6be-d2ff9992d7c7	EL	Earned Leave	30
+29ae4ab6-d6e7-42a3-b41c-582d5b19ae96	ML	Maternity Leave	180
+d2777815-3a0b-47f6-8605-bbbae09b889d	COL	Compensatory Off Leave	0
+523da7ac-7727-4116-85dd-a587d30eadab	CL	Casual Leave	12
+9638f3a2-c141-4eeb-b7fb-2c620c2bc756	SL	Sick Leave	10
+22bb6f8e-e16c-456f-bd80-28a8e791083b	EL	Earned Leave	30
+9ae7f352-ee4f-4fc1-95f8-46b0f39254ef	ML	Maternity Leave	180
+5db8253d-14b8-42c3-bee8-a2f7db23a78f	COL	Compensatory Off Leave	0
+9340c05d-bd6c-4392-941f-4d3683feeff8	CL	Casual Leave	12
+4c7e38fc-7578-4747-b8fb-41a5ef521a40	SL	Sick Leave	10
+11027a9e-3a31-4a76-b586-4069ad433ca9	EL	Earned Leave	30
+0055376a-3c9e-4966-aed7-a5ba61bb73d2	ML	Maternity Leave	180
+d8722ef3-1213-4e9e-8568-0ac21f4cf792	COL	Compensatory Off Leave	0
+6757ba9c-ef71-432d-963f-a92643ef617e	CL	Casual Leave	12
+fee4be1b-d570-49e3-af59-ed3b3bdd08b6	SL	Sick Leave	10
+f4da2cf9-6434-46f1-9d74-5709f4897052	EL	Earned Leave	30
+30cf9c7d-06ce-4f82-a02f-8758e8949085	CL	Casual Leave	12
+c989a375-9a31-47f2-9890-39322196c0c0	SL	Sick Leave	10
+a9c70754-f39a-4831-9279-b99f465fdf14	EL	Earned Leave	30
+5d572e8c-4122-4bf8-b5ce-47d9bbd51f9d	ML	Maternity Leave	180
+7866b65f-6227-4cee-872d-7c8be52b7424	COL	Compensatory Off Leave	0
+e3412a21-16cb-43b1-863c-f47574e75dc5	ML	Maternity Leave	180
+6406a605-3bfe-4bca-abe6-e2c58042ed94	COL	Compensatory Off Leave	0
+90454b82-6997-46e8-9406-96c4db0e2dd3	CL	Casual Leave	12
+9a583104-5026-4242-9c98-ab900c5afb25	SL	Sick Leave	10
+1d36ab65-57ac-42fa-b68c-5ed75c29df9f	EL	Earned Leave	30
+338df05e-5e1d-49d4-bc0f-1b0d2cca2503	ML	Maternity Leave	180
+66c081b0-bebb-4cd1-92be-6ee51b259edf	COL	Compensatory Off Leave	0
+a68e21cf-c919-4bf2-8803-dd8b3e1f105c	CL	Casual Leave	12
+5b4d8797-8e50-4399-a954-b23dc8f9a910	SL	Sick Leave	10
+ffaf154c-999c-4462-9ee4-fe298f2699ed	EL	Earned Leave	30
+e58f8dd6-8cb0-4d05-be7a-33a73d6b3b33	ML	Maternity Leave	180
+9f53fb6c-01fb-4ccb-b21d-904b3b9de933	COL	Compensatory Off Leave	0
 \.
 
 
@@ -32842,8 +33225,6 @@ COPY "tenant_srms-cricket-academy".subject_offerings (id, subject_id, prof_id, d
 COPY "tenant_srms-cricket-academy".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 c1415ac9-bc4b-4c9b-a959-6dbfd292550f	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 0b6d6072-6ddf-4bc1-ad65-fb6c975fe8c3	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-c1415ac9-bc4b-4c9b-a959-6dbfd292550f	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-0b6d6072-6ddf-4bc1-ad65-fb6c975fe8c3	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -32978,46 +33359,6 @@ ebd3daa4-b1e5-48b6-af65-277348f60fd7	B2023-C4-6	2023	4	\N	2023-01-31	2023-02-27	
 a476d43e-16d2-43aa-bc33-c84660190c73	B2024-C4-6	2024	4	\N	2024-01-09	2024-01-24	t	14	B.Sc. INTERNSHIP	6	14	Batch 2024
 6f5f78e6-84da-4446-aeb1-7d22d559228b	B2025-C4-6	2025	4	\N	2025-01-09	2026-01-09	t	15	B.Sc. INTERNSHIP	6	15	Batch 2025
 c2a6bf6c-da5c-4636-aae5-200e90a8f438	B2026-C4-6	2026	4	\N	2026-01-31	2027-02-27	t	16	B.Sc. INTERNSHIP	6	16	Batch 2026
-f7588554-7458-4473-9339-6d626fff07a1	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-26dd9db1-bfeb-4616-b9be-c928f33362b2	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-f4fdb161-16c5-4d56-addd-e479e8102a49	B2011-C1-6	2011	1	\N	\N	\N	t	1	B.Sc.	6	1	Batch 2011
-4dd2f300-98cc-4804-bd18-ae96177c1453	B2012-C1-6	2012	1	\N	\N	\N	t	2	B.Sc.	6	2	Batch 2012
-57d8ec54-fc12-47d3-97d9-799a344e32f1	B2013-C1-6	2013	1	\N	\N	\N	t	3	B.Sc.	6	3	Batch 2013
-9d9ba246-673f-49d2-9575-5be7e9a613cf	B2014-C1-6	2014	1	\N	\N	\N	t	4	B.Sc.	6	4	Batch 2014
-0b1573e4-767b-477d-8eb3-6dc1cdb6ea09	B2015-C1-6	2015	1	\N	\N	\N	t	5	B.Sc.	6	5	Batch 2015
-e3cf3e3c-ec1e-44f9-b3e0-4ad9fb8307d1	B2016-C1-6	2016	1	\N	\N	\N	t	6	B.Sc.	6	6	Batch 2016
-7ea36839-f45a-4e7f-bb90-33e700945108	B2017-C1-6	2017	1	\N	\N	\N	t	7	B.Sc.	6	7	Batch 2017
-3fcf5917-d343-4a0c-af15-ebf1e2bee780	B2018-C1-6	2018	1	\N	\N	\N	t	8	B.Sc.	6	8	Batch 2018
-4fb08ed2-ddd4-4908-88da-a64529b91d11	B2019-C1-6	2019	1	\N	\N	\N	t	9	B.Sc.	6	9	Batch 2019
-2433abf8-e211-4f5f-a5f6-6ef01bf74fad	B2020-C1-6	2020	1	\N	\N	\N	t	10	B.Sc.	6	10	Batch 2020
-9ac03309-1bfb-436d-b793-6b31ccb74ae6	B2021-C1-6	2021	1	\N	\N	\N	t	11	B.Sc.	6	11	Batch 2021
-b298a143-078e-49e3-98fa-cb02dab0a278	B2022-C1-6	2022	1	\N	2022-03-06	2022-03-30	t	12	B.Sc.	6	12	Batch 2022
-c616c9cb-c980-4f9e-bcb6-7190828504ac	B2023-C1-6	2023	1	\N	2023-02-01	2023-02-27	t	13	B.Sc.	6	13	Batch 2023
-2c00f2b7-7814-43cd-acd9-9822fb6cbb69	B2024-C1-6	2024	1	\N	2024-01-09	2024-01-09	t	14	B.Sc.	6	14	Batch 2024
-3be73793-2d55-47b8-ab99-87904c17ee68	B2025-C1-6	2025	1	\N	2025-01-31	2030-01-31	t	15	B.Sc.	6	15	Batch 2025
-31bdb629-7d2b-4cbc-bd29-847b64c0325f	B2026-C1-6	2026	1	\N	2026-01-31	2027-02-27	t	16	B.Sc.	6	16	Batch 2026
-8a027457-5ee4-4956-8315-5111924083fe	B2019-C2-6	2019	2	\N	\N	\N	t	9	M.Sc.	6	9	Batch 2019
-6f6a75d7-eef9-4e95-af7b-24415f54b00e	B2020-C2-6	2020	2	\N	\N	\N	t	10	M.Sc.	6	10	Batch 2020
-e761cfb4-78da-46eb-861c-d2fd0b37129b	B2021-C2-6	2021	2	\N	\N	\N	t	11	M.Sc.	6	11	Batch 2021
-146eee9e-6bb1-44e2-95bf-81596d5a4573	B2022-C2-6	2022	2	\N	2022-03-06	2022-03-30	t	12	M.Sc.	6	12	Batch 2022
-3e1d1d21-9119-47a5-9252-f172e9e8c0d5	B2023-C2-6	2023	2	\N	2023-01-31	2023-02-27	t	13	M.Sc.	6	13	Batch 2023
-3b098471-ede5-4cbc-87fd-2204acca913b	B2024-C2-6	2024	2	\N	2024-01-09	2024-01-24	t	14	M.Sc.	6	14	Batch 2024
-1bc0bdaa-c636-41e1-b126-7d94ebdea978	B2025-C2-6	2025	2	\N	2025-01-31	2030-01-31	t	15	M.Sc.	6	15	Batch 2025
-3ccf7cad-707e-41e6-9986-85b0c705d078	B2026-C2-6	2026	2	\N	2026-01-31	2027-02-27	t	16	M.Sc.	6	16	Batch 2026
-507d0f2e-6378-4836-acbc-3f556c1a83de	B2019-C3-6	2019	3	\N	\N	\N	t	9	Diploma	6	9	Batch 2019
-82d9f844-26a4-4ffe-beb3-cdbd7a2f0694	B2020-C3-6	2020	3	\N	\N	\N	t	10	Diploma	6	10	Batch 2020
-f73aae52-bad0-446d-88c1-1aff2a6814fb	B2021-C3-6	2021	3	\N	\N	\N	t	11	Diploma	6	11	Batch 2021
-2a2469b5-79d9-444d-8346-7454ba30ecea	B2022-C3-6	2022	3	\N	2022-04-25	2022-12-30	t	12	Diploma	6	12	Batch 2022
-8a4d396e-c72a-4db3-8c6d-e1945517d5d4	B2023-C3-6	2023	3	\N	2023-01-31	2023-02-27	t	13	Diploma	6	13	Batch 2023
-f4abba2b-e23a-47ce-9ac2-4173486479ad	B2024-C3-6	2024	3	\N	2024-01-09	2024-01-24	t	14	Diploma	6	14	Batch 2024
-343aba7d-0418-4439-bfa8-e6f15d89c3fb	B2025-C3-6	2025	3	\N	2025-01-31	2030-07-31	t	15	Diploma	6	15	Batch 2025
-3a92311c-87c7-4a09-903d-23e5f194cce3	B2026-C3-6	2026	3	\N	2026-01-31	2027-02-27	t	16	Diploma	6	16	Batch 2026
-40f30b48-59a9-44de-9ef8-9d6f8aafb92c	B2021-C4-6	2021	4	\N	\N	\N	t	11	B.Sc. INTERNSHIP	6	11	Batch 2021
-94d0dedb-2af0-4f82-8547-a5ecaa8a641a	B2022-C4-6	2022	4	\N	2022-03-06	2022-03-30	t	12	B.Sc. INTERNSHIP	6	12	Batch 2022
-ebd3daa4-b1e5-48b6-af65-277348f60fd7	B2023-C4-6	2023	4	\N	2023-01-31	2023-02-27	t	13	B.Sc. INTERNSHIP	6	13	Batch 2023
-a476d43e-16d2-43aa-bc33-c84660190c73	B2024-C4-6	2024	4	\N	2024-01-09	2024-01-24	t	14	B.Sc. INTERNSHIP	6	14	Batch 2024
-6f5f78e6-84da-4446-aeb1-7d22d559228b	B2025-C4-6	2025	4	\N	2025-01-09	2026-01-09	t	15	B.Sc. INTERNSHIP	6	15	Batch 2025
-c2a6bf6c-da5c-4636-aae5-200e90a8f438	B2026-C4-6	2026	4	\N	2026-01-31	2027-02-27	t	16	B.Sc. INTERNSHIP	6	16	Batch 2026
 \.
 
 
@@ -33050,14 +33391,6 @@ ac915a4a-b575-43c0-8bfe-2b7016036667	\N	\N	\N	PY2.1	Describe excitation-contract
 386d0b30-8394-475b-a618-fd7b5a172bd1	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 ac188106-52b4-41af-a97d-0dad0c8e76c0	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 c84c2ced-9ebe-4691-8e32-5d54f33b8c75	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-ac915a4a-b575-43c0-8bfe-2b7016036667	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-295363b1-812a-4661-a414-b778975e5dd3	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-246d5f0f-7a9d-4b55-bfa6-5cbd0ef217b5	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-67a3cee9-1389-4a9c-aaa2-a2d6dee2eb66	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-00e3fc02-dff9-42b2-907d-2cbbfb3681cc	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-386d0b30-8394-475b-a618-fd7b5a172bd1	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-ac188106-52b4-41af-a97d-0dad0c8e76c0	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-c84c2ced-9ebe-4691-8e32-5d54f33b8c75	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:38.035557+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -33066,10 +33399,6 @@ c84c2ced-9ebe-4691-8e32-5d54f33b8c75	\N	\N	\N	AN10.1	Describe scapular region mu
 --
 
 COPY "tenant_srms-iahs-bareilly".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-a14e7f42-124c-4f64-9391-095f6bea1fe5	1	B.Sc.	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.94832+00	semester	1	UG
-1866645f-6c79-4fcf-8283-8632f5ed47a4	2	M.Sc.	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.953074+00	semester	2	PG
-0c9c5bb5-3a71-4fea-a288-e576d87530a0	3	Diploma	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.957483+00	semester	3	UG
-f5cb56ca-d72d-4a17-9380-d0b8e44f2c7f	4	B.Sc. INTERNSHIP	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.96128+00	semester	4	UG
 a14e7f42-124c-4f64-9391-095f6bea1fe5	1	B.Sc.	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.94832+00	semester	1	UG
 1866645f-6c79-4fcf-8283-8632f5ed47a4	2	M.Sc.	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.953074+00	semester	2	PG
 0c9c5bb5-3a71-4fea-a288-e576d87530a0	3	Diploma	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.957483+00	semester	3	UG
@@ -33118,14 +33447,9 @@ d960a665-f5bb-4457-88ac-6d9fafa08e13	B.R.I.T	5	Engineering	\N	t	2026-08-14 14:34
 17fac1c5-3382-44ff-8469-3bb58c871946	B.O.T.T	6	General	\N	t	2026-08-14 14:34:23.991375+00	6	1	B.Sc.	6
 8ba6c2f5-ceec-4721-a1d1-17c1c54909e0	BMLS	7	General	\N	t	2026-08-14 14:34:23.99527+00	7	1	B.Sc.	6
 2e33b069-7345-45fa-a6c7-4e572734de18	BMRIT	8	Engineering	\N	t	2026-08-14 14:34:23.999338+00	8	1	B.Sc.	6
-f9d0f1d4-47c9-4020-a5ea-de80a03e9665	Medical LaboratoryTech.	1	Engineering	\N	t	2026-08-14 14:34:24.090762+00	1	2	M.Sc.	6
-75d6dd2a-b30e-4b4f-bb57-13d99051c321	Physiotherapy	2	General	\N	t	2026-08-14 14:34:24.094707+00	2	2	M.Sc.	6
-8f6c2b11-e876-4d53-83eb-8fffea060207	Optometry	3	Engineering	\N	t	2026-08-14 14:34:24.098186+00	3	2	M.Sc.	6
-e9662944-cf67-4f2d-93ff-4f6e2e6f1b50	Radiological Imaging Techniques	4	General	\N	t	2026-08-14 14:34:24.102056+00	4	2	M.Sc.	6
-83edf4d6-fb85-43bd-ad8b-4028a1d7d36a	Operation Theatre\r\nTechniques	5	General	\N	t	2026-08-14 14:34:24.105609+00	5	2	M.Sc.	6
-c940e0fa-ce68-4cfa-8762-be3e3ad79fee	MLS(Haematology & Blood Banking)	6	General	\N	t	2026-08-14 14:34:24.108873+00	6	2	M.Sc.	6
-d8e5853c-7c38-48fa-a4ef-791d76572e64	MLS(Pathology)	7	General	\N	t	2026-08-14 14:34:24.112126+00	7	2	M.Sc.	6
-ea037247-c721-4f4a-8780-d01922261ab5	MLS(Medical Microbiology)	8	Engineering	\N	t	2026-08-14 14:34:24.115793+00	8	2	M.Sc.	6
+4817f228-0bf4-4813-93fc-a2ed61fdb8a1	MCA General	1	General	\N	t	2026-08-16 08:57:32.221128+00	1	3	MCA	6
+02b884c9-f4dc-43b7-bce3-38c4060f4e6a	MBA General	1	General	\N	t	2026-08-16 08:57:32.226648+00	1	4	MBA	6
+623758e5-5265-4d59-b7c6-19f5b7cbac3e	B.Pharm General	1	General	\N	t	2026-08-16 08:57:32.230922+00	1	2	B.PHARM.	6
 e3e6c059-e538-47e4-b705-deed8bd9a90b	MLS(Clinical Biochemistry)	9	General	\N	t	2026-08-14 14:34:24.119391+00	9	2	M.Sc.	6
 d7aa0781-d829-4b25-8218-0efd891c5b56	PT(Orthopedics)	10	General	\N	t	2026-08-14 14:34:24.122716+00	10	2	M.Sc.	6
 33e74921-1739-48a0-9968-85889ff9ff1d	PT(Neurology)	11	General	\N	t	2026-08-14 14:34:24.126343+00	11	2	M.Sc.	6
@@ -33134,74 +33458,6 @@ d7aa0781-d829-4b25-8218-0efd891c5b56	PT(Orthopedics)	10	General	\N	t	2026-08-14 
 ebea8c4a-0125-4e72-83b2-f660cf8efff1	MMRIT	15	Engineering	\N	t	2026-08-14 14:34:24.140566+00	15	2	M.Sc.	6
 58df94ed-3520-4960-8574-ea6e875994ac	PT(Obstetrics & Gynaecology)	14	General	\N	t	2026-08-14 14:34:24.136777+00	14	2	M.Sc.	6
 f414038b-a4ad-42ea-8b68-13c278ec8171	MOTT	16	General	\N	t	2026-08-14 14:34:24.14417+00	16	2	M.Sc.	6
-be9e591a-06e6-41eb-b6ed-84b03c6f33c1	BLOOD TRANSFUSION TECH (D.B.T.T.)	1	General	\N	t	2026-08-14 14:34:24.22547+00	1	3	Diploma	6
-5f423cbf-d0a0-4293-bae8-f61e7788c18b	C.T. SCAN TECHNICIAN (D.C.T.T.)	2	General	\N	t	2026-08-14 14:34:24.22913+00	2	3	Diploma	6
-743501d6-8c05-4931-803c-2908ca50392e	OPTOMETRY (D.OPT)	3	Engineering	\N	t	2026-08-14 14:34:24.232857+00	3	3	Diploma	6
-85bd1a1f-d5ce-43c7-912b-41a626511c7f	PHYSIOTHERAPY (D.PT.)	4	General	\N	t	2026-08-14 14:34:24.236155+00	4	3	Diploma	6
-4c703258-b1cd-4f22-ac8b-a37ea4a1aa74	OT TECHNICIAN (D.O.T.T.)	5	General	\N	t	2026-08-14 14:34:24.240209+00	5	3	Diploma	6
-f3177174-bb1a-4f9e-bc38-341d20d48a0d	Diploma in Dialysis Technician(D.D.T)	6	General	\N	t	2026-08-14 14:34:24.244357+00	6	3	Diploma	6
-d756563a-e1b4-473c-ae0e-7435155727d4	Diploma in Cardiology Technician (DCT)	8	General	\N	t	2026-08-14 14:34:24.248963+00	8	3	Diploma	6
-50093d08-a525-4ebc-b4a1-f771d58b1d71	DACCT	9	General	\N	t	2026-08-14 14:34:24.252713+00	9	3	Diploma	6
-b2857a36-20fe-43e3-b26c-f1a9cabfd7c2	DETCT	10	General	\N	t	2026-08-14 14:34:24.256625+00	10	3	Diploma	6
-569056fa-a6de-4dec-9a9b-b6172e1e77a5	Diploma in Radiotherapy Technician (DRT)	7	General	\N	t	2026-08-14 14:34:24.260831+00	7	3	Diploma	6
-c71d6da1-d0ce-4a92-a6ab-3f565de5fbfb	B.M.L.T.	1	General	\N	t	2026-08-14 14:34:24.338921+00	1	4	B.Sc. INTERNSHIP	6
-d43f808e-65dd-49ab-b5bb-6f59b3136f7a	B.P.T.	2	General	\N	t	2026-08-14 14:34:24.343008+00	2	4	B.Sc. INTERNSHIP	6
-1aae2787-4ab7-417a-9785-ab066a0d58f9	B.C.T./MRIT	3	Engineering	\N	t	2026-08-14 14:34:24.346419+00	3	4	B.Sc. INTERNSHIP	6
-d5ba0938-09d0-4473-bfd3-209210455e33	B.OPTOM	4	General	\N	t	2026-08-14 14:34:24.350035+00	4	4	B.Sc. INTERNSHIP	6
-ae76a636-f985-46fb-b54c-6bde842caa19	B.R.I.T	5	Engineering	\N	t	2026-08-14 14:34:24.353673+00	5	4	B.Sc. INTERNSHIP	6
-712baae7-f226-45a6-b72e-741405a148dd	B.O.T.T	6	General	\N	t	2026-08-14 14:34:24.357357+00	6	4	B.Sc. INTERNSHIP	6
-bd11cf02-76b2-4731-9c10-de9b7d534c95	BCVT - INTERNSHIP	7	General	\N	t	2026-08-14 14:34:24.360895+00	7	4	B.Sc. INTERNSHIP	6
-96960bdb-be80-45d9-aa3c-feff3a0d5ec0	BOT- INTERNSHIP	8	General	\N	t	2026-08-14 14:34:24.364776+00	8	4	B.Sc. INTERNSHIP	6
-0dafbcf8-9384-4f14-b97c-6eed9ef9924d	BASLP- INTERNSHIP	9	General	\N	t	2026-08-14 14:34:24.369435+00	9	4	B.Sc. INTERNSHIP	6
-d376f5f2-b208-432b-bca9-664ce7ed6bb5	BRDT- INTERNSHIP	10	General	\N	t	2026-08-14 14:34:24.373365+00	10	4	B.Sc. INTERNSHIP	6
-26c242be-ddcc-4bf0-b8c7-3b727bb19175	BACCT - INTERNSHIP	11	General	\N	t	2026-08-14 14:34:24.376982+00	11	4	B.Sc. INTERNSHIP	6
-b2336228-3be3-4a5d-8df1-d3ff06f3b624	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:38.035557+00	\N	\N	\N	\N
-0df2ed45-4103-43a8-8abe-fdf58b3913a0	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:38.035557+00	\N	\N	\N	\N
-9d4a1781-835a-4ab4-9bd6-6fa6ba5aafbf	B.M.L.T.	1	General	\N	t	2026-08-14 14:34:23.969775+00	1	1	B.Sc.	6
-c5b0d320-5a72-4f6e-945a-b0fd1b6d1c6a	B.P.T.	2	General	\N	t	2026-08-14 14:34:23.974572+00	2	1	B.Sc.	6
-fd37bb61-d273-4364-8215-466590252cea	B.C.T./MRIT	3	Engineering	\N	t	2026-08-14 14:34:23.979124+00	3	1	B.Sc.	6
-2f9b41c9-6f4d-4ccc-b516-54f2cf5301b8	B.OPTOM	4	General	\N	t	2026-08-14 14:34:23.983641+00	4	1	B.Sc.	6
-d960a665-f5bb-4457-88ac-6d9fafa08e13	B.R.I.T	5	Engineering	\N	t	2026-08-14 14:34:23.987637+00	5	1	B.Sc.	6
-17fac1c5-3382-44ff-8469-3bb58c871946	B.O.T.T	6	General	\N	t	2026-08-14 14:34:23.991375+00	6	1	B.Sc.	6
-8ba6c2f5-ceec-4721-a1d1-17c1c54909e0	BMLS	7	General	\N	t	2026-08-14 14:34:23.99527+00	7	1	B.Sc.	6
-2e33b069-7345-45fa-a6c7-4e572734de18	BMRIT	8	Engineering	\N	t	2026-08-14 14:34:23.999338+00	8	1	B.Sc.	6
-f9d0f1d4-47c9-4020-a5ea-de80a03e9665	Medical LaboratoryTech.	1	Engineering	\N	t	2026-08-14 14:34:24.090762+00	1	2	M.Sc.	6
-75d6dd2a-b30e-4b4f-bb57-13d99051c321	Physiotherapy	2	General	\N	t	2026-08-14 14:34:24.094707+00	2	2	M.Sc.	6
-8f6c2b11-e876-4d53-83eb-8fffea060207	Optometry	3	Engineering	\N	t	2026-08-14 14:34:24.098186+00	3	2	M.Sc.	6
-e9662944-cf67-4f2d-93ff-4f6e2e6f1b50	Radiological Imaging Techniques	4	General	\N	t	2026-08-14 14:34:24.102056+00	4	2	M.Sc.	6
-83edf4d6-fb85-43bd-ad8b-4028a1d7d36a	Operation Theatre\r\nTechniques	5	General	\N	t	2026-08-14 14:34:24.105609+00	5	2	M.Sc.	6
-c940e0fa-ce68-4cfa-8762-be3e3ad79fee	MLS(Haematology & Blood Banking)	6	General	\N	t	2026-08-14 14:34:24.108873+00	6	2	M.Sc.	6
-d8e5853c-7c38-48fa-a4ef-791d76572e64	MLS(Pathology)	7	General	\N	t	2026-08-14 14:34:24.112126+00	7	2	M.Sc.	6
-ea037247-c721-4f4a-8780-d01922261ab5	MLS(Medical Microbiology)	8	Engineering	\N	t	2026-08-14 14:34:24.115793+00	8	2	M.Sc.	6
-e3e6c059-e538-47e4-b705-deed8bd9a90b	MLS(Clinical Biochemistry)	9	General	\N	t	2026-08-14 14:34:24.119391+00	9	2	M.Sc.	6
-d7aa0781-d829-4b25-8218-0efd891c5b56	PT(Orthopedics)	10	General	\N	t	2026-08-14 14:34:24.122716+00	10	2	M.Sc.	6
-33e74921-1739-48a0-9968-85889ff9ff1d	PT(Neurology)	11	General	\N	t	2026-08-14 14:34:24.126343+00	11	2	M.Sc.	6
-12ea4feb-1943-4c1a-9421-6e83a99cf4ce	PT(Cardiopulmonary)	12	General	\N	t	2026-08-14 14:34:24.129858+00	12	2	M.Sc.	6
-72a7d5a0-7b0c-4678-8009-2f76f5507530	PT(Sports)	13	General	\N	t	2026-08-14 14:34:24.133292+00	13	2	M.Sc.	6
-ebea8c4a-0125-4e72-83b2-f660cf8efff1	MMRIT	15	Engineering	\N	t	2026-08-14 14:34:24.140566+00	15	2	M.Sc.	6
-58df94ed-3520-4960-8574-ea6e875994ac	PT(Obstetrics & Gynaecology)	14	General	\N	t	2026-08-14 14:34:24.136777+00	14	2	M.Sc.	6
-f414038b-a4ad-42ea-8b68-13c278ec8171	MOTT	16	General	\N	t	2026-08-14 14:34:24.14417+00	16	2	M.Sc.	6
-be9e591a-06e6-41eb-b6ed-84b03c6f33c1	BLOOD TRANSFUSION TECH (D.B.T.T.)	1	General	\N	t	2026-08-14 14:34:24.22547+00	1	3	Diploma	6
-5f423cbf-d0a0-4293-bae8-f61e7788c18b	C.T. SCAN TECHNICIAN (D.C.T.T.)	2	General	\N	t	2026-08-14 14:34:24.22913+00	2	3	Diploma	6
-743501d6-8c05-4931-803c-2908ca50392e	OPTOMETRY (D.OPT)	3	Engineering	\N	t	2026-08-14 14:34:24.232857+00	3	3	Diploma	6
-85bd1a1f-d5ce-43c7-912b-41a626511c7f	PHYSIOTHERAPY (D.PT.)	4	General	\N	t	2026-08-14 14:34:24.236155+00	4	3	Diploma	6
-4c703258-b1cd-4f22-ac8b-a37ea4a1aa74	OT TECHNICIAN (D.O.T.T.)	5	General	\N	t	2026-08-14 14:34:24.240209+00	5	3	Diploma	6
-f3177174-bb1a-4f9e-bc38-341d20d48a0d	Diploma in Dialysis Technician(D.D.T)	6	General	\N	t	2026-08-14 14:34:24.244357+00	6	3	Diploma	6
-d756563a-e1b4-473c-ae0e-7435155727d4	Diploma in Cardiology Technician (DCT)	8	General	\N	t	2026-08-14 14:34:24.248963+00	8	3	Diploma	6
-50093d08-a525-4ebc-b4a1-f771d58b1d71	DACCT	9	General	\N	t	2026-08-14 14:34:24.252713+00	9	3	Diploma	6
-b2857a36-20fe-43e3-b26c-f1a9cabfd7c2	DETCT	10	General	\N	t	2026-08-14 14:34:24.256625+00	10	3	Diploma	6
-569056fa-a6de-4dec-9a9b-b6172e1e77a5	Diploma in Radiotherapy Technician (DRT)	7	General	\N	t	2026-08-14 14:34:24.260831+00	7	3	Diploma	6
-c71d6da1-d0ce-4a92-a6ab-3f565de5fbfb	B.M.L.T.	1	General	\N	t	2026-08-14 14:34:24.338921+00	1	4	B.Sc. INTERNSHIP	6
-d43f808e-65dd-49ab-b5bb-6f59b3136f7a	B.P.T.	2	General	\N	t	2026-08-14 14:34:24.343008+00	2	4	B.Sc. INTERNSHIP	6
-1aae2787-4ab7-417a-9785-ab066a0d58f9	B.C.T./MRIT	3	Engineering	\N	t	2026-08-14 14:34:24.346419+00	3	4	B.Sc. INTERNSHIP	6
-d5ba0938-09d0-4473-bfd3-209210455e33	B.OPTOM	4	General	\N	t	2026-08-14 14:34:24.350035+00	4	4	B.Sc. INTERNSHIP	6
-ae76a636-f985-46fb-b54c-6bde842caa19	B.R.I.T	5	Engineering	\N	t	2026-08-14 14:34:24.353673+00	5	4	B.Sc. INTERNSHIP	6
-712baae7-f226-45a6-b72e-741405a148dd	B.O.T.T	6	General	\N	t	2026-08-14 14:34:24.357357+00	6	4	B.Sc. INTERNSHIP	6
-bd11cf02-76b2-4731-9c10-de9b7d534c95	BCVT - INTERNSHIP	7	General	\N	t	2026-08-14 14:34:24.360895+00	7	4	B.Sc. INTERNSHIP	6
-96960bdb-be80-45d9-aa3c-feff3a0d5ec0	BOT- INTERNSHIP	8	General	\N	t	2026-08-14 14:34:24.364776+00	8	4	B.Sc. INTERNSHIP	6
-0dafbcf8-9384-4f14-b97c-6eed9ef9924d	BASLP- INTERNSHIP	9	General	\N	t	2026-08-14 14:34:24.369435+00	9	4	B.Sc. INTERNSHIP	6
-d376f5f2-b208-432b-bca9-664ce7ed6bb5	BRDT- INTERNSHIP	10	General	\N	t	2026-08-14 14:34:24.373365+00	10	4	B.Sc. INTERNSHIP	6
-26c242be-ddcc-4bf0-b8c7-3b727bb19175	BACCT - INTERNSHIP	11	General	\N	t	2026-08-14 14:34:24.376982+00	11	4	B.Sc. INTERNSHIP	6
 \.
 
 
@@ -33226,10 +33482,6 @@ COPY "tenant_srms-iahs-bareilly".examination_papers (id, code, name, subject_id,
 --
 
 COPY "tenant_srms-iahs-bareilly".faculty (id, user_id, emp_id, name, department_id, subject_id, designation, qualification, specialization, joining_date, photo_url, phone, gender, experience, staff_type, is_active, created_at, updated_at) FROM stdin;
-560b9c8b-dc12-4bd0-be6f-0ffbdac73f37	d73a7560-e042-46a9-b7c9-234fa0bd941c	EMP1001	Dr. Sanjay Singh	b2336228-3be3-4a5d-8df1-d3ff06f3b624	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
-7c249b20-c8d8-4812-bb9c-a6f49383abeb	6e216d52-9673-42b7-af43-04e049da314b	EMP1002	Dr. Aparna Tyagi	0df2ed45-4103-43a8-8abe-fdf58b3913a0	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
-560b9c8b-dc12-4bd0-be6f-0ffbdac73f37	d73a7560-e042-46a9-b7c9-234fa0bd941c	EMP1001	Dr. Sanjay Singh	b2336228-3be3-4a5d-8df1-d3ff06f3b624	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
-7c249b20-c8d8-4812-bb9c-a6f49383abeb	6e216d52-9673-42b7-af43-04e049da314b	EMP1002	Dr. Aparna Tyagi	0df2ed45-4103-43a8-8abe-fdf58b3913a0	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 \.
 
 
@@ -33312,6 +33564,91 @@ ddc4d9f9-ce82-49b8-ad77-011caa0d5590	EL	Earned Leave	30
 ddc4d9f9-ce82-49b8-ad77-011caa0d5590	EL	Earned Leave	30
 73c6f4d1-588b-4124-801e-5e4e23a0d7c7	ML	Maternity Leave	180
 662aeb55-2333-4e1c-8a3d-db8a016b713c	COL	Compensatory Off Leave	0
+36c2a860-7c66-4d4b-a151-fa5af563d2e4	CL	Casual Leave	12
+8cd43942-93d9-4ef9-bb7d-8298107f1e67	SL	Sick Leave	10
+940de02f-3d92-42de-b69a-f8592184be3c	EL	Earned Leave	30
+59380580-580a-4011-a918-f170ac99155b	ML	Maternity Leave	180
+c956798e-a91f-4f15-b800-5ee85fdb9ca0	COL	Compensatory Off Leave	0
+6edf0240-0ac6-45fb-a84a-91157595cdc1	CL	Casual Leave	12
+2542faf0-b00d-42c0-af68-cf893488cfaf	SL	Sick Leave	10
+eb9b4108-aaf4-4640-b21d-4953f51e3434	EL	Earned Leave	30
+fc72947c-3339-433f-b7b3-e54982af09b5	ML	Maternity Leave	180
+ecea02b7-7e31-4ba0-a5dd-cec8469fc802	COL	Compensatory Off Leave	0
+4066b3b9-9b74-4799-a5e5-d8e0b65f7ae1	CL	Casual Leave	12
+414e6ba2-c50b-43c2-9498-348e43b438e0	SL	Sick Leave	10
+02185803-4288-425f-89b9-8b19cbaaa850	EL	Earned Leave	30
+5b42998d-536f-4464-83e2-86f71f6b3c8c	ML	Maternity Leave	180
+deb341ea-f473-4042-874a-ab96fd4f6e3a	COL	Compensatory Off Leave	0
+08fb42f2-96ec-4a45-8796-c8174dda497d	CL	Casual Leave	12
+30769f1a-f3eb-4321-a1fc-58ef1a3618bd	SL	Sick Leave	10
+8e48a184-f567-4966-9bd8-1052be973bf2	EL	Earned Leave	30
+c4d6915b-fc8c-4761-88d0-f1b665e19921	ML	Maternity Leave	180
+c1dae989-41f9-4424-bd6f-2236a6b135a3	COL	Compensatory Off Leave	0
+bcc4a2da-3154-4f6e-baa3-e2d0c91b4049	CL	Casual Leave	12
+d933d866-5f6e-46c1-9923-a019f82be43d	SL	Sick Leave	10
+d7647d17-0ef6-4be1-adea-e3c1f4352c1c	EL	Earned Leave	30
+adcb2749-f547-4831-941e-89d51ffc3867	ML	Maternity Leave	180
+d000993b-c6b0-4368-bfd0-ceb913b3afc8	COL	Compensatory Off Leave	0
+934ae169-4be4-48cd-9a69-9e2c17b0a684	CL	Casual Leave	12
+55bbf77a-2349-4451-989d-b16914b939d8	SL	Sick Leave	10
+5aa613cc-35ac-4022-b96e-efd7c5b7d06e	EL	Earned Leave	30
+eb88de2a-930e-4c02-ae4e-ad70bf25e683	ML	Maternity Leave	180
+f84da7c7-2306-456b-97f0-5d53e437769d	COL	Compensatory Off Leave	0
+714a2983-0146-4a43-b906-3dab8d6b0cfb	CL	Casual Leave	12
+8c0cee36-6cb6-47bc-beb6-e1d17f8e4a18	SL	Sick Leave	10
+acc35b36-9477-4f83-9d6a-69d9ed861b92	EL	Earned Leave	30
+4e98d3c9-39fc-4265-9ada-ee91efecc9b7	ML	Maternity Leave	180
+af819c79-8089-46be-a144-bb5a9efb60d7	COL	Compensatory Off Leave	0
+bbb96084-1257-4cdc-8fc6-1e5271a74160	CL	Casual Leave	12
+aae7b31b-93ee-43ea-a7ce-b8e1576d480b	SL	Sick Leave	10
+9d71ad4e-0515-4064-ba98-651aeb44ebaf	EL	Earned Leave	30
+d5f4a4d8-f9d6-4f5e-92e1-4fce5ba817ad	ML	Maternity Leave	180
+10266998-659b-4a47-ad8a-634a3604f0d3	COL	Compensatory Off Leave	0
+c497f961-3d70-4955-8ba4-cbe173b4eecd	CL	Casual Leave	12
+1894f019-2a66-4f0a-8cce-417253e88c32	SL	Sick Leave	10
+7bd57b76-ec8a-4253-b092-e9b9c7a6e5f8	EL	Earned Leave	30
+7e129485-f21a-4c3e-a206-8559ba079ea9	ML	Maternity Leave	180
+0cd1679d-f385-4492-9b53-ebbd131ea41a	COL	Compensatory Off Leave	0
+e55405c4-82c3-4ace-a519-a5cbd74818aa	CL	Casual Leave	12
+b6e76c97-9f40-4fd0-8942-d85013f42c3f	SL	Sick Leave	10
+7108b595-f77a-4f4c-8026-6d10ee21a814	EL	Earned Leave	30
+e45e9df3-be73-42e8-925f-4c4c96787cf5	ML	Maternity Leave	180
+3641267e-97b6-41f1-abe2-f75770e5bd9b	COL	Compensatory Off Leave	0
+99729832-fbf1-4342-a0ef-7a247de896d5	CL	Casual Leave	12
+8486b766-282a-43c2-b2f6-d6aa99620e73	SL	Sick Leave	10
+5a6ee645-2a45-4271-ab94-3ee01f80c6c3	EL	Earned Leave	30
+4e98103d-9fef-4e4d-870b-8d1254fc3716	ML	Maternity Leave	180
+86bdac4f-641f-4fca-844a-3ba6729d6840	COL	Compensatory Off Leave	0
+bf2010db-ce3c-4959-92d0-50fc9af74261	CL	Casual Leave	12
+93afe923-e008-475d-a1ce-453344091a5e	SL	Sick Leave	10
+6d05a3e1-3fbf-4937-85f1-72af56e814fe	EL	Earned Leave	30
+3d7f7c8a-e91e-4df7-8f4a-bbe5931bc05b	ML	Maternity Leave	180
+afa625f8-5fbd-47ac-a59a-9c664a9aa48d	COL	Compensatory Off Leave	0
+102319f4-5aa9-4617-8c3e-bf89ea8fdaa0	CL	Casual Leave	12
+6fee9e27-95fc-4937-8808-1a54235cae8b	SL	Sick Leave	10
+361448b5-67d7-4042-9d7b-5c811f06d1b5	EL	Earned Leave	30
+37cc0659-d40c-4579-aa11-50d0a5847bb6	ML	Maternity Leave	180
+60ad4020-606d-4695-ab47-06c2262f60f3	COL	Compensatory Off Leave	0
+a08a48d4-29d8-48a0-9d39-4e5c09ad335c	CL	Casual Leave	12
+fc585221-6ae4-41be-b916-4fd3259397aa	SL	Sick Leave	10
+b0628991-1ffc-409c-8204-5b5ba75fd93b	EL	Earned Leave	30
+be5f7b4b-23e6-4fd2-817f-81998a2e3b66	CL	Casual Leave	12
+30da82c7-f893-433c-8bdf-3f13416c20c2	SL	Sick Leave	10
+065b13c3-d7e8-4bcc-8161-a01b6567258f	EL	Earned Leave	30
+0db14bf6-e6e7-409f-ad9a-95b8827abd9b	ML	Maternity Leave	180
+37f956d1-c59c-454a-a29f-7fd0f2956675	COL	Compensatory Off Leave	0
+3372b6da-0d27-4624-92f5-2f42505fff8f	ML	Maternity Leave	180
+002e93f9-2257-4437-b287-ddb94fb1e374	COL	Compensatory Off Leave	0
+3bda2909-3fc4-4f42-9a59-8af9e1329f3a	CL	Casual Leave	12
+b8592a7b-40c1-431d-8fc9-512ed5adf53f	SL	Sick Leave	10
+d3e0a716-4011-44ad-b621-f17fd4d8cc71	EL	Earned Leave	30
+0dd3348e-301b-4d86-bc6a-7ba36a0183ce	ML	Maternity Leave	180
+5bf32459-ff0d-4521-8ce7-a486c20a93e6	COL	Compensatory Off Leave	0
+ac8d200f-9ce0-4a4e-a7d4-0f6ca83e7fc7	CL	Casual Leave	12
+1e1295d9-0db7-43df-a24e-9624c96d58a4	SL	Sick Leave	10
+b356ce3a-9381-40bb-a7ac-039cf0aa519e	EL	Earned Leave	30
+b3b3b91d-7159-4820-8fff-2b307e13b793	ML	Maternity Leave	180
+6bed575a-9e7d-4497-8907-e181d4625266	COL	Compensatory Off Leave	0
 \.
 
 
@@ -33558,8 +33895,6 @@ COPY "tenant_srms-iahs-bareilly".subject_offerings (id, subject_id, prof_id, dty
 COPY "tenant_srms-iahs-bareilly".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 f0d9b637-973c-464e-a550-de7fa3d1f65e	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 efbb77c4-d9f6-4240-a4c4-a0faff762382	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-f0d9b637-973c-464e-a550-de7fa3d1f65e	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-efbb77c4-d9f6-4240-a4c4-a0faff762382	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -33611,15 +33946,11 @@ COPY "tenant_srms-iahs-bareilly".users (id, email, password_hash, role, is_activ
 239ed735-1fe8-4fc2-af97-1920cdbb91a6	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 87fc38ba-4a25-46f0-9748-72b20536a0d2	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 b96cd89a-3aff-476c-b1b6-14dee2cc9d11	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
-d73a7560-e042-46a9-b7c9-234fa0bd941c	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
-6e216d52-9673-42b7-af43-04e049da314b	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 a4130faf-bb7f-4701-a889-78fc8a86625b	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 11f7dd79-fdf4-478e-a1a3-d8673ade71b5	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 239ed735-1fe8-4fc2-af97-1920cdbb91a6	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 87fc38ba-4a25-46f0-9748-72b20536a0d2	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 b96cd89a-3aff-476c-b1b6-14dee2cc9d11	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
-d73a7560-e042-46a9-b7c9-234fa0bd941c	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
-6e216d52-9673-42b7-af43-04e049da314b	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 a4130faf-bb7f-4701-a889-78fc8a86625b	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 11f7dd79-fdf4-478e-a1a3-d8673ade71b5	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.035557+00	2026-08-14 14:33:38.035557+00
 \.
@@ -33690,42 +34021,6 @@ f5572116-bbde-4ccf-835c-a7a0ca1f8724	B2023-2025-C5-5	2023	5	\N	2023-01-19	2023-0
 40dc719b-d149-45b6-ab40-aaa5d1022c99	B2024-2026-C5-5	2024	5	\N	\N	\N	t	3	M.B.A.	5	3	Batch 2024-2026
 594c87c2-9b40-4b02-8efd-d1917b865d1f	B2025-2027-C5-5	2025	5	\N	2025-07-31	2027-10-30	t	4	M.B.A.	5	4	Batch 2025-2027
 0437e7bc-bca1-4c71-af73-b7acaefc86a9	B2026-2028-C5-5	2026	5	\N	\N	\N	t	5	M.B.A.	5	5	Batch 2026-2028
-42cf002b-a911-404b-9938-fc94bcc5bb6e	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-5fed9c80-431a-4743-9b82-0946b84292a3	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-da2820dc-d363-4e49-b834-bd6a9c6a88f1	B2011-2013-C1-5	2011	1	\N	\N	\N	t	1	PGDM	5	\N	Batch 2011-2013
-787dc54a-8f39-4df7-8d67-cbda9039e8e1	B2012-2014-C1-5	2012	1	\N	\N	\N	t	2	PGDM	5	\N	Batch 2012-2014
-c779c8f9-99f0-408e-ace6-3534bf2c1bfa	B2013-2015-C1-5	2013	1	\N	\N	\N	t	3	PGDM	5	\N	Batch 2013-2015
-05e9dcb6-f02a-4c1e-bd8b-467c45d8532b	B2014-2016-C1-5	2014	1	\N	\N	\N	t	8	PGDM	5	\N	Batch 2014-2016
-b915d9c1-68f5-4587-88ee-74de2c7ebebb	B2015-2017-C1-5	2015	1	\N	\N	\N	t	5	PGDM	5	\N	Batch 2015-2017
-972936ef-a7ba-4cd3-a118-dd2a44b0c259	B2016-2018-C1-5	2016	1	\N	\N	\N	t	6	PGDM	5	\N	Batch 2016-2018
-ace8a5a3-584a-4b84-a982-711d7a2f0b2c	B2017-2019-C1-5	2017	1	\N	\N	\N	t	7	PGDM	5	\N	Batch 2017-2019
-e4ab600f-9c1e-4ea6-a7f6-d9be6cc1d098	B2018-2020-C1-5	2018	1	\N	\N	\N	t	9	PGDM	5	\N	Batch 2018-2020
-21f0110f-51f8-4d4b-b00c-ec011f52f4c7	B2019-2021-C1-5	2019	1	\N	\N	\N	t	10	PGDM	5	\N	Batch 2019-2021
-aa2c6b1e-8b74-4fa6-b721-d61f2f503609	B2020-2022-C1-5	2020	1	\N	\N	\N	t	11	PGDM	5	\N	Batch 2020-2022
-69a9246d-de2f-42eb-a672-2140c9599647	B2021-2023-C1-5	2021	1	\N	\N	\N	t	12	PGDM	5	\N	Batch 2021-2023
-1de3f9fb-0137-4457-871c-764db2daa9bf	B2020-2023-C2-5	2020	2	\N	\N	\N	t	1	B.B.A.	5	\N	Batch 2020-2023
-2e312014-db4b-4171-98d8-2de1942703c1	B2021-2024-C2-5	2021	2	\N	\N	\N	t	2	B.B.A.	5	\N	Batch 2021-2024
-22c0eabf-edbb-4a6c-ae63-25e65c811dc1	B2022-2025-C2-5	2022	2	\N	\N	\N	t	3	B.B.A.	5	\N	Batch 2022-2025
-c263a693-a676-4d62-bffe-a1724fe88a90	B2023-2026-C2-5	2023	2	\N	2023-01-19	2023-01-19	t	4	B.B.A.	5	4	Batch 2023-2026
-e920320d-cd41-4619-b81a-6584c947edae	B2024-2027-C2-5	2024	2	\N	\N	\N	t	5	B.B.A.	5	5	Batch 2024-2027
-305d133c-4851-42b8-9a8e-53ff6d3c3c94	B2025-2028-C2-5	2025	2	\N	2025-07-31	2028-10-30	t	6	B.B.A.	5	6	Batch 2025-2028
-1811bf34-bec1-4c60-818b-98c4cc32d117	B2026-2029-C2-5	2026	2	\N	\N	\N	t	7	B.B.A.	5	7	Batch 2026-2029
-782257c9-16e0-4bea-8803-e2134888b686	B2020-2023-C3-5	2020	3	\N	\N	\N	t	1	B.COM. HONS	5	\N	Batch 2020-2023
-fe2a2135-8f90-4d38-933e-2995fec761c4	B2021-2024-C3-5	2021	3	\N	\N	\N	t	2	B.COM. HONS	5	\N	Batch 2021-2024
-4e4a4899-0363-468f-a117-41bdc5870988	B2022-2025-C3-5	2022	3	\N	\N	\N	t	3	B.COM. HONS	5	\N	Batch 2022-2025
-c3dcb448-b497-4dc3-ba50-0e39c62f6acb	B2023-2026-C3-5	2023	3	\N	2023-01-19	2023-12-30	t	4	B.COM. HONS	5	4	Batch 2023-2026
-c0e91f5f-b81f-4e66-95a3-06ebdd453b5a	B2024-2027-C3-5	2024	3	\N	\N	\N	t	5	B.COM. HONS	5	5	Batch 2024-2027
-3570fb3b-c41e-4f5a-9073-8bad42cb13c9	B2021-2024-C4-5	2021	4	\N	\N	\N	t	2	BCA	5	\N	Batch 2021-2024
-51d6db60-0174-45ea-a416-8931ffce6881	B2022-2025-C4-5	2022	4	\N	\N	\N	t	3	BCA	5	\N	Batch 2022-2025
-fafaf314-d5ab-4d91-af08-897db746c7ee	B2023-2026-C4-5	2023	4	\N	2023-01-19	2023-01-19	t	4	BCA	5	4	Batch 2023-2026
-91e24dc3-a605-4edc-80ba-d9175187eb9b	B2024-2027-C4-5	2024	4	\N	\N	\N	t	5	BCA	5	5	Batch 2024-2027
-b02554bc-78b8-431f-a330-7422d85a904f	B2025-2028-C4-5	2025	4	\N	2024-12-29	2028-10-30	t	6	BCA	5	6	Batch 2025-2028
-5a3b754f-bfad-424a-a05e-60013740becd	B2026-2029-C4-5	2026	4	\N	\N	\N	t	7	BCA	5	7	Batch 2026-2029
-3d4fcbe1-eb0c-4b81-bf01-67da4af4ab13	B2022-2024-C5-5	2022	5	\N	\N	\N	t	1	M.B.A.	5	\N	Batch 2022-2024
-f5572116-bbde-4ccf-835c-a7a0ca1f8724	B2023-2025-C5-5	2023	5	\N	2023-01-19	2023-01-19	t	2	M.B.A.	5	2	Batch 2023-2025
-40dc719b-d149-45b6-ab40-aaa5d1022c99	B2024-2026-C5-5	2024	5	\N	\N	\N	t	3	M.B.A.	5	3	Batch 2024-2026
-594c87c2-9b40-4b02-8efd-d1917b865d1f	B2025-2027-C5-5	2025	5	\N	2025-07-31	2027-10-30	t	4	M.B.A.	5	4	Batch 2025-2027
-0437e7bc-bca1-4c71-af73-b7acaefc86a9	B2026-2028-C5-5	2026	5	\N	\N	\N	t	5	M.B.A.	5	5	Batch 2026-2028
 \.
 
 
@@ -33758,14 +34053,6 @@ d49dbfca-0f3b-4db7-8316-66064292b1c9	\N	\N	\N	PY4.2	Describe renal clearance and
 53a82ea1-803c-4c76-975d-abf43b557d3a	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 e2ffbad0-fc37-4c8f-a45f-749faa248710	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 0dbb578c-5d6d-4418-8c84-61ef9d252ea6	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-c029500d-909a-4351-92b8-6200e5b982e0	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-ecaa7486-00fe-49ee-acf5-6dbe983358ea	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-2d665b1e-d893-417f-987d-3ffe5b2521d1	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-d49dbfca-0f3b-4db7-8316-66064292b1c9	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-19144fa0-1fa1-41ef-87ba-5dc76c75a221	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-53a82ea1-803c-4c76-975d-abf43b557d3a	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-e2ffbad0-fc37-4c8f-a45f-749faa248710	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-0dbb578c-5d6d-4418-8c84-61ef9d252ea6	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:37.191124+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -33774,11 +34061,6 @@ e2ffbad0-fc37-4c8f-a45f-749faa248710	\N	\N	\N	AN2.3	Describe brachial plexus for
 --
 
 COPY "tenant_srms-ibs-lucknow".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-5ddc7138-8618-437d-8d85-22f72034fc48	1	PGDM	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.016554+00	semester	1	PG
-a3a47d24-18f0-4a1e-9291-06dd88470af6	2	B.B.A.	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.020786+00	semester	2	UG
-ef12ef4b-ae02-46f8-a74e-01055d520fcc	3	B.COM. HONS	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.024538+00	semester	3	UG
-440e3477-274a-4e53-8d69-9b3e6a79f047	4	BCA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.028327+00	semester	4	UG
-480447af-62db-4941-988f-c8aaac5c9d19	5	M.B.A.	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.032563+00	semester	5	PG
 5ddc7138-8618-437d-8d85-22f72034fc48	1	PGDM	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.016554+00	semester	1	PG
 a3a47d24-18f0-4a1e-9291-06dd88470af6	2	B.B.A.	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.020786+00	semester	2	UG
 ef12ef4b-ae02-46f8-a74e-01055d520fcc	3	B.COM. HONS	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:38.024538+00	semester	3	UG
@@ -33821,17 +34103,9 @@ COPY "tenant_srms-ibs-lucknow".departments (id, name, code, type, hod_user_id, i
 298e05a4-b96a-4797-bc6e-1bc79fee532d	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:37.191124+00	\N	\N	\N	\N
 2eda2623-5e10-4f06-ae73-dade887b08d9	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:37.191124+00	\N	\N	\N	\N
 a78355bb-a083-4709-b817-53086024bd1d	NA	1	General	\N	t	2026-08-14 14:34:23.448855+00	1	1	PGDM	5
-02fbaba1-c8cc-4bcf-85da-d2e8838dc197	NA	1	General	\N	t	2026-08-14 14:34:23.534957+00	1	2	B.B.A.	5
-ac6bef77-fc17-4d09-88dc-bd271665a7e7	NA	1	General	\N	t	2026-08-14 14:34:23.619246+00	1	3	B.COM. HONS	5
-47816db3-8df7-48f2-8461-91090c11ae03	NA	1	General	\N	t	2026-08-14 14:34:23.697822+00	1	4	BCA	5
-19daf900-6b88-407a-aec9-a62ac3f1a7a1	NA	1	General	\N	t	2026-08-14 14:34:23.778186+00	1	5	M.B.A.	5
-298e05a4-b96a-4797-bc6e-1bc79fee532d	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:37.191124+00	\N	\N	\N	\N
-2eda2623-5e10-4f06-ae73-dade887b08d9	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:37.191124+00	\N	\N	\N	\N
-a78355bb-a083-4709-b817-53086024bd1d	NA	1	General	\N	t	2026-08-14 14:34:23.448855+00	1	1	PGDM	5
-02fbaba1-c8cc-4bcf-85da-d2e8838dc197	NA	1	General	\N	t	2026-08-14 14:34:23.534957+00	1	2	B.B.A.	5
-ac6bef77-fc17-4d09-88dc-bd271665a7e7	NA	1	General	\N	t	2026-08-14 14:34:23.619246+00	1	3	B.COM. HONS	5
-47816db3-8df7-48f2-8461-91090c11ae03	NA	1	General	\N	t	2026-08-14 14:34:23.697822+00	1	4	BCA	5
-19daf900-6b88-407a-aec9-a62ac3f1a7a1	NA	1	General	\N	t	2026-08-14 14:34:23.778186+00	1	5	M.B.A.	5
+a9dd4519-b727-49ab-b58a-9086fafcbd8e	MCA General	1	General	\N	t	2026-08-16 08:57:32.207311+00	1	3	MCA	5
+4ed2dbaa-c6d2-40dd-96c9-d7fad4825a40	MBA General	1	General	\N	t	2026-08-16 08:57:32.211503+00	1	4	MBA	5
+78be5ac7-b984-4851-912e-0dfeb7184fe5	B.Pharm General	1	General	\N	t	2026-08-16 08:57:32.215185+00	1	2	B.PHARM.	5
 \.
 
 
@@ -33856,10 +34130,6 @@ COPY "tenant_srms-ibs-lucknow".examination_papers (id, code, name, subject_id, b
 --
 
 COPY "tenant_srms-ibs-lucknow".faculty (id, user_id, emp_id, name, department_id, subject_id, designation, qualification, specialization, joining_date, photo_url, phone, gender, experience, staff_type, is_active, created_at, updated_at) FROM stdin;
-c65eaaa8-d9a9-4b61-85a6-8618d0573265	e78bf1b9-9b3d-4395-82ca-ea624652719f	EMP1001	Dr. Sanjay Singh	298e05a4-b96a-4797-bc6e-1bc79fee532d	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
-140c58db-87a6-49ea-8212-18312e1957fe	261b2b02-33f2-4704-b797-597f7920e09a	EMP1002	Dr. Aparna Tyagi	2eda2623-5e10-4f06-ae73-dade887b08d9	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
-c65eaaa8-d9a9-4b61-85a6-8618d0573265	e78bf1b9-9b3d-4395-82ca-ea624652719f	EMP1001	Dr. Sanjay Singh	298e05a4-b96a-4797-bc6e-1bc79fee532d	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
-140c58db-87a6-49ea-8212-18312e1957fe	261b2b02-33f2-4704-b797-597f7920e09a	EMP1002	Dr. Aparna Tyagi	2eda2623-5e10-4f06-ae73-dade887b08d9	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 \.
 
 
@@ -33942,6 +34212,91 @@ cb82dd9f-aaef-4a55-bbd6-c10b4e0094eb	CL	Casual Leave	12
 7de87bac-8de1-40af-8d91-932a8f897a71	EL	Earned Leave	30
 26aa11d4-3437-4234-bee0-75714cec5b21	ML	Maternity Leave	180
 2cbcce3f-ec22-4790-94a9-f151ad53f135	COL	Compensatory Off Leave	0
+1bfdcf6f-dff7-4414-9fa1-d5c99db30004	CL	Casual Leave	12
+052c9369-ecfd-42fc-8106-7671f317079b	SL	Sick Leave	10
+8612cd47-a875-4150-96db-0574bebac0d4	EL	Earned Leave	30
+c76df4d1-3194-4864-96ca-42354952faa2	ML	Maternity Leave	180
+e08bbbee-6d05-486f-8315-8d33c26ab52e	COL	Compensatory Off Leave	0
+9f7aa617-d925-494a-a90a-5b344c8cbf53	CL	Casual Leave	12
+93a07eb2-5526-463c-83d0-7f34097355c0	SL	Sick Leave	10
+730de658-c6e4-46bc-9ee8-9130319248ab	EL	Earned Leave	30
+834a168b-2e88-44f5-b078-62c700cdc904	ML	Maternity Leave	180
+4c82146c-53c2-496d-8860-19983ae67f71	COL	Compensatory Off Leave	0
+d8bb14c8-077c-4268-b201-9c4e72389e31	CL	Casual Leave	12
+ceda5292-3467-47cd-9cf7-5a78134e5ac1	SL	Sick Leave	10
+f84462a4-8728-42cf-ac15-798acc44b9b1	EL	Earned Leave	30
+f3be6918-502f-4f8f-ad48-dfa1766ae027	ML	Maternity Leave	180
+dcebb96f-5ab9-4492-954f-75d739ca8ce5	COL	Compensatory Off Leave	0
+8dab3d41-e609-4e2e-85ce-2a3a885d7726	CL	Casual Leave	12
+d04df1ed-fd2e-4e5f-8fd0-9a9ac91348d8	SL	Sick Leave	10
+39cf1808-364f-4997-98ab-4bf426a60650	EL	Earned Leave	30
+d0011ed6-3545-48fc-90f7-4fa5e9e33213	ML	Maternity Leave	180
+7140ecdc-6b94-4691-8867-b1f80f903807	COL	Compensatory Off Leave	0
+2934e92d-1b4f-4e79-841e-2b6df5819de6	CL	Casual Leave	12
+f8371423-bdba-4a21-99e4-1e5f14da0687	SL	Sick Leave	10
+3934c418-732f-46c1-a511-df59b0a90430	EL	Earned Leave	30
+fb289805-7e1e-4cf9-8cc1-300703004643	ML	Maternity Leave	180
+66ed33b0-75e8-4514-9163-c5a9bd2777d0	COL	Compensatory Off Leave	0
+30ac5fd5-591d-4120-ba68-142eaff863ce	CL	Casual Leave	12
+ebbed0ff-f9a1-442f-bff7-874fb42875af	SL	Sick Leave	10
+b5dea49b-2803-4463-98a6-70d1056bb8b7	EL	Earned Leave	30
+a660902f-efd1-4023-ac0d-85528f1d6e9f	ML	Maternity Leave	180
+04103b3e-0217-4c0d-909e-58bd9d6e1e6f	COL	Compensatory Off Leave	0
+92c3fd46-41c9-43f9-b383-bab28e0fa11e	CL	Casual Leave	12
+59d6b896-5b86-42ca-9843-92527a5513bb	SL	Sick Leave	10
+3a9d7714-a6d6-47a7-97c2-fa0f95de4990	EL	Earned Leave	30
+8da634f8-3825-459f-9296-33ef85e04886	ML	Maternity Leave	180
+94716c83-28b0-403d-bc47-75d70f120c93	COL	Compensatory Off Leave	0
+36a2ba75-03f8-418e-be06-062408af24bb	CL	Casual Leave	12
+0c1332e5-6e0f-4a6a-bb64-59cee4b7deea	SL	Sick Leave	10
+5bf28846-043b-445c-b52d-f35bb35826a1	EL	Earned Leave	30
+d6de0253-c083-4246-8e25-f36100883928	ML	Maternity Leave	180
+96ec64cc-ba9b-4bad-b5dc-9fba737af747	COL	Compensatory Off Leave	0
+96522d8d-e543-4837-a76e-3cb8c0c81d31	CL	Casual Leave	12
+6f368569-7143-4483-92ae-97a826c6af29	SL	Sick Leave	10
+a3a3e2b7-4747-4717-a437-e84d6cfe0ed0	EL	Earned Leave	30
+de0b455a-af28-46e6-aee6-9e0581eed5e4	ML	Maternity Leave	180
+4dc01e1b-3136-4819-aca2-30953a3370a2	COL	Compensatory Off Leave	0
+cb5fd15a-38ea-44ec-b87d-fdaab0333ecf	CL	Casual Leave	12
+d4d70de0-2a6e-4150-b3a8-9036652ae2c4	SL	Sick Leave	10
+bbbfbf12-272c-4cfd-8c6f-8c2511aba0b5	EL	Earned Leave	30
+30dcd6a2-9787-4a01-91d2-a7477bb47868	ML	Maternity Leave	180
+2f181024-e6ea-4084-a145-5d623c24fefd	COL	Compensatory Off Leave	0
+1ba292b3-3416-4ec6-b1bf-ec839970ccd3	CL	Casual Leave	12
+664768a3-a0c3-4cdd-ac91-184b5c5e5e42	SL	Sick Leave	10
+fc387f9b-abdb-42b2-a9a3-a72c9f6a917e	EL	Earned Leave	30
+01484ba0-8f0e-4212-8bde-ec456c983d06	ML	Maternity Leave	180
+ef9240df-bbef-478f-adf1-a5574ecd581b	COL	Compensatory Off Leave	0
+dbb07459-426f-4d95-9bbf-e1a3f611f1a2	CL	Casual Leave	12
+fb696c92-5889-412f-9ca1-42a379bbd983	SL	Sick Leave	10
+d67c359e-3206-4735-9aa0-7ef9cf3b37b3	EL	Earned Leave	30
+90ded6e9-1b80-4c56-b6a1-262b7571fcbf	ML	Maternity Leave	180
+7b241be9-ee37-475c-87c2-a763fdf37803	COL	Compensatory Off Leave	0
+4fe1ee43-b6f7-408c-875a-4eafd6d854ab	CL	Casual Leave	12
+5821bb9a-22ca-4047-b373-5ef9c2c88fbf	SL	Sick Leave	10
+33c17560-214e-42ee-a9bd-7061870286f0	EL	Earned Leave	30
+78402c6b-ccb2-4dc6-bcd2-4ccb9a37da93	ML	Maternity Leave	180
+43c4b1b7-dd88-4783-b4a0-cc6c92a0e439	COL	Compensatory Off Leave	0
+ec5f2e16-7092-4119-b483-5aea1a11a601	CL	Casual Leave	12
+72a44795-6c0e-4ade-8a68-153fdcef59ac	SL	Sick Leave	10
+53b27445-e102-4a9f-b0cd-9515f395883c	EL	Earned Leave	30
+2b4f164d-1d7d-4a41-b9de-0ade1f631028	CL	Casual Leave	12
+f618a80a-c781-4c87-9d34-df1703e76b8a	SL	Sick Leave	10
+307f0d9c-3f31-408d-a8ae-f580ce8cf3f1	EL	Earned Leave	30
+1c19f514-4cbc-4350-9bf7-87c07793f7d3	ML	Maternity Leave	180
+dc1056f9-ef2a-455e-9004-4e72f811d643	COL	Compensatory Off Leave	0
+d4809c29-c2cb-45a0-bb08-f91210b26d5c	ML	Maternity Leave	180
+3279ebcb-fb51-483b-9854-9fc923eedf32	COL	Compensatory Off Leave	0
+4e6b7165-ba9b-4ed6-8537-0e453ba3561a	CL	Casual Leave	12
+94931327-a07b-442d-8443-0d21ac2f8f8c	SL	Sick Leave	10
+6ce0e1c0-4f64-4e41-9a5a-f4288178804c	EL	Earned Leave	30
+50e2d32c-5470-4a16-a0ce-455baaab37cd	ML	Maternity Leave	180
+084d2ac3-7caf-450d-b531-bf17a31b63a1	COL	Compensatory Off Leave	0
+65878c69-3dbc-4563-b315-b93b1c6b19e2	CL	Casual Leave	12
+5ada0c70-e392-41c0-8043-b1ab4f627117	SL	Sick Leave	10
+9c9da4d5-3127-4ec0-8578-85cd7a833898	EL	Earned Leave	30
+ddc49870-d94c-4657-84a6-194fcbb06da2	ML	Maternity Leave	180
+d1fd4383-f25f-4f35-860c-872dbbe8bcf4	COL	Compensatory Off Leave	0
 \.
 
 
@@ -34188,8 +34543,6 @@ COPY "tenant_srms-ibs-lucknow".subject_offerings (id, subject_id, prof_id, dtype
 COPY "tenant_srms-ibs-lucknow".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 63dbaaaa-dcd3-4a15-ba48-7466127f7d03	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 5e69ec46-2bf5-4b7c-b34c-8891f968ea42	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-63dbaaaa-dcd3-4a15-ba48-7466127f7d03	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-5e69ec46-2bf5-4b7c-b34c-8891f968ea42	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -34241,15 +34594,11 @@ COPY "tenant_srms-ibs-lucknow".users (id, email, password_hash, role, is_active,
 9ae659d1-e623-4892-95ad-cdcbca96c910	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 b44108d2-6dea-4834-8dfd-dfdb75fec6d2	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 60c91911-63ff-4fb0-bdd6-54aabeb2dbf8	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
-e78bf1b9-9b3d-4395-82ca-ea624652719f	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
-261b2b02-33f2-4704-b797-597f7920e09a	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 28611686-6ce7-4c73-9c79-74d8aa0f03e2	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 e5ff0c51-3ca0-4844-87d0-8d469d9f9991	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 9ae659d1-e623-4892-95ad-cdcbca96c910	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 b44108d2-6dea-4834-8dfd-dfdb75fec6d2	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 60c91911-63ff-4fb0-bdd6-54aabeb2dbf8	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
-e78bf1b9-9b3d-4395-82ca-ea624652719f	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
-261b2b02-33f2-4704-b797-597f7920e09a	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 28611686-6ce7-4c73-9c79-74d8aa0f03e2	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 e5ff0c51-3ca0-4844-87d0-8d469d9f9991	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:37.191124+00	2026-08-14 14:33:37.191124+00
 \.
@@ -34293,8 +34642,6 @@ a67ccceb-8002-4864-a518-84e3eadf0836	2025	2025	MBBS	\N	2025-07-01	2030-07-01	t	\
 6adef641-028d-470d-a653-6df9b249f3b8	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
 414e7f19-ac10-4156-aaf4-7b78a5b47f41	16	2014	1	\N	2021-08-31	2022-02-27	t	16	M.B.B.S.	11	16	Batch 2014
 29a767ec-fb2d-4735-9f5e-f1d978f1410f	30	2015	1	\N	2021-08-31	2022-02-27	t	30	M.B.B.S.	11	30	Batch 2015
-d73b9a3b-c26a-4681-a9dd-5f88cd2bcb8c	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-3e9b491f-38a2-4737-997e-37c17dd7ec9b	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
 13d01357-3337-4559-838d-c8c5dd4ef7a0	37	2015	1	\N	2021-08-31	2022-02-27	t	37	M.B.B.S.	11	37	Batch 2015-A
 7c9de2c0-1c0c-497a-b772-f3d186565d1b	38	2016	1	\N	2021-08-31	2022-02-27	t	38	M.B.B.S.	11	38	Batch 2016
 109b3584-9477-4192-959a-135a3a36c91d	42	2016	1	\N	2021-08-31	2022-02-27	t	42	M.B.B.S.	11	42	Batch 2016-SUPPLE
@@ -34327,131 +34674,16 @@ a362b1ef-ad5b-4019-8199-4ad56c550b58	34	2026	1	\N	2021-08-31	2022-02-27	t	34	M.B
 a7fd353d-3e67-468c-a3c5-7001ee1f3c81	3	2013	2	\N	2021-08-31	2022-02-27	t	3	P.G.	11	3	Batch 2013
 3bfb1efe-0b10-4c7b-9b83-341609914c9e	4	2014	2	\N	2021-08-31	2022-02-27	t	4	P.G.	11	4	Batch 2014
 0c610d25-8b12-4210-a53c-6e77f7183bed	5	2015	2	\N	2021-08-31	2022-02-27	t	5	P.G.	11	5	Batch 2015
-53e2adbe-7dc4-41f3-b1f8-e97b3b1331dc	6	2016	2	\N	2021-08-31	2022-02-27	t	6	P.G.	11	6	Batch 2016
 02e883d8-f4bd-438c-8b0f-dd61c7f8c3ff	7	2017	2	\N	2021-08-31	2022-02-27	t	7	P.G.	11	7	Batch 2017
 e0e0300c-17cf-49fb-9fd3-dd7c1600457d	8	2018	2	\N	2021-08-31	2022-02-27	t	8	P.G.	11	8	Batch 2018
 be665e48-c910-4db8-8499-2620eb7c7a35	9	2019	2	\N	2021-08-31	2022-02-27	t	9	P.G.	11	9	Batch 2019
 5c6c948c-a338-4cb8-8b1b-d77a314fdc66	10	2020	2	\N	2021-08-31	2022-02-27	t	10	P.G.	11	10	Batch 2020
-225bfb6b-3005-4f7e-a16e-b5bd4f4bd643	11	2021	2	\N	2022-01-31	2023-01-31	t	11	P.G.	11	11	Batch 2021
-b1e85eb8-e102-408c-982b-65a65368dabf	15	2025	2	\N	\N	\N	t	15	P.G.	11	15	Batch 2025
-8dbfa113-19b0-4e8e-8aa2-05bf8a430641	16	2026	2	\N	2026-07-09	2027-07-09	t	16	P.G.	11	16	Batch 2026
-556f3948-7cc5-435a-ad18-04762a52ca35	1	2016	3	\N	2021-08-31	2022-02-27	t	1	ISCCM	11	1	Batch 2016
-6e6ec9ad-093f-45b9-8b5b-5c85af6a07e5	2	2017	3	\N	2021-08-31	2022-02-27	t	2	ISCCM	11	2	Batch 2017
-3ec638e6-3bb2-449e-9d46-9cde30890e28	3	2019	3	\N	2021-08-31	2022-02-27	t	3	ISCCM	11	3	Batch 2019
-87a9f553-14d7-4348-b00f-6ec5ba6b8d17	4	2020	3	\N	2021-08-31	2022-02-27	t	4	ISCCM	11	4	Batch 2020
 096863b3-ca12-416c-89b1-7b26cc1abc5c	12	2022	2	\N	2022-10-06	2022-10-06	t	12	P.G.	11	12	Batch 2022
-ebc6483d-fa58-4fcc-b2aa-5cbef858ba52	13	2023	2	\N	2023-08-06	2024-12-30	t	13	P.G.	11	13	Batch 2023
-63a64a61-56e7-489f-a133-a966282876d0	7	2005	1	\N	2021-08-31	2022-02-27	t	7	M.B.B.S.	11	7	Batch 2005
-7a478c3f-9f03-4520-916b-af8a0af4b43d	8	2006	1	\N	2021-08-31	2022-02-27	t	8	M.B.B.S.	11	8	Batch 2006
-e598ac04-74a7-40fe-8de2-b80cd6fd0b33	1	2007	1	\N	2021-08-31	2022-02-27	t	1	M.B.B.S.	11	1	Batch 2007
 5b7b9a32-84b8-42d1-9ebb-58dc84c937c1	31	2007	1	\N	2021-08-31	2022-02-27	t	31	M.B.B.S.	11	31	Batch 2007(SUPPLE)
-c5b7c3ba-6dc5-4b75-af8a-16209a147832	2	2008	1	\N	2021-08-31	2022-02-27	t	2	M.B.B.S.	11	2	Batch 2008
 133c8789-cc93-426d-ae29-b284f4ef89cf	32	2008	1	\N	2021-08-31	2022-02-27	t	32	M.B.B.S.	11	32	Batch 2008(SUPPLE)
-cf45e2e6-39ae-473f-bac3-179ce30b83fe	3	2009	1	\N	2021-08-31	2022-02-27	t	3	M.B.B.S.	11	3	Batch 2009
 a6dbdf1a-322f-4a7d-949b-e14f387b79ba	25	2009	1	\N	2021-08-31	2022-02-27	t	25	M.B.B.S.	11	25	Batch 2009 (SUPPLE)
-9a8c1650-17c2-406d-b96a-d5dd22548d04	4	2010	1	\N	2021-08-31	2022-02-27	t	4	M.B.B.S.	11	4	Batch 2010
 89f0e5c3-bc60-47f4-9fae-549dced16916	26	2010	1	\N	2021-08-31	2022-02-27	t	26	M.B.B.S.	11	26	Batch 2010 (SUPPLE)
-45448b90-c3f8-414c-843d-1f6d51c13a4c	5	2011	1	\N	2021-08-31	2022-02-27	t	5	M.B.B.S.	11	5	Batch 2011
 3405bfe9-e408-41e1-915a-1c9c880f3c8b	14	2024	2	\N	\N	\N	t	14	P.G.	11	14	Batch 2024
-daff44db-ad1f-475b-8c82-dbed2214e7c2	5	2026	3	\N	2026-07-09	2027-07-09	t	5	ISCCM	11	5	Batch 2026
-1ff8ea6c-6ecb-493f-9ee6-823867d44100	1	2016	4	\N	2021-08-31	2022-02-27	t	1	BDTC	11	1	Batch 2016
-5b469b19-2be9-4547-a219-e9c23301df40	1	2019	5	\N	2021-08-31	2022-02-27	t	1	PDCC	11	1	Batch 2019
-107c8811-0ac7-41dc-81b5-f87339867be8	2	2020	5	\N	2021-08-31	2022-02-27	t	2	PDCC	11	2	Batch 2020
-ba43ee16-131f-4461-9dc9-271bc8afc2c6	3	2021	5	\N	2021-08-31	2022-02-27	t	3	PDCC	11	3	Batch 2021
-4ed2bb05-f726-48a9-abdb-233bbe7317e2	4	2022	5	\N	2022-01-31	2022-01-31	t	4	PDCC	11	4	Batch 2022
-a21a8b5a-bc63-48fc-9357-13645c79274d	5	2023	5	\N	\N	\N	t	5	PDCC	11	5	Batch 2023
-a58658dd-fec6-4de7-8062-7f7a0bf7c1fe	6	2024	5	\N	\N	\N	t	6	PDCC	11	6	Batch 2024
-9d3333a2-8d4a-47cb-95c4-89295968a77d	7	2025	5	\N	\N	\N	t	7	PDCC	11	7	Batch 2025
-0db34c6b-f886-4ba2-bf60-fbd31eae0690	1	2023	6	\N	2023-12-31	2026-12-30	t	1	Super Speciality (DM/MCH)	11	1	Batch 2023
-0fdec463-4ab6-4798-8a1a-b445cdece37d	2	2024	6	\N	\N	\N	t	2	Super Speciality (DM/MCH)	11	2	Batch 2024
-943b2720-fa33-4dbb-a1c4-09cb9f534eab	3	2026	6	\N	2026-07-09	2027-07-09	t	3	Super Speciality (DM/MCH)	11	3	Batch 2026
-b71ee2e7-51de-420c-b1dd-b7a4a0699297	1	2025	7	\N	2025-12-26	2026-12-25	t	1	MBBS FMG INTERNSHIP	11	1	Batch 2025-2026
-cda7d985-c136-449c-b767-62c3f88b906e	2	2026	7	\N	2026-07-09	2027-07-09	t	2	MBBS FMG INTERNSHIP	11	2	Batch 2026-2027
-cb490654-a4ea-42f7-b8ed-a701c3aa5238	1	2025	8	\N	\N	\N	t	1	MBBS SRMS INTERNSHIP	11	1	Batch 2025-2026
-540c72c2-30b5-43ad-bf48-0c9ce60fb210	2	2026	8	\N	2026-07-09	2027-07-09	t	2	MBBS SRMS INTERNSHIP	11	2	Batch 2026-2027
-5659b12f-6af9-4c40-9058-3522fbe56fd7	22	2011	1	\N	2021-08-31	2022-02-27	t	22	M.B.B.S.	11	22	Batch 2011 SUPPLE
-59a8a20e-60e6-4ecc-8172-f38a2353ed65	11	2012	1	\N	2021-08-31	2022-02-27	t	11	M.B.B.S.	11	11	Batch 2012
-a67ccceb-8002-4864-a518-84e3eadf0836	2025	2025	MBBS	\N	2025-07-01	2030-07-01	t	\N	\N	\N	\N	\N
-0a97293c-b07f-451a-9fa6-b405edace929	13	2013	1	\N	2021-08-31	2022-02-27	t	13	M.B.B.S.	11	13	Batch 2013
-6adef641-028d-470d-a653-6df9b249f3b8	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-414e7f19-ac10-4156-aaf4-7b78a5b47f41	16	2014	1	\N	2021-08-31	2022-02-27	t	16	M.B.B.S.	11	16	Batch 2014
-29a767ec-fb2d-4735-9f5e-f1d978f1410f	30	2015	1	\N	2021-08-31	2022-02-27	t	30	M.B.B.S.	11	30	Batch 2015
-d73b9a3b-c26a-4681-a9dd-5f88cd2bcb8c	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-3e9b491f-38a2-4737-997e-37c17dd7ec9b	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-13d01357-3337-4559-838d-c8c5dd4ef7a0	37	2015	1	\N	2021-08-31	2022-02-27	t	37	M.B.B.S.	11	37	Batch 2015-A
-7c9de2c0-1c0c-497a-b772-f3d186565d1b	38	2016	1	\N	2021-08-31	2022-02-27	t	38	M.B.B.S.	11	38	Batch 2016
-109b3584-9477-4192-959a-135a3a36c91d	42	2016	1	\N	2021-08-31	2022-02-27	t	42	M.B.B.S.	11	42	Batch 2016-SUPPLE
-9d747107-02d9-4bee-995e-e071e280f559	40	2017	1	\N	2017-08-30	2022-12-29	t	40	M.B.B.S.	11	40	Batch 2017
-66a6eb48-04b8-41a4-9dcd-90f5d67bfbaf	44	2018	1	\N	2018-09-05	2022-12-29	t	44	M.B.B.S.	11	44	Batch 2018
-eade0592-bd56-4722-802e-91d9521cca9e	49	2019	1	\N	2019-09-02	2024-04-29	t	49	M.B.B.S.	11	49	Batch 2019
-17475066-30c6-4b71-adde-8415de903ade	52	2020	1	\N	2021-02-07	2025-04-29	t	52	M.B.B.S.	11	52	Batch 2020
-88e12fc3-b1fe-4b2c-a54f-2758aa3e43e9	55	2021	1	\N	2022-02-20	2026-04-29	t	55	M.B.B.S.	11	55	Batch 2021
-052a3054-0dcb-43a4-ad5f-4d924ce516d1	58	2022	1	\N	2022-12-12	2027-05-30	t	58	M.B.B.S.	11	58	Batch 2022
-2d93366b-f50d-4b41-a5d1-c9541bb3abe1	60	2023	1	\N	2023-09-22	2028-09-16	t	60	M.B.B.S.	11	60	Batch 2023
-ce1b29ed-340b-4fd0-a514-aeb40c55920a	63	2024	1	\N	2024-10-23	2029-10-20	t	63	M.B.B.S.	11	63	Batch 2024
-e63279fc-5924-4141-8ae3-bcef52a75415	66	2025	1	\N	2025-10-06	2030-10-05	t	66	M.B.B.S.	11	66	Batch 2025
-2e4b9d9b-eb89-4867-a89c-b0b7982606e2	67	2026	1	\N	2026-07-09	2027-07-09	t	67	M.B.B.S.	11	67	Batch 2026
-1c888ac0-ea8a-4ae9-bc9e-65f880c15561	6	2026	1	\N	2021-08-31	2022-02-27	t	6	M.B.B.S.	11	6	Batch INTERNS
-60e8c96f-5601-4098-9422-07a22b2650be	50	2026	1	\N	2021-08-31	2022-02-27	t	50	M.B.B.S.	11	50	Batch INTERNS 2014
-65171108-49a5-4120-870e-9f912e40894c	51	2026	1	\N	2021-08-31	2022-02-27	t	51	M.B.B.S.	11	51	Batch INTERNS 2015
-eca019a8-60a3-4323-b5cb-fb2de1decf85	57	2026	1	\N	2022-06-20	2022-12-30	t	57	M.B.B.S.	11	57	Batch INTERNS 2017
-0c3a08b2-e34f-4972-a69a-61507cda4949	59	2026	1	\N	2023-06-14	2023-12-12	t	59	M.B.B.S.	11	59	Batch INTERNS 2018
-d370385c-7c83-4104-b079-b9546fec114c	62	2026	1	\N	\N	\N	t	62	M.B.B.S.	11	62	Batch INTERNS 2019
-30970415-5131-4dff-942a-69f88203768c	68	2026	1	\N	2026-07-23	2027-07-23	t	68	M.B.B.S.	11	66	Batch INTERNS 2020
-b58c05fe-7eb9-49d1-9799-c7d756b835b6	69	2026	1	\N	2026-07-23	2027-07-23	t	69	M.B.B.S.	11	67	Batch INTERNS 2021
-0b92b602-6984-4f2a-80af-7a990a5d47f4	15	2026	1	\N	2021-08-31	2022-02-27	t	15	M.B.B.S.	11	15	Batch INTERNS(2009)
-730d9c94-c1b9-4097-bfaa-837d5c26c642	35	2026	1	\N	2021-08-31	2022-02-27	t	35	M.B.B.S.	11	35	Batch INTERNS(2011)
-05dc7717-78cc-45ed-b823-720adca72066	54	2026	1	\N	2021-08-31	2022-02-27	t	54	M.B.B.S.	11	54	Batch INTERNS-2016
-c0c3cc32-083f-449c-9da4-ed62e4abc06b	23	2026	1	\N	2021-08-31	2022-02-27	t	23	M.B.B.S.	11	23	Batch SUPPLE 2012
-9b84ae6a-44ad-4ffc-a21d-b0c93c19e5b4	21	2026	1	\N	2021-08-31	2022-02-27	t	21	M.B.B.S.	11	21	Batch SUPPLE 2013
-a362b1ef-ad5b-4019-8199-4ad56c550b58	34	2026	1	\N	2021-08-31	2022-02-27	t	34	M.B.B.S.	11	34	Batch SUPPLE 2014
-93924e2d-d5cf-41da-a54c-1f72507601d9	1	2011	2	\N	2021-08-31	2022-02-27	t	1	P.G.	11	1	Batch 2011
-35b43095-b4f1-438d-8955-0b9ef9a4ff07	2	2012	2	\N	2021-08-31	2022-02-27	t	2	P.G.	11	2	Batch 2012
-a7fd353d-3e67-468c-a3c5-7001ee1f3c81	3	2013	2	\N	2021-08-31	2022-02-27	t	3	P.G.	11	3	Batch 2013
-3bfb1efe-0b10-4c7b-9b83-341609914c9e	4	2014	2	\N	2021-08-31	2022-02-27	t	4	P.G.	11	4	Batch 2014
-0c610d25-8b12-4210-a53c-6e77f7183bed	5	2015	2	\N	2021-08-31	2022-02-27	t	5	P.G.	11	5	Batch 2015
-53e2adbe-7dc4-41f3-b1f8-e97b3b1331dc	6	2016	2	\N	2021-08-31	2022-02-27	t	6	P.G.	11	6	Batch 2016
-02e883d8-f4bd-438c-8b0f-dd61c7f8c3ff	7	2017	2	\N	2021-08-31	2022-02-27	t	7	P.G.	11	7	Batch 2017
-e0e0300c-17cf-49fb-9fd3-dd7c1600457d	8	2018	2	\N	2021-08-31	2022-02-27	t	8	P.G.	11	8	Batch 2018
-be665e48-c910-4db8-8499-2620eb7c7a35	9	2019	2	\N	2021-08-31	2022-02-27	t	9	P.G.	11	9	Batch 2019
-5c6c948c-a338-4cb8-8b1b-d77a314fdc66	10	2020	2	\N	2021-08-31	2022-02-27	t	10	P.G.	11	10	Batch 2020
-225bfb6b-3005-4f7e-a16e-b5bd4f4bd643	11	2021	2	\N	2022-01-31	2023-01-31	t	11	P.G.	11	11	Batch 2021
-b1e85eb8-e102-408c-982b-65a65368dabf	15	2025	2	\N	\N	\N	t	15	P.G.	11	15	Batch 2025
-8dbfa113-19b0-4e8e-8aa2-05bf8a430641	16	2026	2	\N	2026-07-09	2027-07-09	t	16	P.G.	11	16	Batch 2026
-556f3948-7cc5-435a-ad18-04762a52ca35	1	2016	3	\N	2021-08-31	2022-02-27	t	1	ISCCM	11	1	Batch 2016
-6e6ec9ad-093f-45b9-8b5b-5c85af6a07e5	2	2017	3	\N	2021-08-31	2022-02-27	t	2	ISCCM	11	2	Batch 2017
-3ec638e6-3bb2-449e-9d46-9cde30890e28	3	2019	3	\N	2021-08-31	2022-02-27	t	3	ISCCM	11	3	Batch 2019
-87a9f553-14d7-4348-b00f-6ec5ba6b8d17	4	2020	3	\N	2021-08-31	2022-02-27	t	4	ISCCM	11	4	Batch 2020
-096863b3-ca12-416c-89b1-7b26cc1abc5c	12	2022	2	\N	2022-10-06	2022-10-06	t	12	P.G.	11	12	Batch 2022
-ebc6483d-fa58-4fcc-b2aa-5cbef858ba52	13	2023	2	\N	2023-08-06	2024-12-30	t	13	P.G.	11	13	Batch 2023
-63a64a61-56e7-489f-a133-a966282876d0	7	2005	1	\N	2021-08-31	2022-02-27	t	7	M.B.B.S.	11	7	Batch 2005
-7a478c3f-9f03-4520-916b-af8a0af4b43d	8	2006	1	\N	2021-08-31	2022-02-27	t	8	M.B.B.S.	11	8	Batch 2006
-e598ac04-74a7-40fe-8de2-b80cd6fd0b33	1	2007	1	\N	2021-08-31	2022-02-27	t	1	M.B.B.S.	11	1	Batch 2007
-5b7b9a32-84b8-42d1-9ebb-58dc84c937c1	31	2007	1	\N	2021-08-31	2022-02-27	t	31	M.B.B.S.	11	31	Batch 2007(SUPPLE)
-c5b7c3ba-6dc5-4b75-af8a-16209a147832	2	2008	1	\N	2021-08-31	2022-02-27	t	2	M.B.B.S.	11	2	Batch 2008
-133c8789-cc93-426d-ae29-b284f4ef89cf	32	2008	1	\N	2021-08-31	2022-02-27	t	32	M.B.B.S.	11	32	Batch 2008(SUPPLE)
-cf45e2e6-39ae-473f-bac3-179ce30b83fe	3	2009	1	\N	2021-08-31	2022-02-27	t	3	M.B.B.S.	11	3	Batch 2009
-a6dbdf1a-322f-4a7d-949b-e14f387b79ba	25	2009	1	\N	2021-08-31	2022-02-27	t	25	M.B.B.S.	11	25	Batch 2009 (SUPPLE)
-9a8c1650-17c2-406d-b96a-d5dd22548d04	4	2010	1	\N	2021-08-31	2022-02-27	t	4	M.B.B.S.	11	4	Batch 2010
-89f0e5c3-bc60-47f4-9fae-549dced16916	26	2010	1	\N	2021-08-31	2022-02-27	t	26	M.B.B.S.	11	26	Batch 2010 (SUPPLE)
-45448b90-c3f8-414c-843d-1f6d51c13a4c	5	2011	1	\N	2021-08-31	2022-02-27	t	5	M.B.B.S.	11	5	Batch 2011
-3405bfe9-e408-41e1-915a-1c9c880f3c8b	14	2024	2	\N	\N	\N	t	14	P.G.	11	14	Batch 2024
-daff44db-ad1f-475b-8c82-dbed2214e7c2	5	2026	3	\N	2026-07-09	2027-07-09	t	5	ISCCM	11	5	Batch 2026
-1ff8ea6c-6ecb-493f-9ee6-823867d44100	1	2016	4	\N	2021-08-31	2022-02-27	t	1	BDTC	11	1	Batch 2016
-5b469b19-2be9-4547-a219-e9c23301df40	1	2019	5	\N	2021-08-31	2022-02-27	t	1	PDCC	11	1	Batch 2019
-107c8811-0ac7-41dc-81b5-f87339867be8	2	2020	5	\N	2021-08-31	2022-02-27	t	2	PDCC	11	2	Batch 2020
-ba43ee16-131f-4461-9dc9-271bc8afc2c6	3	2021	5	\N	2021-08-31	2022-02-27	t	3	PDCC	11	3	Batch 2021
-4ed2bb05-f726-48a9-abdb-233bbe7317e2	4	2022	5	\N	2022-01-31	2022-01-31	t	4	PDCC	11	4	Batch 2022
-a21a8b5a-bc63-48fc-9357-13645c79274d	5	2023	5	\N	\N	\N	t	5	PDCC	11	5	Batch 2023
-a58658dd-fec6-4de7-8062-7f7a0bf7c1fe	6	2024	5	\N	\N	\N	t	6	PDCC	11	6	Batch 2024
-9d3333a2-8d4a-47cb-95c4-89295968a77d	7	2025	5	\N	\N	\N	t	7	PDCC	11	7	Batch 2025
-0db34c6b-f886-4ba2-bf60-fbd31eae0690	1	2023	6	\N	2023-12-31	2026-12-30	t	1	Super Speciality (DM/MCH)	11	1	Batch 2023
-0fdec463-4ab6-4798-8a1a-b445cdece37d	2	2024	6	\N	\N	\N	t	2	Super Speciality (DM/MCH)	11	2	Batch 2024
-943b2720-fa33-4dbb-a1c4-09cb9f534eab	3	2026	6	\N	2026-07-09	2027-07-09	t	3	Super Speciality (DM/MCH)	11	3	Batch 2026
-b71ee2e7-51de-420c-b1dd-b7a4a0699297	1	2025	7	\N	2025-12-26	2026-12-25	t	1	MBBS FMG INTERNSHIP	11	1	Batch 2025-2026
-cda7d985-c136-449c-b767-62c3f88b906e	2	2026	7	\N	2026-07-09	2027-07-09	t	2	MBBS FMG INTERNSHIP	11	2	Batch 2026-2027
-cb490654-a4ea-42f7-b8ed-a701c3aa5238	1	2025	8	\N	\N	\N	t	1	MBBS SRMS INTERNSHIP	11	1	Batch 2025-2026
-540c72c2-30b5-43ad-bf48-0c9ce60fb210	2	2026	8	\N	2026-07-09	2027-07-09	t	2	MBBS SRMS INTERNSHIP	11	2	Batch 2026-2027
 \.
 
 
@@ -34488,18 +34720,6 @@ c0fefade-d2ca-4bb3-849e-fb3710154e07	bd3e051a-7513-4f9e-8577-0e1ec39e3527	6fcbb1
 96bf8551-8a86-49cf-9ce8-ec65010dfe1e	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 60f094b3-4942-4854-a7bf-aa008c3b0e93	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 2cfd6e42-af39-4f1f-9f72-87781fc4db5e	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-e9c82719-251c-422d-903d-144ff79956a3	bd3e051a-7513-4f9e-8577-0e1ec39e3527	\N	AN1.1(2024)	Describe & Demonstrate normal anatomical position, various planes, relation, comparison, laterality & movements in the human body	Knowledge	Shows How	t	t	2026-08-03 17:18:32.721242+00	4b7d9d2d-2bf5-4634-9913-d04993378f06	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-53b95419-0ba1-44a0-bcc7-807d45bd77f9	bd3e051a-7513-4f9e-8577-0e1ec39e3527	\N	AN1.2(2024)	Describe composition of bone and bone marrow	Knowledge	Shows How	t	t	2026-08-03 17:19:12.233539+00	4b7d9d2d-2bf5-4634-9913-d04993378f06	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-ca0a2ffd-8ae8-452d-a4ec-15f262c4f935	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-65f2075d-f9e8-4fb1-9098-b9784ead2615	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-013e50be-06be-4681-973d-f6c8c60489fd	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-88a8a67c-9c0d-4cbb-8f3a-37efd7f87ac8	bd3e051a-7513-4f9e-8577-0e1ec39e3527	0fb688a4-41d8-4767-87e7-e010fc25355d	PY1.1(2024)	Describe and demonstrate cell membrane transport mechanisms & homeostasis	Knowledge	Knows How	t	t	2026-07-30 16:28:25.188766+00	4b7d9d2d-2bf5-4634-9913-d04993378f06	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-c0fefade-d2ca-4bb3-849e-fb3710154e07	bd3e051a-7513-4f9e-8577-0e1ec39e3527	6fcbb147-f8f9-4f65-b63c-4ca53d6aa090	PY2.1(2024)	Describe composition of blood, plasma proteins, erythropoiesis, & hemoglobin	Knowledge	Knows How	t	t	2026-07-30 16:29:09.66433+00	4b7d9d2d-2bf5-4634-9913-d04993378f06	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-983f8f69-c3b9-4feb-96d5-3ace35ea9eb0	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-00ffcb85-d4ac-4c7e-b474-0da3e9834962	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-96bf8551-8a86-49cf-9ce8-ec65010dfe1e	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-60f094b3-4942-4854-a7bf-aa008c3b0e93	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-2cfd6e42-af39-4f1f-9f72-87781fc4db5e	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-13 07:38:54.337895+00	\N	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -34508,14 +34728,6 @@ c0fefade-d2ca-4bb3-849e-fb3710154e07	bd3e051a-7513-4f9e-8577-0e1ec39e3527	6fcbb1
 --
 
 COPY "tenant_srms-ims".courses (id, code, name, degree_level, duration_years, semesters, is_active, created_at, professional_phase, academic_system, course_cd, course_type) FROM stdin;
-f29953fa-61ee-437a-a3c9-29513854181b	1	M.B.B.S.	UG	5.5	9	t	2026-08-14 14:33:44.00045+00	1st Professional (Phase I)	professional	1	UG
-2fe47a9b-8ad4-4925-ac0b-8ba220d141fa	2	P.G.	PG	3.0	9	t	2026-08-14 14:33:44.005829+00	1st Year Resident (Junior Resident)	professional	2	PG
-0db51e84-318f-4857-8a58-82efec2a1130	3	ISCCM	Fellowship	1.0	9	t	2026-08-14 14:33:44.012176+00	Post-Doctoral Phase I	professional	3	Fellowship
-a9a1a17c-a439-4dc8-a714-5574ce327bbe	4	BDTC	Fellowship	1.0	9	t	2026-08-14 14:33:44.017788+00	Post-Doctoral Phase I	professional	4	Fellowship
-77b9db54-7467-4caa-9f7e-ab929a206141	5	PDCC	Fellowship	1.0	9	t	2026-08-14 14:33:44.023063+00	Post-Doctoral Phase I	professional	5	Fellowship
-72dff7f4-14cd-460c-89c9-6f65d9cbe6ca	6	Super Speciality (DM/MCH)	PG	3.0	9	t	2026-08-14 14:33:44.027392+00	1st Year Resident (Junior Resident)	professional	6	PG
-36de4181-4b15-4253-b859-6e393703e7a4	7	MBBS FMG INTERNSHIP	UG	5.5	9	t	2026-08-14 14:33:44.031866+00	1st Professional (Phase I)	professional	7	UG
-a2ad6230-b276-4635-af8a-c7e6fbe6ec99	8	MBBS SRMS INTERNSHIP	UG	5.5	9	t	2026-08-14 14:33:44.036334+00	1st Professional (Phase I)	professional	8	UG
 f29953fa-61ee-437a-a3c9-29513854181b	1	M.B.B.S.	UG	5.5	9	t	2026-08-14 14:33:44.00045+00	1st Professional (Phase I)	professional	1	UG
 2fe47a9b-8ad4-4925-ac0b-8ba220d141fa	2	P.G.	PG	3.0	9	t	2026-08-14 14:33:44.005829+00	1st Year Resident (Junior Resident)	professional	2	PG
 0db51e84-318f-4857-8a58-82efec2a1130	3	ISCCM	Fellowship	1.0	9	t	2026-08-14 14:33:44.012176+00	Post-Doctoral Phase I	professional	3	Fellowship
@@ -34568,10 +34780,6 @@ f72221a0-46b1-4eec-b1b3-0925a877795d	Department of Physiology	PHY	PRE_CLINICAL	\
 ea9b4e7b-2d26-4ed1-9f4a-7e53a7b194d0	IDCCM	1	Clinical	\N	t	2026-08-14 14:34:26.746105+00	1	3	ISCCM	11
 c71c02ae-021f-4658-b9af-6606841ee83e	POST MBBS COURSE	2	Clinical	\N	t	2026-08-14 14:34:26.750367+00	2	3	ISCCM	11
 d5660638-4650-407b-9847-90dac9d6532c	IDCCN	3	Clinical	\N	t	2026-08-14 14:34:26.754685+00	3	3	ISCCM	11
-a5985ea3-e4eb-4cac-ab1c-07f4633b51df	N.A.	1	Clinical	\N	t	2026-08-14 14:34:26.825198+00	1	4	BDTC	11
-8adeba68-93b0-485f-a4ea-80326519cb59	M.D. RADIO DIAGONOSIS	1	Clinical	\N	t	2026-08-14 14:34:26.899903+00	1	5	PDCC	11
-a3537fac-12e3-4bb7-a001-6ecd58ae47f6	M.D. GENERAL MEDICINE	2	Clinical	\N	t	2026-08-14 14:34:26.904189+00	2	5	PDCC	11
-7e703fda-ee7b-4548-b416-f68d004e05be	M.S. OPTHALMOLOGY	3	Clinical	\N	t	2026-08-14 14:34:26.908272+00	3	5	PDCC	11
 a9051005-db30-4dfc-8e3e-94c94544fbec	M.D. PAEDIATRICS	4	Clinical	\N	t	2026-08-14 14:34:26.912359+00	4	5	PDCC	11
 4b52fe77-74be-429b-a241-f93fc873498b	M.S. ENT	5	Clinical	\N	t	2026-08-14 14:34:26.916132+00	5	5	PDCC	11
 344cf5b2-13d9-4a5d-a227-583dd032d3ef	M.S. ORTHOPAEDICS	6	Clinical	\N	t	2026-08-14 14:34:26.919989+00	6	5	PDCC	11
@@ -34584,22 +34792,6 @@ a6cb0617-deb2-4d8d-8c62-071463d087b5	M.D. ANATOMY	11	Pre-Clinical	\N	t	2026-08-1
 123061bd-0f70-4932-95ad-b61d2c5b7af7	M.D. BIOCHEMISTRY	13	Clinical	\N	t	2026-08-14 14:34:26.949311+00	13	5	PDCC	11
 f870d351-0ca2-4e81-81bb-601273de2918	M.D. COMMUNITY MEDICINE	14	Clinical	\N	t	2026-08-14 14:34:26.954177+00	14	5	PDCC	11
 a2d0bc4d-b82c-4590-8618-e4dd0886f314	M.D. MICROBIOLOGY	15	Clinical	\N	t	2026-08-14 14:34:26.95872+00	15	5	PDCC	11
-34eaa928-dba8-4a4d-b84c-537959b751f1	M.B.B.S. Department	1	Clinical	\N	t	2026-08-14 14:34:26.482527+00	1	1	M.B.B.S.	11
-646a3f84-ccc6-44d7-ab64-ba3c0935331a	M.D. RADIO DIAGONOSIS	1	Clinical	\N	t	2026-08-14 14:34:26.565536+00	1	2	P.G.	11
-480c731b-9aa5-42a8-9d42-5a8fc2812a8c	M.D. GENERAL MEDICINE	2	Clinical	\N	t	2026-08-14 14:34:26.572416+00	2	2	P.G.	11
-c82b34bf-7880-4292-8bcd-b47734242ecc	M.S. OPTHALMOLOGY	3	Clinical	\N	t	2026-08-14 14:34:26.576817+00	3	2	P.G.	11
-4694c8b2-28dd-401c-ada8-b68f3e7b57df	M.D. PAEDIATRICS	4	Clinical	\N	t	2026-08-14 14:34:26.581326+00	4	2	P.G.	11
-e2473a09-8d8b-4d93-83e9-cbb4d5e65a54	M.S. ENT	5	Clinical	\N	t	2026-08-14 14:34:26.585264+00	5	2	P.G.	11
-b125434b-4459-4947-9bb8-efdd80c13044	M.S. ORTHOPAEDICS	6	Clinical	\N	t	2026-08-14 14:34:26.590161+00	6	2	P.G.	11
-0f29dc93-6f59-49cd-9351-c4de63154931	M.D. DERMATOLOGY	7	Clinical	\N	t	2026-08-14 14:34:26.594468+00	7	2	P.G.	11
-285c7854-7dd6-4af2-93ad-4aa598ada926	M.S. OBSTETRICS AND GYNAECOLOGY	8	Clinical	\N	t	2026-08-14 14:34:26.599613+00	8	2	P.G.	11
-926da84a-02b4-40ca-bc7e-231ab295a4a6	M.D. ANAESTHESIA	9	Clinical	\N	t	2026-08-14 14:34:26.603937+00	9	2	P.G.	11
-5045fe61-5aba-4045-89dc-6c67e3f18bb5	M.D. PHYSIOLOGY	10	Pre-Clinical	\N	t	2026-08-14 14:34:26.608172+00	10	2	P.G.	11
-2617afee-b94f-4a05-a0f3-b314f36ac3ed	M.D. ANATOMY	11	Pre-Clinical	\N	t	2026-08-14 14:34:26.612954+00	11	2	P.G.	11
-dc966c52-21b4-40fb-8bfe-c5e919344a0f	M.D. PSYCHIATRY	12	Clinical	\N	t	2026-08-14 14:34:26.617598+00	12	2	P.G.	11
-654cb264-33b1-4e46-8842-9398cbb0d2f9	M.D. BIOCHEMISTRY	13	Clinical	\N	t	2026-08-14 14:34:26.622474+00	13	2	P.G.	11
-c8082420-6f61-4d84-a031-0806f7a48e73	M.D. COMMUNITY MEDICINE	14	Clinical	\N	t	2026-08-14 14:34:26.627582+00	14	2	P.G.	11
-74e5e8ed-f653-445c-9594-ec0fac58f2c5	M.D. MICROBIOLOGY	15	Clinical	\N	t	2026-08-14 14:34:26.631837+00	15	2	P.G.	11
 670afce1-f6b3-41c1-b034-4325d4c47a8d	M.S. GENERAL SURGERY	16	Clinical	\N	t	2026-08-14 14:34:26.636319+00	16	2	P.G.	11
 96a292ad-1dcc-42f8-8ca8-fed399beee95	M.D. PATHOLOGY	17	Para-Clinical	\N	t	2026-08-14 14:34:26.641635+00	17	2	P.G.	11
 84557121-5cc3-49c2-8ca4-bead85f7979a	M.D. PHARMACOLOGY	18	Para-Clinical	\N	t	2026-08-14 14:34:26.646681+00	18	2	P.G.	11
@@ -34608,76 +34800,6 @@ a5667b9a-48ed-4ca1-a088-a6c0ccdcb3f9	M.D. RADIO THERAPY(RADIATION ONCOLOGY)	20	C
 1fb98382-3575-4c6b-badb-15c1999886a5	M.D. PULMONARY MEDICINE(RESPIRATORY)	21	Clinical	\N	t	2026-08-14 14:34:26.659899+00	21	2	P.G.	11
 98698072-8ae7-4830-9fbd-7d0e4c94d81a	M.D. IMMUNO HAEMATOLOGY AND BLOOD  TRANSFUSION	22	Clinical	\N	t	2026-08-14 14:34:26.664176+00	22	2	P.G.	11
 24116712-ccee-4ad9-b62f-a48d8a194a3d	M.D EMERGENCY MEDICINE	23	Clinical	\N	t	2026-08-14 14:34:26.668533+00	23	2	P.G.	11
-0c744897-2009-4c64-b2d6-52b5b6d04331	M.S. GENERAL SURGERY	16	Clinical	\N	t	2026-08-14 14:34:26.962462+00	16	5	PDCC	11
-9efe5059-b126-4028-b40f-f1842169e0e2	M.D. PATHOLOGY	17	Para-Clinical	\N	t	2026-08-14 14:34:26.966365+00	17	5	PDCC	11
-6753a70c-d61e-4582-9830-e17738e6f535	M.D. PHARMACOLOGY	18	Para-Clinical	\N	t	2026-08-14 14:34:26.970779+00	18	5	PDCC	11
-9476e9a7-e41f-4dc9-90aa-47bc40d72741	M.D. FORENSIC MEDICINE	19	Clinical	\N	t	2026-08-14 14:34:26.974357+00	19	5	PDCC	11
-56a58997-def2-4f51-8f2a-5ae5b2c929af	M.D. RADIO THERAPY	20	Clinical	\N	t	2026-08-14 14:34:26.978073+00	20	5	PDCC	11
-cd83d3d5-349d-40f7-8a09-6866aa160914	M.D. PULMONARY MEDICINE	21	Clinical	\N	t	2026-08-14 14:34:26.982396+00	21	5	PDCC	11
-9cac91a9-2268-41ea-8cca-a55413bd36a6	DM NEUROLOGY	1	Clinical	\N	t	2026-08-14 14:34:27.066678+00	1	6	Super Speciality (DM/MCH)	11
-318c1a65-7ab7-4909-8c94-1aeaf0b8e85f	MCH Neurosurgery	2	Clinical	\N	t	2026-08-14 14:34:27.073559+00	2	6	Super Speciality (DM/MCH)	11
-96ed5309-0b70-4ed5-b88d-1d08f87daf24	MBBS FMG INTERNSHIP Department	1	Clinical	\N	t	2026-08-14 14:34:27.161285+00	1	7	MBBS FMG INTERNSHIP	11
-d0b7f109-750d-4056-a315-e92427f09e79	MBBS SRMS INTERNSHIP Department	1	Clinical	\N	t	2026-08-14 14:34:27.24108+00	1	8	MBBS SRMS INTERNSHIP	11
-c883d4c2-dc0a-4f02-8806-deddbcf7f149	None	NO	Clinical	\N	t	2026-08-01 15:52:09.866547+00	\N	\N	\N	\N
-e730b589-4310-416b-be05-5ce9e42426e8	PHYSIOLOGY	PY	Pre-Clinical	\N	t	2026-08-02 14:01:38.313636+00	\N	\N	\N	\N
-4f7fa8e5-a7c8-4169-bcdf-069ffa170b8d	ANATOMY	AN	Pre-Clinical	\N	t	2026-08-02 14:27:16.715564+00	\N	\N	\N	\N
-2c10df43-d7c8-4f09-818c-9f8fdc79d5ba	BIO CHEMISTRY	BC	Pre-Clinical	\N	t	2026-08-02 14:27:34.733121+00	\N	\N	\N	\N
-01f233a9-0fe1-4c17-8cab-712ea2468a68	COMMUNITY MEDICINE	CM	Pre-Clinical	\N	t	2026-08-02 14:27:49.101155+00	\N	\N	\N	\N
-f72221a0-46b1-4eec-b1b3-0925a877795d	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-08 17:10:22.986053+00	\N	\N	\N	\N
-091f60d0-b9b1-4a79-acd8-3418d23d982a	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-08 17:10:22.986053+00	\N	\N	\N	\N
-ea9b4e7b-2d26-4ed1-9f4a-7e53a7b194d0	IDCCM	1	Clinical	\N	t	2026-08-14 14:34:26.746105+00	1	3	ISCCM	11
-c71c02ae-021f-4658-b9af-6606841ee83e	POST MBBS COURSE	2	Clinical	\N	t	2026-08-14 14:34:26.750367+00	2	3	ISCCM	11
-d5660638-4650-407b-9847-90dac9d6532c	IDCCN	3	Clinical	\N	t	2026-08-14 14:34:26.754685+00	3	3	ISCCM	11
-a5985ea3-e4eb-4cac-ab1c-07f4633b51df	N.A.	1	Clinical	\N	t	2026-08-14 14:34:26.825198+00	1	4	BDTC	11
-8adeba68-93b0-485f-a4ea-80326519cb59	M.D. RADIO DIAGONOSIS	1	Clinical	\N	t	2026-08-14 14:34:26.899903+00	1	5	PDCC	11
-a3537fac-12e3-4bb7-a001-6ecd58ae47f6	M.D. GENERAL MEDICINE	2	Clinical	\N	t	2026-08-14 14:34:26.904189+00	2	5	PDCC	11
-7e703fda-ee7b-4548-b416-f68d004e05be	M.S. OPTHALMOLOGY	3	Clinical	\N	t	2026-08-14 14:34:26.908272+00	3	5	PDCC	11
-a9051005-db30-4dfc-8e3e-94c94544fbec	M.D. PAEDIATRICS	4	Clinical	\N	t	2026-08-14 14:34:26.912359+00	4	5	PDCC	11
-4b52fe77-74be-429b-a241-f93fc873498b	M.S. ENT	5	Clinical	\N	t	2026-08-14 14:34:26.916132+00	5	5	PDCC	11
-344cf5b2-13d9-4a5d-a227-583dd032d3ef	M.S. ORTHOPAEDICS	6	Clinical	\N	t	2026-08-14 14:34:26.919989+00	6	5	PDCC	11
-5f799537-43c3-4d6b-9909-8edfbaeb7eae	M.D. DERMATOLOGY	7	Clinical	\N	t	2026-08-14 14:34:26.923389+00	7	5	PDCC	11
-d7cc770f-9579-4545-bda2-1411ef1f5248	M.S. OBSTETRICS AND GYNAECOLOGY	8	Clinical	\N	t	2026-08-14 14:34:26.927105+00	8	5	PDCC	11
-95423e7b-e617-48bd-b44a-56a6bcf7e61a	M.D. ANAESTHESIA	9	Clinical	\N	t	2026-08-14 14:34:26.930719+00	9	5	PDCC	11
-0465129f-c3fa-4e63-8b5f-a80fa04bda32	M.D. PHYSIOLOGY	10	Pre-Clinical	\N	t	2026-08-14 14:34:26.934481+00	10	5	PDCC	11
-a6cb0617-deb2-4d8d-8c62-071463d087b5	M.D. ANATOMY	11	Pre-Clinical	\N	t	2026-08-14 14:34:26.938069+00	11	5	PDCC	11
-6460ef8a-b751-4f71-aeec-86e55b62b6d3	M.D. PSYCHIATRY	12	Clinical	\N	t	2026-08-14 14:34:26.942089+00	12	5	PDCC	11
-123061bd-0f70-4932-95ad-b61d2c5b7af7	M.D. BIOCHEMISTRY	13	Clinical	\N	t	2026-08-14 14:34:26.949311+00	13	5	PDCC	11
-f870d351-0ca2-4e81-81bb-601273de2918	M.D. COMMUNITY MEDICINE	14	Clinical	\N	t	2026-08-14 14:34:26.954177+00	14	5	PDCC	11
-a2d0bc4d-b82c-4590-8618-e4dd0886f314	M.D. MICROBIOLOGY	15	Clinical	\N	t	2026-08-14 14:34:26.95872+00	15	5	PDCC	11
-34eaa928-dba8-4a4d-b84c-537959b751f1	M.B.B.S. Department	1	Clinical	\N	t	2026-08-14 14:34:26.482527+00	1	1	M.B.B.S.	11
-646a3f84-ccc6-44d7-ab64-ba3c0935331a	M.D. RADIO DIAGONOSIS	1	Clinical	\N	t	2026-08-14 14:34:26.565536+00	1	2	P.G.	11
-480c731b-9aa5-42a8-9d42-5a8fc2812a8c	M.D. GENERAL MEDICINE	2	Clinical	\N	t	2026-08-14 14:34:26.572416+00	2	2	P.G.	11
-c82b34bf-7880-4292-8bcd-b47734242ecc	M.S. OPTHALMOLOGY	3	Clinical	\N	t	2026-08-14 14:34:26.576817+00	3	2	P.G.	11
-4694c8b2-28dd-401c-ada8-b68f3e7b57df	M.D. PAEDIATRICS	4	Clinical	\N	t	2026-08-14 14:34:26.581326+00	4	2	P.G.	11
-e2473a09-8d8b-4d93-83e9-cbb4d5e65a54	M.S. ENT	5	Clinical	\N	t	2026-08-14 14:34:26.585264+00	5	2	P.G.	11
-b125434b-4459-4947-9bb8-efdd80c13044	M.S. ORTHOPAEDICS	6	Clinical	\N	t	2026-08-14 14:34:26.590161+00	6	2	P.G.	11
-0f29dc93-6f59-49cd-9351-c4de63154931	M.D. DERMATOLOGY	7	Clinical	\N	t	2026-08-14 14:34:26.594468+00	7	2	P.G.	11
-285c7854-7dd6-4af2-93ad-4aa598ada926	M.S. OBSTETRICS AND GYNAECOLOGY	8	Clinical	\N	t	2026-08-14 14:34:26.599613+00	8	2	P.G.	11
-926da84a-02b4-40ca-bc7e-231ab295a4a6	M.D. ANAESTHESIA	9	Clinical	\N	t	2026-08-14 14:34:26.603937+00	9	2	P.G.	11
-5045fe61-5aba-4045-89dc-6c67e3f18bb5	M.D. PHYSIOLOGY	10	Pre-Clinical	\N	t	2026-08-14 14:34:26.608172+00	10	2	P.G.	11
-2617afee-b94f-4a05-a0f3-b314f36ac3ed	M.D. ANATOMY	11	Pre-Clinical	\N	t	2026-08-14 14:34:26.612954+00	11	2	P.G.	11
-dc966c52-21b4-40fb-8bfe-c5e919344a0f	M.D. PSYCHIATRY	12	Clinical	\N	t	2026-08-14 14:34:26.617598+00	12	2	P.G.	11
-654cb264-33b1-4e46-8842-9398cbb0d2f9	M.D. BIOCHEMISTRY	13	Clinical	\N	t	2026-08-14 14:34:26.622474+00	13	2	P.G.	11
-c8082420-6f61-4d84-a031-0806f7a48e73	M.D. COMMUNITY MEDICINE	14	Clinical	\N	t	2026-08-14 14:34:26.627582+00	14	2	P.G.	11
-74e5e8ed-f653-445c-9594-ec0fac58f2c5	M.D. MICROBIOLOGY	15	Clinical	\N	t	2026-08-14 14:34:26.631837+00	15	2	P.G.	11
-670afce1-f6b3-41c1-b034-4325d4c47a8d	M.S. GENERAL SURGERY	16	Clinical	\N	t	2026-08-14 14:34:26.636319+00	16	2	P.G.	11
-96a292ad-1dcc-42f8-8ca8-fed399beee95	M.D. PATHOLOGY	17	Para-Clinical	\N	t	2026-08-14 14:34:26.641635+00	17	2	P.G.	11
-84557121-5cc3-49c2-8ca4-bead85f7979a	M.D. PHARMACOLOGY	18	Para-Clinical	\N	t	2026-08-14 14:34:26.646681+00	18	2	P.G.	11
-28a7656f-5440-4392-887a-e58afe331f4e	M.D. FORENSIC MEDICINE	19	Clinical	\N	t	2026-08-14 14:34:26.651567+00	19	2	P.G.	11
-a5667b9a-48ed-4ca1-a088-a6c0ccdcb3f9	M.D. RADIO THERAPY(RADIATION ONCOLOGY)	20	Clinical	\N	t	2026-08-14 14:34:26.656+00	20	2	P.G.	11
-1fb98382-3575-4c6b-badb-15c1999886a5	M.D. PULMONARY MEDICINE(RESPIRATORY)	21	Clinical	\N	t	2026-08-14 14:34:26.659899+00	21	2	P.G.	11
-98698072-8ae7-4830-9fbd-7d0e4c94d81a	M.D. IMMUNO HAEMATOLOGY AND BLOOD  TRANSFUSION	22	Clinical	\N	t	2026-08-14 14:34:26.664176+00	22	2	P.G.	11
-24116712-ccee-4ad9-b62f-a48d8a194a3d	M.D EMERGENCY MEDICINE	23	Clinical	\N	t	2026-08-14 14:34:26.668533+00	23	2	P.G.	11
-0c744897-2009-4c64-b2d6-52b5b6d04331	M.S. GENERAL SURGERY	16	Clinical	\N	t	2026-08-14 14:34:26.962462+00	16	5	PDCC	11
-9efe5059-b126-4028-b40f-f1842169e0e2	M.D. PATHOLOGY	17	Para-Clinical	\N	t	2026-08-14 14:34:26.966365+00	17	5	PDCC	11
-6753a70c-d61e-4582-9830-e17738e6f535	M.D. PHARMACOLOGY	18	Para-Clinical	\N	t	2026-08-14 14:34:26.970779+00	18	5	PDCC	11
-9476e9a7-e41f-4dc9-90aa-47bc40d72741	M.D. FORENSIC MEDICINE	19	Clinical	\N	t	2026-08-14 14:34:26.974357+00	19	5	PDCC	11
-56a58997-def2-4f51-8f2a-5ae5b2c929af	M.D. RADIO THERAPY	20	Clinical	\N	t	2026-08-14 14:34:26.978073+00	20	5	PDCC	11
-cd83d3d5-349d-40f7-8a09-6866aa160914	M.D. PULMONARY MEDICINE	21	Clinical	\N	t	2026-08-14 14:34:26.982396+00	21	5	PDCC	11
-9cac91a9-2268-41ea-8cca-a55413bd36a6	DM NEUROLOGY	1	Clinical	\N	t	2026-08-14 14:34:27.066678+00	1	6	Super Speciality (DM/MCH)	11
-318c1a65-7ab7-4909-8c94-1aeaf0b8e85f	MCH Neurosurgery	2	Clinical	\N	t	2026-08-14 14:34:27.073559+00	2	6	Super Speciality (DM/MCH)	11
-96ed5309-0b70-4ed5-b88d-1d08f87daf24	MBBS FMG INTERNSHIP Department	1	Clinical	\N	t	2026-08-14 14:34:27.161285+00	1	7	MBBS FMG INTERNSHIP	11
-d0b7f109-750d-4056-a315-e92427f09e79	MBBS SRMS INTERNSHIP Department	1	Clinical	\N	t	2026-08-14 14:34:27.24108+00	1	8	MBBS SRMS INTERNSHIP	11
 \.
 
 
@@ -34822,6 +34944,101 @@ db86a019-991e-41b7-9923-ac09a0789a43	SL	Sick Leave	10
 b93387df-0e1c-444f-a2d3-df56eb68ab63	EL	Earned Leave	30
 9392c7d2-8887-41aa-bcfd-9a5e1b3b1336	ML	Maternity Leave	180
 37696b83-c41f-45e9-81f1-f4672202e84f	COL	Compensatory Off Leave	0
+3baf0b5d-fcff-43b5-a258-26289d12ae23	CL	Casual Leave	12
+dd9b2f10-7f05-44d5-b118-c8d55e29aca8	SL	Sick Leave	10
+2c48f79c-efd8-44b5-8ee8-31dc72a5ed49	EL	Earned Leave	30
+71b50654-ca2a-4e8d-b882-a38a8b92e893	ML	Maternity Leave	180
+092d4079-08d7-4304-8880-110badab25d4	COL	Compensatory Off Leave	0
+381db429-e7b5-4956-ab64-00f1363b2dfc	CL	Casual Leave	12
+3a101f56-ea54-4c73-9b02-cd49487490aa	SL	Sick Leave	10
+2115d3f6-9030-4816-a591-71c33004f913	EL	Earned Leave	30
+d488dbef-f0a9-4eb9-bd6d-b2b4626312ce	ML	Maternity Leave	180
+038bb600-50e3-4a26-980c-5a2e5255e73b	COL	Compensatory Off Leave	0
+098b6571-9395-42a0-b503-35437ee2e54d	CL	Casual Leave	12
+4dda536d-8eaa-4b1a-8967-4950e700f9bf	SL	Sick Leave	10
+8321639b-bb97-4b8f-b76e-c66ab4e4d1c9	EL	Earned Leave	30
+afb1e54f-5fdf-43ef-a2df-dac2459a1d1e	ML	Maternity Leave	180
+ae4cb8c8-e6c4-4a56-bcfa-95fd3c172582	COL	Compensatory Off Leave	0
+e2e386f7-5bdd-4f3c-ac77-fe1d31e8df2f	CL	Casual Leave	12
+79ab5775-4097-4179-9402-4bdb49ffdb41	SL	Sick Leave	10
+f61c6ecb-d085-4add-91fe-e545a72cc08c	EL	Earned Leave	30
+b1712203-696e-439e-a8c2-475cb046a7e6	ML	Maternity Leave	180
+f7ad7345-78b4-4647-884f-fb696626eaf5	COL	Compensatory Off Leave	0
+a4a17268-55a2-4882-8f6a-3ec51db785ea	CL	Casual Leave	12
+43a3c24f-44be-4541-9980-29dd50f813b9	SL	Sick Leave	10
+839ba237-daef-43c7-99bd-10c858b691b4	EL	Earned Leave	30
+2e6595e7-531d-4ea7-852a-41946cde9261	ML	Maternity Leave	180
+88043f6e-4c5b-445a-bc28-ca41708f1e29	COL	Compensatory Off Leave	0
+78af4cf2-0c71-4b37-aa9e-b2830987c793	CL	Casual Leave	12
+405a2163-4517-48a9-82be-596ba4ab0930	SL	Sick Leave	10
+64d495ad-c0d6-4854-acdd-ffff9ccbc321	EL	Earned Leave	30
+7635d4f1-d324-4a82-8de1-ba66c46838ad	ML	Maternity Leave	180
+9096bdcd-b39d-4dfe-bb2c-f69a7f2937e4	COL	Compensatory Off Leave	0
+35573b03-eecb-4596-8237-92fe26c1b6f9	CL	Casual Leave	12
+00719234-b6f9-44a6-b283-1b0390818b4b	SL	Sick Leave	10
+9a83871b-8155-4e5c-957d-57f26c039428	EL	Earned Leave	30
+08bf062f-11e9-429f-8766-ef628f3705b3	ML	Maternity Leave	180
+d06f9065-8ce2-4e92-93fb-18135317be1d	COL	Compensatory Off Leave	0
+b27a3316-68f1-4fa5-8fc2-4c19c036c76e	CL	Casual Leave	12
+9764f9b3-7c6f-4b5c-8054-3c19f5b3f626	SL	Sick Leave	10
+49e8dcd7-ef09-4831-832d-a4040bc0aeb9	EL	Earned Leave	30
+3b88979c-e96f-4619-a838-14603bc286e0	ML	Maternity Leave	180
+13cf8738-adb6-485f-8d44-dcabbbec6b9d	COL	Compensatory Off Leave	0
+16f40360-53f4-4811-9137-c4d1e483f12d	CL	Casual Leave	12
+f9f42040-adaf-46a9-8365-fe7a4b65f7a6	SL	Sick Leave	10
+3e04408f-3f18-4bb0-8917-80ec2deada13	EL	Earned Leave	30
+bca4b9de-c9a9-4ded-860d-9c68cdea3a7c	ML	Maternity Leave	180
+3bd4107e-a214-4e58-8b19-87d6c1c50e30	COL	Compensatory Off Leave	0
+1f440f1f-07d0-49e8-a2e9-b6112f913fb7	CL	Casual Leave	12
+70899dd9-64ff-43c9-86b0-9fa27af901fb	SL	Sick Leave	10
+cfad83c1-e0b1-4757-9900-e7bc3fa39c60	EL	Earned Leave	30
+eda9741d-d7e7-42a9-8db0-b5e1ed569402	ML	Maternity Leave	180
+8e49e7f7-d86d-4295-85e8-f4f290ab0fbd	COL	Compensatory Off Leave	0
+1df290b9-0b54-4170-96ae-cb84eb716b6b	CL	Casual Leave	12
+344f945d-72a7-4ccf-9c9e-f2d78ea49947	SL	Sick Leave	10
+64c3ce18-b846-4f73-bb83-f31e6f16a5b1	EL	Earned Leave	30
+11c66d2b-d91d-465d-b379-95ff6a13e625	ML	Maternity Leave	180
+d9919fed-645e-4f12-be51-a54b2a0e39c1	COL	Compensatory Off Leave	0
+21b3fc2b-4b54-44ec-9f39-35e02b6378bb	CL	Casual Leave	12
+9492a887-3c62-471f-b8b5-99d6bfd84de4	SL	Sick Leave	10
+b496b7cc-53d5-40c2-a292-5de6fb0df737	EL	Earned Leave	30
+16e1ec87-0880-4741-beae-2ac658762625	ML	Maternity Leave	180
+91744952-c8d2-458a-bb70-860bb6ba118f	COL	Compensatory Off Leave	0
+0b1804b0-f19d-465d-bfd8-72edb6779f95	CL	Casual Leave	12
+36765c54-bd2c-4ab9-9395-aaadf6e7b947	SL	Sick Leave	10
+9523ddbe-7543-4d9f-90ad-f2e818801d84	EL	Earned Leave	30
+05b192e4-63ed-4c8d-bd95-868b13f15dec	ML	Maternity Leave	180
+3e09149f-07bc-4bbc-b191-2f9148578428	COL	Compensatory Off Leave	0
+3a0ae4c5-0d0a-4dbc-a8c7-abe126287388	CL	Casual Leave	12
+bb3a659d-8b90-4b55-8df3-81b335c11f35	SL	Sick Leave	10
+684a5b1b-3ba7-4a12-ac61-adb8d78d7751	EL	Earned Leave	30
+5ae6ed5b-b440-44fc-972f-5a5569ed2f5c	CL	Casual Leave	12
+d528e660-f54a-42a3-95ad-cff0c2d8007a	SL	Sick Leave	10
+8a4a209b-9265-4239-8ce2-c86b3d76fabc	EL	Earned Leave	30
+02b3fbea-c38a-4274-a5a5-971be5874832	ML	Maternity Leave	180
+4ff8d670-be64-4e97-a0d8-7246a74dc606	COL	Compensatory Off Leave	0
+e5eb2112-b786-4df7-830f-fa835d2aa736	CL	Casual Leave	12
+dd828194-0a5c-4be3-8725-6812f7b64cd0	SL	Sick Leave	10
+05955a26-1d51-47e8-9d13-f6998e198a01	EL	Earned Leave	30
+731f62e5-5fca-496e-842b-c293d129b5d0	ML	Maternity Leave	180
+5964b174-8bdd-4174-8a46-c01e8cfe2e65	COL	Compensatory Off Leave	0
+641d6123-8966-4521-b9f7-29956242bec4	CL	Casual Leave	12
+1babf325-39ee-4090-8615-74cd635c2d0c	SL	Sick Leave	10
+636f6bdb-0f27-47c5-a9da-330b350ff430	EL	Earned Leave	30
+e2d3dccb-f434-4c65-b37e-7fe06a60c286	ML	Maternity Leave	180
+ec3b8b5f-dc40-4843-b7b3-3450fb41037f	COL	Compensatory Off Leave	0
+a6dd8b6d-7eaa-4d2c-afc8-c475aa548c9a	ML	Maternity Leave	180
+c0ada4c8-ea1f-4507-8844-85f96aa074fc	COL	Compensatory Off Leave	0
+cb73dc57-aa7f-405f-b0b6-7e2458e4cb5b	CL	Casual Leave	12
+22a89b5f-3e54-40f2-929b-af446b192947	SL	Sick Leave	10
+037191f6-12ac-4e33-82cb-7f36053255e2	EL	Earned Leave	30
+dc806b40-baf2-4257-9f86-b4097b0e83a6	ML	Maternity Leave	180
+d096884d-ceac-41c1-b03b-415398b340e0	COL	Compensatory Off Leave	0
+4802f0c9-b3c6-466b-b2bd-1b56ca949ec8	CL	Casual Leave	12
+57716116-421d-4641-b8f2-d0eb0fa9ce05	SL	Sick Leave	10
+2bb9d025-5bfd-40ec-a68a-71dbceba9b08	EL	Earned Leave	30
+4fbfa251-24f0-4c3d-9e98-6b3779a08322	ML	Maternity Leave	180
+7245e4e4-2a53-4ab7-901f-ed065e01b7ea	COL	Compensatory Off Leave	0
 \.
 
 
@@ -34894,8 +35111,6 @@ COPY "tenant_srms-ims".notifications (id, recipient_id, title, body, type, is_re
 --
 
 COPY "tenant_srms-ims".professional_linkers (id, code, name, course_cd, professional_phase, academic_session, description, is_active, created_at) FROM stdin;
-4b7d9d2d-2bf5-4634-9913-d04993378f06	2024	2024 CBME Year	MBBS	1st Professional (Phase I)	2024-2029	NMC New Guideline -2024	t	2026-07-30 16:48:21.028992+00
-4b7d9d2d-2bf5-4634-9913-d04993378f06	2024	2024 CBME Year	MBBS	1st Professional (Phase I)	2024-2029	NMC New Guideline -2024	t	2026-07-30 16:48:21.028992+00
 \.
 
 
@@ -35388,16 +35603,6 @@ beed9ba6-ef90-4eed-911f-c505f88c6de8	PHY101	Human Physiology & Organ Systems	e73
 bd3e051a-7513-4f9e-8577-0e1ec39e3527	PY	PHYSIOLOGY	e730b589-4310-416b-be05-5ce9e42426e8	\N	10	Combined	t	f	\N	\N	\N
 5ab15870-7895-4aea-b8a3-5c8337c872c4	BC	BIOCHEMISTRY	2c10df43-d7c8-4f09-818c-9f8fdc79d5ba	\N	10	Combined	t	f	\N	\N	\N
 0f231de1-238d-4bcf-b236-7a760e091c9b	CM	COMMUNITY MEDICINE	01f233a9-0fe1-4c17-8cab-712ea2468a68	\N	10	Combined	t	f	\N	\N	\N
-836fe7e7-34f0-447f-b2d9-487ecf96a801	ANAT101	Human Anatomy & Histology	\N	d73b9a3b-c26a-4681-a9dd-5f88cd2bcb8c	6	THEORY	t	f	\N	\N	\N
-b8dc7a33-0ac9-4e6b-a254-8b7e2d4418cd	PATH301	Systemic Pathology & Microbiology	\N	d73b9a3b-c26a-4681-a9dd-5f88cd2bcb8c	4	THEORY	t	f	\N	\N	\N
-6a68b8d8-1886-4595-99fe-8f446b3b6465	SURG302	General Surgery & Skills Lab	\N	d73b9a3b-c26a-4681-a9dd-5f88cd2bcb8c	4	PRACTICAL	t	f	\N	\N	\N
-18499f5b-3208-4c5f-9133-8f88cf41cd87	PED303	Pediatrics & Neonatal Care	\N	d73b9a3b-c26a-4681-a9dd-5f88cd2bcb8c	3	THEORY	t	f	\N	\N	\N
-aab379a1-2dc5-42b6-92c2-52f3d4f17376	MED304	General Medicine & Clinical Rotation	\N	d73b9a3b-c26a-4681-a9dd-5f88cd2bcb8c	5	CLINICAL	t	f	\N	\N	\N
-6bd85322-bc0f-4d88-8701-da3308ac4989	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	t	f	\N	\N	\N
-beed9ba6-ef90-4eed-911f-c505f88c6de8	PHY101	Human Physiology & Organ Systems	e730b589-4310-416b-be05-5ce9e42426e8	\N	4	THEORY	t	f	\N	\N	\N
-bd3e051a-7513-4f9e-8577-0e1ec39e3527	PY	PHYSIOLOGY	e730b589-4310-416b-be05-5ce9e42426e8	\N	10	Combined	t	f	\N	\N	\N
-5ab15870-7895-4aea-b8a3-5c8337c872c4	BC	BIOCHEMISTRY	2c10df43-d7c8-4f09-818c-9f8fdc79d5ba	\N	10	Combined	t	f	\N	\N	\N
-0f231de1-238d-4bcf-b236-7a760e091c9b	CM	COMMUNITY MEDICINE	01f233a9-0fe1-4c17-8cab-712ea2468a68	\N	10	Combined	t	f	\N	\N	\N
 \.
 
 
@@ -35424,8 +35629,6 @@ a64dba29-16be-4782-9db4-44dc70449c71	707c5771-e963-470f-ae4a-16c3ab824724	beed9b
 --
 
 COPY "tenant_srms-ims".topics (id, subject_id, code, name, description, hours, is_active, created_at, linker_id, subject_code, unit_id, unit_code, course_cd, branch_cd, batch_year, bloom_level) FROM stdin;
-0fb688a4-41d8-4767-87e7-e010fc25355d	bd3e051a-7513-4f9e-8577-0e1ec39e3527	PY1 (2024)	Topic 01: General Physiology (2024)	General Physiology, Cell Membrane Transport, Homeostasis	2	t	2026-07-30 16:26:22.741669+00	4b7d9d2d-2bf5-4634-9913-d04993378f06	\N	\N	\N	\N	\N	\N	\N
-6fcbb147-f8f9-4f65-b63c-4ca53d6aa090	bd3e051a-7513-4f9e-8577-0e1ec39e3527	PY2 (2024)	Topic 02 : Haematology (2024)	Blood Composition, Erythropoiesis, Plasma Proteins, Hemostasis	2	t	2026-07-30 16:26:52.476434+00	4b7d9d2d-2bf5-4634-9913-d04993378f06	\N	\N	\N	\N	\N	\N	\N
 0fb688a4-41d8-4767-87e7-e010fc25355d	bd3e051a-7513-4f9e-8577-0e1ec39e3527	PY1 (2024)	Topic 01: General Physiology (2024)	General Physiology, Cell Membrane Transport, Homeostasis	2	t	2026-07-30 16:26:22.741669+00	4b7d9d2d-2bf5-4634-9913-d04993378f06	\N	\N	\N	\N	\N	\N	\N
 6fcbb147-f8f9-4f65-b63c-4ca53d6aa090	bd3e051a-7513-4f9e-8577-0e1ec39e3527	PY2 (2024)	Topic 02 : Haematology (2024)	Blood Composition, Erythropoiesis, Plasma Proteins, Hemostasis	2	t	2026-07-30 16:26:52.476434+00	4b7d9d2d-2bf5-4634-9913-d04993378f06	\N	\N	\N	\N	\N	\N	\N
 \.
@@ -35544,30 +35747,6 @@ e30c1a1e-685f-4371-9ec5-d5faf2e5fb7e	B2019-C4-9	2019	4	\N	\N	\N	t	1	M.SC. NURSIN
 0239b09b-88fa-4272-90ae-dcccac039e0e	B2024-C4-9	2024	4	\N	2024-01-09	2024-01-24	t	6	M.SC. NURSING	9	6	Batch 2024
 b118b51d-83f7-492f-95dd-c2f239623b68	B2025-C4-9	2025	4	\N	\N	\N	t	7	M.SC. NURSING	9	7	Batch 2025
 8cfd20a3-815c-4bda-82c6-216d0c3d91ee	B2026-C4-9	2026	4	\N	\N	\N	t	8	M.SC. NURSING	9	8	Batch 2026
-de03625b-8fd2-4f67-89b0-36c8a0720a04	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-b5f2303a-df0a-4278-91a6-66790d7877f3	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-4346af71-d40b-4a22-a548-7cd7297aedfa	B2017-C1-9	2017	1	\N	\N	\N	t	1	B.SC NURSING	9	1	Batch 2017
-e7260c64-554d-4f1b-ab63-2f9d2dd96624	B2018-C1-9	2018	1	\N	\N	\N	t	2	B.SC NURSING	9	2	Batch 2018
-8d7058f2-8c4d-4cb2-9b10-db5acb746104	B2019-C1-9	2019	1	\N	\N	\N	t	3	B.SC NURSING	9	3	Batch 2019
-ecd1eb0d-9a65-4880-abfe-d088e189dc67	B2020-C1-9	2020	1	\N	\N	\N	t	4	B.SC NURSING	9	4	Batch 2020
-557a59f4-3d14-46a1-a91f-02e82117c0d5	B2021-C1-9	2021	1	\N	\N	\N	t	5	B.SC NURSING	9	5	Batch 2021
-c7c73ca6-62b3-4e57-830b-c02de4efe65b	B2022-C1-9	2022	1	\N	2022-06-22	2022-12-30	t	6	B.SC NURSING	9	6	Batch 2022
-1230a030-90b3-4058-af89-a5608e026f99	B2023-C1-9	2023	1	\N	\N	\N	t	7	B.SC NURSING	9	7	Batch 2023
-14226082-66d1-45a2-8ecc-5df3873f2bc7	B2024-C1-9	2024	1	\N	2024-01-09	2024-01-24	t	8	B.SC NURSING	9	8	Batch 2024
-4aa1d089-67c7-4edd-8b38-84cbb413eb95	B2025-C1-9	2025	1	\N	\N	\N	t	9	B.SC NURSING	9	9	Batch 2025
-e9a115ce-4caf-48b2-8849-02bf5e67a4e1	B2026-C1-9	2026	1	\N	\N	\N	t	10	B.SC NURSING	9	10	Batch 2026
-a960b50d-9649-49b9-895c-0f8ffe0585ca	B2019-C3-9	2019	3	\N	\N	\N	t	1	POST B.SC. NURSING(NON-REGULAR)	9	1	Batch 2019
-2008ed98-2106-48d9-82a9-14a99a1227ff	B2020-C3-9	2020	3	\N	\N	\N	t	2	POST B.SC. NURSING(NON-REGULAR)	9	2	Batch 2020
-bce3f79b-2b74-4e66-8910-c26e2e846b68	B2021-C3-9	2021	3	\N	\N	\N	t	3	POST B.SC. NURSING(NON-REGULAR)	9	3	Batch 2021
-ef00cd3f-1591-499f-9717-b9495f3a8b8a	B2022-C3-9	2022	3	\N	2022-06-22	2022-12-30	t	4	POST B.SC. NURSING(NON-REGULAR)	9	4	Batch 2022
-e30c1a1e-685f-4371-9ec5-d5faf2e5fb7e	B2019-C4-9	2019	4	\N	\N	\N	t	1	M.SC. NURSING	9	1	Batch 2019
-16bd9569-9700-49e1-96db-fb931b22c0a8	B2020-C4-9	2020	4	\N	\N	\N	t	2	M.SC. NURSING	9	2	Batch 2020
-48c0ba67-b108-441d-b5d8-e9a43da51489	B2021-C4-9	2021	4	\N	\N	\N	t	3	M.SC. NURSING	9	3	Batch 2021
-90565e3d-8452-4f26-b0d8-c9dcbd093f23	B2022-C4-9	2022	4	\N	2022-06-22	2022-12-30	t	4	M.SC. NURSING	9	4	Batch 2022
-98e68105-b211-478a-8703-6b4832d7317e	B2023-C4-9	2023	4	\N	2023-07-31	2024-07-30	t	5	M.SC. NURSING	9	5	Batch 2023
-0239b09b-88fa-4272-90ae-dcccac039e0e	B2024-C4-9	2024	4	\N	2024-01-09	2024-01-24	t	6	M.SC. NURSING	9	6	Batch 2024
-b118b51d-83f7-492f-95dd-c2f239623b68	B2025-C4-9	2025	4	\N	\N	\N	t	7	M.SC. NURSING	9	7	Batch 2025
-8cfd20a3-815c-4bda-82c6-216d0c3d91ee	B2026-C4-9	2026	4	\N	\N	\N	t	8	M.SC. NURSING	9	8	Batch 2026
 \.
 
 
@@ -35600,14 +35779,6 @@ d9634bd7-e0dd-4974-931b-892589ea881f	\N	\N	\N	PY3.1	Describe cardiac action pote
 a03aaf7a-247b-4d4e-b5dc-1f5f1b184735	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 c5ccd9de-044b-4ca3-905d-cba83ba4d065	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 2e5c9f45-836a-4f89-9c7d-b81c2c179e81	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-da5c0fbd-9b3c-447b-a5ff-c8299b3f78c4	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-2768f90f-6d12-4e51-9c9b-58737c24b145	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-d9634bd7-e0dd-4974-931b-892589ea881f	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-3e4206f3-cdda-43ee-9277-5edf4623c3a2	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-3e9a52d5-332e-4bad-ae1e-7d1cd1a4d908	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a03aaf7a-247b-4d4e-b5dc-1f5f1b184735	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-c5ccd9de-044b-4ca3-905d-cba83ba4d065	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-2e5c9f45-836a-4f89-9c7d-b81c2c179e81	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:41.073175+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -35617,9 +35788,7 @@ c5ccd9de-044b-4ca3-905d-cba83ba4d065	\N	\N	\N	AN2.3	Describe brachial plexus for
 
 COPY "tenant_srms-nursing-college".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
 a77c048f-1861-48d7-9d03-114886d81fe7	1	B.SC NURSING	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:42.633+00	semester	1	UG
-9a285786-cad6-4e73-bd7f-b45b7ba6ca94	3	POST B.SC. NURSING(NON-REGULAR)	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:42.637707+00	semester	3	UG
-79b20755-3d1e-4daf-9293-15dc583300eb	4	M.SC. NURSING	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:42.647231+00	semester	4	PG
-a77c048f-1861-48d7-9d03-114886d81fe7	1	B.SC NURSING	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:42.633+00	semester	1	UG
+56527a72-6387-4c51-87b8-5cd9ac853fb1	2	POST B.SC. NURSING (REGULAR)	UG	3.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.097141+00	semester	2	UG
 9a285786-cad6-4e73-bd7f-b45b7ba6ca94	3	POST B.SC. NURSING(NON-REGULAR)	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:42.637707+00	semester	3	UG
 79b20755-3d1e-4daf-9293-15dc583300eb	4	M.SC. NURSING	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:42.647231+00	semester	4	PG
 \.
@@ -35659,13 +35828,8 @@ COPY "tenant_srms-nursing-college".departments (id, name, code, type, hod_user_i
 ead7b6af-3ed8-4f26-ab6c-74d40481e8e2	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:41.073175+00	\N	\N	\N	\N
 5eb3db50-b63e-48a8-b5c2-bc3dc0336841	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:41.073175+00	\N	\N	\N	\N
 80f9f0bc-9450-40e7-a01d-4a83e5a222b9	B.SC NURSING Department	1	General	\N	t	2026-08-14 14:34:25.315778+00	1	1	B.SC NURSING	9
-1b4f2c24-ca54-4ca0-9d98-b87876f2d0aa	POST B.SC. NURSING(NON-REGULAR) Department	1	General	\N	t	2026-08-14 14:34:25.418549+00	1	3	POST B.SC. NURSING(NON-REGULAR)	9
-83988c22-31a8-46f0-a227-e11efdb041bf	M.SC. NURSING Department	1	General	\N	t	2026-08-14 14:34:25.499353+00	1	4	M.SC. NURSING	9
-ead7b6af-3ed8-4f26-ab6c-74d40481e8e2	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:41.073175+00	\N	\N	\N	\N
-5eb3db50-b63e-48a8-b5c2-bc3dc0336841	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:41.073175+00	\N	\N	\N	\N
-80f9f0bc-9450-40e7-a01d-4a83e5a222b9	B.SC NURSING Department	1	General	\N	t	2026-08-14 14:34:25.315778+00	1	1	B.SC NURSING	9
-1b4f2c24-ca54-4ca0-9d98-b87876f2d0aa	POST B.SC. NURSING(NON-REGULAR) Department	1	General	\N	t	2026-08-14 14:34:25.418549+00	1	3	POST B.SC. NURSING(NON-REGULAR)	9
-83988c22-31a8-46f0-a227-e11efdb041bf	M.SC. NURSING Department	1	General	\N	t	2026-08-14 14:34:25.499353+00	1	4	M.SC. NURSING	9
+fa3a49f0-d4a4-495d-b99b-bb4c403de31c	MCA General	1	General	\N	t	2026-08-16 08:57:32.256184+00	1	3	MCA	9
+fb3dfc8c-fde7-4dfa-b7ab-ed17f4ee3df0	MBA General	1	General	\N	t	2026-08-16 08:57:32.259612+00	1	4	MBA	9
 \.
 
 
@@ -35690,10 +35854,6 @@ COPY "tenant_srms-nursing-college".examination_papers (id, code, name, subject_i
 --
 
 COPY "tenant_srms-nursing-college".faculty (id, user_id, emp_id, name, department_id, subject_id, designation, qualification, specialization, joining_date, photo_url, phone, gender, experience, staff_type, is_active, created_at, updated_at) FROM stdin;
-193a03e0-075f-46e2-a96f-af93e3ebed52	1d3cc656-bace-445f-9827-6babaec2a396	EMP1001	Dr. Sanjay Singh	ead7b6af-3ed8-4f26-ab6c-74d40481e8e2	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
-a0fe950e-04bf-4e52-9d90-da87e8e195ac	75f044e9-d4c6-4097-89e9-a627598154e4	EMP1002	Dr. Aparna Tyagi	5eb3db50-b63e-48a8-b5c2-bc3dc0336841	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
-193a03e0-075f-46e2-a96f-af93e3ebed52	1d3cc656-bace-445f-9827-6babaec2a396	EMP1001	Dr. Sanjay Singh	ead7b6af-3ed8-4f26-ab6c-74d40481e8e2	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
-a0fe950e-04bf-4e52-9d90-da87e8e195ac	75f044e9-d4c6-4097-89e9-a627598154e4	EMP1002	Dr. Aparna Tyagi	5eb3db50-b63e-48a8-b5c2-bc3dc0336841	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 \.
 
 
@@ -35776,6 +35936,91 @@ e872ebd5-a669-468a-80ba-7dbff2db5acd	COL	Compensatory Off Leave	0
 7b77ccec-1355-43f7-99cf-fe836bb19346	EL	Earned Leave	30
 7be2f69e-5fb2-49ae-b634-336e32234cb5	ML	Maternity Leave	180
 e872ebd5-a669-468a-80ba-7dbff2db5acd	COL	Compensatory Off Leave	0
+d2b37236-883f-4c5f-9282-a25e4bf6ba2b	CL	Casual Leave	12
+97b7910d-e647-4b1a-9182-ea84e5f40436	SL	Sick Leave	10
+aa222d77-03c5-4df6-9062-c0932a03767a	EL	Earned Leave	30
+134099a5-4701-4448-9ef3-a46b3a322774	ML	Maternity Leave	180
+f074c56b-f235-4e0a-8fb8-45bc01930b67	COL	Compensatory Off Leave	0
+6572207e-9b7e-44da-9d5e-c7f0d8916dac	CL	Casual Leave	12
+c7970443-8afa-44b8-9222-b27713214c77	SL	Sick Leave	10
+e742627f-6138-41f5-9896-e583a00cad5d	EL	Earned Leave	30
+1ee96de6-28c4-46e8-a0d4-bc420fc7a0e0	ML	Maternity Leave	180
+8a5d98f8-ef5d-485a-870a-3c3f537104ee	COL	Compensatory Off Leave	0
+b7b183ef-3759-4248-aa51-ad554eb3ffaf	CL	Casual Leave	12
+ac250c53-e054-48c5-b214-0f4daa190461	SL	Sick Leave	10
+06ef5cfe-156b-4b3e-b749-9c393cb50c79	EL	Earned Leave	30
+406acef0-c415-40f9-b016-e86a2846fb44	ML	Maternity Leave	180
+36866ab1-2853-455d-9f5d-b4059bb8b5e8	COL	Compensatory Off Leave	0
+918599f0-ff0b-4b72-b44c-062a971705e6	CL	Casual Leave	12
+d4730446-71f0-434b-943b-1eab53f93b53	SL	Sick Leave	10
+e837e342-473f-44ce-9132-9f4fb7b7d980	EL	Earned Leave	30
+d5268824-6467-47d1-9121-85d6d424640d	ML	Maternity Leave	180
+813c4397-cbcd-4414-8b72-58f72eaaefdd	COL	Compensatory Off Leave	0
+6fcfa43c-68af-4d2e-9a9b-9cf881935f50	CL	Casual Leave	12
+8035b051-9254-4b35-9469-b333c0849aa8	SL	Sick Leave	10
+2f27237c-de45-4242-bd3c-dfb5dfc2fc2f	EL	Earned Leave	30
+b6c4d791-edeb-489f-9599-92ae6429df82	ML	Maternity Leave	180
+359bfb68-2f92-433f-912f-c8d328d2aeff	COL	Compensatory Off Leave	0
+45e317e8-580c-4cc3-befd-aefe3c0e32f7	CL	Casual Leave	12
+e6b613c2-d170-4cd6-8549-333129f09ba0	SL	Sick Leave	10
+c6c5c973-b3f4-4df9-8c67-9db079374574	EL	Earned Leave	30
+ab9a7a9e-e230-4616-a060-1c8d857c2f00	ML	Maternity Leave	180
+69fc4962-b109-4b15-84e1-24b935639b9f	COL	Compensatory Off Leave	0
+df09ba8e-b350-42a4-834e-32d361b8b0d8	CL	Casual Leave	12
+77acffbf-98b0-4ddd-890b-8bc2d5bb2424	SL	Sick Leave	10
+a7dcaa50-cb35-41f3-9c8c-ffd79d3c468d	EL	Earned Leave	30
+8f36f3db-c9da-4075-8cfd-33df403c1328	ML	Maternity Leave	180
+43ab9129-b555-49dd-973f-e48be641aef2	COL	Compensatory Off Leave	0
+8a7c5017-3e94-4eb3-bb39-0988e7faa9b7	CL	Casual Leave	12
+bd215600-ee32-4b43-81fb-844625c8345a	SL	Sick Leave	10
+77cfd50a-8859-4fce-b15d-cdeebf02a6d4	EL	Earned Leave	30
+d2ec5973-4b2a-4973-a1f6-a31b6d38be50	ML	Maternity Leave	180
+14e23a3c-95c3-4358-9e67-b5c094a80447	COL	Compensatory Off Leave	0
+05f8e42b-4a28-4fcc-8779-09f96dc7eccb	CL	Casual Leave	12
+7fc5d7b7-0804-4b94-b179-c48ef7ec44f0	SL	Sick Leave	10
+da98e3bf-075e-40c0-bc55-4d66cd0137e9	EL	Earned Leave	30
+0f62ae9a-718f-425d-bb49-f01c8a4e4664	ML	Maternity Leave	180
+fc47fd6b-40a4-4f44-925e-28305793863a	COL	Compensatory Off Leave	0
+09ad14bd-2adc-48bf-a484-82ce4826673e	CL	Casual Leave	12
+f8fa31b0-f7fc-4bbf-9d80-a7a391ae560c	SL	Sick Leave	10
+6ba1b6cd-9a95-461a-ae20-0b6b2bee51b0	EL	Earned Leave	30
+b66cd886-785f-456e-94aa-a6dd0d28bc93	ML	Maternity Leave	180
+66875023-ad0e-4415-9fcf-6af05c19f8b0	COL	Compensatory Off Leave	0
+0ea92a8b-a383-403c-8670-0146de357580	CL	Casual Leave	12
+29278167-c5f2-4b35-97c1-78605b9671f0	SL	Sick Leave	10
+5ffe14f9-1a66-435b-be4b-c38954ecf4ab	EL	Earned Leave	30
+5cc34c29-5d19-4cee-9155-27feac3ba99d	ML	Maternity Leave	180
+247aa340-e7b0-4ff9-9fda-aec0b0e1a663	COL	Compensatory Off Leave	0
+af8fb05f-f982-4d3c-a38e-23d7fbfad7d3	CL	Casual Leave	12
+5822ec5d-a9a9-43e9-af16-f47bb47f9c33	SL	Sick Leave	10
+da345bef-fe66-40b0-a8e1-60fa9f5b9488	EL	Earned Leave	30
+abb5a376-835a-4cd4-9efe-f4c55ef4f5ab	ML	Maternity Leave	180
+fe1b0a60-1b2b-410c-ac8e-6b62919d3a0a	COL	Compensatory Off Leave	0
+45521e1f-b6f2-4cb6-aeae-f85860aba9c5	CL	Casual Leave	12
+0e6e9af4-14c1-4813-a7c2-44d9f6ed7561	SL	Sick Leave	10
+720f7c71-604a-4bfc-b2dc-03b0852b6d45	EL	Earned Leave	30
+06fd2fda-d1ed-4674-99eb-5345642ed64b	ML	Maternity Leave	180
+4c0f507b-54ab-4eb3-b1a1-3f3b5d30fb96	COL	Compensatory Off Leave	0
+0ccb4d70-2f36-4d5e-bf9a-17839a1d3e1e	CL	Casual Leave	12
+e5196e7f-e727-4af3-ad1c-5ed1718251b3	SL	Sick Leave	10
+d13083b2-a841-4e14-bfae-cefe722838f2	EL	Earned Leave	30
+752ac8fb-e18e-4e63-b184-3fbb91dc652a	CL	Casual Leave	12
+a30c175d-eca1-4c1e-b24c-7119cf43cc65	SL	Sick Leave	10
+f9962f70-00c3-469b-aa6e-e10238857fed	EL	Earned Leave	30
+6a77555e-3c65-4c2b-bdab-0cee42810e8a	ML	Maternity Leave	180
+b160d120-68b5-4a63-ae39-18002f67714b	COL	Compensatory Off Leave	0
+bbcef4f5-ed4b-40c4-92b4-4970b02db129	ML	Maternity Leave	180
+4d8d7b74-2dbe-4efc-bbda-1e0fb9493160	COL	Compensatory Off Leave	0
+e687d5a2-6bc4-45d4-9bf7-be5f1ae6d18a	CL	Casual Leave	12
+8cb108f7-a9c9-47de-939f-fc610be12441	SL	Sick Leave	10
+97b5763b-c7c6-460d-a94a-c17855615fe8	EL	Earned Leave	30
+60bb16e3-a19d-4d72-a895-b3696744aa77	ML	Maternity Leave	180
+148972b8-42ca-4d7d-8c14-001e935dc95f	COL	Compensatory Off Leave	0
+3af05da7-1e7f-4549-ad13-7b6d882b82ae	CL	Casual Leave	12
+e79c50ff-1164-4673-894d-fe4f76ddd1b9	SL	Sick Leave	10
+5add7bdb-d4c7-4f9d-9b14-cefde30de444	EL	Earned Leave	30
+3de28ee8-27b3-411c-9058-f5d892fb5ac9	ML	Maternity Leave	180
+2b3bbc3b-5263-4a2c-9b03-301913efda47	COL	Compensatory Off Leave	0
 \.
 
 
@@ -36022,8 +36267,6 @@ COPY "tenant_srms-nursing-college".subject_offerings (id, subject_id, prof_id, d
 COPY "tenant_srms-nursing-college".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 d8d93425-f1f3-4dc5-823b-ca1c1fb91a5e	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 40683317-1c62-46f3-bc9d-0efbdab5d41b	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-d8d93425-f1f3-4dc5-823b-ca1c1fb91a5e	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-40683317-1c62-46f3-bc9d-0efbdab5d41b	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -36075,15 +36318,11 @@ COPY "tenant_srms-nursing-college".users (id, email, password_hash, role, is_act
 48cba7a8-f4a2-47a0-8f14-811ade3dfe28	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 2a1f5188-2716-47fd-9c33-655c1aeecf5f	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 e25ea404-c5b2-41f2-8585-a790b48d6a9a	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
-1d3cc656-bace-445f-9827-6babaec2a396	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
-75f044e9-d4c6-4097-89e9-a627598154e4	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 5c5db9fa-a6c2-4f73-9ded-e3d23a5ac775	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 9e842f39-5376-40fd-8f81-15803dd629f2	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 48cba7a8-f4a2-47a0-8f14-811ade3dfe28	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 2a1f5188-2716-47fd-9c33-655c1aeecf5f	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 e25ea404-c5b2-41f2-8585-a790b48d6a9a	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
-1d3cc656-bace-445f-9827-6babaec2a396	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
-75f044e9-d4c6-4097-89e9-a627598154e4	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 5c5db9fa-a6c2-4f73-9ded-e3d23a5ac775	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 9e842f39-5376-40fd-8f81-15803dd629f2	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:41.073175+00	2026-08-14 14:33:41.073175+00
 \.
@@ -36148,36 +36387,6 @@ d0189cf3-1224-44f9-8522-2f47b8ad6e80	B2021-C4-8	2021	4	\N	\N	\N	t	3	ANM	8	3	Batc
 4dc4442b-9302-40c9-be3c-96ae4da257c0	B2022-C4-8	2022	4	\N	\N	\N	t	4	ANM	8	4	Batch 2022
 9e42e5aa-7723-409c-b623-8b0501a7eafb	B2023-C4-8	2023	4	\N	\N	\N	t	5	ANM	8	5	Batch 2023
 3438d52a-2c78-4e1c-a692-498a8e22e2a1	B2026-C4-8	2026	4	\N	\N	\N	t	6	ANM	8	6	Batch 2026
-2de2b8ba-edbe-4976-966c-30ed6a4ba9dd	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-fb58521c-7858-4d1b-80f0-8dbd8f6239c7	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-3ddecc8c-1cf9-4314-87ce-d8990cd8211d	B2006-C1-8	2006	1	\N	\N	\N	t	6	GNM	8	6	Batch 2006
-1a71b406-8cbe-4eb9-a733-5777f1518d77	B2008-C1-8	2008	1	\N	\N	\N	t	1	GNM	8	1	Batch 2008
-f4602cb5-d492-4d1b-9b23-2a58a60d56b0	B2009-C1-8	2009	1	\N	\N	\N	t	2	GNM	8	2	Batch 2009
-f3848762-72ad-42dd-8231-ec433595c42a	B2010-C1-8	2010	1	\N	\N	\N	t	3	GNM	8	3	Batch 2010
-0ecf5ef5-1727-4295-ba89-648467b172a1	B2011-C1-8	2011	1	\N	\N	\N	t	4	GNM	8	4	Batch 2011
-6eabaea1-dabd-4eb2-a1df-053008565248	B2012-C1-8	2012	1	\N	\N	\N	t	5	GNM	8	5	Batch 2012
-e55ca9e4-7b36-467f-9981-34718fd8c4e3	B2013-C1-8	2013	1	\N	\N	\N	t	7	GNM	8	7	Batch 2013
-8978e1a2-9d1d-4e06-a91c-9954506be1be	B2014-C1-8	2014	1	\N	\N	\N	t	8	GNM	8	8	Batch 2014
-0394c2af-c9ef-4790-902b-55be74ed607c	B2015-C1-8	2015	1	\N	\N	\N	t	9	GNM	8	9	Batch 2015
-b5dabd9e-ad14-4730-8e6a-67cdd38898fd	B2016-C1-8	2016	1	\N	\N	\N	t	10	GNM	8	10	Batch 2016
-31b37dd6-c479-41ef-b55d-af176a2ff44b	B2017-C1-8	2017	1	\N	\N	\N	t	11	GNM	8	11	Batch 2017
-c1cc4ea5-f0b1-4d97-8f3b-d98a8a6f8657	B2018-C1-8	2018	1	\N	\N	\N	t	12	GNM	8	12	Batch 2018
-5de87ee3-ff0d-44be-895d-73ee1b49aeaf	B2019-C1-8	2019	1	\N	\N	\N	t	13	GNM	8	13	Batch 2019
-2f1fd1fd-bf5c-454b-84ed-1dcee75faeef	B2020-C1-8	2020	1	\N	\N	\N	t	14	GNM	8	14	Batch 2020
-7156ae98-a2bd-42e7-be8c-d95f0d5fcf65	B2021-C1-8	2021	1	\N	\N	\N	t	15	GNM	8	15	Batch 2021
-296b9b96-a5ca-432a-9189-51dc8730311a	B2022-C1-8	2022	1	\N	2022-03-09	2022-11-30	t	16	GNM	8	16	Batch 2022
-316c1d2b-6785-4533-a030-d5ae678d2bb3	B2023-C1-8	2023	1	\N	\N	\N	t	17	GNM	8	17	Batch 2023
-200ef3b5-88cf-424d-9732-392a4b60a40c	B2024-C1-8	2024	1	\N	2024-01-09	2024-01-24	t	18	GNM	8	18	Batch 2024
-e7fa2f3c-fdd4-4a05-bbbf-90c730537f63	B2025-C1-8	2025	1	\N	\N	\N	t	19	GNM	8	19	Batch 2025
-a6c927c8-8cef-4f20-9a60-7d0e0817dfd9	B2026-C1-8	2026	1	\N	\N	\N	t	20	GNM	8	20	Batch 2026
-de32b42f-756c-47a8-83c4-4d2ddb198398	B2011-C2-8	2011	2	\N	\N	\N	t	1	PARAMEDICAL	8	1	Batch 2011
-a08d8afe-704b-493f-b334-4a2157d8fa74	B2016-C3-8	2016	3	\N	\N	\N	t	1	NURSING ASST.	8	1	Batch 2016
-a45a5847-35dc-447b-beaa-d4c1da5a32ff	B2019-C4-8	2019	4	\N	\N	\N	t	1	ANM	8	1	Batch 2019
-eb582d6d-1b4c-41bd-94d2-a1d64aa375d8	B2020-C4-8	2020	4	\N	\N	\N	t	2	ANM	8	2	Batch 2020
-d0189cf3-1224-44f9-8522-2f47b8ad6e80	B2021-C4-8	2021	4	\N	\N	\N	t	3	ANM	8	3	Batch 2021
-4dc4442b-9302-40c9-be3c-96ae4da257c0	B2022-C4-8	2022	4	\N	\N	\N	t	4	ANM	8	4	Batch 2022
-9e42e5aa-7723-409c-b623-8b0501a7eafb	B2023-C4-8	2023	4	\N	\N	\N	t	5	ANM	8	5	Batch 2023
-3438d52a-2c78-4e1c-a692-498a8e22e2a1	B2026-C4-8	2026	4	\N	\N	\N	t	6	ANM	8	6	Batch 2026
 \.
 
 
@@ -36210,14 +36419,6 @@ c1fa8247-c478-4d78-b723-ac4169a9403e	\N	\N	\N	PY3.1	Describe cardiac action pote
 85240944-3a00-4486-b7f3-895b5a706873	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 a35108d5-d01e-405c-bed3-e5b2fcd69174	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 0ec092fb-632e-4ad6-b969-df2b8cbec433	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-731f3698-7bad-4327-a33c-3a4d5fbb3462	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-09d9427d-0544-430f-a0bb-bbb9b3f54e1a	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-c1fa8247-c478-4d78-b723-ac4169a9403e	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-49caf579-d863-4c15-b501-f9e5a079dd50	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-7f01c9e4-ece0-411c-8305-3271c21990d0	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-85240944-3a00-4486-b7f3-895b5a706873	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a35108d5-d01e-405c-bed3-e5b2fcd69174	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-0ec092fb-632e-4ad6-b969-df2b8cbec433	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:40.039806+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -36226,10 +36427,6 @@ a35108d5-d01e-405c-bed3-e5b2fcd69174	\N	\N	\N	AN2.3	Describe brachial plexus for
 --
 
 COPY "tenant_srms-nursing-school".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-a2889764-a473-4357-93b7-899596dfcf38	1	GNM	Diploma	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:41.056779+00	semester	1	Diploma
-18adab49-7bf1-4116-b145-c21e0bf16cc7	2	PARAMEDICAL	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:41.061833+00	semester	2	UG
-01f88168-34f7-480f-8d58-433fc22d27a4	3	NURSING ASST.	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:41.065982+00	semester	3	UG
-c104b739-965f-4d67-8efb-25e3f9282799	4	ANM	Diploma	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:41.070027+00	semester	4	Diploma
 a2889764-a473-4357-93b7-899596dfcf38	1	GNM	Diploma	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:41.056779+00	semester	1	Diploma
 18adab49-7bf1-4116-b145-c21e0bf16cc7	2	PARAMEDICAL	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:41.061833+00	semester	2	UG
 01f88168-34f7-480f-8d58-433fc22d27a4	3	NURSING ASST.	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:41.065982+00	semester	3	UG
@@ -36271,23 +36468,13 @@ COPY "tenant_srms-nursing-school".departments (id, name, code, type, hod_user_id
 45b9cf1e-5389-4502-a3fb-355d498681fb	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:40.039806+00	\N	\N	\N	\N
 9c77ff55-1704-4bf3-8cf2-498dcac3673c	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:40.039806+00	\N	\N	\N	\N
 faa252c1-ea65-4e87-afa5-bbd9ebb52af2	NURSING COURSE	1	General	\N	t	2026-08-14 14:34:24.847949+00	1	1	GNM	8
-63da627d-0207-4189-b0fd-cbbd75ad4ad2	B.M.L.T.	1	General	\N	t	2026-08-14 14:34:24.928595+00	1	2	PARAMEDICAL	8
 fdf961a3-22f6-4efc-ba40-26c2edcaa461	B.P.T.	2	General	\N	t	2026-08-14 14:34:24.933148+00	2	2	PARAMEDICAL	8
 6c7c4c19-6e58-4749-82ae-2f4999b4bc12	C.T./MRI	3	General	\N	t	2026-08-14 14:34:24.936963+00	3	2	PARAMEDICAL	8
 0ac64f0f-2eb1-4648-9e34-622d07df5cc8	OPTOMETRY	4	Engineering	\N	t	2026-08-14 14:34:24.940998+00	4	2	PARAMEDICAL	8
 4d139e25-e581-4a7d-b822-5fa55415b743	RADIO	5	General	\N	t	2026-08-14 14:34:24.944393+00	5	2	PARAMEDICAL	8
-1917a748-56f2-4365-9ecb-518d510bcbef	.	1	General	\N	t	2026-08-14 14:34:25.034672+00	1	3	NURSING ASST.	8
-8090f73a-6e6b-48c3-bab8-7acc0a382f61	ANM Department	1	General	\N	t	2026-08-14 14:34:25.119221+00	1	4	ANM	8
-45b9cf1e-5389-4502-a3fb-355d498681fb	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:40.039806+00	\N	\N	\N	\N
-9c77ff55-1704-4bf3-8cf2-498dcac3673c	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:40.039806+00	\N	\N	\N	\N
-faa252c1-ea65-4e87-afa5-bbd9ebb52af2	NURSING COURSE	1	General	\N	t	2026-08-14 14:34:24.847949+00	1	1	GNM	8
-63da627d-0207-4189-b0fd-cbbd75ad4ad2	B.M.L.T.	1	General	\N	t	2026-08-14 14:34:24.928595+00	1	2	PARAMEDICAL	8
-fdf961a3-22f6-4efc-ba40-26c2edcaa461	B.P.T.	2	General	\N	t	2026-08-14 14:34:24.933148+00	2	2	PARAMEDICAL	8
-6c7c4c19-6e58-4749-82ae-2f4999b4bc12	C.T./MRI	3	General	\N	t	2026-08-14 14:34:24.936963+00	3	2	PARAMEDICAL	8
-0ac64f0f-2eb1-4648-9e34-622d07df5cc8	OPTOMETRY	4	Engineering	\N	t	2026-08-14 14:34:24.940998+00	4	2	PARAMEDICAL	8
-4d139e25-e581-4a7d-b822-5fa55415b743	RADIO	5	General	\N	t	2026-08-14 14:34:24.944393+00	5	2	PARAMEDICAL	8
-1917a748-56f2-4365-9ecb-518d510bcbef	.	1	General	\N	t	2026-08-14 14:34:25.034672+00	1	3	NURSING ASST.	8
-8090f73a-6e6b-48c3-bab8-7acc0a382f61	ANM Department	1	General	\N	t	2026-08-14 14:34:25.119221+00	1	4	ANM	8
+48614887-9e20-4d0d-bb40-583796fe6f5b	MCA General	1	General	\N	t	2026-08-16 08:57:32.242853+00	1	3	MCA	8
+f642eec9-c683-4844-bc41-0c8fc3cd1c14	MBA General	1	General	\N	t	2026-08-16 08:57:32.247192+00	1	4	MBA	8
+f2064e44-3435-4230-81b0-3a8be5fdf44a	B.Pharm General	1	General	\N	t	2026-08-16 08:57:32.250549+00	1	2	B.PHARM.	8
 \.
 
 
@@ -36312,10 +36499,6 @@ COPY "tenant_srms-nursing-school".examination_papers (id, code, name, subject_id
 --
 
 COPY "tenant_srms-nursing-school".faculty (id, user_id, emp_id, name, department_id, subject_id, designation, qualification, specialization, joining_date, photo_url, phone, gender, experience, staff_type, is_active, created_at, updated_at) FROM stdin;
-0177c860-d525-44d6-b52a-94ec10955d5d	12fee4f8-7a5a-4cd8-b48a-96f30a75b17b	EMP1001	Dr. Sanjay Singh	45b9cf1e-5389-4502-a3fb-355d498681fb	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
-2f91c8d2-34a1-4cf4-bb72-2654b3972747	c0ba54dd-b3b4-4d69-8cc5-ada0ac930b32	EMP1002	Dr. Aparna Tyagi	9c77ff55-1704-4bf3-8cf2-498dcac3673c	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
-0177c860-d525-44d6-b52a-94ec10955d5d	12fee4f8-7a5a-4cd8-b48a-96f30a75b17b	EMP1001	Dr. Sanjay Singh	45b9cf1e-5389-4502-a3fb-355d498681fb	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
-2f91c8d2-34a1-4cf4-bb72-2654b3972747	c0ba54dd-b3b4-4d69-8cc5-ada0ac930b32	EMP1002	Dr. Aparna Tyagi	9c77ff55-1704-4bf3-8cf2-498dcac3673c	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 \.
 
 
@@ -36398,6 +36581,91 @@ a0734f18-986c-4244-93c3-28952dd16544	COL	Compensatory Off Leave	0
 992313be-da8e-42e9-a115-d2ed6bb0dcea	EL	Earned Leave	30
 144d85d6-cf87-4cfc-9501-78841c81b69e	ML	Maternity Leave	180
 a0734f18-986c-4244-93c3-28952dd16544	COL	Compensatory Off Leave	0
+cd1813a3-1a96-4cca-9db3-c8d9ba2a849e	CL	Casual Leave	12
+8f778f79-fdf5-4490-9790-88416b5c9486	SL	Sick Leave	10
+f36bf10c-19ef-4ed9-ae00-14c7c32c2be6	EL	Earned Leave	30
+0c5d97f2-396d-4a7a-9c0a-150bd17a1c0d	ML	Maternity Leave	180
+19170130-2f98-47f4-a7bf-be8f0ee236d5	COL	Compensatory Off Leave	0
+4a6fa664-1933-4f6a-bb2c-88595e57e8f4	CL	Casual Leave	12
+f3d88be2-d98a-4318-b091-a602e1f2477f	SL	Sick Leave	10
+be830561-f28b-47c7-8481-01fa4d4b3d84	EL	Earned Leave	30
+82138c08-6c49-4719-836b-03632fa5be94	ML	Maternity Leave	180
+9e2f84a4-61c2-4f4e-85e0-85013444d923	COL	Compensatory Off Leave	0
+9d6ff2c4-4446-464f-b95a-ef30426fdd28	CL	Casual Leave	12
+0700835a-cded-470d-8116-85511ad8ab43	SL	Sick Leave	10
+de6697ef-f95a-4a18-a0c7-650b2453dacf	EL	Earned Leave	30
+f7af368a-69f5-4cfb-99d6-e9efe39cffed	ML	Maternity Leave	180
+04e4421b-0bc9-4d3c-994b-0cdbb272c0d2	COL	Compensatory Off Leave	0
+f7a757da-e005-4ec4-bc6f-b4ef79f863b8	CL	Casual Leave	12
+e48249d8-7e07-4eaa-9c6c-c55c40269518	SL	Sick Leave	10
+3b02bcb2-48c5-4daf-ac3e-f988ee29b387	EL	Earned Leave	30
+12cecf80-b49c-4a5e-893e-96f8cbad8739	ML	Maternity Leave	180
+182ad4f8-fe81-4175-a7ba-c5089f0ff7c4	COL	Compensatory Off Leave	0
+3a08f25a-7696-4e79-899e-cd3fe3233956	CL	Casual Leave	12
+f0261dcc-0ace-49de-9946-345ec44ee2d6	SL	Sick Leave	10
+d22f40cb-8f84-49cf-bc27-30813ca9e53d	EL	Earned Leave	30
+3b276ff1-8340-4a45-89bd-0e39b21d43d6	ML	Maternity Leave	180
+ad2ee094-98d6-4663-88f2-bce2b7c85c69	COL	Compensatory Off Leave	0
+019fd4ac-5185-4a86-b454-78928a11a831	CL	Casual Leave	12
+7e8c54d9-23fd-464d-bb21-966fa361e4f1	SL	Sick Leave	10
+57126920-f012-40b9-b3cc-7e001582d1da	EL	Earned Leave	30
+1e7e9f13-c9a9-4808-afc5-8a04d71a8aa1	ML	Maternity Leave	180
+9c178190-cacc-44e8-9065-7fc7d79ea3a0	COL	Compensatory Off Leave	0
+ab7b3005-72a3-48e0-a9a6-3c8744e5e44e	CL	Casual Leave	12
+d43f9f9e-2a53-48a1-93c3-fb3af20db484	SL	Sick Leave	10
+8f8f27f5-8e2c-4911-9df1-9595fe02f9ef	EL	Earned Leave	30
+be50c9eb-28fa-4ec3-bb5e-d5ea720b7543	ML	Maternity Leave	180
+46107690-6134-4b4b-a641-0294bee9b992	COL	Compensatory Off Leave	0
+a951160a-4f6e-4abe-a1ac-06e1958f020f	CL	Casual Leave	12
+4e97dccf-13ce-4ff6-b484-bf99ad3a53ae	SL	Sick Leave	10
+8666c598-1ebd-4993-a4f5-66c8a8e15275	EL	Earned Leave	30
+4e717bad-2c40-4750-ae4b-e127bfcc8cc2	ML	Maternity Leave	180
+ab12941b-bc48-4732-8953-8b35f54f3a42	COL	Compensatory Off Leave	0
+ab5bf495-0375-4cc8-a012-368c6de0f4ce	CL	Casual Leave	12
+cc899a26-999d-4724-86d3-06d4487431d5	SL	Sick Leave	10
+0c62c4be-eb17-4506-be3b-50331aa95c06	EL	Earned Leave	30
+daf3c268-c04b-4d8e-a9a7-c193e2457e50	ML	Maternity Leave	180
+35b9a4dd-d45f-440e-9829-332475d9bf6e	COL	Compensatory Off Leave	0
+924be1c4-fa34-4ba6-b20f-1385174475bc	CL	Casual Leave	12
+177e392d-c3dd-42f4-a9d3-18d001b7d9eb	SL	Sick Leave	10
+c0fa811c-514c-4fcb-962e-7f1c0d05097c	EL	Earned Leave	30
+98d5d839-5ffe-4b34-a42d-b8a96dc9915d	ML	Maternity Leave	180
+464ae5fd-6a7e-4205-912c-cfbaa9257712	COL	Compensatory Off Leave	0
+f080afc0-9dd8-4dd9-8ee6-ffddeb94e104	CL	Casual Leave	12
+d7e87b65-7599-47af-b2eb-9d22ff3e2230	SL	Sick Leave	10
+c786258a-3eb9-405d-8beb-309ab2b70ccd	EL	Earned Leave	30
+68c0dfe2-c378-4660-8775-9a473721be1a	ML	Maternity Leave	180
+9b6ba775-d1f9-4f6e-9f57-5c659be3ba61	COL	Compensatory Off Leave	0
+c11bfe22-f607-4dd9-a17d-006fd8cb76f4	CL	Casual Leave	12
+050f5f71-fa30-4fcd-97b6-402ebc436d86	SL	Sick Leave	10
+6725dd57-5dfc-406e-ac23-08b3c04c11b8	EL	Earned Leave	30
+3c1c7039-4884-47f4-86ee-792a5ef8b777	ML	Maternity Leave	180
+cdb1d4cd-f911-4d52-93a1-439cda5e1c92	COL	Compensatory Off Leave	0
+79d29e6a-57ba-4ab2-ac56-779cfc45515a	CL	Casual Leave	12
+a15458bf-a361-4412-adc7-fa7778ae0bd8	SL	Sick Leave	10
+23754fa8-15a4-4c12-8096-1667a7848473	EL	Earned Leave	30
+cf37a6ed-0916-466c-bbcf-d14ddaade82f	ML	Maternity Leave	180
+4a661a55-3cfe-40b4-98da-38290382b56d	COL	Compensatory Off Leave	0
+195ec466-d3cf-465c-9d7d-57684d0cea70	CL	Casual Leave	12
+a4ce5660-bef8-4e77-8dc0-c021ac30a2a4	SL	Sick Leave	10
+b9ed58ee-ae19-4d4d-bcdd-5f2eac6a1579	EL	Earned Leave	30
+2e7dfc17-52a1-4332-9e6e-78c47a1bbedb	CL	Casual Leave	12
+c8e8126b-4129-42d6-923c-e4b4514daafa	SL	Sick Leave	10
+0254a85f-8fad-4231-9a3e-3e8ae90d9e45	EL	Earned Leave	30
+189c62ca-bb08-486c-b25a-0f70b531d384	ML	Maternity Leave	180
+f62469ca-2dee-4fc7-a3ac-ff164555fdcb	COL	Compensatory Off Leave	0
+83bb828f-ec6d-4cfe-99cb-7142c187dac5	ML	Maternity Leave	180
+4bfa0aba-e924-4d8b-ae09-b0e0c6497112	COL	Compensatory Off Leave	0
+3294cf36-033d-441a-8c25-c4d7dc359c9b	CL	Casual Leave	12
+c14d7e31-deaa-4ee4-9c6d-c02032b0d976	SL	Sick Leave	10
+49d22bfe-26f9-42ab-a4aa-a2538a945a37	EL	Earned Leave	30
+43c48825-95be-4097-827d-4e7e7fc87c23	ML	Maternity Leave	180
+c3cb16fd-701d-46e8-809b-d179eeb302b7	COL	Compensatory Off Leave	0
+dcff7ecf-4260-4981-aef1-4101f450c7e3	CL	Casual Leave	12
+b8057f99-83f2-407c-9dde-67817015105e	SL	Sick Leave	10
+d0938042-063f-44be-a4bf-227902080530	EL	Earned Leave	30
+487c1b8c-ef2f-42af-94e4-e114396f4db3	ML	Maternity Leave	180
+25b14bf1-8aea-4aa9-9a3a-c118d2f5e71e	COL	Compensatory Off Leave	0
 \.
 
 
@@ -36644,8 +36912,6 @@ COPY "tenant_srms-nursing-school".subject_offerings (id, subject_id, prof_id, dt
 COPY "tenant_srms-nursing-school".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 356a943f-35ea-415a-8aac-d8e42c5e6c91	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 d3a223ce-6b82-4414-ad66-1fdd2758c6f4	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-356a943f-35ea-415a-8aac-d8e42c5e6c91	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-d3a223ce-6b82-4414-ad66-1fdd2758c6f4	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -36697,15 +36963,11 @@ COPY "tenant_srms-nursing-school".users (id, email, password_hash, role, is_acti
 2ce93dc4-9e38-4c97-95b1-935ce571fb76	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 9de15fd9-9d4c-4582-b7f1-68516a7f326b	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 d8c25a47-d7be-454d-8612-b8d2785cb94f	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
-12fee4f8-7a5a-4cd8-b48a-96f30a75b17b	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
-c0ba54dd-b3b4-4d69-8cc5-ada0ac930b32	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 2ba846ed-84bd-4f59-9239-ae8ef96459a9	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 878db400-71f9-4ffd-a13f-d11e9b98a408	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 2ce93dc4-9e38-4c97-95b1-935ce571fb76	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 9de15fd9-9d4c-4582-b7f1-68516a7f326b	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 d8c25a47-d7be-454d-8612-b8d2785cb94f	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
-12fee4f8-7a5a-4cd8-b48a-96f30a75b17b	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
-c0ba54dd-b3b4-4d69-8cc5-ada0ac930b32	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 2ba846ed-84bd-4f59-9239-ae8ef96459a9	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 878db400-71f9-4ffd-a13f-d11e9b98a408	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:40.039806+00	2026-08-14 14:33:40.039806+00
 \.
@@ -36743,9 +37005,6 @@ COPY "tenant_srms-quiz-panel".batches (id, code, year, course_cd, department_id,
 bee2705c-6aff-4f21-9c25-a7de12e5370d	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
 746661e3-c6c3-4132-adf3-f09bdd5b72b9	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
 094968d9-e789-4397-b05c-5800ea6bc668	1	2022	1	\N	\N	\N	t	1	ONLINE TEST	13	1	Batch 2022
-bee2705c-6aff-4f21-9c25-a7de12e5370d	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-746661e3-c6c3-4132-adf3-f09bdd5b72b9	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-094968d9-e789-4397-b05c-5800ea6bc668	1	2022	1	\N	\N	\N	t	1	ONLINE TEST	13	1	Batch 2022
 \.
 
 
@@ -36778,14 +37037,6 @@ ad6fe137-40ef-4866-a39c-ce8032208ce5	\N	\N	\N	PY5.1	Describe synaptic transmissi
 df6348e1-4945-4dd2-b3e5-3f5e5f576a27	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 5288daa1-4423-4a2c-9881-770e86f77d66	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 94ea70ae-c99b-49d9-93b8-1b06ebaa5f59	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-0958e0ca-1063-4662-aacf-544e765fa8d1	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-53c10d33-6fbf-4c08-b058-27c42fd70051	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-b2f254e7-9cb4-427e-9ef0-b18b98455ae1	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-fe004f64-3550-404c-a2e6-e6debda3b4e5	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-ad6fe137-40ef-4866-a39c-ce8032208ce5	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-df6348e1-4945-4dd2-b3e5-3f5e5f576a27	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-5288daa1-4423-4a2c-9881-770e86f77d66	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-94ea70ae-c99b-49d9-93b8-1b06ebaa5f59	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:45.122331+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -36794,7 +37045,6 @@ df6348e1-4945-4dd2-b3e5-3f5e5f576a27	\N	\N	\N	AN1.1	Describe osteology of upper 
 --
 
 COPY "tenant_srms-quiz-panel".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-db6b95c5-be42-4842-8874-480c10a4fde4	1	ONLINE TEST	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:46.135907+00	semester	1	Certificate
 db6b95c5-be42-4842-8874-480c10a4fde4	1	ONLINE TEST	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:46.135907+00	semester	1	Certificate
 \.
 
@@ -36830,9 +37080,6 @@ f3ad0221-63d8-4da2-9242-65413cf6227d	EL	Electives	t
 --
 
 COPY "tenant_srms-quiz-panel".departments (id, name, code, type, hod_user_id, is_active, created_at, branch_cd, course_cd, course_name, colg_cd) FROM stdin;
-c085f742-526f-47f0-a048-41ef86243b8b	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:45.122331+00	\N	\N	\N	\N
-0e8a0f6d-4ca8-4e5c-86c9-b932c06e9902	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:45.122331+00	\N	\N	\N	\N
-60f7cf04-7441-491f-854e-941fc1731cf7	2022	1	General	\N	t	2026-08-14 14:34:27.971023+00	1	1	ONLINE TEST	13
 c085f742-526f-47f0-a048-41ef86243b8b	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:45.122331+00	\N	\N	\N	\N
 0e8a0f6d-4ca8-4e5c-86c9-b932c06e9902	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:45.122331+00	\N	\N	\N	\N
 60f7cf04-7441-491f-854e-941fc1731cf7	2022	1	General	\N	t	2026-08-14 14:34:27.971023+00	1	1	ONLINE TEST	13
@@ -36946,6 +37193,91 @@ fcc304b5-ce45-4342-a5b2-fb2509153a19	ML	Maternity Leave	180
 a2ae977a-1205-449a-87ca-d5c25bcb20d8	EL	Earned Leave	30
 fcc304b5-ce45-4342-a5b2-fb2509153a19	ML	Maternity Leave	180
 7abb8d92-c01a-4892-bc13-c7698a88a6ea	COL	Compensatory Off Leave	0
+3dd1504d-cf29-4bbe-b153-a4827e7641cd	CL	Casual Leave	12
+efbe6276-2aba-4b62-97d7-92ff656f1172	SL	Sick Leave	10
+17bbce85-558a-472a-a70a-b4cad23cfab4	EL	Earned Leave	30
+63f37bca-0519-402b-8476-78f020d9ea2b	ML	Maternity Leave	180
+7dc04612-1e5e-44ba-8585-760c3c116650	COL	Compensatory Off Leave	0
+53e41a73-0591-454c-a37f-5cf8044d0394	CL	Casual Leave	12
+1cbe2361-8298-48f0-9af4-000f930e907d	SL	Sick Leave	10
+02192030-da81-4212-a205-b186ec0671c6	EL	Earned Leave	30
+34f7f7d7-1da4-4443-8a5e-3b51ffd99b12	ML	Maternity Leave	180
+9e686bc1-6fb6-4865-90be-1c0556c02ee4	COL	Compensatory Off Leave	0
+7833ea48-c09b-4db6-8a51-80da452feb11	CL	Casual Leave	12
+86a94385-001a-446f-935d-2444cb12d6ae	SL	Sick Leave	10
+cab7189c-4afe-40aa-980a-6c665fbc0c59	EL	Earned Leave	30
+0aaf8cf0-e660-4934-bdff-ddbd915d0df0	ML	Maternity Leave	180
+c0fe9ab4-1d07-4ca6-a80f-07b14152a1a0	COL	Compensatory Off Leave	0
+2b31da7e-bef4-4063-8c03-3f0f337a1555	CL	Casual Leave	12
+335b5456-6df9-4abb-9373-cf27d6fcf848	SL	Sick Leave	10
+76942ed3-0964-4230-ac7e-e2c96e970d7f	EL	Earned Leave	30
+62a4350a-26c1-4dbc-969e-276336f5274f	ML	Maternity Leave	180
+d297227a-5d5f-467e-8b81-365bc7d45be3	COL	Compensatory Off Leave	0
+154208a4-e40f-49c5-8c89-704591e1aac8	CL	Casual Leave	12
+cfaf7a49-a14e-479a-b30f-bd5c7f26ce7b	SL	Sick Leave	10
+24385b23-fdc1-400b-823b-6437567b545a	EL	Earned Leave	30
+b360da22-2871-461e-b575-1ca513b59872	ML	Maternity Leave	180
+36821cfb-69a2-45e5-93ea-1d93be35ff87	COL	Compensatory Off Leave	0
+d38670f9-cbec-4f88-b539-5f0d4846d010	CL	Casual Leave	12
+1841f1d7-3c85-4f7c-adae-3f0e72cede6b	SL	Sick Leave	10
+b0895f26-9e06-4934-9b32-dfbb38caeee8	EL	Earned Leave	30
+3953db0f-0945-4e58-8e93-5dc61e2d3b5a	ML	Maternity Leave	180
+192828a9-6a7f-41d9-8a77-8dcb3c0db7cc	COL	Compensatory Off Leave	0
+e7c141a2-318b-4fd7-9370-01c708a42ce1	CL	Casual Leave	12
+41edc9f6-01df-4e8a-aec4-4309bb0b92ba	SL	Sick Leave	10
+aef51a1e-c58c-496d-8a28-2f5519a67cc7	EL	Earned Leave	30
+51326c49-aa57-41d9-ba77-4dfc4ae0ae3c	ML	Maternity Leave	180
+cd409749-f8fb-4107-ac95-fe75a7a5c0a2	COL	Compensatory Off Leave	0
+772f3612-6479-40ed-8e9a-84854aa38213	CL	Casual Leave	12
+77d55204-97a5-45a3-bda4-bd597eb887a4	SL	Sick Leave	10
+f5598af9-0b03-41b0-b8c7-a3ab3760488b	EL	Earned Leave	30
+793261c3-eb05-4ed9-a6f3-2b9a21bc4c06	ML	Maternity Leave	180
+21e03741-c0d1-4cac-aa3e-eaabba5fa334	COL	Compensatory Off Leave	0
+f366005b-cd35-4f37-8fd1-0bd73c0c9cf8	CL	Casual Leave	12
+011080af-82e2-43d7-808f-5b1a1d258af6	SL	Sick Leave	10
+626185db-d648-4760-946a-2ebde2dd234a	EL	Earned Leave	30
+b85768c7-b75d-41b2-9527-f3fda597e914	ML	Maternity Leave	180
+de8e2904-5e95-434e-8e1f-cb553a6f50fb	COL	Compensatory Off Leave	0
+9d9c95c8-1df7-4354-a882-c59a91b69f58	CL	Casual Leave	12
+a245ad89-6f8b-46ca-aa38-ef0f3c765c62	SL	Sick Leave	10
+8ae580d1-8543-496e-8b60-9a8253c8dee0	EL	Earned Leave	30
+351d7c05-0e4c-4834-bad8-39c651911570	ML	Maternity Leave	180
+f7176927-8d46-4bc7-af18-57a39acc00e1	COL	Compensatory Off Leave	0
+d39923a7-077a-4c2e-bec9-9e96a0cbe52f	CL	Casual Leave	12
+9480b440-1b88-487e-a8e0-5255f1d93844	SL	Sick Leave	10
+f84831c6-be1c-4f8c-bc26-7d4976fa0e09	EL	Earned Leave	30
+61ce8901-56e4-4b31-bdbe-be06d8d8f6bf	ML	Maternity Leave	180
+6d6ddd38-1981-47eb-8f7b-ab6928bc5f45	COL	Compensatory Off Leave	0
+f6ed8f7e-ed67-4d02-81a0-ca7dccd8795f	CL	Casual Leave	12
+c8f797c8-2e02-45df-965a-24d4a3abcfcb	SL	Sick Leave	10
+2f84d880-9024-4acc-a797-4835aad3da05	EL	Earned Leave	30
+a6f9e519-555c-4728-9c4b-3be67c7ea41b	ML	Maternity Leave	180
+5642e6ae-70a9-416a-bb41-c29b06fcf0c4	COL	Compensatory Off Leave	0
+4c886eb9-e71a-4e38-bf9c-eaf5983925a1	CL	Casual Leave	12
+aceeb964-3c46-44fa-925e-633bb9747af6	SL	Sick Leave	10
+36643f46-afa8-4ee5-bf10-ef01c2dd33ff	EL	Earned Leave	30
+3000d399-9def-4c0a-8d2f-e288a350169a	ML	Maternity Leave	180
+5002f38a-e71c-4a41-b717-5d584e631aa6	COL	Compensatory Off Leave	0
+9d2bad21-c11c-4895-8194-c5a6e585d2a5	CL	Casual Leave	12
+801b9352-3b70-40f1-bd94-f710a35b0cb4	SL	Sick Leave	10
+0726cf26-fd0c-409a-9aac-853f9ab328f5	EL	Earned Leave	30
+869ff009-9c11-4d93-b58f-4989fb28f1ee	CL	Casual Leave	12
+fc353225-64f2-4da0-8127-84024a3a6ebc	SL	Sick Leave	10
+8663cab6-a301-49f8-960f-fe16cbe002bf	EL	Earned Leave	30
+97ab51bc-f82c-4623-9aa0-92792da55753	ML	Maternity Leave	180
+53697868-b739-4d2c-9eeb-d8649e7d010c	COL	Compensatory Off Leave	0
+62487102-c9d2-42b7-a95d-830acd7e9d8b	ML	Maternity Leave	180
+b0e5b9b8-13b1-4fda-b694-adf9a98b876a	COL	Compensatory Off Leave	0
+dfa11b1d-09d4-4369-8b66-488026326152	CL	Casual Leave	12
+6d9ba3b8-7eda-43c2-a111-4263b4c9759a	SL	Sick Leave	10
+c9506714-1621-43cb-bd12-1cb34f7eccf3	EL	Earned Leave	30
+b9df8861-df9e-45d0-ad10-27458b693e94	ML	Maternity Leave	180
+e7e8f039-4988-4ac4-adcb-29d717f40cec	COL	Compensatory Off Leave	0
+061ca3bb-0bdf-4f0e-b4fa-635089b6de00	CL	Casual Leave	12
+ce4264e6-a026-4756-b99c-d5ce73faa8dc	SL	Sick Leave	10
+08e38a36-030a-4e2b-971e-5e29e1c2ff7c	EL	Earned Leave	30
+aa06e36e-96f5-4817-81bc-937e159982fd	ML	Maternity Leave	180
+bf0dfe67-2a0f-4e49-8be6-0cd91fc0191c	COL	Compensatory Off Leave	0
 \.
 
 
@@ -37192,8 +37524,6 @@ COPY "tenant_srms-quiz-panel".subject_offerings (id, subject_id, prof_id, dtype_
 COPY "tenant_srms-quiz-panel".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 fbd6df8f-f223-4416-9c8f-5493f8f20f19	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 a61f0171-40e9-4ae6-a501-beb3d9c6acc5	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-fbd6df8f-f223-4416-9c8f-5493f8f20f19	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-a61f0171-40e9-4ae6-a501-beb3d9c6acc5	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -37310,28 +37640,6 @@ cf1c4153-7772-44c0-b01e-48b6b584760e	B2025-C8-10	2025	8	\N	\N	\N	t	3	DIPLOMA (2 
 c7870016-49bd-46c9-af7a-597239069507	B2021-C9-10	2021	9	\N	\N	\N	t	1	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10	\N	Batch 2021
 3d9c00f4-0b48-41b3-aa42-353353b16cda	B2024-C9-10	2024	9	\N	\N	\N	t	2	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2024
 96214164-a073-4272-b3f0-539c9fdbac3f	B2025-C9-10	2025	9	\N	\N	\N	t	3	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2025
-ebe9f825-7f33-43de-b6e3-0edbbb76a727	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-8c582ac4-5a86-45b8-b9b0-f8f2feecbd17	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-f904fbce-8ffc-4d94-95ad-0c02fcebdb26	B2021-C10-10	2021	10	\N	\N	\N	t	1	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10	\N	Batch 2021
-63617059-734c-4a2a-a9c5-f343ec876faf	B2024-C10-10	2024	10	\N	\N	\N	t	2	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2024
-b5a1276a-14ce-4c7c-8ab2-ec050b388673	B2025-C10-10	2025	10	\N	\N	\N	t	3	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2025
-c2887485-be22-43ca-835d-b8adf60da02e	B2024-C11-10	2024	11	\N	\N	\N	t	2	Theatre Workshop (6 months)	10	2	Batch 2024
-d6c248e9-589d-48ec-bcf8-8df2d3f56ac6	B2025-C11-10	2025	11	\N	\N	\N	t	3	Theatre Workshop (6 months)	10	2	Batch 2025
-7b8e3730-c38c-40fb-9169-458ed2e2eefa	BFeb-2022-C11-10	2026	11	\N	\N	\N	t	1	Theatre Workshop (6 months)	10	1	Batch Feb-2022
-aaf8d4c5-2eeb-4284-915c-24e4e94effb2	B2024-C14-10	2024	14	\N	\N	\N	t	2	Professional Photography - Advance Diploma (12 Months)	10	2	Batch 2024
-32bb9c42-6bd8-4ff6-a811-b3904019c3b1	B2025-C14-10	2025	14	\N	\N	\N	t	1	Professional Photography - Advance Diploma (12 Months)	10	1	Batch 2025
-3326f91d-4abe-4d6a-96a0-f902accf8f32	B2021-C6-10	2021	6	\N	\N	\N	t	1	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10	\N	Batch 2021
-dccea198-57e9-48b8-a550-80b999615301	B2024-C6-10	2024	6	\N	\N	\N	t	2	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2024
-ffc1d2ff-6394-4981-883b-2cbfcc8015fc	B2025-C6-10	2025	6	\N	\N	\N	t	3	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2025
-fb1e53f3-839d-4072-941b-991b3109eb3f	B2021-C7-10	2021	7	\N	\N	\N	t	1	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10	\N	Batch 2021
-f6f6fefa-86e0-44ae-8f3a-60fc9eb585b3	B2024-C7-10	2024	7	\N	\N	\N	t	2	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10	2	Batch 2024
-b8bde6b9-3724-4737-81c0-762d268d6ed0	B2025-C7-10	2025	7	\N	\N	\N	t	3	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10	2	Batch 2025
-5e5075a8-47bf-4a10-9c76-14dc005ec719	B2021-C8-10	2021	8	\N	\N	\N	t	1	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10	\N	Batch 2021
-766b3f9f-f42d-4ae4-84ca-1310577ea9f0	B2024-C8-10	2024	8	\N	\N	\N	t	2	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2024
-cf1c4153-7772-44c0-b01e-48b6b584760e	B2025-C8-10	2025	8	\N	\N	\N	t	3	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2025
-c7870016-49bd-46c9-af7a-597239069507	B2021-C9-10	2021	9	\N	\N	\N	t	1	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10	\N	Batch 2021
-3d9c00f4-0b48-41b3-aa42-353353b16cda	B2024-C9-10	2024	9	\N	\N	\N	t	2	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2024
-96214164-a073-4272-b3f0-539c9fdbac3f	B2025-C9-10	2025	9	\N	\N	\N	t	3	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10	2	Batch 2025
 \.
 
 
@@ -37364,14 +37672,6 @@ e2afcf02-962c-4991-aa94-90aa31fa2be6	\N	\N	\N	PY5.1	Describe synaptic transmissi
 7fa32b65-2865-4598-9540-6e57e1203551	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 ed87dcbe-7a1b-4690-9b2a-13500d25cb9f	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 5e9e0bab-f6ca-4bde-9a9b-dc76bd131d46	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-d9c0812d-bd9d-4ff7-a442-e671d6672d41	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-18120e53-b39d-4f3e-9f2a-2476d89e0491	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-d3ff4146-c7c5-49bb-9f17-2600ec2cba8f	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-7989bbf4-23d3-4256-ae5f-be93edb3286c	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-e2afcf02-962c-4991-aa94-90aa31fa2be6	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-7fa32b65-2865-4598-9540-6e57e1203551	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-ed87dcbe-7a1b-4690-9b2a-13500d25cb9f	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-5e9e0bab-f6ca-4bde-9a9b-dc76bd131d46	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:42.651065+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -37380,20 +37680,19 @@ ed87dcbe-7a1b-4690-9b2a-13500d25cb9f	\N	\N	\N	AN2.3	Describe brachial plexus for
 --
 
 COPY "tenant_srms-riddhima-bareilly".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
+1f924e15-c6b3-4e2f-bb29-0a55f9d8e310	1	CERTIFICATE COURSE (6MONTHS)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.278193+00	semester	1	Certificate
+11e2b65b-9615-47ca-8029-1de6f193dfee	2	ADVANCE CERTIFICATE (1 YEAR)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.282023+00	semester	2	Certificate
+d790873b-86e5-4260-80f5-f3ebff0fd9df	3	DIPLOMA (2 YEARS)	PG	2.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.28836+00	semester	3	PG
+5435514a-6bea-421b-9246-02d14fd25220	4	ADVANCE DIPLOMA (3 YEARS)	UG	3.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.291974+00	semester	4	UG
+f16383bd-86d4-43ee-bdeb-0116564f8b01	5	HOBBY CLASSES (45 DAYS)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.295261+00	semester	5	Certificate
 37e52f3e-d2b2-42af-8a4c-e0f9ee3a737b	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.749895+00	semester	6	Certificate
 2cce8af0-c753-4aa9-af1a-0b42914e50cd	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.75522+00	semester	7	Certificate
 812ccdb9-e439-4067-a214-23419d36f3c4	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.760417+00	semester	8	PG
 f70ee17d-ce09-4959-ac2c-477e22cff580	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.765768+00	semester	9	UG
 a1a97608-7eaa-492d-9ee2-05410bd6b8d9	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.771035+00	semester	10	Certificate
 fed71bf3-6167-40e0-9034-56f9f912def0	11	Theatre Workshop (6 months)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.797588+00	semester	11	Certificate
-223f0121-42d3-4618-b47d-a4c7fe32e7b5	14	Professional Photography - Advance Diploma (12 Months)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.801885+00	semester	14	Certificate
-5f3b350d-903c-46e3-946d-629186dac91a	15	30 Hours certificate Photography	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.815163+00	semester	15	Certificate
-37e52f3e-d2b2-42af-8a4c-e0f9ee3a737b	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.749895+00	semester	6	Certificate
-2cce8af0-c753-4aa9-af1a-0b42914e50cd	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.75522+00	semester	7	Certificate
-812ccdb9-e439-4067-a214-23419d36f3c4	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.760417+00	semester	8	PG
-f70ee17d-ce09-4959-ac2c-477e22cff580	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.765768+00	semester	9	UG
-a1a97608-7eaa-492d-9ee2-05410bd6b8d9	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.771035+00	semester	10	Certificate
-fed71bf3-6167-40e0-9034-56f9f912def0	11	Theatre Workshop (6 months)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.797588+00	semester	11	Certificate
+9edbfbd1-6916-4156-848f-d40750664266	12	Professional Photography Diploma (3 Months)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.325502+00	semester	12	Certificate
+6d88dd62-e899-4076-ad04-b0dde55260bb	13	Professional Photography Diploma (6 Months)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.330072+00	semester	13	Certificate
 223f0121-42d3-4618-b47d-a4c7fe32e7b5	14	Professional Photography - Advance Diploma (12 Months)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.801885+00	semester	14	Certificate
 5f3b350d-903c-46e3-946d-629186dac91a	15	30 Hours certificate Photography	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.815163+00	semester	15	Certificate
 \.
@@ -37437,59 +37736,6 @@ e3485ac7-2f48-480a-8361-0fcdd8af833b	Department of Anatomy	ANA	PRE_CLINICAL	\N	t
 07a76322-e9cc-4e05-8863-b427a474096c	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:25.700415+00	4	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10
 294c5722-9caf-4a16-beca-c317830e3399	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:25.703837+00	2	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10
 d2521f86-599e-4688-a7ac-f12d563f7366	DANCE-BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:25.707417+00	5	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10
-25cb7faf-8434-434a-ae58-1e18d2fae985	Theatre Workshop (6 months) Department	1	General	\N	t	2026-08-14 14:34:25.781513+00	1	11	Theatre Workshop (6 months)	10
-9607414c-2be3-49ff-bc8c-4caa3329b69f	12 Months	1	General	\N	t	2026-08-14 14:34:25.864687+00	1	14	Professional Photography - Advance Diploma (12 Months)	10
-1a755e1b-74e0-4ae9-9843-5111866351b2	PHOTOGRAPHY	1	General	\N	t	2026-08-14 14:34:25.959249+00	1	15	30 Hours certificate Photography	10
-a88d4642-5610-447a-b2f1-af12dea3e032	MUSIC (VOCAL & INSTRUMENTAL)	1	General	\N	t	2026-08-14 14:34:26.039495+00	1	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-e04ef8a0-4eff-4b4b-834c-33a93ac48cdf	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:26.044794+00	2	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-15d092c4-4541-4f32-a767-afa898eada00	DRAMA & THEATRE	3	General	\N	t	2026-08-14 14:34:26.0487+00	3	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-973b8607-dc02-4576-9dc7-3674aaed0e68	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:26.052756+00	4	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-d1f863df-3ac7-43ea-be76-659eec0d32e3	DANCE - BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:26.056613+00	5	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-7f999749-4111-4eea-8069-58d794e745d5	MUSIC (VOCAL & INSTRUMENTAL)	1	General	\N	t	2026-08-14 14:34:26.142837+00	1	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-8011e0ab-1e8c-4c9e-9a9c-975d93db4ada	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:26.149238+00	2	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-cad9ae25-539d-44c4-aec7-015413ddd7f0	DRAMA & THEATRE	3	General	\N	t	2026-08-14 14:34:26.153285+00	3	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-b2416137-8d18-4a6e-a0a5-473ff14f0c9e	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:26.15758+00	4	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-30cb6c77-1903-43f0-ae8d-8f2bc67dcb64	DANCE - BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:26.161419+00	5	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-bd36a81d-71b2-4be9-8671-b7b7a547d45e	MUSIC (VOCAL & INSTRUMENTAL)	1	General	\N	t	2026-08-14 14:34:26.236304+00	1	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-5f67d4aa-6104-4d9f-9feb-91cf114239a9	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:26.240963+00	2	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-8728e2ce-b516-499e-b705-d0d267ac5950	DRAMA & THEATRE	3	General	\N	t	2026-08-14 14:34:26.246323+00	3	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-db3ee37c-5ab8-483b-bfd9-dc085ddb24d2	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:26.250178+00	4	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-21a83b85-fd49-4a4e-ae25-2dd44ea92543	DANCE - BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:26.254256+00	5	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-2debda3f-2d8b-46f6-b052-cfd3742ca783	MUSIC (VOCAL & INSTRUMENTAL)	1	General	\N	t	2026-08-14 14:34:26.339336+00	1	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
-79882cb7-9bfb-42ec-ad5e-4a9d98db6c05	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:26.344847+00	2	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
-7b3dad1a-9a65-4c2b-8482-23e0521de266	DRAMA & THEATRE	3	General	\N	t	2026-08-14 14:34:26.352369+00	3	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
-151c7398-eb95-450a-91b8-d665e7e86b29	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:26.356858+00	4	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
-8b9b990f-d17b-4a2a-b79c-39f2afe133de	DANCE - BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:26.361684+00	5	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
-356f2d7a-82d6-4567-b9b4-7f0ee216eb2a	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:42.651065+00	\N	\N	\N	\N
-e3485ac7-2f48-480a-8361-0fcdd8af833b	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:42.651065+00	\N	\N	\N	\N
-4741140e-9fbf-4273-87d2-3abd81d7f352	MUSIC (VOCAL & INSTRUMENTAL)	1	General	\N	t	2026-08-14 14:34:25.692473+00	1	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10
-70d6c0fa-23db-4954-97a5-7d6d5b1c0996	DRAMA & THEATRE	3	General	\N	t	2026-08-14 14:34:25.696639+00	3	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10
-07a76322-e9cc-4e05-8863-b427a474096c	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:25.700415+00	4	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10
-294c5722-9caf-4a16-beca-c317830e3399	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:25.703837+00	2	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10
-d2521f86-599e-4688-a7ac-f12d563f7366	DANCE-BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:25.707417+00	5	10	HOBBY CLASSES (45 DAYS) - KHAIRAGARH UNIVERSITY	10
-25cb7faf-8434-434a-ae58-1e18d2fae985	Theatre Workshop (6 months) Department	1	General	\N	t	2026-08-14 14:34:25.781513+00	1	11	Theatre Workshop (6 months)	10
-9607414c-2be3-49ff-bc8c-4caa3329b69f	12 Months	1	General	\N	t	2026-08-14 14:34:25.864687+00	1	14	Professional Photography - Advance Diploma (12 Months)	10
-1a755e1b-74e0-4ae9-9843-5111866351b2	PHOTOGRAPHY	1	General	\N	t	2026-08-14 14:34:25.959249+00	1	15	30 Hours certificate Photography	10
-a88d4642-5610-447a-b2f1-af12dea3e032	MUSIC (VOCAL & INSTRUMENTAL)	1	General	\N	t	2026-08-14 14:34:26.039495+00	1	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-e04ef8a0-4eff-4b4b-834c-33a93ac48cdf	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:26.044794+00	2	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-15d092c4-4541-4f32-a767-afa898eada00	DRAMA & THEATRE	3	General	\N	t	2026-08-14 14:34:26.0487+00	3	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-973b8607-dc02-4576-9dc7-3674aaed0e68	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:26.052756+00	4	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-d1f863df-3ac7-43ea-be76-659eec0d32e3	DANCE - BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:26.056613+00	5	6	CERTIFICATE COURSE (6MONTHS) - KHAIRAGARH UNIVERSITY	10
-7f999749-4111-4eea-8069-58d794e745d5	MUSIC (VOCAL & INSTRUMENTAL)	1	General	\N	t	2026-08-14 14:34:26.142837+00	1	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-8011e0ab-1e8c-4c9e-9a9c-975d93db4ada	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:26.149238+00	2	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-cad9ae25-539d-44c4-aec7-015413ddd7f0	DRAMA & THEATRE	3	General	\N	t	2026-08-14 14:34:26.153285+00	3	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-b2416137-8d18-4a6e-a0a5-473ff14f0c9e	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:26.15758+00	4	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-30cb6c77-1903-43f0-ae8d-8f2bc67dcb64	DANCE - BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:26.161419+00	5	7	ADVANCE CERTIFICATE (1 YEAR) - KHAIRAGARH UNIVERSITY	10
-bd36a81d-71b2-4be9-8671-b7b7a547d45e	MUSIC (VOCAL & INSTRUMENTAL)	1	General	\N	t	2026-08-14 14:34:26.236304+00	1	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-5f67d4aa-6104-4d9f-9feb-91cf114239a9	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:26.240963+00	2	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-8728e2ce-b516-499e-b705-d0d267ac5950	DRAMA & THEATRE	3	General	\N	t	2026-08-14 14:34:26.246323+00	3	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-db3ee37c-5ab8-483b-bfd9-dc085ddb24d2	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:26.250178+00	4	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-21a83b85-fd49-4a4e-ae25-2dd44ea92543	DANCE - BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:26.254256+00	5	8	DIPLOMA (2 YEARS) - KHAIRAGARH UNIVERSITY	10
-2debda3f-2d8b-46f6-b052-cfd3742ca783	MUSIC (VOCAL & INSTRUMENTAL)	1	General	\N	t	2026-08-14 14:34:26.339336+00	1	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
-79882cb7-9bfb-42ec-ad5e-4a9d98db6c05	DANCE - KATHAK	2	General	\N	t	2026-08-14 14:34:26.344847+00	2	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
-7b3dad1a-9a65-4c2b-8482-23e0521de266	DRAMA & THEATRE	3	General	\N	t	2026-08-14 14:34:26.352369+00	3	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
-151c7398-eb95-450a-91b8-d665e7e86b29	VISUAL ARTS / FINE ARTS	4	General	\N	t	2026-08-14 14:34:26.356858+00	4	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
-8b9b990f-d17b-4a2a-b79c-39f2afe133de	DANCE - BHARATNATYAM	5	General	\N	t	2026-08-14 14:34:26.361684+00	5	9	ADVANCE DIPLOMA (3 YEARS) - KHAIRAGARH UNIVERSITY	10
 \.
 
 
@@ -37514,10 +37760,6 @@ COPY "tenant_srms-riddhima-bareilly".examination_papers (id, code, name, subject
 --
 
 COPY "tenant_srms-riddhima-bareilly".faculty (id, user_id, emp_id, name, department_id, subject_id, designation, qualification, specialization, joining_date, photo_url, phone, gender, experience, staff_type, is_active, created_at, updated_at) FROM stdin;
-c33fb018-3a3b-4187-a4e1-8a8d9b73120d	736206d0-b4a3-4fbe-9e81-039524bc6084	EMP1001	Dr. Sanjay Singh	356f2d7a-82d6-4567-b9b4-7f0ee216eb2a	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
-47fb4736-ebb6-40de-b26d-ffaea1ef37ea	8bcae1d5-5cbf-481e-9b9e-9c862c71a9a7	EMP1002	Dr. Aparna Tyagi	e3485ac7-2f48-480a-8361-0fcdd8af833b	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
-c33fb018-3a3b-4187-a4e1-8a8d9b73120d	736206d0-b4a3-4fbe-9e81-039524bc6084	EMP1001	Dr. Sanjay Singh	356f2d7a-82d6-4567-b9b4-7f0ee216eb2a	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
-47fb4736-ebb6-40de-b26d-ffaea1ef37ea	8bcae1d5-5cbf-481e-9b9e-9c862c71a9a7	EMP1002	Dr. Aparna Tyagi	e3485ac7-2f48-480a-8361-0fcdd8af833b	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 \.
 
 
@@ -37600,6 +37842,91 @@ b70e27d6-9741-40dd-a816-d94c3fa11330	COL	Compensatory Off Leave	0
 3f12e54c-4ef7-4271-ba84-347e819e8c19	EL	Earned Leave	30
 6509858f-3b21-45c8-84c9-7293e08ef8ad	ML	Maternity Leave	180
 b70e27d6-9741-40dd-a816-d94c3fa11330	COL	Compensatory Off Leave	0
+aed37c04-8620-4dd9-9a98-c4553fc8b112	CL	Casual Leave	12
+47d0438d-b617-4aab-b178-ab03c14276b6	SL	Sick Leave	10
+289f6bfc-86a0-48dc-a3c6-2cab37a31657	EL	Earned Leave	30
+93a19b50-27bc-43d4-9731-00f0c14ce0eb	ML	Maternity Leave	180
+f4c9dcbd-c516-485c-b7ba-f1187b7f8bcf	COL	Compensatory Off Leave	0
+439af936-04e6-42c5-accc-03f84199c8ab	CL	Casual Leave	12
+6c2129dc-a47c-4092-bbba-664d34c4288b	SL	Sick Leave	10
+dea473df-9da9-4685-93ef-69bbd3ef72e9	EL	Earned Leave	30
+043d545a-2000-4ace-aae5-85f2eabd568c	ML	Maternity Leave	180
+f4a22396-a9a1-4d56-ab06-9fed9ce667d3	COL	Compensatory Off Leave	0
+8842c6a9-f610-4959-8e7f-bef76c20e0d1	CL	Casual Leave	12
+2bc3eb02-2fc5-40af-8bea-786b54101ed6	SL	Sick Leave	10
+9a3a38c0-720c-45ec-9545-3b00eb9229a5	EL	Earned Leave	30
+559f00a8-9f8a-4acb-9304-9e03288b3016	ML	Maternity Leave	180
+58b0adb1-4e7d-4def-8fd4-b3a196d34c2a	COL	Compensatory Off Leave	0
+415938ea-27d0-4980-b26b-f9643ec9d223	CL	Casual Leave	12
+045fb47b-1b3d-4a07-958e-7f9ddef999fe	SL	Sick Leave	10
+00104802-e741-4ddd-9319-869aeb42b0df	EL	Earned Leave	30
+82ef66ff-e3b6-46f4-b3f9-b8394db74bef	ML	Maternity Leave	180
+56586465-c7f5-4ee2-ba0d-32a25cb30c94	COL	Compensatory Off Leave	0
+24404039-fb87-4e1d-9078-8bdecf091924	CL	Casual Leave	12
+2f0e1f4a-6c4c-4bb9-a650-d4d6cc9327a0	SL	Sick Leave	10
+aa3154cc-2c41-40cd-8b7b-4a68f99d77c6	EL	Earned Leave	30
+aed615b1-295a-4e5c-97c0-12bf394fe3f0	ML	Maternity Leave	180
+a8a982aa-4b47-4d17-b48e-96dbcfdf1ac3	COL	Compensatory Off Leave	0
+1e2c758e-723c-46f4-b4f4-791774849b0a	CL	Casual Leave	12
+ec013e6d-a315-4fc3-9851-7f90dac66fe4	SL	Sick Leave	10
+91cfd07f-e97e-4d4b-a6ab-45a9eb06281d	EL	Earned Leave	30
+d0fed259-d9ce-46c5-b047-3dc5fb778688	ML	Maternity Leave	180
+2f8700e3-19b0-43b9-8172-dd0dfb9462f4	COL	Compensatory Off Leave	0
+a259a76e-2bb9-42eb-b02b-e7d2d6f77e21	CL	Casual Leave	12
+a53a9b64-96b2-4dba-927d-99efa054cd17	SL	Sick Leave	10
+6defc8af-92ab-478a-ab4e-256f3bc2e1e4	EL	Earned Leave	30
+1f781876-912e-418a-8920-07d66e5ead6e	ML	Maternity Leave	180
+45408942-7938-4aad-a727-a36eda08cac7	COL	Compensatory Off Leave	0
+5ddcb08a-c3e0-4b58-b6f0-1586847b4f92	CL	Casual Leave	12
+645144bc-2276-4941-9050-cf2a3562b475	SL	Sick Leave	10
+d99bf6ed-9bba-4e41-a1e5-7ecdf69f7cab	EL	Earned Leave	30
+c18be81d-430b-4b8c-b33e-d1dcd99f09e2	ML	Maternity Leave	180
+e3b12e7f-1e0e-4a5a-881c-761db0f3972e	COL	Compensatory Off Leave	0
+65fb1ef9-c44f-4967-993b-92e4ae229fa3	CL	Casual Leave	12
+a38ac0df-ae4a-4d8b-a754-ebbafe9d815f	SL	Sick Leave	10
+e32b879a-f336-4cb4-8d88-10ebe939a0d8	EL	Earned Leave	30
+7374ddfb-b423-4d65-ad96-8a73e226e003	ML	Maternity Leave	180
+72fded9b-5c3e-412c-95ca-7ab7a77a1f2d	COL	Compensatory Off Leave	0
+76ebe443-d439-44dd-84c7-49db6babea54	CL	Casual Leave	12
+424a2ba3-f738-4af5-861b-46adfa5eb030	SL	Sick Leave	10
+e810889f-d652-4c24-99bd-48d468c787d8	EL	Earned Leave	30
+944cb9b4-da6b-4aca-995e-c3ba2e618c39	ML	Maternity Leave	180
+3d341c48-f1e7-4e53-a6a4-d2e4fb34e91c	COL	Compensatory Off Leave	0
+57158b87-b322-45b7-aae0-e4becaf9df41	CL	Casual Leave	12
+1c7e31da-8378-49be-b43e-e925ad5dbfe1	SL	Sick Leave	10
+d4f9d24e-ca16-4d67-aafa-0fa7dcaf7df7	EL	Earned Leave	30
+897481c5-a283-425f-a123-b535d95df542	ML	Maternity Leave	180
+c7c6071e-395d-401e-9616-168bd25996e0	COL	Compensatory Off Leave	0
+367b70bd-96fb-45f9-bd4d-870697dd77db	CL	Casual Leave	12
+7bc3b038-cb19-4167-a03d-4e309395f27a	SL	Sick Leave	10
+4f1d97d2-1453-4bad-962b-952ed615d991	EL	Earned Leave	30
+1c4b512a-1cc4-451a-bd82-e98701ad4f4a	ML	Maternity Leave	180
+53934d6c-14e5-48dd-aa2c-44becc5c7175	COL	Compensatory Off Leave	0
+4078044b-1188-442c-b89a-05563842ab7e	CL	Casual Leave	12
+c607d146-ccf9-4da8-bbe4-ee87f132e142	SL	Sick Leave	10
+db1851f8-1f55-4e26-a39d-fbf0bfeacab5	EL	Earned Leave	30
+1417a36c-374b-4f95-9a8d-926e065f3071	ML	Maternity Leave	180
+cb013cb7-ad31-46f8-9dfe-d30e70586d0f	COL	Compensatory Off Leave	0
+8a523c2b-497f-4797-90b0-c21f2fc8a361	CL	Casual Leave	12
+3b91a68d-8425-47c0-ad46-51b9c732b304	SL	Sick Leave	10
+85878987-145d-49d0-af8d-87644bfa1154	EL	Earned Leave	30
+8dc5f4bc-bf7e-4cb2-a4d7-8cc6e99dbf48	CL	Casual Leave	12
+6f90a746-7b63-4006-9ea9-1f0360769ab5	SL	Sick Leave	10
+d89041a2-1923-4cb8-9cd0-8d0ac0ce4b21	EL	Earned Leave	30
+c6a81b52-52c0-4965-86bc-c4e53a46c63e	ML	Maternity Leave	180
+28487864-c828-41c8-897e-494390143eb1	COL	Compensatory Off Leave	0
+f36cf234-d1cc-4544-b141-4630d98e083f	ML	Maternity Leave	180
+e5e49f5d-0993-4925-89e6-0ee03c18da06	COL	Compensatory Off Leave	0
+b841b1cc-b9d0-4265-8553-3a51f02afbf7	CL	Casual Leave	12
+96352b73-d4a0-4507-8bac-29956e14bcc0	SL	Sick Leave	10
+8735e42c-348d-4e0e-a648-8550dca07cf5	EL	Earned Leave	30
+3771b944-3537-4b18-a00b-419679ac6e4a	ML	Maternity Leave	180
+53b0ff6c-95a3-4b54-bf3b-4b1885e97632	COL	Compensatory Off Leave	0
+c4604494-a599-497f-8518-997009ec1c1e	CL	Casual Leave	12
+4aeaccd8-a190-4027-b699-002478296a34	SL	Sick Leave	10
+70a8931c-b9b1-46e9-a640-ca64191ac4ca	EL	Earned Leave	30
+d7fb0393-a39b-4cae-8185-002ff0228a64	ML	Maternity Leave	180
+936e756c-a0b1-41eb-89ec-182c11fcc5b4	COL	Compensatory Off Leave	0
 \.
 
 
@@ -37846,8 +38173,6 @@ COPY "tenant_srms-riddhima-bareilly".subject_offerings (id, subject_id, prof_id,
 COPY "tenant_srms-riddhima-bareilly".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 d33c64bb-0a0c-4dc7-9476-af25fdd46c6a	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 3e749887-0403-4a10-bd38-11caa66f2a24	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-d33c64bb-0a0c-4dc7-9476-af25fdd46c6a	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-3e749887-0403-4a10-bd38-11caa66f2a24	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -37899,15 +38224,11 @@ COPY "tenant_srms-riddhima-bareilly".users (id, email, password_hash, role, is_a
 6e797ec8-b8d1-4156-9e83-4e0d8d09ff27	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 fc585ced-f032-4ff2-95dc-694176c3ae6e	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 0384449b-d69f-4c45-9b3f-73740698540c	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
-736206d0-b4a3-4fbe-9e81-039524bc6084	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
-8bcae1d5-5cbf-481e-9b9e-9c862c71a9a7	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 5f22740f-b4a0-43b0-9396-9f8e7d8769b1	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 9ad37152-bdf6-4e2b-9202-6b7c262c8086	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 6e797ec8-b8d1-4156-9e83-4e0d8d09ff27	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 fc585ced-f032-4ff2-95dc-694176c3ae6e	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 0384449b-d69f-4c45-9b3f-73740698540c	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
-736206d0-b4a3-4fbe-9e81-039524bc6084	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
-8bcae1d5-5cbf-481e-9b9e-9c862c71a9a7	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 5f22740f-b4a0-43b0-9396-9f8e7d8769b1	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 9ad37152-bdf6-4e2b-9202-6b7c262c8086	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:42.651065+00	2026-08-14 14:33:42.651065+00
 \.
@@ -37947,11 +38268,6 @@ f176ccf6-0f21-4373-89ee-108770c01852	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
 e044f365-a88f-44bb-880b-3ec3897c3d9c	1	2020	1	\N	\N	\N	t	1	SAMUDAYIK SEWA YOJNA	7	1	Batch 2020
 13e2733d-9568-4b3c-961a-f3943ba5007b	2	2021	1	\N	\N	\N	t	2	SAMUDAYIK SEWA YOJNA	7	2	Batch 2021
 45e8afa8-d7c9-4710-83bb-1a48ff4fede0	3	2022	1	\N	\N	\N	t	3	SAMUDAYIK SEWA YOJNA	7	3	Batch 2022
-165eb81e-0752-4581-9d28-707d9cd93a98	2023-MBBS	2023	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-f176ccf6-0f21-4373-89ee-108770c01852	2025	2025	MBBS	\N	\N	\N	t	\N	\N	\N	\N	\N
-e044f365-a88f-44bb-880b-3ec3897c3d9c	1	2020	1	\N	\N	\N	t	1	SAMUDAYIK SEWA YOJNA	7	1	Batch 2020
-13e2733d-9568-4b3c-961a-f3943ba5007b	2	2021	1	\N	\N	\N	t	2	SAMUDAYIK SEWA YOJNA	7	2	Batch 2021
-45e8afa8-d7c9-4710-83bb-1a48ff4fede0	3	2022	1	\N	\N	\N	t	3	SAMUDAYIK SEWA YOJNA	7	3	Batch 2022
 \.
 
 
@@ -37984,14 +38300,6 @@ b8a48b56-f66a-40b4-ade1-a0a0c51e24db	\N	\N	\N	PY5.1	Describe synaptic transmissi
 e7b54eff-3b44-41a5-bd11-9b71a306629d	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 26e4c860-69ee-4c26-8ae7-a32eea3babb8	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 18a89675-0be7-4ad4-a670-d837792a74a0	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-1c8b769f-67ca-4194-bc6c-71e249a57d3d	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-a5e37bdd-8ef3-4277-a7fd-2b7b14d840b7	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-8642cdea-4277-4662-bae9-ecb0707d8a52	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-50419a92-595e-4fbe-928c-2e3d4735ca0e	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-b8a48b56-f66a-40b4-ade1-a0a0c51e24db	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-e7b54eff-3b44-41a5-bd11-9b71a306629d	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-26e4c860-69ee-4c26-8ae7-a32eea3babb8	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
-18a89675-0be7-4ad4-a670-d837792a74a0	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:38.964558+00	\N	KL-2 (Understand)	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
@@ -38000,7 +38308,6 @@ e7b54eff-3b44-41a5-bd11-9b71a306629d	\N	\N	\N	AN1.1	Describe osteology of upper 
 --
 
 COPY "tenant_srms-trust-bareilly".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-6a6f32e9-041c-4ff9-97bd-397272fb2327	1	SAMUDAYIK SEWA YOJNA	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:40.031574+00	semester	1	Certificate
 6a6f32e9-041c-4ff9-97bd-397272fb2327	1	SAMUDAYIK SEWA YOJNA	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:40.031574+00	semester	1	Certificate
 \.
 
@@ -38058,28 +38365,6 @@ d41ae4b4-387d-4632-a9ce-7cdb6bc6cf0d	ENDO ASST	18	General	\N	t	2026-08-14 14:34:
 3b346234-ab5f-46f2-a480-bac29c9d37fc	EMG CARE ASST	17	General	\N	t	2026-08-14 14:34:24.633934+00	17	1	SAMUDAYIK SEWA YOJNA	7
 7cc8e103-fa0b-432e-9dee-1a32fb728ea0	WORKSHOP.ASST(CARPENTING)	22	General	\N	t	2026-08-14 14:34:24.637849+00	22	1	SAMUDAYIK SEWA YOJNA	7
 5021adb1-b3eb-416a-96d4-c7123a0b6255	DIALYSIS ASST	19	General	\N	t	2026-08-14 14:34:24.65104+00	19	1	SAMUDAYIK SEWA YOJNA	7
-7a878ae9-5918-44f5-af7f-72b3f1a55ede	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-14 14:33:38.964558+00	\N	\N	\N	\N
-09dcba52-525c-4bdc-9a3c-5a8bffc9929d	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-14 14:33:38.964558+00	\N	\N	\N	\N
-de3b29ca-4ab2-4dbf-86de-a24e12a032cf	NURS CARE ASS	1	General	\N	t	2026-08-14 14:34:24.559067+00	1	1	SAMUDAYIK SEWA YOJNA	7
-bd1f1663-9486-4c9b-b3e4-414d7aeba0f4	MACH FIT CARP	2	Engineering	\N	t	2026-08-14 14:34:24.562805+00	2	1	SAMUDAYIK SEWA YOJNA	7
-376990a4-7e00-4373-9644-af96f00e10a7	EPABX	3	General	\N	t	2026-08-14 14:34:24.567195+00	3	1	SAMUDAYIK SEWA YOJNA	7
-f6c39979-d819-40db-8fe7-22ac53cbadee	COMP OP	4	General	\N	t	2026-08-14 14:34:24.573632+00	4	1	SAMUDAYIK SEWA YOJNA	7
-4c53d912-a016-41d8-8fcd-c502f4bd98fb	COMP HW	5	General	\N	t	2026-08-14 14:34:24.579515+00	5	1	SAMUDAYIK SEWA YOJNA	7
-d830618c-6814-40fb-ac73-eeb551b5b5f6	ELECTRICAL	6	General	\N	t	2026-08-14 14:34:24.586126+00	6	1	SAMUDAYIK SEWA YOJNA	7
-6ad9b3fa-5139-4eb9-9733-7ff2277dba8f	XRAY ECG	7	General	\N	t	2026-08-14 14:34:24.589854+00	7	1	SAMUDAYIK SEWA YOJNA	7
-73645eeb-136f-425c-9afe-a2c81b6309f0	ELECTRONIC	8	General	\N	t	2026-08-14 14:34:24.593447+00	8	1	SAMUDAYIK SEWA YOJNA	7
-86662d14-077b-4727-8942-194615f28327	HOUSEKEEPING	9	General	\N	t	2026-08-14 14:34:24.596968+00	9	1	SAMUDAYIK SEWA YOJNA	7
-cb5a9500-a8e3-496a-a802-02f3f192f945	MED DISP	10	Engineering	\N	t	2026-08-14 14:34:24.600857+00	10	1	SAMUDAYIK SEWA YOJNA	7
-945e947d-251c-40b9-8c89-9e204126fd24	TAILORING	11	General	\N	t	2026-08-14 14:34:24.604335+00	11	1	SAMUDAYIK SEWA YOJNA	7
-476666ed-fe6d-434e-afa4-11e2be11fdc3	MEDICAL REC	12	Engineering	\N	t	2026-08-14 14:34:24.608391+00	12	1	SAMUDAYIK SEWA YOJNA	7
-915347e4-bfa3-4ffa-938d-8b42b7b0898b	DENT HYG	13	General	\N	t	2026-08-14 14:34:24.612704+00	13	1	SAMUDAYIK SEWA YOJNA	7
-093ae29a-5960-440d-9047-6a5a4cb7a53d	BLOOD COLL	14	General	\N	t	2026-08-14 14:34:24.616331+00	14	1	SAMUDAYIK SEWA YOJNA	7
-073e9324-5ecc-4c29-a423-dfb3ae86d272	DIET ASST	15	General	\N	t	2026-08-14 14:34:24.621266+00	15	1	SAMUDAYIK SEWA YOJNA	7
-fabd80ae-6f77-4131-b668-f39a914cbbaa	CC ASST	16	General	\N	t	2026-08-14 14:34:24.624913+00	16	1	SAMUDAYIK SEWA YOJNA	7
-d41ae4b4-387d-4632-a9ce-7cdb6bc6cf0d	ENDO ASST	18	General	\N	t	2026-08-14 14:34:24.629363+00	18	1	SAMUDAYIK SEWA YOJNA	7
-3b346234-ab5f-46f2-a480-bac29c9d37fc	EMG CARE ASST	17	General	\N	t	2026-08-14 14:34:24.633934+00	17	1	SAMUDAYIK SEWA YOJNA	7
-7cc8e103-fa0b-432e-9dee-1a32fb728ea0	WORKSHOP.ASST(CARPENTING)	22	General	\N	t	2026-08-14 14:34:24.637849+00	22	1	SAMUDAYIK SEWA YOJNA	7
-5021adb1-b3eb-416a-96d4-c7123a0b6255	DIALYSIS ASST	19	General	\N	t	2026-08-14 14:34:24.65104+00	19	1	SAMUDAYIK SEWA YOJNA	7
 \.
 
 
@@ -38104,10 +38389,6 @@ COPY "tenant_srms-trust-bareilly".examination_papers (id, code, name, subject_id
 --
 
 COPY "tenant_srms-trust-bareilly".faculty (id, user_id, emp_id, name, department_id, subject_id, designation, qualification, specialization, joining_date, photo_url, phone, gender, experience, staff_type, is_active, created_at, updated_at) FROM stdin;
-0b93b70a-f9c1-494c-b550-69957013981e	31b0cbf1-b28c-4e1b-a8a3-5056175f1d90	EMP1001	Dr. Sanjay Singh	7a878ae9-5918-44f5-af7f-72b3f1a55ede	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
-ac2294d9-3046-41c4-8b56-893f69862159	47560f56-e049-4b38-a42b-5f1e37842959	EMP1002	Dr. Aparna Tyagi	09dcba52-525c-4bdc-9a3c-5a8bffc9929d	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
-0b93b70a-f9c1-494c-b550-69957013981e	31b0cbf1-b28c-4e1b-a8a3-5056175f1d90	EMP1001	Dr. Sanjay Singh	7a878ae9-5918-44f5-af7f-72b3f1a55ede	\N	Professor & HOD	\N	Physiology & Biophysics	\N	/avatars/dr_sanjay_singh.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
-ac2294d9-3046-41c4-8b56-893f69862159	47560f56-e049-4b38-a42b-5f1e37842959	EMP1002	Dr. Aparna Tyagi	09dcba52-525c-4bdc-9a3c-5a8bffc9929d	\N	Associate Professor	\N	Human Anatomy & Histology	\N	/avatars/dr_sarah_sharma.png	\N	\N	\N	Faculty	t	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 \.
 
 
@@ -38190,6 +38471,91 @@ cc06cf3a-7cc7-4765-bf2b-f05cda30a618	CL	Casual Leave	12
 01d100a6-c8dc-4e21-a185-956463aa91e9	EL	Earned Leave	30
 46e7d1e4-ec56-4954-adbe-7e4289244f13	ML	Maternity Leave	180
 8fd85b4d-5f7d-4bd3-ab34-76ca4b99b08d	COL	Compensatory Off Leave	0
+4d7e6954-a6cf-4e6b-b2c9-e78c84fe5d2c	CL	Casual Leave	12
+59386bff-a581-4478-b4fa-044591f31b4d	SL	Sick Leave	10
+e20c1b4e-f57a-49aa-8c97-635cbc503a47	EL	Earned Leave	30
+f2430dbd-7621-45f0-b16d-99407c8bb013	ML	Maternity Leave	180
+4955c347-bcb4-403d-8f20-80e4a9af42e7	COL	Compensatory Off Leave	0
+6d7eca24-d4df-4e01-8d4d-c0928640248b	CL	Casual Leave	12
+d5345b77-28d1-4ffe-8264-857ac31cfc7b	SL	Sick Leave	10
+0a6e08dc-aa6d-4b4e-8c98-9ffa39b33587	EL	Earned Leave	30
+c7346f2e-d13c-49f4-990d-323421b43c7d	ML	Maternity Leave	180
+effa69d2-f7e9-4d3b-b8bd-c6c3fde63958	COL	Compensatory Off Leave	0
+4eed5448-c736-450e-b9ba-d5e3b6191dbc	CL	Casual Leave	12
+285df26a-104f-4be1-b4f3-b9754ad3dcb1	SL	Sick Leave	10
+77d257ab-8ce4-44b5-b423-47f14a869c52	EL	Earned Leave	30
+896237e7-c9b1-43b2-b40d-9366a3fd8984	ML	Maternity Leave	180
+86c19ffd-f307-49c2-a2a8-297eb5a6587d	COL	Compensatory Off Leave	0
+5ed26655-7e89-42a2-9a66-c594cb0acd28	CL	Casual Leave	12
+0ac8a814-a358-4214-9de8-ea34e6627e99	SL	Sick Leave	10
+c3c028ed-a0da-46ab-9ad3-5507bf4d4ab0	EL	Earned Leave	30
+4285b1d0-a5a4-4b97-8740-604cf5d98816	ML	Maternity Leave	180
+271b2a84-353a-42cb-a343-281bd5b1dfa6	COL	Compensatory Off Leave	0
+f6926860-0c3f-4ec8-8644-88bd56d7209d	CL	Casual Leave	12
+fe4ede90-1e93-477f-b6fa-875f007f195e	SL	Sick Leave	10
+bb6d8cc4-de75-4d66-b2bf-83b55e58adf5	EL	Earned Leave	30
+b38433e3-aa70-4462-8603-1c71b7bff3a4	ML	Maternity Leave	180
+d03bbe46-b8e9-488a-ba12-04926df90185	COL	Compensatory Off Leave	0
+54e9a9ba-1b0a-422b-bfae-fa8f657cb745	CL	Casual Leave	12
+1a571201-94a8-4d67-a514-1305a8e8710d	SL	Sick Leave	10
+e9bfb95b-74c9-442f-8c4c-4d1c28fddbdb	EL	Earned Leave	30
+ade19eb7-35e5-44a3-975e-8c0b24992068	ML	Maternity Leave	180
+6ca3687f-d3b1-4874-b0c5-04a1c77ecd79	COL	Compensatory Off Leave	0
+db9b66a3-3b39-4274-b08d-24b19f9484a1	CL	Casual Leave	12
+5ed9d930-134d-4255-a8d8-fb6016d1d518	SL	Sick Leave	10
+75e9f38b-2e41-47fd-abb4-facb8aff218e	EL	Earned Leave	30
+db37570f-6d27-424f-9f7f-b559cc068ff7	ML	Maternity Leave	180
+9c848a08-2c33-4b20-89e7-b92279c4a223	COL	Compensatory Off Leave	0
+ac2e7b2c-02b9-4cc6-ba9f-c247a3564bd4	CL	Casual Leave	12
+9a821b57-42ba-4725-be1a-7c6267af1971	SL	Sick Leave	10
+5e4f80fc-a672-4695-bd78-ffcdb1c47c1b	EL	Earned Leave	30
+584e846d-26ef-41b5-8335-10f551b80e3b	ML	Maternity Leave	180
+64fd73bb-bd6f-4b9f-8099-b7e63d5b233f	COL	Compensatory Off Leave	0
+361dd1c6-117d-4ebc-9c58-9adf65c11831	CL	Casual Leave	12
+f74f29eb-979f-428a-a031-fb02532bc3a3	SL	Sick Leave	10
+5ea15bb9-b3cd-4368-8c8e-b53cda6e8e98	EL	Earned Leave	30
+747b6c30-8894-488e-8c08-0d325eb7aac7	ML	Maternity Leave	180
+cc6198e0-b25d-45f8-8f50-4e4c04283cf1	COL	Compensatory Off Leave	0
+850ed770-3988-4b05-ac8c-1c50d31d31b3	CL	Casual Leave	12
+6acd5a5a-b3ee-4b8f-b283-210ffae37d29	SL	Sick Leave	10
+76582030-2a21-4e0b-9b30-f5cbead8f29b	EL	Earned Leave	30
+a32e2bdc-832c-4e39-bf98-9e1858847373	ML	Maternity Leave	180
+e0739987-9b85-4c50-af1e-ee3292ff5f90	COL	Compensatory Off Leave	0
+7f846bae-c1f2-4cd2-93f8-17ef13265206	CL	Casual Leave	12
+d611dde5-0ac3-4e1e-bf32-599f6d81f99b	SL	Sick Leave	10
+9ac3bf4f-bac4-4859-a3bd-b8de15a6bd95	EL	Earned Leave	30
+fb0bdffb-8f1b-4c58-8304-cfb9e03ae26b	ML	Maternity Leave	180
+bcdb5ec9-e7eb-4362-bd20-c797e54ce7ac	COL	Compensatory Off Leave	0
+6d88f8b1-a88d-4913-b44a-25a9aa58f1ed	CL	Casual Leave	12
+e0a841fd-8e73-4086-a67d-9439d74b545a	SL	Sick Leave	10
+06e21510-c11b-42fe-9992-7168f199b6c3	EL	Earned Leave	30
+c849617e-ebe7-4860-923b-60f6c6714154	ML	Maternity Leave	180
+06f1e82c-7160-4083-80e7-64aaa00454e5	COL	Compensatory Off Leave	0
+b7f36669-c06b-4781-98f3-beb0a3d81b70	CL	Casual Leave	12
+0a185edc-1d51-43c0-9796-4855cecdf25d	SL	Sick Leave	10
+94cf8bb4-974c-4f54-b621-341c9b9d1433	EL	Earned Leave	30
+547ce75c-e6dd-4734-bb5d-bd93c92dbcfb	ML	Maternity Leave	180
+9994ff5c-a370-4515-b75c-860180e6cf2f	COL	Compensatory Off Leave	0
+f7913578-9527-4466-8927-72b6c8543f1d	CL	Casual Leave	12
+60c9fa08-7f7f-4e30-8619-1dd69608fdc8	SL	Sick Leave	10
+f27e72d1-7a67-45b3-8338-3fb25a374d4e	EL	Earned Leave	30
+ef41cc43-d543-4c9d-8799-4cded71cd7cc	CL	Casual Leave	12
+1c1cebaa-94f2-482b-895c-eff12a3ea763	SL	Sick Leave	10
+8ea1cac2-ac92-4ddd-85cf-33654971f356	EL	Earned Leave	30
+aaaba9cb-8e33-4ec8-a3d9-e94d6644e12c	ML	Maternity Leave	180
+1967166a-0bbd-438d-8474-9e1e83c02a1d	COL	Compensatory Off Leave	0
+5f3c56b4-36be-488c-a22b-40afe20e279f	ML	Maternity Leave	180
+1ff5db27-4377-47c3-aff8-abee433955a9	COL	Compensatory Off Leave	0
+62bfbab7-744d-414d-b0b4-3952503cda5e	CL	Casual Leave	12
+66a47197-4338-447f-97cb-30eaff0f8743	SL	Sick Leave	10
+22e7dd4f-7074-4586-b940-e8e2c7e03aa2	EL	Earned Leave	30
+32e1a44a-9fbd-436b-8004-e03d81e36288	ML	Maternity Leave	180
+59127882-884c-4045-a527-29303aca2977	COL	Compensatory Off Leave	0
+7f20f34a-fdf9-4c55-b742-f09d5769f7b5	CL	Casual Leave	12
+09f720c8-fcd1-4ce0-beba-0abcdb05750f	SL	Sick Leave	10
+8dddfb09-dce7-434f-8580-1925240a7433	EL	Earned Leave	30
+91c54b59-71d4-4d61-9403-e5c138381c47	ML	Maternity Leave	180
+9db96631-b6d8-4633-8186-399d25add564	COL	Compensatory Off Leave	0
 \.
 
 
@@ -38436,8 +38802,6 @@ COPY "tenant_srms-trust-bareilly".subject_offerings (id, subject_id, prof_id, dt
 COPY "tenant_srms-trust-bareilly".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd) FROM stdin;
 ac4ab598-0820-48d5-a1da-f0c3a3093610	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
 187b54bd-e7e8-49ae-ad73-e875cbf5ebed	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
-ac4ab598-0820-48d5-a1da-f0c3a3093610	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t	\N	\N	\N
-187b54bd-e7e8-49ae-ad73-e875cbf5ebed	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t	\N	\N	\N
 \.
 
 
@@ -38489,15 +38853,11 @@ COPY "tenant_srms-trust-bareilly".users (id, email, password_hash, role, is_acti
 c67fa146-bfea-41ea-a584-5661cc5353aa	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 f845d20d-4a49-450e-ac0f-b54800c6259e	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 d6106109-7999-4be6-82c3-5f6087cd5929	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
-31b0cbf1-b28c-4e1b-a8a3-5056175f1d90	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
-47560f56-e049-4b38-a42b-5f1e37842959	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 99141c50-bf87-4434-97c1-b0ea0494cf88	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 61f4f1bf-a663-43a1-aa2f-ad844b0cb45b	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 c67fa146-bfea-41ea-a584-5661cc5353aa	admin@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	COLLEGE_ADMIN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 f845d20d-4a49-450e-ac0f-b54800c6259e	clerk@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	CLERK	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 d6106109-7999-4be6-82c3-5f6087cd5929	warden@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	WARDEN	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
-31b0cbf1-b28c-4e1b-a8a3-5056175f1d90	sanjay.singh@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
-47560f56-e049-4b38-a42b-5f1e37842959	aparna.tyagi@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	FACULTY	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 99141c50-bf87-4434-97c1-b0ea0494cf88	rahul.verma@srms.edu	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 61f4f1bf-a663-43a1-aa2f-ad844b0cb45b	kabir.deshmukh2025@srms.ac.in	$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.	STUDENT	t	t	0	f	0	\N	\N	\N	\N	2026-08-14 14:33:38.964558+00	2026-08-14 14:33:38.964558+00
 \.
@@ -38534,8 +38894,6 @@ COPY "tenant_unicamp-med".attendance_sessions (id, faculty_id, subject_id, batch
 COPY "tenant_unicamp-med".batches (id, code, year, course_cd, department_id, start_date, end_date, is_active) FROM stdin;
 e6f7335e-4b6e-4521-825d-ba759fab2a1f	2023-MBBS	2023	MBBS	\N	\N	\N	t
 1d13472e-fa8e-4421-a3f6-ccc8550d0912	2025	2025	MBBS	\N	\N	\N	t
-e6f7335e-4b6e-4521-825d-ba759fab2a1f	2023-MBBS	2023	MBBS	\N	\N	\N	t
-1d13472e-fa8e-4421-a3f6-ccc8550d0912	2025	2025	MBBS	\N	\N	\N	t
 \.
 
 
@@ -38560,14 +38918,6 @@ COPY "tenant_unicamp-med".chat_messages (id, group_id, sender_id, content, file_
 --
 
 COPY "tenant_unicamp-med".competencies (id, subject_id, topic_id, linker_id, code, description, domain, level, is_core, is_active, created_at) FROM stdin;
-9f59ecba-47a5-4e0f-a666-5858541aeb19	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.814913+00
-264e07ab-fb09-4ee4-a78c-e18122779f90	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:30.814913+00
-851a140d-2ca7-4a46-ab1e-22e7c1a93784	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.814913+00
-bc15dc6a-567d-4e5d-9455-f2f50e0260b8	\N	\N	\N	PY4.2	Describe renal clearance and glomerular filtration rate measurement	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.814913+00
-cc00cc2f-def5-4ef1-9a36-485f46810d53	\N	\N	\N	PY5.1	Describe synaptic transmission, neurotransmitters and receptor mechanisms	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.814913+00
-70398337-9b48-4069-88ef-1c22fb3689df	\N	\N	\N	AN1.1	Describe osteology of upper limb, clavicle, scapula and humerus attachments	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:30.814913+00
-954fb3ed-a8f7-4739-ae60-b699d9bd8a6e	\N	\N	\N	AN2.3	Describe brachial plexus formation, branches and clinical nerve injury syndromes	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.814913+00
-867b1578-da56-4f5d-8fb7-ad126716fa7d	\N	\N	\N	AN10.1	Describe scapular region muscles, rotator cuff and shoulder abduction	KNOWLEDGE	KNOWS	t	t	2026-08-14 14:33:30.814913+00
 9f59ecba-47a5-4e0f-a666-5858541aeb19	\N	\N	\N	PY2.1	Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.814913+00
 264e07ab-fb09-4ee4-a78c-e18122779f90	\N	\N	\N	PY2.5	Perform and interpret spirometry and pulmonary function tests in normal subjects	SKILL	PERFORMS	t	t	2026-08-14 14:33:30.814913+00
 851a140d-2ca7-4a46-ab1e-22e7c1a93784	\N	\N	\N	PY3.1	Describe cardiac action potential, conduction system of heart and normal ECG waves	KNOWLEDGE	KNOWS_HOW	t	t	2026-08-14 14:33:30.814913+00
@@ -38618,8 +38968,6 @@ d21fddaf-7820-4c7e-b810-ef7ab49f19dc	EL	Electives	t
 --
 
 COPY "tenant_unicamp-med".departments (id, name, code, type, hod_user_id, is_active, created_at) FROM stdin;
-061019e8-9f16-4fdd-bae4-6e9029332ab8	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:40.847853+00
-a207bd08-b447-4ee9-b4e5-5feab5ab4d51	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:40.847853+00
 061019e8-9f16-4fdd-bae4-6e9029332ab8	Department of Physiology	PHY	PRE_CLINICAL	\N	t	2026-08-13 17:47:40.847853+00
 a207bd08-b447-4ee9-b4e5-5feab5ab4d51	Department of Anatomy	ANA	PRE_CLINICAL	\N	t	2026-08-13 17:47:40.847853+00
 \.
@@ -38978,8 +39326,6 @@ COPY "tenant_unicamp-med".subject_offerings (id, subject_id, prof_id, dtype_id, 
 COPY "tenant_unicamp-med".subjects (id, code, name, department_id, batch_id, credits, type, is_longitudinal, is_active) FROM stdin;
 afc2f1f8-d8a3-4757-a766-ff16cf1eb533	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
 b214d073-7d17-44e0-9247-3202857a5723	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
-afc2f1f8-d8a3-4757-a766-ff16cf1eb533	PHY101	Human Physiology & Organ Systems	\N	\N	4	THEORY	f	t
-b214d073-7d17-44e0-9247-3202857a5723	ANA101	Human Anatomy & Histology	\N	\N	4	THEORY	f	t
 \.
 
 
@@ -39067,6 +39413,14 @@ ALTER TABLE ONLY public.global_admins
 
 ALTER TABLE ONLY public.global_admins
     ADD CONSTRAINT global_admins_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tenants tenants_pkey; Type: CONSTRAINT; Schema: public; Owner: unicampus
+--
+
+ALTER TABLE ONLY public.tenants
+    ADD CONSTRAINT tenants_pkey PRIMARY KEY (id);
 
 
 --
@@ -47500,6 +47854,20 @@ CREATE INDEX idx_audit_tenant_created ON public.audit_logs USING btree (tenant_i
 
 
 --
+-- Name: tenants_code_uniq; Type: INDEX; Schema: public; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX tenants_code_uniq ON public.tenants USING btree (code);
+
+
+--
+-- Name: tenants_slug_uniq; Type: INDEX; Schema: public; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX tenants_slug_uniq ON public.tenants USING btree (slug);
+
+
+--
 -- Name: idx_att_rec_student; Type: INDEX; Schema: tenant_aiims-delhi; Owner: unicampus
 --
 
@@ -47885,6 +48253,13 @@ CREATE INDEX idx_students_rollno ON "tenant_srms-cet".students USING btree (roll
 
 
 --
+-- Name: competencies_code_uq_idx; Type: INDEX; Schema: tenant_srms-cet-bareilly; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX competencies_code_uq_idx ON "tenant_srms-cet-bareilly".competencies USING btree (code);
+
+
+--
 -- Name: idx_att_rec_student; Type: INDEX; Schema: tenant_srms-cet-bareilly; Owner: unicampus
 --
 
@@ -47959,6 +48334,27 @@ CREATE INDEX idx_students_dept ON "tenant_srms-cet-bareilly".students USING btre
 --
 
 CREATE INDEX idx_students_rollno ON "tenant_srms-cet-bareilly".students USING btree (rollno);
+
+
+--
+-- Name: subjects_code_uq_idx; Type: INDEX; Schema: tenant_srms-cet-bareilly; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX subjects_code_uq_idx ON "tenant_srms-cet-bareilly".subjects USING btree (code);
+
+
+--
+-- Name: topics_code_uq_idx; Type: INDEX; Schema: tenant_srms-cet-bareilly; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX topics_code_uq_idx ON "tenant_srms-cet-bareilly".topics USING btree (code);
+
+
+--
+-- Name: units_code_uq_idx; Type: INDEX; Schema: tenant_srms-cet-bareilly; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX units_code_uq_idx ON "tenant_srms-cet-bareilly".units USING btree (code);
 
 
 --
@@ -51947,5 +52343,5 @@ ALTER TABLE ONLY "tenant_unicamp-med".topics
 -- PostgreSQL database dump complete
 --
 
-\unrestrict a8qHeTBAnArFFIhhOqNK77mVov1hZOGT6oKkpKjhF6znIIIggmaEFBZ2sJrV9bC
+\unrestrict 9vtCbBsDnW8UQTiaQVOm29JdSW6Aros9S8BaeOdqYWd4usipwqeaz0xyzHoyMgV
 
