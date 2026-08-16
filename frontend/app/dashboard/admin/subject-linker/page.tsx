@@ -172,23 +172,36 @@ export default function SubjectLinkerPage() {
 
       // Initialize default college selection
       if (loadedColleges.length > 0) {
-        const firstCol = loadedColleges[0];
-        const firstColCode = firstCol.code || firstCol.id || '1';
-        setSelectedCollegeId(firstColCode);
-        setSelectedCollegeSlug(firstCol.slug || 'srms-cet-bareilly');
+        const savedSlug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant')) : null;
+        const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
+
+        const defaultCol = loadedColleges.find(c =>
+          (savedSlug && (c.slug === savedSlug || c.id === savedSlug)) ||
+          (savedColgCd && (String((c as any).colg_cd) === savedColgCd || String(c.id) === savedColgCd || String(c.code) === savedColgCd)) ||
+          c.slug === 'srms-cet-bareilly' ||
+          String(c.code) === '1'
+        ) || loadedColleges[0];
+
+        const defaultColCode = defaultCol.code || defaultCol.id || '1';
+        const defaultColSlug = defaultCol.slug || 'srms-cet-bareilly';
+
+        setSelectedCollegeId(defaultColCode);
+        setSelectedCollegeSlug(defaultColSlug);
+        setSelectedCollegeFilter(defaultColCode);
+        fetchFaculties(defaultColSlug);
 
         const matchingDepts = loadedDepts.filter(d =>
-          d.college_id === firstCol.id ||
-          d.college_slug === firstCol.slug ||
-          String(d.colg_cd) === String(firstColCode) ||
-          String(d.college_code) === String(firstColCode)
+          d.college_id === defaultCol.id ||
+          d.college_slug === defaultCol.slug ||
+          String(d.colg_cd) === String(defaultColCode) ||
+          String(d.college_code) === String(defaultColCode)
         );
         if (matchingDepts.length > 0) {
           const firstDept = matchingDepts[0];
           setSelectedDeptId(firstDept.id || firstDept.code);
 
           const matchingSubs = loadedSubs.filter(s =>
-            (s.college_id === firstCol.id || s.college_slug === firstCol.slug || String(s.colg_cd) === String(firstColCode) || String(s.college_code) === String(firstColCode)) &&
+            (s.college_id === defaultCol.id || s.college_slug === defaultCol.slug || String(s.colg_cd) === String(defaultColCode) || String(s.college_code) === String(defaultColCode)) &&
             (s.department_id === firstDept.id || s.department_code === firstDept.code || s.branch_cd === firstDept.branch_cd)
           );
           if (matchingSubs.length > 0) {
@@ -632,17 +645,31 @@ export default function SubjectLinkerPage() {
       };
     });
 
-  // Merge explicit links with primary registered links
-  const allDisplayLinks: FacultySubjectLink[] = [...links];
+  // Merge explicit links with primary registered links and deduplicate
+  const allDisplayLinks = useMemo(() => {
+    const combined: FacultySubjectLink[] = [...links];
 
-  primaryRegisteredLinks.forEach(pLink => {
-    const existsInExplicit = allDisplayLinks.some(
-      e => e.faculty_id === pLink.faculty_id && e.subject_id === pLink.subject_id
-    );
-    if (!existsInExplicit) {
-      allDisplayLinks.push(pLink);
+    primaryRegisteredLinks.forEach(pLink => {
+      const existsInExplicit = combined.some(
+        e => (e.faculty_id === pLink.faculty_id || e.faculty_code === pLink.faculty_code) &&
+             (e.subject_id === pLink.subject_id || e.subject_code === pLink.subject_code)
+      );
+      if (!existsInExplicit) {
+        combined.push(pLink);
+      }
+    });
+
+    const seen = new Set<string>();
+    const uniqueLinks: FacultySubjectLink[] = [];
+    for (const l of combined) {
+      const key = `${l.faculty_code || l.faculty_id}-${l.subject_code || l.subject_id}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueLinks.push(l);
+      }
     }
-  });
+    return uniqueLinks;
+  }, [links, primaryRegisteredLinks]);
 
   // Filter linked items for roster table
   const filteredLinks = useMemo(() => {
@@ -659,7 +686,7 @@ export default function SubjectLinkerPage() {
           link.college_slug === targetColSlug ||
           link.college_id === targetColId ||
           (targetCol && (link.college_id === targetCol.id || link.college_slug === targetCol.slug || String(link.college_code) === String(targetCol.code)));
-        if (!isColMatch && (link.college_code || link.college_slug || link.college_id)) return false;
+        if (!isColMatch) return false;
       }
 
       // 2. Department Filter

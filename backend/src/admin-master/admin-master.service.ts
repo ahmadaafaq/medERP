@@ -1507,7 +1507,7 @@ export class AdminMasterService {
         const s = `tenant_${col.slug}`;
         try {
           const rows = await this.ds.query(
-            `SELECT fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
+            `SELECT DISTINCT ON (fs.id) fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
                     f.name AS faculty_name, f.emp_id AS faculty_code, f.designation AS faculty_designation,
                     fd.name AS faculty_department_name, fd.code AS faculty_department_code,
                     s.name AS subject_name, s.code AS subject_code,
@@ -1518,7 +1518,7 @@ export class AdminMasterService {
              JOIN "${s}".subjects s ON s.id = fs.subject_id
              LEFT JOIN "${s}".departments sd ON (sd.id = s.department_id OR sd.code = s.department_id::text)
              WHERE fs.is_active = true
-             ORDER BY fs.created_at DESC`
+             ORDER BY fs.id, fs.created_at DESC`
           );
           rows.forEach((r: any) => {
             allLinks.push({
@@ -1540,7 +1540,7 @@ export class AdminMasterService {
 
     const params: any[] = [];
     let sql = `
-      SELECT fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
+      SELECT DISTINCT ON (fs.id) fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
              f.name AS faculty_name, f.emp_id AS faculty_code, f.designation AS faculty_designation,
              fd.name AS faculty_department_name, fd.code AS faculty_department_code,
              s.name AS subject_name, s.code AS subject_code,
@@ -1564,7 +1564,7 @@ export class AdminMasterService {
       params.push(query.departmentId);
       sql += ` AND (f.department_id = $${params.length} OR s.department_id = $${params.length} OR fd.code = $${params.length} OR sd.code = $${params.length})`;
     }
-    sql += ` ORDER BY fs.created_at DESC`;
+    sql += ` ORDER BY fs.id, fs.created_at DESC`;
     const rows = await this.ds.query(sql, params).catch(() => []);
     return rows.map((r: any) => ({
       ...r,
