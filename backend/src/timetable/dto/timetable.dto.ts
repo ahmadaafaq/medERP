@@ -4,22 +4,22 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 export class CreateTimetableSlotDto {
   @ApiPropertyOptional({ example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   facultyId?: string;
 
   @ApiPropertyOptional({ example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   subjectId?: string;
 
   @ApiPropertyOptional({ example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   departmentId?: string;
 
   @ApiPropertyOptional({ example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   batchId?: string;
 
   @ApiProperty({ example: 1, description: 'Day of week: 0=Sunday, 1=Monday, ..., 6=Saturday' })
@@ -71,4 +71,4 @@ export class CreateTimetableSlotDto {
   competencyCodes?: string;
 }
 
-export class UpdateTimetableSlotDto extends PartialType(CreateTimetableSlotDto) {}
+export class UpdateTimetableSlotDto extends PartialType(CreateTimetableSlotDto) { }

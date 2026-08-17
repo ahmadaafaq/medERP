@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { X } from "lucide-react";
+
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 
@@ -666,10 +668,10 @@ export default function StudentMasterPage() {
       const list: Student[] = Array.isArray(result)
         ? result
         : Array.isArray(result?.data?.data)
-        ? result.data.data
-        : Array.isArray(result?.data)
-        ? result.data
-        : [];
+          ? result.data.data
+          : Array.isArray(result?.data)
+            ? result.data
+            : [];
       const seen = new Set<string>();
       const deduped = list.filter((s) => {
         const key = s.id || s.registration_no || s.rollno;
@@ -1243,15 +1245,13 @@ export default function StudentMasterPage() {
                     setLinkedOnly(next);
                     fetchStudents({ linkedOnly: next });
                   }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-[11px] transition-all ${
-                    linkedOnly
-                      ? 'bg-[var(--color-primary-700)] text-white border-[var(--color-primary-700)] shadow-sm'
-                      : 'bg-[var(--color-bg-surface)] text-[var(--color-ink-700)] border-[var(--color-border)] hover:border-[var(--color-primary-700)] hover:text-[var(--color-primary-700)]'
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-[11px] transition-all ${linkedOnly
+                    ? 'bg-[var(--color-primary-700)] text-white border-[var(--color-primary-700)] shadow-sm'
+                    : 'bg-[var(--color-bg-surface)] text-[var(--color-ink-700)] border-[var(--color-border)] hover:border-[var(--color-primary-700)] hover:text-[var(--color-primary-700)]'
+                    }`}
                 >
-                  <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all ${
-                    linkedOnly ? 'bg-white border-white' : 'border-[var(--color-ink-500)]'
-                  }`}>
+                  <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all ${linkedOnly ? 'bg-white border-white' : 'border-[var(--color-ink-500)]'
+                    }`}>
                     {linkedOnly && (
                       <svg className="w-2.5 h-2.5 text-[var(--color-primary-700)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
@@ -1268,33 +1268,30 @@ export default function StudentMasterPage() {
                   <button
                     type="button"
                     onClick={() => setViewMode('roster')}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                      viewMode === 'roster'
-                        ? 'bg-[var(--color-primary-700)] text-white shadow-sm border-[var(--color-primary-700)]'
-                        : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-[var(--color-primary-100)]'
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${viewMode === 'roster'
+                      ? 'bg-[var(--color-primary-700)] text-white shadow-sm border-[var(--color-primary-700)]'
+                      : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-[var(--color-primary-100)]'
+                      }`}
                   >
                     📋 Roster View
                   </button>
                   <button
                     type="button"
                     onClick={() => { setViewMode('linker'); setLinkerMode('phase'); }}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                      viewMode === 'linker' && linkerMode === 'phase'
-                        ? 'bg-[var(--color-primary-700)] text-white shadow-sm border-[var(--color-primary-700)]'
-                        : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-[var(--color-primary-100)]'
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${viewMode === 'linker' && linkerMode === 'phase'
+                      ? 'bg-[var(--color-primary-700)] text-white shadow-sm border-[var(--color-primary-700)]'
+                      : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-[var(--color-primary-100)]'
+                      }`}
                   >
                     🎓 Batch Phase Linker
                   </button>
                   <button
                     type="button"
                     onClick={() => { setViewMode('linker'); setLinkerMode('group'); }}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                      viewMode === 'linker' && linkerMode === 'group'
-                        ? 'bg-purple-700 text-white shadow-sm border-purple-700'
-                        : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-purple-100 dark:hover:bg-purple-900/40'
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${viewMode === 'linker' && linkerMode === 'group'
+                      ? 'bg-purple-700 text-white shadow-sm border-purple-700'
+                      : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-purple-100 dark:hover:bg-purple-900/40'
+                      }`}
                   >
                     👥 Batch Group Linker
                   </button>
@@ -1386,21 +1383,19 @@ export default function StudentMasterPage() {
               <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-700/50">
                 <button
                   onClick={() => setLinkerMode('phase')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    linkerMode === 'phase'
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${linkerMode === 'phase'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+                    }`}
                 >
                   <span>🎓</span> Professional Phase Promotion
                 </button>
                 <button
                   onClick={() => setLinkerMode('group')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    linkerMode === 'group'
-                      ? 'bg-purple-600 text-white shadow-md'
-                      : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${linkerMode === 'group'
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+                    }`}
                 >
                   <span>👥</span> Academic Group Allocation
                 </button>
@@ -1662,23 +1657,21 @@ export default function StudentMasterPage() {
                         </td>
                         <td className="font-mono text-[var(--color-ink-700)]">{student.academic_session ? student.academic_session.split(' ')[0] : '—'}</td>
                         <td>
-                          <span className={`premium-badge ${
-                            student.residency_type === 'Hosteller'
-                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                              : student.residency_type === 'Resident'
+                          <span className={`premium-badge ${student.residency_type === 'Hosteller'
+                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                            : student.residency_type === 'Resident'
                               ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
                               : 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20'
-                          }`}>
+                            }`}>
                             {student.residency_type || 'Day Scholar'}
                           </span>
                         </td>
                         <td className="text-[var(--color-ink-500)] font-mono text-[10px]">{student.admission_type || '—'}</td>
                         <td>
-                          <span className={`premium-badge ${
-                            student.is_active
-                              ? 'bg-[var(--color-success-tint)] text-[var(--color-success)] border border-[var(--color-success)]/10'
-                              : 'bg-[var(--color-danger-tint)] text-[var(--color-danger)] border border-[var(--color-danger)]/10'
-                          }`}>
+                          <span className={`premium-badge ${student.is_active
+                            ? 'bg-[var(--color-success-tint)] text-[var(--color-success)] border border-[var(--color-success)]/10'
+                            : 'bg-[var(--color-danger-tint)] text-[var(--color-danger)] border border-[var(--color-danger)]/10'
+                            }`}>
                             {student.is_active ? 'ACTIVE' : 'INACTIVE'}
                           </span>
                         </td>
@@ -1717,11 +1710,10 @@ export default function StudentMasterPage() {
                         key={pg}
                         type="button"
                         onClick={() => setCurrentPage(pg)}
-                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                          currentPage === pg
-                            ? 'bg-[var(--color-accent-brass)] text-white font-bold'
-                            : 'hover:bg-[var(--color-primary-100)] text-[var(--color-ink-700)] hover:text-[var(--color-primary-700)]'
-                        }`}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${currentPage === pg
+                          ? 'bg-[var(--color-accent-brass)] text-white font-bold'
+                          : 'hover:bg-[var(--color-primary-100)] text-[var(--color-ink-700)] hover:text-[var(--color-primary-700)]'
+                          }`}
                       >
                         {pg}
                       </button>
@@ -1751,24 +1743,25 @@ export default function StudentMasterPage() {
               <div className="flex justify-between items-center mb-6 border-b border-slate-300 dark:border-slate-800 pb-4">
                 <div>
                   <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                    {editModeId ? 'Edit Student Profile' : 'NMC Medical Student Registration'}
+                    {editModeId ? 'Edit Student Profile' : 'Engineering Student Registration'}
                   </h3>
                   <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                    Step {currentStep} of 6 â€” {
+                    Step {currentStep} of 6 — {
                       currentStep === 1 ? 'Academic & College Enrollment' :
-                      currentStep === 2 ? 'Personal Details' :
-                      currentStep === 3 ? 'Guardian & Addresses' :
-                      currentStep === 4 ? 'NEET & Educational Qualifications' :
-                      currentStep === 5 ? 'Hostel, Transport & Bank Details' :
-                      'Medical Fitness & Digital Declaration'
+                        currentStep === 2 ? 'Personal Details' :
+                          currentStep === 3 ? 'Guardian & Addresses' :
+                            currentStep === 4 ? 'NEET & Educational Qualifications' :
+                              currentStep === 5 ? 'Hostel, Transport & Bank Details' :
+                                'Medical Fitness & Digital Declaration'
                     }
                   </p>
                 </div>
                 <button
                   onClick={() => setIsModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-slate-200/80 dark:bg-slate-200 dark:bg-slate-800/80 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white font-bold flex items-center justify-center transition-colors text-sm"
+                  className="w-8 h-8 rounded-full bg-slate-200/80 dark:bg-slate-200 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-colors"
+                  aria-label="Close modal"
                 >
-                  âœ•
+                  <X size={18} strokeWidth={2} />
                 </button>
               </div>
 
@@ -1777,20 +1770,18 @@ export default function StudentMasterPage() {
                 {[1, 2, 3, 4, 5, 6].map((step, idx) => (
                   <div key={step} className="flex-1 flex items-center">
                     <div className="flex flex-col items-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                        currentStep === step
-                          ? 'bg-indigo-600 text-slate-900 dark:text-white ring-4 ring-indigo-500/30'
-                          : currentStep > step
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${currentStep === step
+                        ? 'bg-indigo-600 text-slate-900 dark:text-white ring-4 ring-indigo-500/30'
+                        : currentStep > step
                           ? 'bg-emerald-500 text-slate-900 dark:text-white font-black'
                           : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
-                      }`}>
+                        }`}>
                         {currentStep > step ? 'âœ“' : step}
                       </div>
                     </div>
                     {idx < 5 && (
-                      <div className={`flex-1 h-0.5 mx-2 transition-all ${
-                        currentStep > step ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-800'
-                      }`} />
+                      <div className={`flex-1 h-0.5 mx-2 transition-all ${currentStep > step ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-800'
+                        }`} />
                     )}
                   </div>
                 ))}
@@ -1811,9 +1802,9 @@ export default function StudentMasterPage() {
                           onChange={(e) => handleCollegeChange(e.target.value)}
                           className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
                         >
-                          <option value="">Select Medical College</option>
+                          <option value="">Select College</option>
                           {colleges.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                            <option key={c.id} value={c.code}>[#{c.code || '1'}] {c.name}</option>
                           ))}
                         </select>
                       </div>
@@ -1828,7 +1819,7 @@ export default function StudentMasterPage() {
                         >
                           <option value="">{metadataLoading ? 'Loading courses...' : 'Select Course'}</option>
                           {filteredCourses.map((c) => (
-                            <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+                            <option key={c.id} value={c.course_cd || c.code}>[#{c.course_cd || c.code}] {c.name}</option>
                           ))}
                         </select>
                       </div>
@@ -1995,126 +1986,126 @@ export default function StudentMasterPage() {
                       </div>
                     </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">First Name *</label>
-                      <input
-                        type="text"
-                        value={formData.firstName}
-                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                        placeholder="Rahul"
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
-                      />
-                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">First Name *</label>
+                        <input
+                          type="text"
+                          value={formData.firstName}
+                          onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                          placeholder="Rahul"
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Middle Name</label>
-                      <input
-                        type="text"
-                        value={formData.middleName}
-                        onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
-                        placeholder="Kumar"
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
-                      />
-                    </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Middle Name</label>
+                        <input
+                          type="text"
+                          value={formData.middleName}
+                          onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
+                          placeholder="Kumar"
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Last Name *</label>
-                      <input
-                        type="text"
-                        value={formData.lastName}
-                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                        placeholder="Sharma"
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
-                      />
-                    </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Last Name *</label>
+                        <input
+                          type="text"
+                          value={formData.lastName}
+                          onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                          placeholder="Sharma"
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Gender</label>
-                      <select
-                        value={formData.gender}
-                        onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
-                      >
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Gender</label>
+                        <select
+                          value={formData.gender}
+                          onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
+                        >
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Date of Birth</label>
-                      <input
-                        type="date"
-                        value={formData.dob}
-                        onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
-                      />
-                    </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Date of Birth</label>
+                        <input
+                          type="date"
+                          value={formData.dob}
+                          onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Blood Group</label>
-                      <select
-                        value={formData.bloodGroup}
-                        onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
-                      >
-                        <option value="A+">A+</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
-                        <option value="B-">B-</option>
-                        <option value="O+">O+</option>
-                        <option value="O-">O-</option>
-                        <option value="AB+">AB+</option>
-                        <option value="AB-">AB-</option>
-                      </select>
-                    </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Blood Group</label>
+                        <select
+                          value={formData.bloodGroup}
+                          onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
+                        >
+                          <option value="A+">A+</option>
+                          <option value="A-">A-</option>
+                          <option value="B+">B+</option>
+                          <option value="B-">B-</option>
+                          <option value="O+">O+</option>
+                          <option value="O-">O-</option>
+                          <option value="AB+">AB+</option>
+                          <option value="AB-">AB-</option>
+                        </select>
+                      </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Aadhaar Number (12 digits)</label>
-                      <input
-                        type="text"
-                        maxLength={12}
-                        value={formData.aadhaarNo}
-                        onChange={(e) => setFormData({ ...formData, aadhaarNo: e.target.value })}
-                        placeholder="123456789012"
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
-                      />
-                    </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Aadhaar Number (12 digits)</label>
+                        <input
+                          type="text"
+                          maxLength={12}
+                          value={formData.aadhaarNo}
+                          onChange={(e) => setFormData({ ...formData, aadhaarNo: e.target.value })}
+                          placeholder="123456789012"
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">PAN Number (Optional)</label>
-                      <input
-                        type="text"
-                        value={formData.panNo}
-                        onChange={(e) => setFormData({ ...formData, panNo: e.target.value.toUpperCase() })}
-                        placeholder="ABCDE1234F"
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
-                      />
-                    </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">PAN Number (Optional)</label>
+                        <input
+                          type="text"
+                          value={formData.panNo}
+                          onChange={(e) => setFormData({ ...formData, panNo: e.target.value.toUpperCase() })}
+                          placeholder="ABCDE1234F"
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Mobile Number *</label>
-                      <input
-                        type="text"
-                        value={formData.mobileNumber}
-                        onChange={(e) => setFormData({ ...formData, mobileNumber: e.target.value })}
-                        placeholder="9876543210"
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
-                      />
-                    </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Mobile Number *</label>
+                        <input
+                          type="text"
+                          value={formData.mobileNumber}
+                          onChange={(e) => setFormData({ ...formData, mobileNumber: e.target.value })}
+                          placeholder="9876543210"
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
+                        />
+                      </div>
 
-                    <div className="md:col-span-2">
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Email Address</label>
-                      <input
-                        type="email"
-                        value={formData.emailAddress}
-                        onChange={(e) => setFormData({ ...formData, emailAddress: e.target.value })}
-                        placeholder="rahul.sharma@mederp.edu"
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
-                      />
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Email Address</label>
+                        <input
+                          type="email"
+                          value={formData.emailAddress}
+                          onChange={(e) => setFormData({ ...formData, emailAddress: e.target.value })}
+                          placeholder="rahul.sharma@mederp.edu"
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
+                        />
+                      </div>
                     </div>
-                  </div>
                   </div>
                 )}
 
@@ -2514,7 +2505,7 @@ export default function StudentMasterPage() {
                 disabled={currentStep === 1}
                 className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-800 hover:bg-slate-200 dark:bg-slate-800 font-bold text-xs text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                â† Back
+                Back
               </button>
 
               <div className="flex gap-3">
@@ -2531,7 +2522,7 @@ export default function StudentMasterPage() {
                     onClick={handleNextStep}
                     className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-bold text-xs text-slate-900 dark:text-white shadow-md shadow-indigo-600/10 transition-colors"
                   >
-                    Next Step â†’
+                    Next Step
                   </button>
                 ) : (
                   <button
@@ -2627,7 +2618,7 @@ export default function StudentMasterPage() {
 </head>
 <body>
 <div class="header">
-  ${s?.photoUrl ? `<img class="photo" src="${s.photoUrl}" alt="photo"/>` : `<div class="photo-placeholder">${s?.name?.charAt(0)||'?'}</div>`}
+  ${s?.photoUrl ? `<img class="photo" src="${s.photoUrl}" alt="photo"/>` : `<div class="photo-placeholder">${s?.name?.charAt(0) || '?'}</div>`}
   <div>
     <div class="college-name">${s?.collegeName || s?.college_name || ''}</div>
     <div class="student-name">${s?.name || ''}</div>
@@ -2638,46 +2629,46 @@ export default function StudentMasterPage() {
 
 <h3>Personal Information</h3>
 <div class="grid">
-  <div class="field"><label>Gender</label><span>${s?.gender||'—'}</span></div>
-  <div class="field"><label>Date of Birth</label><span>${s?.dob||'—'}</span></div>
-  <div class="field"><label>Blood Group</label><span>${s?.bloodGroup||'—'}</span></div>
-  <div class="field"><label>Aadhaar No</label><span>${s?.aadhaarNo||'—'}</span></div>
-  <div class="field"><label>Mobile</label><span>${s?.mobileNo||'—'}</span></div>
-  <div class="field"><label>Email</label><span>${s?.emailAddress||'—'}</span></div>
+  <div class="field"><label>Gender</label><span>${s?.gender || '—'}</span></div>
+  <div class="field"><label>Date of Birth</label><span>${s?.dob || '—'}</span></div>
+  <div class="field"><label>Blood Group</label><span>${s?.bloodGroup || '—'}</span></div>
+  <div class="field"><label>Aadhaar No</label><span>${s?.aadhaarNo || '—'}</span></div>
+  <div class="field"><label>Mobile</label><span>${s?.mobileNo || '—'}</span></div>
+  <div class="field"><label>Email</label><span>${s?.emailAddress || '—'}</span></div>
 </div>
 
 <h3>Academic Details</h3>
 <div class="grid">
-  <div class="field"><label>College</label><span>${s?.collegeName||s?.college_name||'—'}</span></div>
-  <div class="field"><label>Branch</label><span>${s?.branchName||'—'}</span></div>
-  <div class="field"><label>Residency</label><span>${s?.residencyType||s?.residency_type||'—'}</span></div>
-  <div class="field"><label>Admission Type</label><span>${s?.admissionType||s?.admission_type||'—'}</span></div>
-  <div class="field"><label>Admission Status</label><span>${s?.admissionStatus||'—'}</span></div>
-  <div class="field"><label>Category</label><span>${s?.categoryCode||'—'}</span></div>
+  <div class="field"><label>College</label><span>${s?.collegeName || s?.college_name || '—'}</span></div>
+  <div class="field"><label>Branch</label><span>${s?.branchName || '—'}</span></div>
+  <div class="field"><label>Residency</label><span>${s?.residencyType || s?.residency_type || '—'}</span></div>
+  <div class="field"><label>Admission Type</label><span>${s?.admissionType || s?.admission_type || '—'}</span></div>
+  <div class="field"><label>Admission Status</label><span>${s?.admissionStatus || '—'}</span></div>
+  <div class="field"><label>Category</label><span>${s?.categoryCode || '—'}</span></div>
 </div>
 
 <h3>Guardian Information</h3>
 <div class="grid">
-  <div class="field"><label>Father's Name</label><span>${s?.fatherName||'—'}</span></div>
-  <div class="field"><label>Father's Mobile</label><span>${s?.fatherMobile||'—'}</span></div>
-  <div class="field"><label>Father's Occupation</label><span>${s?.fatherOccupation||'—'}</span></div>
-  <div class="field"><label>Mother's Name</label><span>${s?.motherName||'—'}</span></div>
-  <div class="field"><label>Mother's Mobile</label><span>${s?.motherMobile||'—'}</span></div>
-  <div class="field"><label>Mother's Occupation</label><span>${s?.motherOccupation||'—'}</span></div>
+  <div class="field"><label>Father's Name</label><span>${s?.fatherName || '—'}</span></div>
+  <div class="field"><label>Father's Mobile</label><span>${s?.fatherMobile || '—'}</span></div>
+  <div class="field"><label>Father's Occupation</label><span>${s?.fatherOccupation || '—'}</span></div>
+  <div class="field"><label>Mother's Name</label><span>${s?.motherName || '—'}</span></div>
+  <div class="field"><label>Mother's Mobile</label><span>${s?.motherMobile || '—'}</span></div>
+  <div class="field"><label>Mother's Occupation</label><span>${s?.motherOccupation || '—'}</span></div>
 </div>
 
 <h3>NEET & Qualifications</h3>
 <div class="grid">
-  <div class="field"><label>NEET Roll No</label><span>${s?.neetRollNo||'—'}</span></div>
-  <div class="field"><label>NEET Score</label><span>${s?.neetScore||'—'}</span></div>
-  <div class="field"><label>NEET Rank</label><span>${s?.neetRank||'—'}</span></div>
-  <div class="field"><label>10th %</label><span>${s?.tenthPercent||'—'}</span></div>
-  <div class="field"><label>12th %</label><span>${s?.twelfthPercent||'—'}</span></div>
-  <div class="field"><label>12th Board</label><span>${s?.twelfthBoard||'—'}</span></div>
+  <div class="field"><label>NEET Roll No</label><span>${s?.neetRollNo || '—'}</span></div>
+  <div class="field"><label>NEET Score</label><span>${s?.neetScore || '—'}</span></div>
+  <div class="field"><label>NEET Rank</label><span>${s?.neetRank || '—'}</span></div>
+  <div class="field"><label>10th %</label><span>${s?.tenthPercent || '—'}</span></div>
+  <div class="field"><label>12th %</label><span>${s?.twelfthPercent || '—'}</span></div>
+  <div class="field"><label>12th Board</label><span>${s?.twelfthBoard || '—'}</span></div>
 </div>
 
 <div class="footer">
-  <span>Printed on ${new Date().toLocaleDateString('en-IN', {day:'numeric',month:'long',year:'numeric'})}</span>
+  <span>Printed on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
   <span>MedERP – Student Profile Sheet</span>
 </div>
 </body>
@@ -2879,7 +2870,8 @@ export default function StudentMasterPage() {
       )}
 
       {/* Slide-in animation */}
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes slide-in-right {
           from { transform: translateX(100%); opacity: 0; }
           to   { transform: translateX(0);    opacity: 1; }

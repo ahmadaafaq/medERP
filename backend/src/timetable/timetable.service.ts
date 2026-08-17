@@ -11,7 +11,7 @@ export class TimetableService implements OnModuleInit {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly tenantSchemaService: TenantSchemaService,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     try {
@@ -36,13 +36,20 @@ export class TimetableService implements OnModuleInit {
 
   async listSlots(tenantSlug: string, query: { departmentId?: string; batchId?: string; dayOfWeek?: number; facultyId?: string; subjectId?: string }) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+
+    // Resolve any incoming codes/emp_ids to UUIDs so query matches DB correctly
+    const resolvedDeptId = await this.resolveToUUID(slug, 'departments', 'departmentId', query.departmentId);
+    const resolvedBatchId = await this.resolveToUUID(slug, 'batches', 'batchId', query.batchId);
+    const resolvedSubjectId = await this.resolveToUUID(slug, 'subjects', 'subjectId', query.subjectId);
+    const resolvedFacultyId = await this.resolveToUUID(slug, 'faculty', 'facultyId', query.facultyId);
+
     const params: any[] = [];
     let sql = `
       SELECT ts.id, ts.faculty_id, ts.subject_id, ts.department_id, ts.batch_id,
              ts.day_of_week, ts.start_time, ts.end_time, ts.room, ts.slot_type,
              ts.effective_from, ts.effective_until, ts.group_name, ts.topic, ts.competency_codes,
-             COALESCE(f.name, 'Faculty Member') AS faculty_name, f.emp_id AS faculty_code,
-             COALESCE(s.name, 'Medical Subject') AS subject_name, COALESCE(s.code, 'MBBS') AS subject_code,
+             COALESCE(f.name, '') AS faculty_name, f.emp_id AS faculty_code,
+             COALESCE(s.name, '') AS subject_name, COALESCE(s.code, '') AS subject_code,
              d.name AS department_name,
              b.code AS batch_code, b.year AS batch_year
       FROM timetable_slots ts
@@ -53,21 +60,21 @@ export class TimetableService implements OnModuleInit {
       WHERE 1=1
     `;
 
-    if (query.departmentId && !query.facultyId) {
-      params.push(query.departmentId);
+    if (resolvedDeptId && !resolvedFacultyId) {
+      params.push(resolvedDeptId);
       sql += ` AND (ts.department_id = $${params.length} OR f.department_id = $${params.length} OR s.department_id = $${params.length})`;
     }
-    if (query.facultyId) {
-      params.push(query.facultyId);
+    if (resolvedFacultyId) {
+      params.push(resolvedFacultyId);
       sql += ` AND (ts.faculty_id = $${params.length} OR f.id = $${params.length})`;
     }
-    if (query.subjectId) {
-      params.push(query.subjectId);
+    if (resolvedSubjectId) {
+      params.push(resolvedSubjectId);
       sql += ` AND ts.subject_id = $${params.length}`;
     }
 
-    if (query.batchId) {
-      params.push(query.batchId);
+    if (resolvedBatchId) {
+      params.push(resolvedBatchId);
       sql += ` AND ts.batch_id = $${params.length}`;
     }
     if (query.dayOfWeek !== undefined) {
@@ -82,16 +89,16 @@ export class TimetableService implements OnModuleInit {
     let sessionParams: any[] = [];
     let sessionWhere: string[] = ['s.is_cancelled = false'];
 
-    if (query.facultyId) {
-      sessionParams.push(query.facultyId);
+    if (resolvedFacultyId) {
+      sessionParams.push(resolvedFacultyId);
       sessionWhere.push(`(s.faculty_id = $${sessionParams.length} OR ts.faculty_id = $${sessionParams.length})`);
     }
-    if (query.subjectId) {
-      sessionParams.push(query.subjectId);
+    if (resolvedSubjectId) {
+      sessionParams.push(resolvedSubjectId);
       sessionWhere.push(`s.subject_id = $${sessionParams.length}`);
     }
-    if (query.batchId) {
-      sessionParams.push(query.batchId);
+    if (resolvedBatchId) {
+      sessionParams.push(resolvedBatchId);
       sessionWhere.push(`s.batch_id = $${sessionParams.length}`);
     }
 
@@ -186,8 +193,8 @@ export class TimetableService implements OnModuleInit {
       if (slot.competency_codes || slot.topic) {
         const topicStr = String(slot.topic || '').toLowerCase();
         const codesArr = String(slot.competency_codes || '').split(',').map((c: string) => c.trim().toLowerCase());
-        const filtered = relatedComps.filter(c => 
-          codesArr.includes(c.code.toLowerCase()) || 
+        const filtered = relatedComps.filter(c =>
+          codesArr.includes(c.code.toLowerCase()) ||
           (c.code && topicStr.includes(c.code.toLowerCase()))
         );
         if (filtered.length > 0) matchedComps = filtered;
@@ -241,11 +248,63 @@ export class TimetableService implements OnModuleInit {
     return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str);
   }
 
+  private async resolveToUUID(slug: string, table: string, field: string, value?: string): Promise<string | null> {
+    if (!value) return null;
+    if (this.isUUID(value)) return value;
+
+    let query = '';
+    const params = [value];
+    if (table === 'faculty') {
+      query = `SELECT id FROM faculty WHERE emp_id = $1 OR id::text = $1 LIMIT 1`;
+    } else if (table === 'subjects') {
+      query = `SELECT id FROM subjects WHERE code = $1 OR id::text = $1 LIMIT 1`;
+    } else if (table === 'departments') {
+      query = `SELECT id FROM departments WHERE branch_cd = $1 OR code = $1 OR id::text = $1 LIMIT 1`;
+    } else if (table === 'batches') {
+      query = `SELECT id FROM batches WHERE code = $1 OR name = $1 OR id::text = $1 LIMIT 1`;
+    } else {
+      return null;
+    }
+
+    try {
+      const rows = await this.tenantSchemaService.queryInTenant(slug, query, params);
+      if (rows && rows.length > 0) {
+        return rows[0].id;
+      }
+    } catch (err) {
+      this.logger.error(`Error resolving ${field} value "${value}" in table ${table}:`, err);
+    }
+    return null;
+  }
+
   async createSlot(tenantSlug: string, dto: CreateTimetableSlotDto) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
 
-    // Overlap validation
-    await this.checkOverlap(slug, dto);
+    const resolvedFacultyId = await this.resolveToUUID(slug, 'faculty', 'facultyId', dto.facultyId);
+    const resolvedSubjectId = await this.resolveToUUID(slug, 'subjects', 'subjectId', dto.subjectId);
+    const resolvedDepartmentId = await this.resolveToUUID(slug, 'departments', 'departmentId', dto.departmentId);
+    const resolvedBatchId = await this.resolveToUUID(slug, 'batches', 'batchId', dto.batchId);
+
+    if (dto.facultyId && !resolvedFacultyId) {
+      throw new BadRequestException(`Faculty "${dto.facultyId}" not found in this college. It may belong to a different college.`);
+    }
+    if (dto.subjectId && !resolvedSubjectId) {
+      throw new BadRequestException(`Subject "${dto.subjectId}" not found in this college.`);
+    }
+    if (dto.batchId && !resolvedBatchId) {
+      throw new BadRequestException(`Batch "${dto.batchId}" not found in this college.`);
+    }
+
+    const resolvedDto = {
+      ...dto,
+      facultyId: resolvedFacultyId || undefined,
+      subjectId: resolvedSubjectId || undefined,
+      departmentId: resolvedDepartmentId || undefined,
+      batchId: resolvedBatchId || undefined,
+    };
+
+    // Overlap validation using resolved UUIDs
+    await this.checkOverlap(slug, resolvedDto);
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -256,10 +315,10 @@ export class TimetableService implements OnModuleInit {
        ) VALUES ($1, $2, $3, $4, $5, $6::TIME, $7::TIME, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
-        this.isUUID(dto.facultyId) ? dto.facultyId : null,
-        this.isUUID(dto.subjectId) ? dto.subjectId : null,
-        this.isUUID(dto.departmentId) ? dto.departmentId : null,
-        this.isUUID(dto.batchId) ? dto.batchId : null,
+        resolvedFacultyId,
+        resolvedSubjectId,
+        resolvedDepartmentId,
+        resolvedBatchId,
         dto.dayOfWeek,
         dto.startTime,
         dto.endTime,
@@ -279,12 +338,20 @@ export class TimetableService implements OnModuleInit {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const current = await this.getSlotById(tenantSlug, id);
 
+    // Resolve any incoming code/ID values in dto
+    const resolvedFacultyId = dto.facultyId !== undefined ? await this.resolveToUUID(slug, 'faculty', 'facultyId', dto.facultyId) : current.faculty_id;
+    const resolvedSubjectId = dto.subjectId !== undefined ? await this.resolveToUUID(slug, 'subjects', 'subjectId', dto.subjectId) : current.subject_id;
+    const resolvedDepartmentId = dto.departmentId !== undefined ? await this.resolveToUUID(slug, 'departments', 'departmentId', dto.departmentId) : current.department_id;
+    const resolvedBatchId = dto.batchId !== undefined ? await this.resolveToUUID(slug, 'batches', 'batchId', dto.batchId) : current.batch_id;
+    if (dto.facultyId && !resolvedFacultyId) {
+      throw new BadRequestException(`Faculty "${dto.facultyId}" not found in this college. It may belong to a different college.`);
+    }
     // Merge current and update details to perform proper conflict check
     const merged = {
-      facultyId: dto.facultyId !== undefined ? dto.facultyId : current.faculty_id,
-      subjectId: dto.subjectId !== undefined ? dto.subjectId : current.subject_id,
-      departmentId: dto.departmentId !== undefined ? dto.departmentId : current.department_id,
-      batchId: dto.batchId !== undefined ? dto.batchId : current.batch_id,
+      facultyId: resolvedFacultyId || undefined,
+      subjectId: resolvedSubjectId || undefined,
+      departmentId: resolvedDepartmentId || undefined,
+      batchId: resolvedBatchId || undefined,
       dayOfWeek: dto.dayOfWeek !== undefined ? dto.dayOfWeek : current.day_of_week,
       startTime: dto.startTime !== undefined ? dto.startTime : current.start_time,
       endTime: dto.endTime !== undefined ? dto.endTime : current.end_time,
@@ -317,10 +384,10 @@ export class TimetableService implements OnModuleInit {
        WHERE id = $15
        RETURNING *`,
       [
-        this.isUUID(merged.facultyId) ? merged.facultyId : null,
-        this.isUUID(merged.subjectId) ? merged.subjectId : null,
-        this.isUUID(merged.departmentId) ? merged.departmentId : null,
-        this.isUUID(merged.batchId) ? merged.batchId : null,
+        resolvedFacultyId,
+        resolvedSubjectId,
+        resolvedDepartmentId,
+        resolvedBatchId,
         merged.dayOfWeek,
         merged.startTime,
         merged.endTime,
@@ -350,8 +417,13 @@ export class TimetableService implements OnModuleInit {
 
   async getRelevantFaculties(tenantSlug: string, subjectId?: string, departmentId?: string) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+
+    // Frontend sends subject/department CODES, not UUIDs — resolve first, same as every other method.
+    const resolvedSubjectId = await this.resolveToUUID(slug, 'subjects', 'subjectId', subjectId);
+    const resolvedDepartmentId = await this.resolveToUUID(slug, 'departments', 'departmentId', departmentId);
+
     const params: any[] = [];
-    
+
     // We want a list of all faculties that belong to the department OR are linked to the subject via the Subject Linker (faculty_subjects).
     // Prioritize linked faculties at the top!
     let sql = `
@@ -363,15 +435,15 @@ export class TimetableService implements OnModuleInit {
       LEFT JOIN faculty_subjects fs ON fs.faculty_id = f.id AND fs.subject_id = $1 AND fs.is_active = true
       WHERE f.is_active = true
     `;
-    params.push(subjectId || null);
+    params.push(resolvedSubjectId || null);
 
     const conditions: string[] = [];
-    if (subjectId) {
+    if (resolvedSubjectId) {
       // either linked via Subject Linker OR has it as their primary subject_id
       conditions.push(`(fs.subject_id = $1 OR f.subject_id = $1)`);
     }
-    if (departmentId) {
-      params.push(departmentId);
+    if (resolvedDepartmentId) {
+      params.push(resolvedDepartmentId);
       conditions.push(`f.department_id = $${params.length}`);
     }
 

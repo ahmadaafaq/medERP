@@ -127,8 +127,8 @@ export default function Header({ title }: HeaderProps) {
       (nameStr.toLowerCase().includes('sanjay') || empId.includes('DR/07/026')
         ? '/avatars/dr_sanjay_singh.png'
         : nameStr.toLowerCase().includes('sarah') || nameStr.toLowerCase().includes('aparna')
-        ? '/avatars/dr_sarah_sharma.png'
-        : '');
+          ? '/avatars/dr_sarah_sharma.png'
+          : '');
 
     const registrationNo =
       p.registration_no ||
@@ -319,10 +319,10 @@ export default function Header({ title }: HeaderProps) {
   const userDisplayId = user?.registrationNo
     ? `REG: ${user.registrationNo}`
     : user?.empId
-    ? `EMP: ${user.empId}`
-    : user?.id
-    ? `ID: ${user.id.slice(0, 8)}...`
-    : 'ID: Active';
+      ? `EMP: ${user.empId}`
+      : user?.id
+        ? `ID: ${user.id.slice(0, 8)}...`
+        : 'ID: Active';
 
   return (
     <>
@@ -333,7 +333,7 @@ export default function Header({ title }: HeaderProps) {
             <h2 className="text-sm font-black text-white tracking-wider uppercase font-sans">
               {title}
             </h2>
-            <p className="text-[10px] text-purple-200/80 font-medium">MedERP Medical College Management System</p>
+            <p className="text-[10px] text-purple-200/80 font-medium">Engineering College Management System</p>
           </div>
         </div>
 
@@ -711,9 +711,8 @@ export default function Header({ title }: HeaderProps) {
                 <button
                   type="button"
                   onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
-                    notificationsEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${notificationsEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'
+                    }`}
                 >
                   {notificationsEnabled ? 'Enabled' : 'Disabled'}
                 </button>
