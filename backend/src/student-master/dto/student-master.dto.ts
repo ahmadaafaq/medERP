@@ -1,5 +1,6 @@
 import { IsString, IsOptional, IsBoolean, IsNumber, IsEmail, IsArray } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class CreateStudentDto {
   // Step 1: Academic & College Enrollment
@@ -153,7 +154,7 @@ export class CreateStudentDto {
 
   @ApiPropertyOptional({ example: 'rahul.sharma@mederp.edu' })
   @IsOptional()
-  @IsEmail()
+  @IsString()
   emailAddress?: string;
 
   // Step 3: Parents & Addresses
@@ -187,8 +188,9 @@ export class CreateStudentDto {
   @IsString()
   motherMobile?: string;
 
-  @ApiPropertyOptional({ example: '1200000' })
+  @ApiPropertyOptional({ example: 1200000 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   annualIncome?: number;
 
@@ -233,8 +235,9 @@ export class CreateStudentDto {
   @IsString()
   class10Board?: string;
 
-  @ApiPropertyOptional({ example: '94.5' })
+  @ApiPropertyOptional({ example: 94.5 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class10Pct?: number;
 
@@ -245,26 +248,31 @@ export class CreateStudentDto {
 
   @ApiPropertyOptional({ example: 95 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12Physics?: number;
 
   @ApiPropertyOptional({ example: 94 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12Chemistry?: number;
 
   @ApiPropertyOptional({ example: 98 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12Biology?: number;
 
   @ApiPropertyOptional({ example: 92 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12English?: number;
 
-  @ApiPropertyOptional({ example: '94.75' })
+  @ApiPropertyOptional({ example: 94.75 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12Pct?: number;
 
@@ -275,16 +283,19 @@ export class CreateStudentDto {
 
   @ApiPropertyOptional({ example: 685 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   neetScore?: number;
 
   @ApiPropertyOptional({ example: 99.85 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   neetPercentile?: number;
 
   @ApiPropertyOptional({ example: 1250 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   neetAirRank?: number;
 
@@ -346,7 +357,12 @@ export class CreateStudentDto {
   photoUrl?: string;
 }
 
-export class UpdateStudentDto extends CreateStudentDto {}
+export class UpdateStudentDto extends PartialType(CreateStudentDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  id?: string;
+}
 
 export class BulkLinkProfessionalDto {
   @ApiProperty({ type: [String], description: 'Array of student IDs to link and activate in the professional phase' })

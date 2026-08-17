@@ -27,6 +27,16 @@ export class LoginDto {
   @MinLength(1, { message: 'Password is required' })
   password: string;
 
+  @ApiPropertyOptional({ example: 'srms-ims' })
+  @IsOptional()
+  @IsString()
+  tenantSlug?: string;
+
+  @ApiPropertyOptional({ example: 'srms-ims' })
+  @IsOptional()
+  @IsString()
+  tenant?: string;
+
   @ApiPropertyOptional({
     enum: UserRole,
     description: 'Role hint (used to route to correct dashboard on login)',

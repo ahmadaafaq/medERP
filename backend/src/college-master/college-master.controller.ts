@@ -10,6 +10,7 @@ import {
   CreateBranchDto, UpdateBranchDto,
   CreateSessionDto, UpdateSessionDto,
   CreateProfessionalDto, UpdateProfessionalDto,
+  CreateResidencyDto, UpdateResidencyDto,
   CreateGroupDto, UpdateGroupDto,
 } from './dto/college-master.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -194,6 +195,35 @@ export class CollegeMasterController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async deleteProfessional(@Param('id') id: string, @Query('tenant') tenant?: string) {
     return this.collegeMasterService.deleteProfessional(id, tenant);
+  }
+
+  // ─── 7. RESIDENCY CATEGORIES (Hostel / Resident / Day Scholar) ─────────────
+  @Get('residencies')
+  @ApiOperation({ summary: 'List Residency Categories (Hostel, Resident, Day Scholar) — public read' })
+  async listResidencies(@Query('tenant') tenant?: string) {
+    const data = await this.collegeMasterService.listResidencies(tenant);
+    return { success: true, data };
+  }
+
+  @Post('residencies')
+  @ApiOperation({ summary: 'Create Residency Category' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async createResidency(@Body() dto: CreateResidencyDto, @Query('tenant') tenant?: string) {
+    return this.collegeMasterService.createResidency(dto, tenant);
+  }
+
+  @Put('residencies/:id')
+  @ApiOperation({ summary: 'Update Residency Category' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async updateResidency(@Param('id') id: string, @Body() dto: UpdateResidencyDto, @Query('tenant') tenant?: string) {
+    return this.collegeMasterService.updateResidency(id, dto, tenant);
+  }
+
+  @Delete('residencies/:id')
+  @ApiOperation({ summary: 'Delete Residency Category' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async deleteResidency(@Param('id') id: string, @Query('tenant') tenant?: string) {
+    return this.collegeMasterService.deleteResidency(id, tenant);
   }
 
   // ─── 8. GROUPS MASTER ─────────────────────────────────────────────────────

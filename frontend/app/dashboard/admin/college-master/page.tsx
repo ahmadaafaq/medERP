@@ -191,51 +191,60 @@ export default function CollegeMasterPage() {
   // Modal Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
-  const [formData, setFormData] = useState<Record<string, any>>({});
-
-  // ─── TENANT SLUG RESOLVER ────────────────────────────────────────────────────
-  // For tenant-scoped endpoints (courses, batches, branches, sessions),
-  // use the slug of the currently selected college (or the first loaded college).
+  const [formData, setFormData] = useState<Record<string, any>>({});  // ─── TENANT SLUG RESOLVER ────────────────────────────────────────────────────
+  // Strictly enforce the logged-in college tenant slug (No cross-tenant data)
   const getActiveTenantSlug = (): string => {
-    // If a specific college is selected in the filter, use its slug
-    if (selectedCollegeFilter !== 'all') {
-      return colleges.find((c) => c.id === selectedCollegeFilter)?.slug || '';
+    if (typeof window !== 'undefined') {
+      const storedSlug = localStorage.getItem('tenantSlug');
+      if (storedSlug) return storedSlug;
     }
-    // Otherwise use the first loaded college slug
-    return colleges[0]?.slug || '';
+    return colleges[0]?.slug || 'srms-ims';
   };
 
   // Slug for the college currently selected in the form modal
   const getFormCollegeSlug = (): string => {
-    return colleges.find((c) => c.id === formData.collegeId)?.slug
-      || colleges[0]?.slug
-      || '';
+    return getActiveTenantSlug();
   };
 
-  // ─── ON MOUNT: Load colleges from public.tenants (PostgreSQL) ───────────────
-  // This replaces all hardcoded data. localStorage is cleared to avoid stale mock.
+  // ─── ON MOUNT: Load colleges scoped strictly to active tenant ───────────────
   useEffect(() => {
-    // Clear old localStorage mock data on first load
     ['mederp_colleges','mederp_courses','mederp_batches','mederp_branches','mederp_sessions','mederp_residencies','mederp_professionals']
       .forEach((k) => localStorage.removeItem(k));
 
-    // Load real tenants from PostgreSQL via backend
     const loadColleges = async () => {
       try {
+        const storedSlug = (typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null) || 'srms-ims';
         const res = await fetch(`${API_BASE}/colleges`);
         if (res.ok) {
           const data = await res.json();
-          const list: College[] = (data.data || data || []).map((t: any) => ({
-            id: t.id,
-            name: t.name,
-            slug: t.slug,
-            domain: t.domain || '',
-            plan: t.plan || 'standard',
-            primary_color: t.primary_color || '#6366F1',
-            is_active: t.is_active ?? true,
-          }));
+          const list: College[] = (data.data || data || [])
+            .map((t: any) => ({
+              id: t.id,
+              name: t.name,
+              slug: t.slug,
+              domain: t.domain || '',
+              plan: t.plan || 'standard',
+              primary_color: t.primary_color || '#2D2575',
+              is_active: t.is_active ?? true,
+            }))
+            .filter((c: College) => c.slug === storedSlug);
+
+          if (list.length === 0) {
+            const collegeName = (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || storedSlug;
+            list.push({
+              id: storedSlug,
+              name: collegeName,
+              slug: storedSlug,
+              domain: '',
+              plan: 'Enterprise',
+              primary_color: '#2D2575',
+              is_active: true,
+            });
+          }
+
           setColleges(list);
-          console.log(`[CollegeMaster] Loaded ${list.length} tenants from PostgreSQL ✅`);
+          setSelectedCollegeFilter(list[0].id);
+          console.log(`[CollegeMaster] Scoped to active tenant: ${storedSlug} ✅`);
         } else {
           console.error('[CollegeMaster] Failed to load colleges from API');
         }
@@ -243,6 +252,7 @@ export default function CollegeMasterPage() {
         console.error('[CollegeMaster] Error loading colleges:', err);
       }
     };
+
     loadColleges();
   }, []);
 
@@ -251,26 +261,45 @@ export default function CollegeMasterPage() {
   // Uses getActiveTenantSlug() so the right tenant schema is queried
 
   const fetchData = async (tab: SubCategory) => {
-    // 'residencies' has no backend endpoint yet — local-only
-    if (tab === 'residencies') return;
-
     // Colleges come from public.tenants — no tenant slug needed
     if (tab === 'colleges') {
       setLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/colleges`);
+        const token = localStorage.getItem('token');
+        const activeSlug = (typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null) || 'srms-ims';
+        const activeName = (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null);
+
+        const res = await fetch(`${API_BASE}/colleges`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (res.ok) {
           const data = await res.json();
-          const list: College[] = (data.data || data || []).map((t: any) => ({
-            id: t.id,
-            name: t.name,
-            slug: t.slug,
-            domain: t.domain || '',
-            plan: t.plan || 'standard',
-            primary_color: t.primary_color || '#6366F1',
-            is_active: t.is_active ?? true,
-          }));
+          const list: College[] = (data.data || data || [])
+            .map((t: any) => ({
+              id: t.id,
+              name: t.name,
+              slug: t.slug,
+              domain: t.domain || '',
+              plan: t.plan || 'standard',
+              primary_color: t.primary_color || '#5B4BFF',
+              is_active: t.is_active ?? true,
+            }))
+            .filter((c: College) => c.slug === activeSlug);
+
+          if (list.length === 0) {
+            list.push({
+              id: activeSlug,
+              name: activeName || 'Rajshree Medical Research Institute Bareilly',
+              slug: activeSlug,
+              domain: '',
+              plan: 'Enterprise',
+              primary_color: '#5B4BFF',
+              is_active: true,
+            });
+          }
+
           setColleges(list);
+          setSelectedCollegeFilter(list[0].id);
         }
       } catch (err) {
         console.error('[CollegeMaster] Error fetching colleges:', err);
@@ -289,6 +318,7 @@ export default function CollegeMasterPage() {
 
     setLoading(true);
     try {
+      const token = localStorage.getItem('token');
       // API_BASE already = '.../api/v1/college-master' so just use the sub-path
       const endpointMap: Record<string, string> = {
         colleges: 'colleges',
@@ -301,7 +331,9 @@ export default function CollegeMasterPage() {
         residencies: 'residencies',
       };
       const endpoint = endpointMap[tab] || tab;
-      const res = await fetch(`${API_BASE}/${endpoint}?tenant=${slug}`);
+      const res = await fetch(`${API_BASE}/${endpoint}?tenant=${slug}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!res.ok) {
         const errText = await res.text();
         console.error(`[CollegeMaster] API ${tab} failed (${res.status}):`, errText);
@@ -315,12 +347,13 @@ export default function CollegeMasterPage() {
         if (tab === 'branches') setBranches(list);
         if (tab === 'groups') setGroups(list);
         if (tab === 'sessions') setSessions(list);
+        if (tab === 'residencies') setResidencies(list);
         if (tab === 'professionals') {
-          const defaultCollege = selectedCollegeFilter !== 'all' ? colleges.find(c => c.id === selectedCollegeFilter) || colleges[0] : colleges[0];
+          const defaultCollege = colleges[0] || { id: getActiveTenantSlug(), name: (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || 'Medical College' };
           setProfessionals(list.map((p: any) => ({
             id: p.id,
             college_id: p.college_id || defaultCollege?.id || '',
-            college_name: defaultCollege?.name || 'SRMS Institute of Medical Sciences',
+            college_name: defaultCollege?.name || (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || 'Medical College',
             course_id: p.course_cd || 'MBBS',
             course_code: p.course_cd || 'MBBS',
             course_name: 'Bachelor of Medicine, Bachelor of Surgery',
@@ -655,38 +688,42 @@ export default function CollegeMasterPage() {
     const method = isEdit ? 'PUT' : 'POST';
     const recordId = editingItem?.id || editingItem?.slug || '';
 
-    // Residencies: local fallback (no backend endpoint yet)
-    if (activeTab === 'residencies') {
-      updateLocalStateFallback(isEdit);
-      setIsModalOpen(false);
-      return;
-    }
-
     // Colleges → public schema endpoint, no tenant slug needed
     if (activeTab === 'colleges') {
       const url = isEdit ? `${API_BASE}/colleges/${recordId}` : `${API_BASE}/colleges`;
+      const cleanSlug = (formData.slug || formData.name || 'college').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
       const bodyPayload: Record<string, any> = {
         name: formData.name,
-        slug: formData.slug,
-        domain: formData.domain || '',
-        plan: formData.plan || 'standard',
-        primaryColor: formData.primaryColor || formData.primary_color || '#6366F1',
+        slug: cleanSlug,
+        domain: formData.domain || undefined,
+        plan: formData.plan || 'Enterprise',
+        primaryColor: formData.primaryColor || formData.primary_color || '#5B4BFF',
       };
       if (isEdit) {
-        bodyPayload.isActive = formData.is_active ?? true;
+        bodyPayload.isActive = formData.is_active ?? formData.isActive ?? true;
       }
       try {
-        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyPayload) });
+        const token = localStorage.getItem('token');
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(bodyPayload),
+        });
         if (res.ok) {
           console.log('[CollegeMaster] College saved to public.tenants ✅');
           await fetchData('colleges');
         } else {
-          const errText = await res.text();
-          console.error('[CollegeMaster] College save failed:', errText);
-          alert(`Save failed: ${errText}`);
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.message || (await res.text().catch(() => 'Save failed'));
+          console.error('[CollegeMaster] College save failed:', errMsg);
+          alert(`Save failed: ${Array.isArray(errMsg) ? errMsg.join(', ') : errMsg}`);
         }
       } catch (err) {
         console.error('[CollegeMaster] Network error:', err);
+        alert('Network connection error when saving college');
       }
       setIsModalOpen(false);
       return;
@@ -721,6 +758,7 @@ export default function CollegeMasterPage() {
         degreeLevel: formData.degreeLevel || 'UG',
         durationYears: Number(formData.durationYears) || 5,
         professionalPhase: formData.phaseName || '1st Professional (Phase I)',
+        academicSystem: formData.academicSystem || 'professional',
         collegeId: formData.collegeId,
       };
     } else if (activeTab === 'professionals') {
@@ -772,24 +810,42 @@ export default function CollegeMasterPage() {
         departmentId: formData.departmentId || null,
         capacity: Number(formData.capacity) || 50,
       };
+    } else if (activeTab === 'residencies') {
+      bodyPayload = {
+        residencyType: formData.residencyType || 'Hosteller',
+        categoryName: formData.categoryName || 'Hostel Block',
+        blockWing: formData.blockWing || '',
+        totalCapacity: Number(formData.totalCapacity) || 100,
+        allocatedCount: Number(formData.allocatedCount) || 0,
+        monthlyFee: Number(formData.monthlyFee) || 0,
+        collegeId: formData.collegeId,
+        courseId: formData.courseId || null,
+        courseCode: formData.courseCode || formData.course_code || 'ALL',
+      };
     }
 
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(bodyPayload),
       });
       if (res.ok) {
         console.log(`[CollegeMaster] Saved ${activeTab} to tenant_${slug} in PostgreSQL ✅`);
         await fetchData(activeTab);
       } else {
-        const errText = await res.text();
-        console.error(`[CollegeMaster] Save ${activeTab} failed (${res.status}):`, errText);
-        alert(`Save failed: ${errText}`);
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.message || (await res.text().catch(() => 'Save failed'));
+        console.error(`[CollegeMaster] Save ${activeTab} failed (${res.status}):`, errMsg);
+        alert(`Save failed: ${Array.isArray(errMsg) ? errMsg.join(', ') : errMsg}`);
       }
     } catch (err) {
       console.error('[CollegeMaster] Network error during save:', err);
+      alert(`Network error saving ${activeTab}`);
     }
 
     setIsModalOpen(false);
@@ -917,21 +973,17 @@ export default function CollegeMasterPage() {
           {/* Top Controls: Filter by College & Search Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-1">
-              {/* College Filter Selector */}
-              <div className="flex items-center gap-2 bg-white dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs shadow-sm shrink-0">
-                <span className="text-slate-500 dark:text-slate-600 dark:text-slate-400 font-semibold flex items-center gap-1">
-                  <span>🏛️</span> College:
+              {/* Active College Badge (Locked to authenticated tenant) */}
+              <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs shadow-sm shrink-0">
+                <span className="text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1">
+                  <span>🏛️</span> Active College:
                 </span>
-                <select
-                  value={selectedCollegeFilter}
-                  onChange={(e) => setSelectedCollegeFilter(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-slate-900 dark:text-white font-bold focus:outline-none cursor-pointer"
-                >
-                  <option value="all">All Registered Colleges ({colleges.length})</option>
-                  {colleges.map((col) => (
-                    <option key={col.id} value={col.id}>{col.name}</option>
-                  ))}
-                </select>
+                <span className="font-extrabold text-indigo-600 dark:text-indigo-400 max-w-[220px] truncate">
+                  {colleges[0]?.name || (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || 'Current Institution'}
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">
+                  tenant_{getActiveTenantSlug()}
+                </span>
               </div>
 
               {/* Search Bar */}
@@ -1539,17 +1591,50 @@ export default function CollegeMasterPage() {
               {activeTab === 'colleges' && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">College Name *</label>
-                    <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold" />
+                    <label className="text-slate-700 dark:text-slate-300 font-semibold">College Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. AIIMS New Delhi"
+                      value={formData.name || ''}
+                      onChange={(e) => {
+                        const newName = e.target.value;
+                        const autoSlug = newName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                        setFormData({
+                          ...formData,
+                          name: newName,
+                          slug: editingItem ? formData.slug : (formData.slugAutoModified ? formData.slug : autoSlug),
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white font-bold"
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Slug Code *</label>
-                      <input type="text" required value={formData.slug || ''} onChange={(e) => setFormData({ ...formData, slug: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-mono" />
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Slug Code * (Schema ID)</label>
+                      <input
+                        type="text"
+                        required
+                        disabled={Boolean(editingItem)}
+                        placeholder="e.g. aiims-delhi"
+                        value={formData.slug || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+                          slugAutoModified: true,
+                        })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white font-mono disabled:opacity-60"
+                      />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Domain</label>
-                      <input type="text" value={formData.domain || ''} onChange={(e) => setFormData({ ...formData, domain: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white" />
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Domain (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. aiims.edu.in"
+                        value={formData.domain || ''}
+                        onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white"
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">

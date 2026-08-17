@@ -97,7 +97,7 @@ interface TimetableSlotItem {
 }
 
 const API_BASE = 'http://localhost:3001/api/v1';
-const TENANT = 'srms-ims';
+const getActiveTenantSlug = () => (typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null) || 'srms-ims';
 
 const SESSION_TYPES = [
   { value: 'THEORY', label: 'Theory (Lecture)', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' },
@@ -248,7 +248,8 @@ export default function AttendanceMasterPage() {
     setLoadingTimetableSlots(true);
     try {
       const token = localStorage.getItem('token') || '';
-      let url = `${API_BASE}/attendance/timetable-slots?tenant=${TENANT}&batchId=${selectedBatchId}&sessionDate=${sessionDate}`;
+      const slug = getActiveTenantSlug();
+      let url = `${API_BASE}/attendance/timetable-slots?tenant=${slug}&batchId=${selectedBatchId}&sessionDate=${sessionDate}`;
       if (selectedDeptId) url += `&departmentId=${selectedDeptId}`;
 
       const res = await fetch(url, {
@@ -300,10 +301,11 @@ export default function AttendanceMasterPage() {
     try {
       const token = localStorage.getItem('token') || '';
       const headers = { 'Authorization': `Bearer ${token}` };
+      const slug = getActiveTenantSlug();
 
       // 1. Fetch User Scope (Role + Department Access)
       try {
-        const scopeRes = await fetch(`${API_BASE}/attendance/user-scope?tenant=${TENANT}`, { headers });
+        const scopeRes = await fetch(`${API_BASE}/attendance/user-scope?tenant=${slug}`, { headers });
         if (scopeRes.ok) {
           const scopeJson = await scopeRes.json();
           const scope = scopeJson.data || scopeJson;
@@ -318,10 +320,10 @@ export default function AttendanceMasterPage() {
 
       // 2. Fetch Master Data
       const [deptRes, subRes, batchRes, grpRes] = await Promise.all([
-        fetch(`${API_BASE}/users/departments?tenant=${TENANT}`, { headers }),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=${TENANT}`, { headers }),
-        fetch(`${API_BASE}/college-master/batches?tenant=${TENANT}`, { headers }),
-        fetch(`${API_BASE}/college-master/groups?tenant=${TENANT}`, { headers }),
+        fetch(`${API_BASE}/users/departments?tenant=${slug}`, { headers }),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }),
+        fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers }),
+        fetch(`${API_BASE}/college-master/groups?tenant=${slug}`, { headers }),
       ]);
 
       if (deptRes.ok) {
@@ -362,8 +364,9 @@ export default function AttendanceMasterPage() {
     try {
       const token = localStorage.getItem('token') || '';
       const headers = { 'Authorization': `Bearer ${token}` };
+      const slug = getActiveTenantSlug();
 
-      let url = `${API_BASE}/student-master?tenant=${TENANT}&batchId=${selectedBatchId}`;
+      let url = `${API_BASE}/student-master?tenant=${slug}&batchId=${selectedBatchId}`;
       if (selectedGroupId !== 'all') url += `&groupId=${selectedGroupId}`;
 
       const res = await fetch(url, { headers });
@@ -374,7 +377,7 @@ export default function AttendanceMasterPage() {
       let existingRecordMap: Record<string, { status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'; remarks?: string }> = {};
       if (selectedSubjectId) {
         try {
-          let activeSessUrl = `${API_BASE}/attendance/active-session?tenant=${TENANT}&subjectId=${selectedSubjectId}&batchId=${selectedBatchId}&sessionDate=${sessionDate}&sessionType=${sessionType}`;
+          let activeSessUrl = `${API_BASE}/attendance/active-session?tenant=${slug}&subjectId=${selectedSubjectId}&batchId=${selectedBatchId}&sessionDate=${sessionDate}&sessionType=${sessionType}`;
           if (selectedSlotId) activeSessUrl += `&timetableSlotId=${selectedSlotId}`;
           const sessRes = await fetch(activeSessUrl, { headers });
           if (sessRes.ok) {
@@ -468,6 +471,7 @@ export default function AttendanceMasterPage() {
 
     try {
       const token = localStorage.getItem('token') || '';
+      const slug = getActiveTenantSlug();
       const payload = {
         subjectId: selectedSubjectId,
         batchId: selectedBatchId,
@@ -482,7 +486,7 @@ export default function AttendanceMasterPage() {
         })),
       };
 
-      const res = await fetch(`${API_BASE}/attendance/sessions?tenant=${TENANT}`, {
+      const res = await fetch(`${API_BASE}/attendance/sessions?tenant=${slug}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -519,7 +523,8 @@ export default function AttendanceMasterPage() {
     setLoadingReport(true);
     try {
       const token = localStorage.getItem('token') || '';
-      let url = `${API_BASE}/attendance/batches/${reportBatchId}/report?tenant=${TENANT}`;
+      const slug = getActiveTenantSlug();
+      let url = `${API_BASE}/attendance/batches/${reportBatchId}/report?tenant=${slug}`;
       if (reportSubjectId) url += `&subjectId=${reportSubjectId}`;
       if (reportFromDate) url += `&fromDate=${reportFromDate}`;
       if (reportToDate) url += `&toDate=${reportToDate}`;
@@ -542,7 +547,8 @@ export default function AttendanceMasterPage() {
     setLoadingReport(true);
     try {
       const token = localStorage.getItem('token') || '';
-      let url = `${API_BASE}/attendance/batches/${reportBatchId}/matrix-report?tenant=${TENANT}`;
+      const slug = getActiveTenantSlug();
+      let url = `${API_BASE}/attendance/batches/${reportBatchId}/matrix-report?tenant=${slug}`;
       if (reportFromDate) url += `&fromDate=${reportFromDate}`;
       if (reportToDate) url += `&toDate=${reportToDate}`;
 
@@ -563,7 +569,8 @@ export default function AttendanceMasterPage() {
     setLoadingHistory(true);
     try {
       const token = localStorage.getItem('token') || '';
-      const res = await fetch(`${API_BASE}/attendance/sessions?tenant=${TENANT}&limit=30`, {
+      const slug = getActiveTenantSlug();
+      const res = await fetch(`${API_BASE}/attendance/sessions?tenant=${slug}&limit=30`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const json = await res.json();

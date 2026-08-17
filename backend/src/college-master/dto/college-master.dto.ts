@@ -31,6 +31,21 @@ export class CreateCollegeDto {
   @IsString()
   primaryColor?: string;
 
+  @ApiPropertyOptional({ example: '#6366F1' })
+  @IsOptional()
+  @IsString()
+  primary_color?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+
   @ApiPropertyOptional({ example: 'admin@srms.ac.in' })
   @IsOptional()
   @IsEmail()
@@ -52,6 +67,11 @@ export class UpdateCollegeDto extends PartialType(CreateCollegeDto) {
   @IsOptional()
   @IsString()
   primary_color?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  primaryColor?: string;
 }
 
 // ─── 2. COURSES ─────────────────────────────────────────────────────────────
@@ -71,20 +91,50 @@ export class CreateCourseDto {
   @IsString()
   degreeLevel?: string;
 
+  @ApiPropertyOptional({ example: 'UG' })
+  @IsOptional()
+  @IsString()
+  degree_level?: string;
+
   @ApiPropertyOptional({ example: 5 })
   @IsOptional()
   @IsNumber()
   durationYears?: number;
+
+  @ApiPropertyOptional({ example: 5 })
+  @IsOptional()
+  @IsNumber()
+  duration_years?: number;
 
   @ApiPropertyOptional({ example: 'Phase I (1st Professional MBBS)' })
   @IsOptional()
   @IsString()
   professionalPhase?: string;
 
+  @ApiPropertyOptional({ example: 'Phase I (1st Professional MBBS)' })
+  @IsOptional()
+  @IsString()
+  professional_phase?: string;
+
+  @ApiPropertyOptional({ example: 'professional' })
+  @IsOptional()
+  @IsString()
+  academicSystem?: string;
+
+  @ApiPropertyOptional({ example: 'professional' })
+  @IsOptional()
+  @IsString()
+  academic_system?: string;
+
   @ApiPropertyOptional({ example: 'c0a80101-0000-0000-0000-000000000001' })
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
 }
 
 export class UpdateCourseDto extends PartialType(CreateCourseDto) {
@@ -92,6 +142,11 @@ export class UpdateCourseDto extends PartialType(CreateCourseDto) {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }
 
 // ─── 3. BATCHES ─────────────────────────────────────────────────────────────
@@ -110,25 +165,70 @@ export class CreateBatchDto {
   @MaxLength(20)
   courseCd: string;
 
+  @ApiPropertyOptional({ example: 'MBBS' })
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
+
+  @ApiPropertyOptional({ example: 'MBBS' })
+  @IsOptional()
+  @IsString()
+  courseCode?: string;
+
+  @ApiPropertyOptional({ example: 'MBBS' })
+  @IsOptional()
+  @IsString()
+  course_code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_id?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   departmentId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  department_id?: string;
 
   @ApiPropertyOptional({ example: '2024-08-01' })
   @IsOptional()
   @IsDateString()
   startDate?: string;
 
+  @ApiPropertyOptional({ example: '2024-08-01' })
+  @IsOptional()
+  @IsDateString()
+  start_date?: string;
+
   @ApiPropertyOptional({ example: '2029-07-31' })
   @IsOptional()
   @IsDateString()
   endDate?: string;
 
+  @ApiPropertyOptional({ example: '2029-07-31' })
+  @IsOptional()
+  @IsDateString()
+  end_date?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
 }
 
 export class UpdateBatchDto extends PartialType(CreateBatchDto) {
@@ -136,6 +236,11 @@ export class UpdateBatchDto extends PartialType(CreateBatchDto) {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }
 
 // ─── 4. BRANCH / DEPARTMENT ─────────────────────────────────────────────────
@@ -159,6 +264,21 @@ export class CreateBranchDto {
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_id?: string;
 }
 
 export class UpdateBranchDto extends PartialType(CreateBranchDto) {
@@ -166,6 +286,11 @@ export class UpdateBranchDto extends PartialType(CreateBranchDto) {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }
 
 // ─── 5. ACADEMIC SESSIONS ───────────────────────────────────────────────────
@@ -179,19 +304,39 @@ export class CreateSessionDto {
   @IsDateString()
   startDate: string;
 
+  @ApiPropertyOptional({ example: '2024-07-01' })
+  @IsOptional()
+  @IsDateString()
+  start_date?: string;
+
   @ApiProperty({ example: '2025-06-30' })
   @IsDateString()
   endDate: string;
+
+  @ApiPropertyOptional({ example: '2025-06-30' })
+  @IsOptional()
+  @IsDateString()
+  end_date?: string;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
   isCurrent?: boolean;
 
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  is_current?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
 }
 
 export class UpdateSessionDto extends PartialType(CreateSessionDto) {
@@ -199,6 +344,11 @@ export class UpdateSessionDto extends PartialType(CreateSessionDto) {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }
 
 // ─── 6. PROFESSIONAL PHASES ─────────────────────────────────────────────────
@@ -213,20 +363,60 @@ export class CreateProfessionalDto {
   @IsNumber()
   phaseOrder?: number;
 
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsNumber()
+  phase_order?: number;
+
   @ApiPropertyOptional({ example: 'MBBS' })
   @IsOptional()
   @IsString()
   courseCd?: string;
+
+  @ApiPropertyOptional({ example: 'MBBS' })
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
+
+  @ApiPropertyOptional({ example: 'MBBS' })
+  @IsOptional()
+  @IsString()
+  courseCode?: string;
+
+  @ApiPropertyOptional({ example: 'MBBS' })
+  @IsOptional()
+  @IsString()
+  course_code?: string;
 
   @ApiPropertyOptional({ example: 'professional' })
   @IsOptional()
   @IsString()
   academicSystem?: string;
 
+  @ApiPropertyOptional({ example: 'professional' })
+  @IsOptional()
+  @IsString()
+  academic_system?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_id?: string;
 }
 
 export class UpdateProfessionalDto extends PartialType(CreateProfessionalDto) {
@@ -234,9 +424,118 @@ export class UpdateProfessionalDto extends PartialType(CreateProfessionalDto) {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }
 
-// ─── 8. GROUPS MASTER ──────────────────────────────────────────────────────
+// ─── 7. RESIDENCY CATEGORIES (Hostel / Resident / Day Scholar) ─────────────
+export class CreateResidencyDto {
+  @ApiProperty({ example: 'Hosteller' })
+  @IsString()
+  residencyType: string;
+
+  @ApiPropertyOptional({ example: 'Hosteller' })
+  @IsOptional()
+  @IsString()
+  residency_type?: string;
+
+  @ApiProperty({ example: 'Charak Hostel Block A' })
+  @IsString()
+  @MaxLength(200)
+  categoryName: string;
+
+  @ApiPropertyOptional({ example: 'Charak Hostel Block A' })
+  @IsOptional()
+  @IsString()
+  category_name?: string;
+
+  @ApiPropertyOptional({ example: 'North Wing Floor 2' })
+  @IsOptional()
+  @IsString()
+  blockWing?: string;
+
+  @ApiPropertyOptional({ example: 'North Wing Floor 2' })
+  @IsOptional()
+  @IsString()
+  block_wing?: string;
+
+  @ApiPropertyOptional({ example: 100 })
+  @IsOptional()
+  @IsNumber()
+  totalCapacity?: number;
+
+  @ApiPropertyOptional({ example: 100 })
+  @IsOptional()
+  @IsNumber()
+  total_capacity?: number;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @IsNumber()
+  allocatedCount?: number;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @IsNumber()
+  allocated_count?: number;
+
+  @ApiPropertyOptional({ example: 12000 })
+  @IsOptional()
+  @IsNumber()
+  monthlyFee?: number;
+
+  @ApiPropertyOptional({ example: 12000 })
+  @IsOptional()
+  @IsNumber()
+  monthly_fee?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_code?: string;
+}
+
+export class UpdateResidencyDto extends PartialType(CreateResidencyDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+}
+
+// ─── 8. GROUPS MASTER (Batch Sub-Groups: A, B, C, D) ───────────────────────
 export class CreateGroupDto {
   @ApiProperty({ example: 'GRP-A' })
   @IsString()
@@ -256,7 +555,17 @@ export class CreateGroupDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   courseId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_id?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -266,7 +575,17 @@ export class CreateGroupDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  batch_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   departmentId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  department_id?: string;
 
   @ApiPropertyOptional({ example: 50 })
   @IsOptional()
@@ -279,5 +598,10 @@ export class UpdateGroupDto extends PartialType(CreateGroupDto) {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }
 

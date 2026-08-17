@@ -78,7 +78,7 @@ interface TimetableSlot {
 }
 
 const API_BASE = 'http://localhost:3001/api/v1';
-const TENANT = 'srms-ims';
+const getActiveTenantSlug = () => (typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null) || 'srms-ims';
 
 const isUUID = (str?: string) => str ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str) : false;
 
@@ -329,12 +329,19 @@ export default function TimetableDesignPage() {
   const [weekOffset, setWeekOffset] = useState(0);
 
   // Cascading Filter Selection Controls
-  const [selectedCollege, setSelectedCollege] = useState('SRMS IMS (Bareilly)');
+  const [selectedCollege, setSelectedCollege] = useState('');
   const [selectedSession, setSelectedSession] = useState('2024-2025');
   const [selectedCourse, setSelectedCourse] = useState('MBBS');
   const [selectedBranch, setSelectedBranch] = useState('General Medicine');
   const [selectedBatch, setSelectedBatch] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedName = localStorage.getItem('collegeName');
+      if (storedName) setSelectedCollege(storedName);
+    }
+  }, []);
 
   // Loading & Alerts
   const [loading, setLoading] = useState(false);
@@ -389,13 +396,14 @@ export default function TimetableDesignPage() {
     const headers = { 'Authorization': `Bearer ${token}` };
 
     try {
+      const slug = getActiveTenantSlug();
       const [deptRes, batchUserRes, batchCollegeRes, subRes, topicRes, compRes] = await Promise.all([
-        fetch(`${API_BASE}/users/departments?tenant=${TENANT}`, { headers }),
-        fetch(`${API_BASE}/users/batches?tenant=${TENANT}`, { headers }),
-        fetch(`${API_BASE}/college-master/batches?tenant=${TENANT}`, { headers }),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=${TENANT}`, { headers }),
-        fetch(`${API_BASE}/admin-master/topics?tenant=${TENANT}`, { headers }),
-        fetch(`${API_BASE}/admin-master/competencies?tenant=${TENANT}`, { headers }),
+        fetch(`${API_BASE}/users/departments?tenant=${slug}`, { headers }),
+        fetch(`${API_BASE}/users/batches?tenant=${slug}`, { headers }),
+        fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers }),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }),
+        fetch(`${API_BASE}/admin-master/topics?tenant=${slug}`, { headers }),
+        fetch(`${API_BASE}/admin-master/competencies?tenant=${slug}`, { headers }),
       ]);
 
       if (deptRes.ok) {
@@ -452,7 +460,8 @@ export default function TimetableDesignPage() {
     if (!selectedBatch) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/timetable?tenant=${TENANT}&batchId=${selectedBatch}`, {
+      const slug = getActiveTenantSlug();
+      const res = await fetch(`${API_BASE}/timetable?tenant=${slug}&batchId=${selectedBatch}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
       });
       if (res.ok) {
@@ -472,7 +481,8 @@ export default function TimetableDesignPage() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/timetable/relevant-faculties?tenant=${TENANT}&subjectId=${subjectId}&departmentId=${deptId || selectedDept}`, {
+      const slug = getActiveTenantSlug();
+      const res = await fetch(`${API_BASE}/timetable/relevant-faculties?tenant=${slug}&subjectId=${subjectId}&departmentId=${deptId || selectedDept}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
       });
       if (res.ok) {
@@ -655,7 +665,8 @@ export default function TimetableDesignPage() {
     e.preventDefault();
     setLoading(true);
     const isEdit = !!editingSlot;
-    const url = isEdit ? `${API_BASE}/timetable/${editingSlot.id}?tenant=${TENANT}` : `${API_BASE}/timetable?tenant=${TENANT}`;
+    const slug = getActiveTenantSlug();
+    const url = isEdit ? `${API_BASE}/timetable/${editingSlot.id}?tenant=${slug}` : `${API_BASE}/timetable?tenant=${slug}`;
     const method = isEdit ? 'PUT' : 'POST';
 
     // Concatenate selected competency codes
@@ -726,7 +737,8 @@ export default function TimetableDesignPage() {
     if (!confirm('Are you sure you want to delete this scheduled session from PostgreSQL?')) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/timetable/${editingSlot.id}?tenant=${TENANT}`, {
+      const slug = getActiveTenantSlug();
+      const res = await fetch(`${API_BASE}/timetable/${editingSlot.id}?tenant=${slug}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
       });
@@ -856,17 +868,12 @@ export default function TimetableDesignPage() {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               
-              {/* 1. College Select */}
+              {/* 1. College (Locked to active tenant) */}
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">College</label>
-                <select
-                  value={selectedCollege}
-                  onChange={(e) => setSelectedCollege(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-white font-medium"
-                >
-                  <option value="SRMS IMS (Bareilly)">SRMS IMS (Bareilly)</option>
-                  <option value="Rajshree MRI">Rajshree MRI</option>
-                </select>
+                <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Active College</label>
+                <div className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-slate-700/80 text-indigo-300 font-bold truncate">
+                  {selectedCollege || (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || 'Current Institution'}
+                </div>
               </div>
 
               {/* 2. Session */}

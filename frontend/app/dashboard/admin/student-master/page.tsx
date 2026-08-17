@@ -498,44 +498,59 @@ export default function StudentMasterPage() {
     }));
   };
 
+  const getActiveTenantSlug = () => {
+    if (typeof window !== 'undefined') {
+      const storedSlug = localStorage.getItem('tenantSlug');
+      if (storedSlug) return storedSlug;
+    }
+    return colleges[0]?.slug || 'srms-ims';
+  };
+
   const fetchMetadata = async () => {
     try {
       const token = localStorage.getItem('token') || '';
       const headers = { 'Authorization': `Bearer ${token}` };
+      const activeSlug = getActiveTenantSlug();
 
-      // 1. Fetch all colleges (tenants) from public schema
+      // 1. Fetch colleges and scope strictly to active tenant
       const resCol = await fetch(`${API_BASE}/college-master/colleges`, { headers });
       const cols = await resCol.json();
-      const collegeList: College[] = cols.data || [];
-      setColleges(collegeList);
+      const allColleges: College[] = cols.data || [];
+      const collegeList = allColleges.filter((c) => c.slug === activeSlug);
 
-      // 2. Auto-load data from first active college if available
-      if (collegeList.length > 0) {
-        const firstCollege = collegeList[0];
-        const data = await loadTenantData(firstCollege.slug);
-        setAllCourses(data.courses);
-        setAllBatches(data.batches);
-        setAllSessions(data.sessions);
-        setAllBranches(data.branches);
-        setAllProfessionals(data.professionals);
-        setAllGroups(data.groups);
-        if (data.professionals && data.professionals.length > 0) {
-          setTargetProfessionalId(data.professionals[0].id);
-        }
-        if (data.groups && data.groups.length > 0) {
-          setTargetGroupId(data.groups[0].id);
-        }
+      if (collegeList.length === 0) {
+        const storedName = (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || activeSlug;
+        collegeList.push({
+          id: activeSlug,
+          name: storedName,
+          slug: activeSlug,
+          code: activeSlug,
+        });
+      }
+
+      setColleges(collegeList);
+      setSelectedCollege(collegeList[0].id);
+
+      // 2. Auto-load data strictly from logged-in tenant
+      const data = await loadTenantData(activeSlug);
+      setAllCourses(data.courses);
+      setFilterCourses(data.courses);
+      setAllBatches(data.batches);
+      setFilterBatches(data.batches);
+      setAllSessions(data.sessions);
+      setFilterSessions(data.sessions);
+      setAllBranches(data.branches);
+      setAllProfessionals(data.professionals);
+      setAllGroups(data.groups);
+      if (data.professionals && data.professionals.length > 0) {
+        setTargetProfessionalId(data.professionals[0].id);
+      }
+      if (data.groups && data.groups.length > 0) {
+        setTargetGroupId(data.groups[0].id);
       }
     } catch (err) {
       console.error('Failed to fetch metadata', err);
     }
-  };
-
-  const getActiveTenantSlug = () => {
-    const activeCollege = selectedCollege !== 'all'
-      ? colleges.find((c) => c.id === selectedCollege)
-      : colleges[0];
-    return activeCollege?.slug || 'srms-ims';
   };
 
   const fetchStudents = async () => {
@@ -817,49 +832,172 @@ export default function StudentMasterPage() {
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedStudents = students.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  return (
-    <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200">
-      <Sidebar role="admin" />
-      <main className="flex-1 overflow-y-auto pb-10">
-        <Header title="Student Master" />
+  const studentCategories = [
+    { key: 'all', label: '1. Student Directory & Registration', icon: '👨‍🎓', count: students.length },
+    { key: 'phase-linker', label: '2. Batch Professional Phase Linker', icon: '⚡', count: students.filter(s => s.professional_phase).length },
+    { key: 'group-linker', label: '3. Batch Academic Group Linker', icon: '👥', count: students.filter(s => s.group_code).length },
+  ];
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-          {/* Filtering Console */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all mb-8">
-            <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--color-ink-500)] mb-4">Search & Query Console</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Search Query</label>
+  const activeCollegeName = colleges[0]?.name || (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || 'Rajshree Medical Research Institute Bareilly';
+  const activeTenantSlug = getActiveTenantSlug();
+
+  return (
+    <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors">
+      <Sidebar role="admin" />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <Header title="Student Master — Academic Admissions & Medical Records" />
+
+        <main className="p-6 space-y-6 flex-1">
+          {/* 3 Focused Category Tabs — Registration, Phase Linker, Group Linker */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+            {studentCategories.map((cat) => {
+              const isCatActive = 
+                (cat.key === 'all' && viewMode === 'roster') ||
+                (cat.key === 'phase-linker' && viewMode === 'linker' && linkerMode === 'phase') ||
+                (cat.key === 'group-linker' && viewMode === 'linker' && linkerMode === 'group');
+
+              return (
+                <button
+                  key={cat.key}
+                  type="button"
+                  onClick={() => {
+                    if (cat.key === 'phase-linker') {
+                      setViewMode('linker');
+                      setLinkerMode('phase');
+                    } else if (cat.key === 'group-linker') {
+                      setViewMode('linker');
+                      setLinkerMode('group');
+                    } else {
+                      setViewMode('roster');
+                    }
+                  }}
+                  className={`px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 text-left ${
+                    isCatActive
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/50'
+                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/90 border border-slate-200 dark:border-slate-800 shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    <span className="text-base shrink-0">{cat.icon}</span>
+                    <span className="truncate text-xs font-bold">{cat.label}</span>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold shrink-0 ${
+                    isCatActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
+                  }`}>
+                    {cat.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Top Controls: Filter by College & Search Bar & Add Button */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3 flex-1">
+              {/* Active College Badge (Locked to authenticated tenant) */}
+              <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs shadow-sm shrink-0">
+                <span className="text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1">
+                  <span>🏛️</span> Active College:
+                </span>
+                <span className="font-extrabold text-indigo-600 dark:text-indigo-400 max-w-[240px] truncate" title={activeCollegeName}>
+                  {activeCollegeName}
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">
+                  tenant_{activeTenantSlug}
+                </span>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative flex-1 max-w-md">
                 <input
                   type="text"
-                  placeholder="Name, Reg No, Roll No..."
+                  placeholder="Search in Student Master (Name, Reg No, Roll No)..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
+                  className="w-full px-4 py-2 text-xs bg-white dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 shadow-sm"
                 />
+                <svg className="w-4 h-4 absolute right-3 top-2.5 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">College</label>
-                <select
-                  value={selectedCollege}
-                  onChange={(e) => handleFilterCollegeChange(e.target.value)}
-                  className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
+              {/* Add New Student Button */}
+              <button
+                onClick={() => {
+                  setEditModeId(null);
+                  setFormData((prev) => ({
+                    ...prev,
+                    firstName: '',
+                    middleName: '',
+                    lastName: '',
+                    registrationNo: '',
+                    rollNo: '',
+                    mobileNumber: '',
+                    emailAddress: '',
+                    declarationSigned: false,
+                  }));
+                  setCurrentStep(1);
+                  setIsModalOpen(true);
+                }}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 shrink-0"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                </svg>
+                + Register New Student
+              </button>
+            </div>
+
+            <button
+              onClick={fetchStudents}
+              className="px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-200/80 dark:bg-slate-800/80 rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 shadow-sm shrink-0"
+            >
+              <span>🔄</span> Re-Sync Database
+            </button>
+          </div>
+
+          {/* Filtering Console Card */}
+          <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <span>🔍</span> Quick Query & Batch Filter Console
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedCourse('all');
+                    setSelectedBatch('all');
+                    setSelectedSession('all');
+                    setSelectedResidency('all');
+                    setSelectedGroup('all');
+                    setSelectedProfessionalFilter('all');
+                    setLinkedOnly(false);
+                    fetchStudents();
+                  }}
+                  className="px-3 py-1 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 transition-all"
                 >
-                  <option value="all">All Colleges</option>
-                  {colleges.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  Reset Filters
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchStudents}
+                  className="px-3 py-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition-all"
+                >
+                  Apply Filters
+                </button>
               </div>
+            </div>
 
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Course</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Course</label>
                 <select
                   value={selectedCourse}
                   onChange={(e) => setSelectedCourse(e.target.value)}
-                  disabled={selectedCollege === 'all'}
-                  className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px]"
+                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="all">All Courses</option>
                   {filterCourses.map((c) => (
@@ -869,12 +1007,11 @@ export default function StudentMasterPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Batch</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Batch</label>
                 <select
                   value={selectedBatch}
                   onChange={(e) => setSelectedBatch(e.target.value)}
-                  disabled={selectedCollege === 'all'}
-                  className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px]"
+                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="all">All Batches</option>
                   {filterBatches.map((b) => (
@@ -884,12 +1021,11 @@ export default function StudentMasterPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Session</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Session</label>
                 <select
                   value={selectedSession}
                   onChange={(e) => setSelectedSession(e.target.value)}
-                  disabled={selectedCollege === 'all'}
-                  className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px]"
+                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="all">All Sessions</option>
                   {filterSessions.map((s) => (
@@ -899,11 +1035,25 @@ export default function StudentMasterPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Residency</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Prof Phase</label>
+                <select
+                  value={selectedProfessionalFilter}
+                  onChange={(e) => setSelectedProfessionalFilter(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Phases</option>
+                  {allProfessionals.map((p) => (
+                    <option key={p.id} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Residency</label>
                 <select
                   value={selectedResidency}
                   onChange={(e) => setSelectedResidency(e.target.value)}
-                  className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
+                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="all">All Types</option>
                   <option value="Hosteller">Hosteller</option>
@@ -913,11 +1063,11 @@ export default function StudentMasterPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Group</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Group</label>
                 <select
                   value={selectedGroup}
                   onChange={(e) => setSelectedGroup(e.target.value)}
-                  className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
+                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="all">All Groups</option>
                   {allGroups.map((g) => (
@@ -925,155 +1075,24 @@ export default function StudentMasterPage() {
                   ))}
                 </select>
               </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Prof Phase</label>
-                <select
-                  value={selectedProfessionalFilter}
-                  onChange={(e) => setSelectedProfessionalFilter(e.target.value)}
-                  className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px]"
-                >
-                  <option value="all">All Phases</option>
-                  {allProfessionals.map((p) => (
-                    <option key={p.id} value={p.name}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
             </div>
 
-            {/* Linked Only toggle + view mode + action buttons */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t border-[var(--color-border)]">
-              {/* Left: Linked Only toggle & View Mode */}
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setLinkedOnly(!linkedOnly)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-[11px] transition-all ${
-                    linkedOnly
-                      ? 'bg-[var(--color-primary-700)] text-white border-[var(--color-primary-700)] shadow-sm'
-                      : 'bg-[var(--color-bg-surface)] text-[var(--color-ink-700)] border-[var(--color-border)] hover:border-[var(--color-primary-700)] hover:text-[var(--color-primary-700)]'
-                  }`}
-                >
-                  <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all ${
-                    linkedOnly ? 'bg-white border-white' : 'border-[var(--color-ink-500)]'
-                  }`}>
-                    {linkedOnly && (
-                      <svg className="w-2.5 h-2.5 text-[var(--color-primary-700)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </span>
-                  Linked Phase Students Only
-                  {linkedOnly && (
-                    <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[10px]">ACTIVE</span>
-                  )}
-                </button>
-
-                <div className="bg-[var(--color-bg-sunken)] p-1 rounded-xl flex items-center border border-[var(--color-border)] gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('roster')}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                      viewMode === 'roster'
-                        ? 'bg-[var(--color-primary-700)] text-white shadow-sm border-[var(--color-primary-700)]'
-                        : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-[var(--color-primary-100)]'
-                    }`}
-                  >
-                    📋 Roster View
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setViewMode('linker'); setLinkerMode('phase'); }}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                      viewMode === 'linker' && linkerMode === 'phase'
-                        ? 'bg-[var(--color-primary-700)] text-white shadow-sm border-[var(--color-primary-700)]'
-                        : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-[var(--color-primary-100)]'
-                    }`}
-                  >
-                    🎓 Batch Phase Linker
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setViewMode('linker'); setLinkerMode('group'); }}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                      viewMode === 'linker' && linkerMode === 'group'
-                        ? 'bg-purple-700 text-white shadow-sm border-purple-700'
-                        : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-purple-100 dark:hover:bg-purple-900/40'
-                    }`}
-                  >
-                    👥 Batch Group Linker
-                  </button>
-                </div>
-              </div>
-
-              {/* Right: Reset / Apply / Register */}
-              <div className="flex items-center gap-2">
-                {metadataLoading && (
-                  <span className="flex items-center gap-1.5 text-[10px] text-[var(--color-primary-700)] font-semibold mr-2">
-                    <span className="w-3 h-3 border-2 border-[var(--color-primary-700)] border-t-transparent rounded-full animate-spin inline-block" />
-                    Loading tenant...
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSelectedCollege('all');
-                    setSelectedCourse('all');
-                    setSelectedBatch('all');
-                    setSelectedSession('all');
-                    setSelectedResidency('all');
-                    setSelectedGroup('all');
-                    setSelectedProfessionalFilter('all');
-                    setLinkedOnly(false);
-                    setFilterCourses([]);
-                    setFilterBatches([]);
-                    setFilterSessions([]);
-                  }}
-                  className="premium-btn-secondary py-1.5 px-3 rounded-lg font-bold text-[11px] border border-[var(--color-border)] text-[var(--color-ink-700)] hover:border-[var(--color-primary-700)] hover:text-[var(--color-primary-700)] bg-[var(--color-bg-surface)] hover:bg-[var(--color-primary-50)] transition-all"
-                >
-                  Reset Filters
-                </button>
-                <button
-                  type="button"
-                  onClick={fetchStudents}
-                  className="premium-btn-primary py-1.5 px-3 rounded-lg font-bold text-[11px] bg-[var(--color-primary-700)] hover:bg-[var(--color-primary-900)] text-white border-[var(--color-primary-700)] shadow-sm transition-all"
-                >
-                  Apply Filters
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditModeId(null);
-                    setFormData((prev) => ({
-                      ...prev,
-                      firstName: '',
-                      middleName: '',
-                      lastName: '',
-                      registrationNo: '',
-                      rollNo: '',
-                      mobileNumber: '',
-                      emailAddress: '',
-                      declarationSigned: false,
-                    }));
-                    setCurrentStep(1);
-                    setIsModalOpen(true);
-                  }}
-                  className="premium-btn-primary py-1.5 px-3 rounded-lg font-bold text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-sm flex items-center gap-1 shrink-0 transition-all"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
-                  </svg>
-                  Register Student
-                </button>
-              </div>
+            <div className="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={linkedOnly}
+                  onChange={(e) => setLinkedOnly(e.target.checked)}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                />
+                <span>Linked Phase Students Only</span>
+              </label>
             </div>
           </div>
 
           {/* Batch Phase / Group Linker Action Bar */}
           {viewMode === 'linker' && (
-            <div className="bg-gradient-to-r from-slate-900/90 via-indigo-950/90 to-slate-900/90 border-2 border-indigo-500/40 p-6 rounded-2xl mb-8 shadow-2xl backdrop-blur-md">
-              {/* Inner Mode Switcher Tabs */}
+            <div className="bg-gradient-to-r from-slate-900/95 via-indigo-950/90 to-slate-900/95 border-2 border-indigo-500/40 p-6 rounded-2xl shadow-xl">
               <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-700/50">
                 <button
                   onClick={() => setLinkerMode('phase')}
@@ -1105,7 +1124,7 @@ export default function StudentMasterPage() {
                       Batch-wise Professional Phase Linker & Promotion Engine
                     </h3>
                     <p className="text-xs text-slate-300 mt-2 max-w-2xl leading-relaxed">
-                      Filter by a specific batch above, click <b>Select All</b>, choose the required Professional Phase (e.g., <i>Prof 1, Prof 2, Prof 3 Part 1</i>), and save. When advancing academic years, re-filter the batch already linked with Prof 1 and promote them to Prof 2 in PostgreSQL.
+                      Select students from any batch below, choose the required Professional Phase, and link. Promoted students are immediately updated across timetable, logbooks, and assessments.
                     </p>
                   </div>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
@@ -1143,16 +1162,16 @@ export default function StudentMasterPage() {
                       type="button"
                       onClick={handleBulkLink}
                       disabled={isLinking || selectedStudentIds.length === 0 || !targetProfessionalId}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:pointer-events-none font-black text-xs text-white shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/50 transition-all flex items-center justify-center gap-2 whitespace-nowrap border border-indigo-400/30"
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold text-xs shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 whitespace-nowrap"
                     >
                       {isLinking ? (
                         <>
-                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                          <span>Promoting Batch...</span>
+                          <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Promoting...</span>
                         </>
                       ) : (
                         <>
-                          <span>💾</span> Save & Activate Phase
+                          <span>⚡</span> Save & Link Phase
                         </>
                       )}
                     </button>
@@ -1163,10 +1182,10 @@ export default function StudentMasterPage() {
                   <div>
                     <h3 className="text-base font-black text-white tracking-tight flex items-center gap-2">
                       <span className="p-2 bg-purple-500/20 rounded-xl border border-purple-500/30 text-purple-400">👥</span>
-                      Batch-wise Academic Group Linker & Allocation Engine
+                      Batch-wise Academic Group Allocation
                     </h3>
                     <p className="text-xs text-slate-300 mt-2 max-w-2xl leading-relaxed">
-                      Filter students by batch or course, select students using checkboxes (e.g. <b>Group A</b> first 50 students, <b>Group B</b> next 50 students), choose the Academic Group from Group Master, and click <b>Save & Assign Group</b>.
+                      Select students and allocate them to smaller clinical/practical groups (e.g., <i>Group A, Group B, Group C, Group D</i>).
                     </p>
                   </div>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
@@ -1186,7 +1205,7 @@ export default function StudentMasterPage() {
                         readOnly
                         className="rounded border-slate-600 bg-slate-900 text-purple-600 pointer-events-none w-3.5 h-3.5"
                       />
-                      <span>{selectedStudentIds.length === students.length && students.length > 0 ? 'Deselect All' : 'Select Batch Students'} ({selectedStudentIds.length})</span>
+                      <span>{selectedStudentIds.length === students.length && students.length > 0 ? 'Deselect All' : 'Select All Batch'} ({selectedStudentIds.length})</span>
                     </button>
 
                     <select
@@ -1196,20 +1215,20 @@ export default function StudentMasterPage() {
                     >
                       <option value="" disabled>Select Target Academic Group...</option>
                       {allGroups.map((g) => (
-                        <option key={g.id} value={g.id}>Group {g.code} ({g.name})</option>
+                        <option key={g.id} value={g.id}>Group {g.code} — {g.name}</option>
                       ))}
                     </select>
 
                     <button
                       type="button"
-                      onClick={handleBulkLinkGroup}
+                      onClick={handleBulkGroupLink}
                       disabled={isGroupLinking || selectedStudentIds.length === 0 || !targetGroupId}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-emerald-600 hover:from-purple-500 hover:to-emerald-500 disabled:opacity-50 disabled:pointer-events-none font-black text-xs text-white shadow-lg shadow-purple-600/30 hover:shadow-purple-500/50 transition-all flex items-center justify-center gap-2 whitespace-nowrap border border-purple-400/30"
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs shadow-lg shadow-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 whitespace-nowrap"
                     >
                       {isGroupLinking ? (
                         <>
-                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                          <span>Assigning Group...</span>
+                          <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Assigning...</span>
                         </>
                       ) : (
                         <>
@@ -1223,14 +1242,14 @@ export default function StudentMasterPage() {
             </div>
           )}
 
-          {/* Directory DataTable */}
-          <div className="premium-table-wrapper">
+          {/* Master DataTable (Identical to College Master) */}
+          <div className="glass-card overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="overflow-x-auto">
-              <table className="premium-table">
-                <thead>
+              <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300 border-collapse">
+                <thead className="bg-slate-100 dark:bg-slate-900/80 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800">
                   <tr>
                     {viewMode === 'linker' && (
-                      <th className="pl-5 w-12 text-center">
+                      <th className="p-4 w-12 text-center">
                         <input
                           type="checkbox"
                           checked={students.length > 0 && selectedStudentIds.length === students.length}
@@ -1238,37 +1257,69 @@ export default function StudentMasterPage() {
                             if (e.target.checked) setSelectedStudentIds(students.map(s => s.id));
                             else setSelectedStudentIds([]);
                           }}
-                          className="rounded border-[var(--color-border)] bg-[var(--color-bg-sunken)] text-[var(--color-primary-700)] focus:ring-[var(--color-primary-700)] w-4 h-4 cursor-pointer"
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                         />
                       </th>
                     )}
-                    <th className={viewMode === 'linker' ? 'w-12' : 'pl-5 w-12'}>Photo</th>
-                    <th>Reg No</th>
-                    <th>Roll No</th>
-                    <th>Name</th>
-                    <th>College</th>
-                    <th>Course / Batch</th>
-                    <th>Session</th>
-                    <th>Residency</th>
-                    <th>Quota</th>
-                    <th>Status</th>
-                    <th className="pr-5 text-right">Actions</th>
+                    <th className="p-4 whitespace-nowrap w-16 text-center">Photo</th>
+                    <th className="p-4 whitespace-nowrap">Reg No</th>
+                    <th className="p-4 whitespace-nowrap">Roll No</th>
+                    <th className="p-4 whitespace-nowrap min-w-[200px]">Student Name</th>
+                    <th className="p-4 whitespace-nowrap">Course / Batch</th>
+                    <th className="p-4 whitespace-nowrap">Professional Phase</th>
+                    <th className="p-4 whitespace-nowrap">Clinical Group</th>
+                    <th className="p-4 whitespace-nowrap">Residency Type</th>
+                    <th className="p-4 whitespace-nowrap text-center">Status</th>
+                    <th className="p-4 text-right whitespace-nowrap min-w-[140px]">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
                   {loading ? (
-                    <TableSkeleton colCount={viewMode === 'linker' ? 12 : 11} />
+                    <TableSkeleton colCount={viewMode === 'linker' ? 11 : 10} />
                   ) : students.length === 0 ? (
                     <tr>
-                      <td colSpan={viewMode === 'linker' ? 12 : 11} className="p-8 text-center text-slate-500 font-medium">
-                        No registered students found matching search filters.
+                      <td colSpan={viewMode === 'linker' ? 11 : 10} className="p-12 text-center">
+                        <div className="flex flex-col items-center justify-center max-w-md mx-auto space-y-3">
+                          <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center text-3xl shadow-inner">
+                            🎓
+                          </div>
+                          <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                            No Registered Students in {activeCollegeName} Yet
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                            This campus database is clean and isolated for <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">tenant_{activeTenantSlug}</span>. Click below to register student admissions or enroll into MBBS batches.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditModeId(null);
+                              setFormData((prev) => ({
+                                ...prev,
+                                firstName: '',
+                                middleName: '',
+                                lastName: '',
+                                registrationNo: '',
+                                rollNo: '',
+                                mobileNumber: '',
+                                emailAddress: '',
+                                declarationSigned: false,
+                              }));
+                              setCurrentStep(1);
+                              setIsModalOpen(true);
+                            }}
+                            className="mt-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-1.5"
+                          >
+                            <span>➕</span>
+                            <span>Register First Student</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ) : (
                     paginatedStudents.map((student) => (
-                      <tr key={student.id} className="transition-colors">
+                      <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                         {viewMode === 'linker' && (
-                          <td className="pl-5 text-center">
+                          <td className="p-4 text-center">
                             <input
                               type="checkbox"
                               checked={selectedStudentIds.includes(student.id)}
@@ -1276,66 +1327,82 @@ export default function StudentMasterPage() {
                                 if (e.target.checked) setSelectedStudentIds(prev => [...prev, student.id]);
                                 else setSelectedStudentIds(prev => prev.filter(id => id !== student.id));
                               }}
-                              className="rounded border-[var(--color-border)] bg-[var(--color-bg-sunken)] text-[var(--color-primary-700)] focus:ring-[var(--color-primary-700)] w-4 h-4 cursor-pointer"
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                             />
                           </td>
                         )}
-                        <td className={viewMode === 'linker' ? '' : 'pl-5'}>
+                        <td className="p-4 text-center">
                           {student.photo_url ? (
                             <img
                               src={student.photo_url}
                               alt={student.name}
-                              className="w-8 h-8 rounded-full object-cover border border-[var(--color-border)]"
+                              className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-sm inline-block"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-[var(--color-primary-700)] text-white flex items-center justify-center text-[10px] font-extrabold">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center text-xs font-black shadow-sm inline-block leading-8 text-center">
                               {student.name?.charAt(0)?.toUpperCase() || '?'}
                             </div>
                           )}
                         </td>
-                        <td className="font-extrabold text-[var(--color-primary-700)] font-mono">{student.registration_no}</td>
-                        <td className="font-mono text-[var(--color-ink-700)]">{student.rollno || '—'}</td>
-                        <td className="font-bold text-[var(--color-ink-900)]">{student.name}</td>
-                        <td className="text-[var(--color-ink-700)]">{student.college_name || '—'}</td>
-                        <td>
-                          <div className="font-bold text-[var(--color-ink-900)]">{student.course_code}</div>
-                          <div className="text-[10px] text-[var(--color-ink-500)] block font-mono">{student.batch_code}</div>
-                          <div className="flex flex-wrap items-center gap-1 mt-1">
-                            {student.professional_phase && (
-                              <span className="premium-badge bg-[var(--color-primary-100)] text-[var(--color-primary-700)] inline-block">
-                                {student.professional_phase.match(/^(1st|2nd|3rd|4th|5th)/i) ? `${student.professional_phase.match(/^(1st|2nd|3rd|4th|5th)/i)?.[0]} Prof` : student.professional_phase}
-                              </span>
-                            )}
-                            {student.group_code && (
-                              <span className="premium-badge bg-purple-500/20 text-purple-700 dark:text-purple-300 inline-block border border-purple-400/30 font-bold">
-                                👥 Group {student.group_code}
-                              </span>
-                            )}
+                        <td className="p-4 font-mono font-extrabold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                          {student.registration_no}
+                        </td>
+                        <td className="p-4 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {student.rollno || '—'}
+                        </td>
+                        <td className="p-4">
+                          <div className="font-bold text-slate-900 dark:text-white">{student.name}</div>
+                          <div className="text-[10px] text-slate-500 font-medium">{student.college_name || activeCollegeName}</div>
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold text-[11px]">
+                              {student.course_code || 'MBBS'}
+                            </span>
+                            <span className="font-mono text-slate-500 text-xs">
+                              {student.batch_code || '2025-MBBS'}
+                            </span>
                           </div>
                         </td>
-                        <td className="font-mono text-[var(--color-ink-700)]">{student.academic_session ? student.academic_session.split(' ')[0] : '—'}</td>
-                        <td>
-                          <span className={`premium-badge ${
+                        <td className="p-4 whitespace-nowrap">
+                          {student.professional_phase ? (
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-bold text-[10px] border border-indigo-500/30 inline-block">
+                              {student.professional_phase}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[11px] italic">Not Linked</span>
+                          )}
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          {student.group_code ? (
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] border border-emerald-500/30 inline-block">
+                              Group {student.group_code}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[11px] italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border inline-block ${
                             student.residency_type === 'Hosteller'
-                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
                               : student.residency_type === 'Resident'
-                              ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                              : 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20'
+                              ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30'
+                              : 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30'
                           }`}>
                             {student.residency_type || 'Day Scholar'}
                           </span>
                         </td>
-                        <td className="text-[var(--color-ink-500)] font-mono text-[10px]">{student.admission_type || '—'}</td>
-                        <td>
-                          <span className={`premium-badge ${
+                        <td className="p-4 text-center whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
                             student.is_active
-                              ? 'bg-[var(--color-success-tint)] text-[var(--color-success)] border border-[var(--color-success)]/10'
-                              : 'bg-[var(--color-danger-tint)] text-[var(--color-danger)] border border-[var(--color-danger)]/10'
+                              ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
                           }`}>
-                            {student.is_active ? 'ACTIVE' : 'INACTIVE'}
+                            {student.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-                        <td className="pr-5 text-right whitespace-nowrap">
+                        <td className="p-4 text-right whitespace-nowrap min-w-[140px]">
                           <ActionButtons
                             onView={() => handleViewStudent(student.id)}
                             onEdit={() => handleEdit(student.id)}
@@ -1351,7 +1418,7 @@ export default function StudentMasterPage() {
 
             {/* Pagination Controls Footer */}
             {totalItems > 0 && (
-              <div className="p-4 border-t border-[var(--color-border)] bg-[var(--color-bg-sunken)] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-[var(--color-ink-700)]">
+              <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-slate-600 dark:text-slate-400">
                 <div>
                   Showing {startIndex + 1}–{Math.min(startIndex + ITEMS_PER_PAGE, totalItems)} of {totalItems} records
                 </div>
@@ -1360,7 +1427,7 @@ export default function StudentMasterPage() {
                     type="button"
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    className="px-3 py-1.5 rounded bg-[var(--color-bg-surface)] hover:bg-[var(--color-primary-100)] text-[var(--color-primary-700)] border border-[var(--color-border)] disabled:opacity-50 disabled:hover:bg-[var(--color-bg-surface)] transition-all font-bold"
+                    className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-50 transition-all font-bold"
                   >
                     ← Previous
                   </button>
@@ -1370,10 +1437,10 @@ export default function StudentMasterPage() {
                         key={pg}
                         type="button"
                         onClick={() => setCurrentPage(pg)}
-                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
                           currentPage === pg
-                            ? 'bg-[var(--color-accent-brass)] text-white font-bold'
-                            : 'hover:bg-[var(--color-primary-100)] text-[var(--color-ink-700)] hover:text-[var(--color-primary-700)]'
+                            ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
                         }`}
                       >
                         {pg}
@@ -1384,7 +1451,7 @@ export default function StudentMasterPage() {
                     type="button"
                     disabled={currentPage === totalPages}
                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    className="px-3 py-1.5 rounded bg-[var(--color-bg-surface)] hover:bg-[var(--color-primary-100)] text-[var(--color-primary-700)] border border-[var(--color-border)] disabled:opacity-50 disabled:hover:bg-[var(--color-bg-surface)] transition-all font-bold"
+                    className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-50 transition-all font-bold"
                   >
                     Next →
                   </button>
@@ -1392,24 +1459,24 @@ export default function StudentMasterPage() {
               </div>
             )}
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
 
       {/* 6-Step Progressive Wizard Form Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-3xl w-full max-w-4xl p-6 md:p-8 max-h-[90vh] overflow-y-auto flex flex-col justify-between shadow-2xl glass-card">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-4xl p-6 md:p-8 max-h-[90vh] overflow-y-auto flex flex-col justify-between shadow-2xl">
             {/* Stepper Progress Bar */}
             <div>
-              <div className="flex justify-between items-center mb-6 border-b border-slate-300 dark:border-slate-800 pb-4">
+              <div className="flex justify-between items-center mb-6 border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
-                  <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                    {editModeId ? 'Edit Student Profile' : 'NMC Medical Student Registration'}
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>{editModeId ? '✏️ Edit Student Profile' : '🎓 NMC Medical Student Registration'}</span>
                   </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                    Step {currentStep} of 6 â€” {
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Step {currentStep} of 6 — {
                       currentStep === 1 ? 'Academic & College Enrollment' :
-                      currentStep === 2 ? 'Personal Details' :
+                      currentStep === 2 ? 'Personal Details & Photo' :
                       currentStep === 3 ? 'Guardian & Addresses' :
                       currentStep === 4 ? 'NEET & Educational Qualifications' :
                       currentStep === 5 ? 'Hostel, Transport & Bank Details' :
@@ -1418,10 +1485,14 @@ export default function StudentMasterPage() {
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-slate-200/80 dark:bg-slate-200 dark:bg-slate-800/80 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white font-bold flex items-center justify-center transition-colors text-sm"
+                  className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center justify-center transition-all shadow-sm border border-slate-200 dark:border-slate-700"
+                  title="Close Registration Modal"
                 >
-                  âœ•
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
 
@@ -1430,15 +1501,27 @@ export default function StudentMasterPage() {
                 {[1, 2, 3, 4, 5, 6].map((step, idx) => (
                   <div key={step} className="flex-1 flex items-center">
                     <div className="flex flex-col items-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                        currentStep === step
-                          ? 'bg-indigo-600 text-slate-900 dark:text-white ring-4 ring-indigo-500/30'
-                          : currentStep > step
-                          ? 'bg-emerald-500 text-slate-900 dark:text-white font-black'
-                          : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
-                      }`}>
-                        {currentStep > step ? 'âœ“' : step}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editModeId || step < currentStep) setCurrentStep(step);
+                        }}
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition-all shadow-sm ${
+                          currentStep === step
+                            ? 'bg-indigo-600 text-white ring-4 ring-indigo-500/30 font-black'
+                            : currentStep > step
+                            ? 'bg-emerald-600 text-white font-bold'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        {currentStep > step ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          step
+                        )}
+                      </button>
                     </div>
                     {idx < 5 && (
                       <div className={`flex-1 h-0.5 mx-2 transition-all ${
@@ -1602,33 +1685,47 @@ export default function StudentMasterPage() {
                 {currentStep === 2 && (
                   <div className="space-y-6">
                     {/* Photo Upload */}
-                    <div className="flex items-center gap-6 p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl">
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 p-5 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/40 rounded-2xl">
                       <div className="relative flex-shrink-0">
                         {formData.photoUrl ? (
-                          <img
-                            src={formData.photoUrl}
-                            alt="Student Photo"
-                            className="w-24 h-28 rounded-xl object-cover border-2 border-indigo-500 shadow-lg shadow-indigo-500/20"
-                          />
+                          <div className="relative group">
+                            <img
+                              src={formData.photoUrl}
+                              alt="Student Photo"
+                              className="w-24 h-28 rounded-xl object-cover border-2 border-indigo-600 shadow-md"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, photoUrl: '' })}
+                              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow-lg transition-all"
+                              title="Remove Photo"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
                         ) : (
-                          <div className="w-24 h-28 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 border-2 border-dashed border-slate-600 flex flex-col items-center justify-center gap-2">
-                            <span className="text-3xl">ðŸ“·</span>
-                            <span className="text-[9px] text-slate-500 uppercase font-bold">No Photo</span>
+                          <div className="w-24 h-28 rounded-xl bg-slate-100 dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center gap-1 text-slate-400">
+                            <svg className="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span className="text-[10px] uppercase font-bold text-slate-500">No Photo</span>
                           </div>
                         )}
-                        {formData.photoUrl && (
-                          <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, photoUrl: '' })}
-                            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center shadow"
-                          >âœ•</button>
-                        )}
                       </div>
-                      <div className="flex-1">
-                        <h4 className="text-xs font-black text-slate-900 dark:text-white mb-1 uppercase tracking-wider">Student Passport Photo</h4>
-                        <p className="text-[10px] text-slate-500 mb-3">Upload a recent passport-size photo (JPG/PNG, max 2MB). This will appear on the student ID card and printed profile.</p>
-                        <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-all shadow">
-                          ðŸ“ Choose Photo
+                      <div className="flex-1 text-center sm:text-left">
+                        <h4 className="text-xs font-extrabold text-slate-900 dark:text-white mb-1 uppercase tracking-wider flex items-center justify-center sm:justify-start gap-1.5">
+                          <span>📸</span> Student Passport Photo
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
+                          Upload a recent passport-size photo (JPG, PNG, WebP &lt; 2MB). This will appear on student ID cards, roster sheets, and official medical examination records.
+                        </p>
+                        <label className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl cursor-pointer transition-all shadow-md shadow-indigo-600/30">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                          </svg>
+                          <span>Choose Photo</span>
                           <input
                             type="file"
                             accept="image/jpeg,image/png,image/webp"
@@ -1648,7 +1745,7 @@ export default function StudentMasterPage() {
                       </div>
                     </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">First Name *</label>
                       <input
@@ -2160,21 +2257,24 @@ export default function StudentMasterPage() {
             </div>
 
             {/* Stepper Footer Controls */}
-            <div className="flex justify-between items-center border-t border-slate-300 dark:border-slate-800 pt-6 mt-6">
+            <div className="flex justify-between items-center border-t border-slate-200 dark:border-slate-800 pt-5 mt-6">
               <button
                 type="button"
                 onClick={handlePrevStep}
                 disabled={currentStep === 1}
-                className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-800 hover:bg-slate-200 dark:bg-slate-800 font-bold text-xs text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs text-slate-700 dark:text-slate-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
               >
-                â† Back
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                <span>Back</span>
               </button>
 
-              <div className="flex gap-3">
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-transparent hover:bg-slate-200 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-200 transition-colors"
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all"
                 >
                   Cancel
                 </button>
@@ -2182,17 +2282,23 @@ export default function StudentMasterPage() {
                   <button
                     type="button"
                     onClick={handleNextStep}
-                    className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-bold text-xs text-slate-900 dark:text-white shadow-md shadow-indigo-600/10 transition-colors"
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-xs text-white shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-1.5"
                   >
-                    Next Step â†’
+                    <span>Next Step</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={handleFormSubmit}
-                    className="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 font-black text-xs text-slate-900 dark:text-white shadow-lg shadow-emerald-600/20 transition-all"
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 font-black text-xs text-white shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2"
                   >
-                    Save Student Profile
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>{editModeId ? 'Update Student Record' : 'Save & Register Student'}</span>
                   </button>
                 )}
               </div>

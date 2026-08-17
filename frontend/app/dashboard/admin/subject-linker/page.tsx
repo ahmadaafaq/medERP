@@ -46,7 +46,7 @@ interface Department {
 }
 
 const API_BASE = 'http://localhost:3001/api/v1';
-const TENANT = 'srms-ims';
+const getActiveTenantSlug = () => (typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null) || 'srms-ims';
 
 export default function SubjectLinkerPage() {
   const [links, setLinks] = useState<FacultySubjectLink[]>([]);
@@ -75,7 +75,8 @@ export default function SubjectLinkerPage() {
   const fetchLinks = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${TENANT}`, {
+      const slug = getActiveTenantSlug();
+      const res = await fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${slug}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
       });
       if (res.ok) {
@@ -92,14 +93,15 @@ export default function SubjectLinkerPage() {
   const fetchDropdownData = async () => {
     setMetadataLoading(true);
     try {
+      const slug = getActiveTenantSlug();
       const [facRes, subRes, deptRes] = await Promise.all([
-        fetch(`${API_BASE}/users/faculty?tenant=${TENANT}&limit=100`, {
+        fetch(`${API_BASE}/users/faculty?tenant=${slug}&limit=100`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         }),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=${TENANT}`, {
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         }),
-        fetch(`${API_BASE}/users/departments?tenant=${TENANT}`, {
+        fetch(`${API_BASE}/users/departments?tenant=${slug}`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         })
       ]);
@@ -250,9 +252,10 @@ export default function SubjectLinkerPage() {
 
     setSaving(true);
     const isEdit = !!editingLinkId;
+    const slug = getActiveTenantSlug();
     const url = isEdit 
-      ? `${API_BASE}/admin-master/faculty-subjects/${editingLinkId}?tenant=${TENANT}`
-      : `${API_BASE}/admin-master/faculty-subjects?tenant=${TENANT}`;
+      ? `${API_BASE}/admin-master/faculty-subjects/${editingLinkId}?tenant=${slug}`
+      : `${API_BASE}/admin-master/faculty-subjects?tenant=${slug}`;
     const method = isEdit ? 'PUT' : 'POST';
 
     try {
@@ -287,7 +290,8 @@ export default function SubjectLinkerPage() {
   const handleUnlink = async (id: string) => {
     if (!confirm('Are you sure you want to remove this faculty subject link?')) return;
     try {
-      const res = await fetch(`${API_BASE}/admin-master/faculty-subjects/${id}?tenant=${TENANT}`, {
+      const slug = getActiveTenantSlug();
+      const res = await fetch(`${API_BASE}/admin-master/faculty-subjects/${id}?tenant=${slug}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
       });

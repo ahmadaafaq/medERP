@@ -106,11 +106,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     const runner = this.dataSource.createQueryRunner();
     await runner.connect();
     try {
+      await runner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
       await runner.query(`SET search_path TO "${schema}", public`);
+      await this.createTenantTables(runner, schema);
       
       // Alter students table
-      await runner.query(`ALTER TABLE "${schema}".students ALTER COLUMN rollno DROP NOT NULL;`);
-      await runner.query(`ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS registration_no VARCHAR(50) UNIQUE;`);
+      await runner.query(`ALTER TABLE "${schema}".students ALTER COLUMN rollno DROP NOT NULL;`).catch(() => {});
+      await runner.query(`ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS registration_no VARCHAR(50) UNIQUE;`).catch(() => {});
       
       // Create student_admissions
       await runner.query(`
@@ -470,7 +472,53 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      await this.seedDefaultData(runner, slug);
+      // ── Groups Master (Batch Sub-Groups like A, B, C, D) ───────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".groups_master (
+          id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          code          VARCHAR(50)  NOT NULL,
+          name          VARCHAR(200) NOT NULL,
+          college_id    UUID,
+          course_id     UUID,
+          batch_id      UUID        REFERENCES "${schema}".batches(id) ON DELETE CASCADE,
+          department_id UUID        REFERENCES "${schema}".departments(id) ON DELETE SET NULL,
+          capacity      INT          DEFAULT 50,
+          is_active     BOOLEAN      DEFAULT true,
+          created_at    TIMESTAMPTZ  DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ  DEFAULT NOW()
+        );
+      `);
+
+      // ── Residency Categories (Resident / Hosteller / Day Scholar) ──────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".residency_categories (
+          id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+          college_id      UUID,
+          course_id       UUID,
+          course_code     VARCHAR(50),
+          residency_type  VARCHAR(50)  NOT NULL DEFAULT 'Hosteller',
+          category_name   VARCHAR(200) NOT NULL,
+          block_wing      VARCHAR(100),
+          total_capacity  INT          DEFAULT 100,
+          allocated_count INT          DEFAULT 0,
+          monthly_fee     NUMERIC(10,2) DEFAULT 0,
+          is_active       BOOLEAN      DEFAULT true,
+          created_at      TIMESTAMPTZ  DEFAULT NOW(),
+          updated_at      TIMESTAMPTZ  DEFAULT NOW()
+        );
+      `);
+
+      // Alter courses table to add academic_system column
+      await runner.query(`
+        ALTER TABLE "${schema}".courses 
+        ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50) DEFAULT 'professional';
+      `);
+
+      try {
+        await this.seedDefaultData(runner, slug);
+      } catch (seedErr) {
+        this.logger.warn(`Could not complete seedDefaultData for ${slug}: ${seedErr}`);
+      }
     } catch (err) {
       this.logger.error(`Failed to ensure latest schema for ${slug}:`, err);
       throw err;
@@ -522,7 +570,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         emp_id          VARCHAR(50)  UNIQUE NOT NULL,
         name            VARCHAR(200) NOT NULL,
         department_id   UUID        REFERENCES "${schema}".departments(id),
-        subject_id      UUID        REFERENCES "${schema}".subjects(id) ON DELETE SET NULL,
+        subject_id      UUID,
         designation     VARCHAR(100),
         qualification   TEXT,
         specialization  VARCHAR(200),
@@ -783,6 +831,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         type            VARCHAR(20),
         is_longitudinal BOOLEAN      DEFAULT false,
         is_active       BOOLEAN      DEFAULT true
+      );
     `);
 
     // ── Faculty Subjects junction ──────────────────────────────────────────
@@ -1213,8 +1262,28 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         degree_level       VARCHAR(50) DEFAULT 'UG',
         duration_years     INT         DEFAULT 5,
         professional_phase VARCHAR(100) DEFAULT '1st Professional (Phase I)',
+        academic_system    VARCHAR(50) DEFAULT 'professional',
         is_active          BOOLEAN     DEFAULT true,
         created_at         TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── Residency Categories (Resident / Hosteller / Day Scholar) ──────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".residency_categories (
+        id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        college_id      UUID,
+        course_id       UUID,
+        course_code     VARCHAR(50),
+        residency_type  VARCHAR(50)  NOT NULL DEFAULT 'Hosteller',
+        category_name   VARCHAR(200) NOT NULL,
+        block_wing      VARCHAR(100),
+        total_capacity  INT          DEFAULT 100,
+        allocated_count INT          DEFAULT 0,
+        monthly_fee     NUMERIC(10,2) DEFAULT 0,
+        is_active       BOOLEAN      DEFAULT true,
+        created_at      TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ  DEFAULT NOW()
       )
     `);
 
@@ -1353,50 +1422,136 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ('3rd Professional MBBS Part I (Phase III-1)', 3, 'MBBS', 'professional', true),
         ('3rd Professional MBBS Part II (Phase III-2)', 4, 'MBBS', 'professional', true)
       ) AS tmp (name, phase_order, course_cd, academic_system, is_active)
-      WHERE NOT EXISTS (SELECT 1 FROM "${schema}".professional_phases LIMIT 1)
+      WHERE NOT EXISTS (SELECT 1 FROM "${schema}".professional_phases LIMIT 1);
     `);
 
-    // ── Seed Default Authentic Users (Admin, Clerk, Faculty, Student, Warden) ──
-    const defaultPasswordHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.'; // Default password hash for 'Password@123' / 'admin@123' / '1234'
-
-    // 1. College Admin (admin / admin@123)
-    await runner.query(`
-      INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-      VALUES ('admin@srms.edu', $1, 'COLLEGE_ADMIN', true, false)
-      ON CONFLICT (email) DO NOTHING;
-    `, [defaultPasswordHash]);
-
-    // 2. Clerk (1234 / 1234)
-    await runner.query(`
-      INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-      VALUES ('clerk@srms.edu', $1, 'CLERK', true, false)
-      ON CONFLICT (email) DO NOTHING;
-    `, [defaultPasswordHash]);
-
-    // 3. Warden (warden / warden123)
-    await runner.query(`
-      INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-      VALUES ('warden@srms.edu', $1, 'WARDEN', true, false)
-      ON CONFLICT (email) DO NOTHING;
-    `, [defaultPasswordHash]);
-
-    // 4. Faculty (Dr. Sarah Sharma & Dr. Aparna Tyagi)
+    // ── Seed Baseline Academic Master Data if schema is fresh ──
     try {
-      // 4a. Dr. Sanjay Singh (Physiology)
+      // 1. Courses
+      await runner.query(`
+        INSERT INTO "${schema}".courses (code, name, degree_level, duration_years, professional_phase, is_active)
+        SELECT 'MBBS', 'Bachelor of Medicine, Bachelor of Surgery', 'UG', 5, '1st Professional (Phase I)', true
+        WHERE NOT EXISTS (SELECT 1 FROM "${schema}".courses LIMIT 1);
+      `);
+
+      // 2. Academic Sessions
+      await runner.query(`
+        INSERT INTO "${schema}".academic_sessions (name, start_date, end_date, is_current, is_active)
+        SELECT '2024-2025', '2024-08-01', '2025-07-31', true, true
+        WHERE NOT EXISTS (SELECT 1 FROM "${schema}".academic_sessions LIMIT 1);
+      `);
+
+      // 3. Batches
+      await runner.query(`
+        INSERT INTO "${schema}".batches (code, year, course_cd, is_active)
+        SELECT '2024-MBBS', 2024, 'MBBS', true
+        WHERE NOT EXISTS (SELECT 1 FROM "${schema}".batches LIMIT 1);
+      `);
+
+      // 4. Standard Medical Departments (Branches)
+      await runner.query(`
+        INSERT INTO "${schema}".departments (code, name, type, is_active) VALUES
+          ('ANAT', 'Human Anatomy', 'Pre-Clinical', true),
+          ('PHYS', 'Human Physiology', 'Pre-Clinical', true),
+          ('BIOC', 'Biochemistry', 'Pre-Clinical', true),
+          ('PHAR', 'Pharmacology', 'Para-Clinical', true),
+          ('PATH', 'Pathology', 'Para-Clinical', true),
+          ('MICR', 'Microbiology', 'Para-Clinical', true),
+          ('COMM', 'Community Medicine', 'Para-Clinical', true),
+          ('GMED', 'General Medicine', 'Clinical', true),
+          ('GSUR', 'General Surgery', 'Clinical', true),
+          ('OBGY', 'Obstetrics & Gynaecology', 'Clinical', true),
+          ('PAED', 'Paediatrics', 'Clinical', true)
+        ON CONFLICT (code) DO NOTHING;
+      `);
+
+      // 5. Standard Medical Subjects
+      const anatId = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='ANAT'`))[0]?.id;
+      const physId = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='PHYS'`))[0]?.id;
+      const biocId = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='BIOC'`))[0]?.id;
+      const gmedId = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='GMED'`))[0]?.id;
+
+      await runner.query(`
+        INSERT INTO "${schema}".subjects (code, name, department_id, is_active) VALUES
+          ('ANAT101', 'Gross Anatomy & Embryology', $1, true),
+          ('PHYS101', 'General & Systemic Physiology', $2, true),
+          ('BIOC101', 'Medical Biochemistry & Genetics', $3, true),
+          ('MED301', 'Internal & Clinical Medicine', $4, true)
+        ON CONFLICT (code) DO NOTHING;
+      `, [anatId, physId, biocId, gmedId]);
+
+      // 6. Groups Master
+      await runner.query(`
+        INSERT INTO "${schema}".groups_master (code, name, capacity, is_active)
+        SELECT 'A', 'Clinical Posting Group A', 50, true
+        WHERE NOT EXISTS (SELECT 1 FROM "${schema}".groups_master LIMIT 1);
+      `);
+
+      // 7. Residency Categories
+      await runner.query(`
+        INSERT INTO "${schema}".residency_categories (residency_type, category_name, total_capacity, allocated_count, is_active)
+        SELECT 'Hosteller', 'Campus Hostel (AC Single)', 100, 0, true
+        WHERE NOT EXISTS (SELECT 1 FROM "${schema}".residency_categories LIMIT 1);
+      `);
+    } catch (baselineErr) {
+      this.logger.warn(`Baseline master data seeding error for schema ${schema}:`, baselineErr);
+    }
+
+    // ── Seed Default Authentic Users (Admin, Clerk, Warden) ──
+    const defaultPasswordHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.';
+
+    const adminEmail = `admin@${resolvedSlug}.edu`;
+    const clerkEmail = `clerk@${resolvedSlug}.edu`;
+    const wardenEmail = `warden@${resolvedSlug}.edu`;
+
+    await runner.query(`
+      INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
+      VALUES ($1, $2, 'COLLEGE_ADMIN', true, false)
+      ON CONFLICT (email) DO NOTHING;
+    `, [adminEmail, defaultPasswordHash]);
+
+    await runner.query(`
+      INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
+      VALUES ($1, $2, 'CLERK', true, false)
+      ON CONFLICT (email) DO NOTHING;
+    `, [clerkEmail, defaultPasswordHash]);
+
+    await runner.query(`
+      INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
+      VALUES ($1, $2, 'WARDEN', true, false)
+      ON CONFLICT (email) DO NOTHING;
+    `, [wardenEmail, defaultPasswordHash]);
+
+    // Seed demo faculty and demo students ONLY for SRMS tenant
+    const isSrmsTenant = schema.includes('srms');
+    if (!isSrmsTenant) {
+      return;
+    }
+
+    try {
+      // 4a. Dr. Sarah Sharma (Physiology)
       const facRes1 = await runner.query(`
         INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-        VALUES ('sanjay.singh@srms.edu', $1, 'FACULTY', true, false)
+        VALUES ('sarah.sharma@srms.edu', $1, 'FACULTY', true, false)
         ON CONFLICT (email) DO NOTHING
         RETURNING id;
       `, [defaultPasswordHash]);
 
-      const facUserId1 = facRes1[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sanjay.singh@srms.edu'`))[0]?.id;
+      const facUserId1 = facRes1[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sarah.sharma@srms.edu'`))[0]?.id;
       if (facUserId1) {
-        await runner.query(`
-          INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
-          VALUES ($1, 'EMP1001', 'Dr. Sanjay Singh', 'Professor & HOD', 'Physiology & Biophysics', '/avatars/dr_sanjay_singh.png')
-          ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-        `, [facUserId1]);
+        const existingFac1 = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1001' OR user_id=$1 LIMIT 1`, [facUserId1]))[0];
+        if (existingFac1) {
+          await runner.query(`
+            UPDATE "${schema}".faculty 
+            SET user_id = $1, emp_id = 'EMP1001', name = 'Dr. Sarah Sharma', designation = 'Professor & HOD', specialization = 'Physiology & Biophysics', photo_url = '/avatars/dr_sarah_sharma.png'
+            WHERE id = $2;
+          `, [facUserId1, existingFac1.id]);
+        } else {
+          await runner.query(`
+            INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
+            VALUES ($1, 'EMP1001', 'Dr. Sarah Sharma', 'Professor & HOD', 'Physiology & Biophysics', '/avatars/dr_sarah_sharma.png');
+          `, [facUserId1]);
+        }
       }
 
       // 4b. Dr. Aparna Tyagi (Anatomy)
@@ -1409,11 +1564,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       const facUserId2 = facRes2[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='aparna.tyagi@srms.edu'`))[0]?.id;
       if (facUserId2) {
-        await runner.query(`
-          INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
-          VALUES ($1, 'EMP1002', 'Dr. Aparna Tyagi', 'Associate Professor', 'Human Anatomy & Histology', '/avatars/dr_sarah_sharma.png')
-          ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-        `, [facUserId2]);
+        const existingFac2 = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1002' OR user_id=$1 LIMIT 1`, [facUserId2]))[0];
+        if (existingFac2) {
+          await runner.query(`
+            UPDATE "${schema}".faculty 
+            SET user_id = $1, emp_id = 'EMP1002', name = 'Dr. Aparna Tyagi', designation = 'Associate Professor', specialization = 'Human Anatomy & Histology', photo_url = '/avatars/dr_sarah_sharma.png'
+            WHERE id = $2;
+          `, [facUserId2, existingFac2.id]);
+        } else {
+          await runner.query(`
+            INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
+            VALUES ($1, 'EMP1002', 'Dr. Aparna Tyagi', 'Associate Professor', 'Human Anatomy & Histology', '/avatars/dr_sarah_sharma.png');
+          `, [facUserId2]);
+        }
       }
 
       // 4c. Dr. Sanjay Singh (Physiology)
@@ -1426,11 +1589,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       const facUserId3 = facRes3[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sanjay.singh@srms.edu'`))[0]?.id;
       if (facUserId3) {
-        await runner.query(`
-          INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
-          VALUES ($1, 'DR/07/026', 'Dr. Sanjay Singh', 'Assistant Professor', 'Human Physiology', '/avatars/dr_sanjay_singh.png')
-          ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-        `, [facUserId3]);
+        const existingFac3 = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='DR/07/026' OR user_id=$1 LIMIT 1`, [facUserId3]))[0];
+        if (existingFac3) {
+          await runner.query(`
+            UPDATE "${schema}".faculty 
+            SET user_id = $1, emp_id = 'DR/07/026', name = 'Dr. Sanjay Singh', designation = 'Assistant Professor', specialization = 'Human Physiology', photo_url = '/avatars/dr_sanjay_singh.png'
+            WHERE id = $2;
+          `, [facUserId3, existingFac3.id]);
+        } else {
+          await runner.query(`
+            INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
+            VALUES ($1, 'DR/07/026', 'Dr. Sanjay Singh', 'Assistant Professor', 'Human Physiology', '/avatars/dr_sanjay_singh.png');
+          `, [facUserId3]);
+        }
       }
     } catch (e) {}
 
@@ -1445,13 +1616,18 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       const studUserId = studRes[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='rahul.verma@srms.edu'`))[0]?.id;
       if (studUserId) {
-        const existingStudent = await runner.query(`SELECT id FROM "${schema}".students WHERE user_id = $1 OR registration_no = '2023MBBS045' LIMIT 1`, [studUserId]);
-        if (existingStudent.length === 0) {
+        const existingStudent = (await runner.query(`SELECT id FROM "${schema}".students WHERE user_id = $1 OR registration_no = '2023MBBS045' OR rollno = 'MBBS2023045' LIMIT 1`, [studUserId]))[0];
+        if (!existingStudent) {
           await runner.query(`
             INSERT INTO "${schema}".students (user_id, rollno, registration_no, name, batch_cd, course_cd)
             VALUES ($1, 'MBBS2023045', '2023MBBS045', 'Rahul Verma', '2023-MBBS', 'MBBS')
-            ON CONFLICT (registration_no) DO UPDATE SET name = EXCLUDED.name;
           `, [studUserId]);
+        } else {
+          await runner.query(`
+            UPDATE "${schema}".students 
+            SET user_id = $1, rollno = 'MBBS2023045', registration_no = '2023MBBS045', name = 'Rahul Verma', batch_cd = '2023-MBBS', course_cd = 'MBBS' 
+            WHERE id = $2
+          `, [studUserId, existingStudent.id]);
         }
       }
     } catch (e) {}
@@ -1467,13 +1643,18 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       const kabirUserId = kabirRes[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='kabir.deshmukh2025@srms.ac.in' OR email='20260008@srms.ac.in'`))[0]?.id;
       if (kabirUserId) {
-        const existingKabir = await runner.query(`SELECT id FROM "${schema}".students WHERE user_id = $1 OR registration_no = '20260008' LIMIT 1`, [kabirUserId]);
-        if (existingKabir.length === 0) {
+        const existingKabir = (await runner.query(`SELECT id FROM "${schema}".students WHERE user_id = $1 OR registration_no = '20260008' OR rollno = '20260008' LIMIT 1`, [kabirUserId]))[0];
+        if (!existingKabir) {
           await runner.query(`
             INSERT INTO "${schema}".students (user_id, rollno, registration_no, name, batch_cd, course_cd)
             VALUES ($1, '20260008', '20260008', 'Kabir Rao Deshmukh', '2025-MBBS', 'MBBS')
-            ON CONFLICT (registration_no) DO UPDATE SET name = EXCLUDED.name;
           `, [kabirUserId]);
+        } else {
+          await runner.query(`
+            UPDATE "${schema}".students 
+            SET user_id = $1, rollno = '20260008', registration_no = '20260008', name = 'Kabir Rao Deshmukh', batch_cd = '2025-MBBS', course_cd = 'MBBS' 
+            WHERE id = $2
+          `, [kabirUserId, existingKabir.id]);
         }
       }
     } catch (e) {}
@@ -1573,16 +1754,16 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ON CONFLICT (code) DO UPDATE SET description = EXCLUDED.description;
       `);
 
-      const phyDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='PHY'`))[0]?.id;
-      const anaDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='ANA'`))[0]?.id;
+      const phyDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='PHY'`))[0]?.id || null;
+      const anaDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='ANA'`))[0]?.id || null;
 
-      const phySub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='PHY101'`))[0]?.id;
-      const anaSub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='ANA101'`))[0]?.id;
+      const phySub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='PHY101'`))[0]?.id || null;
+      const anaSub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='ANA101'`))[0]?.id || null;
 
-      const mbbsBatch = (await runner.query(`SELECT id FROM "${schema}".batches WHERE code='2023-MBBS' OR code='2025' LIMIT 1`))[0]?.id;
+      const mbbsBatch = (await runner.query(`SELECT id FROM "${schema}".batches WHERE code='2023-MBBS' OR code='2025' LIMIT 1`))[0]?.id || null;
       
-      const sarahFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1001' OR name LIKE '%Sarah%' LIMIT 1`))[0]?.id;
-      const aparnaFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1002' OR name LIKE '%Aparna%' LIMIT 1`))[0]?.id;
+      const sarahFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1001' OR name LIKE '%Sarah%' LIMIT 1`))[0]?.id || null;
+      const aparnaFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1002' OR name LIKE '%Aparna%' LIMIT 1`))[0]?.id || null;
 
       // Ensure faculty department IDs are linked properly
       if (sarahFacId && phyDept) {
@@ -1592,14 +1773,16 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         await runner.query(`UPDATE "${schema}".faculty SET department_id = $1 WHERE id = $2`, [anaDept, aparnaFacId]).catch(() => {});
       }
 
-      // Purge unregistered or non-Anatomy/Physiology dummy slots
-      await runner.query(`
-        DELETE FROM "${schema}".timetable_slots 
-        WHERE subject_id NOT IN ($1, $2) OR faculty_id NOT IN ($3, $4) OR faculty_id IS NULL;
-      `, [phySub, anaSub, sarahFacId || '00000000-0000-0000-0000-000000000000', aparnaFacId || '00000000-0000-0000-0000-000000000000']).catch(() => {});
+      if (phySub && anaSub && sarahFacId && aparnaFacId) {
+        // Purge unregistered or non-Anatomy/Physiology dummy slots
+        await runner.query(`
+          DELETE FROM "${schema}".timetable_slots 
+          WHERE subject_id NOT IN ($1, $2) OR faculty_id NOT IN ($3, $4) OR faculty_id IS NULL;
+        `, [phySub, anaSub, sarahFacId, aparnaFacId]).catch(() => {});
+      }
 
       const countRes = await runner.query(`SELECT COUNT(*) as count FROM "${schema}".timetable_slots`);
-      if (parseInt(countRes[0]?.count || '0', 10) === 0 && mbbsBatch && phySub && anaSub && sarahFacId && aparnaFacId) {
+      if (parseInt(countRes[0]?.count || '0', 10) === 0 && mbbsBatch && phySub && anaSub && sarahFacId && aparnaFacId && phyDept && anaDept) {
         await runner.query(`
           INSERT INTO "${schema}".timetable_slots
             (department_id, subject_id, batch_id, faculty_id, day_of_week, start_time, end_time, room, slot_type, topic, competency_codes)
@@ -1621,6 +1804,115 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       }
     } catch (e) {
       this.logger.error('Error seeding default timetable_slots:', e);
+    }
+
+    // 10. Seed authentic MBBS male & female medical students with photos for the college tenant
+    try {
+      const stuCountRes = await runner.query(`SELECT COUNT(*) as count FROM "${schema}".students`);
+      const stuCount = parseInt(stuCountRes[0]?.count || '0', 10);
+
+      if (stuCount === 0) {
+        const collegeRow = (await runner.query(`SELECT id, name FROM public.tenants WHERE slug = $1 LIMIT 1`, [slug]))[0];
+        const collegeId = collegeRow?.id || null;
+        const collegeName = collegeRow?.name || 'Rajshree Medical Research Institute Bareilly';
+        const prefix = slug.includes('rajshree') ? 'RMRI' : slug.includes('srms') ? 'SRMS' : 'MED';
+
+        const courseId = (await runner.query(`SELECT id FROM "${schema}".courses WHERE code = 'MBBS' LIMIT 1`))[0]?.id || null;
+        const batchRow = (await runner.query(`SELECT id, code FROM "${schema}".batches WHERE code ILIKE '%2024%' OR code ILIKE '%2025%' LIMIT 1`))[0];
+        const batchId = batchRow?.id || null;
+        const batchCode = batchRow?.code || '2024-MBBS';
+
+        const sessionId = (await runner.query(`SELECT id FROM "${schema}".academic_sessions WHERE name ILIKE '%2024%' LIMIT 1`))[0]?.id || null;
+        const profId = (await runner.query(`SELECT id FROM "${schema}".professional_phases WHERE name ILIKE '%1st%' LIMIT 1`))[0]?.id || null;
+
+        const grpRows = await runner.query(`SELECT id, code, name FROM "${schema}".groups_master`);
+        const groupMap: Record<string, { id: string; name: string }> = {};
+        for (const g of grpRows) {
+          groupMap[g.code] = { id: g.id, name: g.name };
+        }
+
+        const baselineStudents = [
+          { first: 'Aarav', last: 'Sharma', gender: 'Male', dob: '2004-03-12', blood: 'O+', roll: '101', reg: `2024${prefix}001`, neetScore: 682, neetRank: 2140, neetRoll: '2401018942', residency: 'Hosteller', groupCode: 'A', phone: '9810123456', email: `aarav.${slug}@mederp.in`, photo: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=300', father: 'Dr. Ramesh Sharma', fatherOcc: 'Surgeon', fatherPhone: '9810111111', mother: 'Sunita Sharma', city: 'Bareilly', state: 'Uttar Pradesh' },
+          { first: 'Ananya', last: 'Patel', gender: 'Female', dob: '2004-07-25', blood: 'A+', roll: '102', reg: `2024${prefix}002`, neetScore: 675, neetRank: 2850, neetRoll: '2401027814', residency: 'Hosteller', groupCode: 'A', phone: '9820234567', email: `ananya.${slug}@mederp.in`, photo: 'https://images.unsplash.com/photo-1594824813589-9a2c4e207d57?auto=format&fit=crop&q=80&w=300', father: 'Bipin Patel', fatherOcc: 'Businessman', fatherPhone: '9820222222', mother: 'Geeta Patel', city: 'Ahmedabad', state: 'Gujarat' },
+          { first: 'Rohan', last: 'Verma', gender: 'Male', dob: '2003-11-14', blood: 'B+', roll: '103', reg: `2024${prefix}003`, neetScore: 668, neetRank: 3620, neetRoll: '2401034921', residency: 'Day Scholar', groupCode: 'B', phone: '9830345678', email: `rohan.${slug}@mederp.in`, photo: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=300', father: 'Suresh Verma', fatherOcc: 'Engineer', fatherPhone: '9830333333', mother: 'Rekha Verma', city: 'Lucknow', state: 'Uttar Pradesh' },
+          { first: 'Pooja', last: 'Iyer', gender: 'Female', dob: '2004-02-18', blood: 'AB+', roll: '104', reg: `2024${prefix}004`, neetScore: 691, neetRank: 1420, neetRoll: '2401041183', residency: 'Resident', groupCode: 'B', phone: '9840456789', email: `pooja.${slug}@mederp.in`, photo: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300', father: 'Venkatesh Iyer', fatherOcc: 'Senior Professor', fatherPhone: '9840444444', mother: 'Meenakshi Iyer', city: 'Chennai', state: 'Tamil Nadu' },
+          { first: 'Vikramaditya', last: 'Singhania', gender: 'Male', dob: '2003-09-30', blood: 'O-', roll: '105', reg: `2024${prefix}005`, neetScore: 659, neetRank: 4810, neetRoll: '2401056729', residency: 'Hosteller', groupCode: 'C', phone: '9850567890', email: `vikram.${slug}@mederp.in`, photo: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=300', father: 'Rajendra Singhania', fatherOcc: 'Industrialist', fatherPhone: '9850555555', mother: 'Kavita Singhania', city: 'Kanpur', state: 'Uttar Pradesh' },
+          { first: 'Sneha', last: 'Mukherjee', gender: 'Female', dob: '2004-05-09', blood: 'A-', roll: '106', reg: `2024${prefix}006`, neetScore: 672, neetRank: 3190, neetRoll: '2401068832', residency: 'Day Scholar', groupCode: 'C', phone: '9860678901', email: `sneha.${slug}@mederp.in`, photo: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=300', father: 'Anirban Mukherjee', fatherOcc: 'Chartered Accountant', fatherPhone: '9860666666', mother: 'Sharmila Mukherjee', city: 'Kolkata', state: 'West Bengal' },
+          { first: 'Mohammed Zaid', last: 'Khan', gender: 'Male', dob: '2003-12-03', blood: 'B-', roll: '107', reg: `2024${prefix}007`, neetScore: 664, neetRank: 4150, neetRoll: '2401079941', residency: 'Hosteller', groupCode: 'D', phone: '9870789012', email: `zaid.${slug}@mederp.in`, photo: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=300', father: 'Dr. Tariq Khan', fatherOcc: 'Cardiologist', fatherPhone: '9870777777', mother: 'Yasmin Khan', city: 'Aligarh', state: 'Uttar Pradesh' },
+          { first: 'Drishya', last: 'Nair', gender: 'Female', dob: '2004-08-16', blood: 'O+', roll: '108', reg: `2024${prefix}008`, neetScore: 688, neetRank: 1680, neetRoll: '2401083319', residency: 'Hosteller', groupCode: 'D', phone: '9880890123', email: `drishya.${slug}@mederp.in`, photo: 'https://images.unsplash.com/photo-1614608682850-e0d6ed316d47?auto=format&fit=crop&q=80&w=300', father: 'Gopal Nair', fatherOcc: 'Naval Officer', fatherPhone: '9880888888', mother: 'Radhika Nair', city: 'Kochi', state: 'Kerala' },
+          { first: 'Devendra Pratap', last: 'Rao', gender: 'Male', dob: '2003-04-22', blood: 'AB-', roll: '109', reg: `2024${prefix}009`, neetScore: 661, neetRank: 4520, neetRoll: '2401095521', residency: 'Day Scholar', groupCode: 'A', phone: '9890901234', email: `devendra.${slug}@mederp.in`, photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=300', father: 'Pratap Rao', fatherOcc: 'Civil Servant', fatherPhone: '9890999999', mother: 'Anuradha Rao', city: 'Varanasi', state: 'Uttar Pradesh' }
+        ];
+
+        for (const s of baselineStudents) {
+          const userRes = await runner.query(`
+            INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
+            VALUES ($1, $2, 'STUDENT', true, false)
+            ON CONFLICT (email) DO UPDATE SET is_active = true
+            RETURNING id
+          `, [s.email.toLowerCase(), defaultPasswordHash]);
+          const userId = userRes[0]?.id;
+
+          const groupInfo = groupMap[s.groupCode] || { id: null, name: 'Group ' + s.groupCode };
+
+          const stuRes = await runner.query(`
+            INSERT INTO "${schema}".students (user_id, name, rollno, registration_no, is_active, phone, blood_group, photo_url, group_id)
+            VALUES ($1, $2, $3, $4, true, $5, $6, $7, $8)
+            ON CONFLICT (registration_no) DO UPDATE
+            SET name = EXCLUDED.name, rollno = EXCLUDED.rollno, phone = EXCLUDED.phone, blood_group = EXCLUDED.blood_group, photo_url = EXCLUDED.photo_url
+            RETURNING id
+          `, [userId, `${s.first} ${s.last}`, s.roll, s.reg, s.phone, s.blood, s.photo, groupInfo.id]);
+          const studentId = stuRes[0]?.id;
+
+          if (studentId) {
+            await runner.query(`
+              INSERT INTO "${schema}".student_admissions (
+                student_id, college_id, college_name, course_id, course_code, professional_id, professional_phase,
+                session_id, academic_session, batch_id, batch_code, residency_type, admission_type, admission_date,
+                group_id, group_code, group_name
+              ) VALUES ($1, $2, $3, $4, 'MBBS', $5, '1st Professional MBBS (Phase I)', $6, '2024-2025', $7, $8, $9, 'Government Quota', '2024-08-01', $10, $11, $12)
+              ON CONFLICT (student_id) DO NOTHING;
+            `, [studentId, collegeId, collegeName, courseId, profId, sessionId, batchId, batchCode, s.residency, groupInfo.id, s.groupCode, groupInfo.name]);
+
+            await runner.query(`
+              INSERT INTO "${schema}".student_academic_details (student_id, class_10_board, class_10_percentage, class_12_board, class_12_physics, class_12_chemistry, class_12_biology, class_12_english, class_12_percentage)
+              VALUES ($1, 'CBSE', 94.5, 'CBSE', 96.0, 95.0, 98.0, 92.0, 95.25)
+              ON CONFLICT (student_id) DO NOTHING;
+            `, [studentId]);
+
+            await runner.query(`
+              INSERT INTO "${schema}".student_neet_details (student_id, neet_roll_no, neet_score, neet_percentile, neet_air_rank)
+              VALUES ($1, $2, $3, 99.2, $4)
+              ON CONFLICT (student_id) DO NOTHING;
+            `, [studentId, s.neetRoll, s.neetScore, s.neetRank]);
+
+            await runner.query(`
+              INSERT INTO "${schema}".student_parents (student_id, father_name, father_occupation, father_mobile, mother_name, annual_income)
+              VALUES ($1, $2, $3, $4, $5, '1800000')
+              ON CONFLICT (student_id) DO NOTHING;
+            `, [studentId, s.father, s.fatherOcc, s.fatherPhone, s.mother]);
+
+            await runner.query(`
+              INSERT INTO "${schema}".student_addresses (student_id, permanent_address_1, permanent_city, permanent_state, permanent_pincode, same_as_permanent)
+              VALUES ($1, 'Civil Lines', $2, $3, '243001', true)
+              ON CONFLICT (student_id) DO NOTHING;
+            `, [studentId, s.city, s.state]);
+
+            await runner.query(`
+              INSERT INTO "${schema}".student_documents (student_id, passport_photo_url)
+              VALUES ($1, $2)
+              ON CONFLICT (student_id) DO NOTHING;
+            `, [studentId, s.photo]);
+
+            await runner.query(`
+              INSERT INTO "${schema}".student_hostel (student_id, hostel_required, hostel_name, room_number)
+              VALUES ($1, $2, $3, $4)
+              ON CONFLICT (student_id) DO NOTHING;
+            `, [studentId, s.residency === 'Hosteller', s.residency === 'Hosteller' ? (s.gender === 'Male' ? 'Charaka Boys Hostel' : 'Sushruta Girls Hostel') : null, s.residency === 'Hosteller' ? `B-${s.roll}` : null]);
+          }
+        }
+      }
+    } catch (stuSeedErr) {
+      this.logger.warn(`Could not complete baseline student seeding for schema ${schema}: ${stuSeedErr}`);
     }
 
     this.logger.log(`Default data seeded for schema: ${schema}`);

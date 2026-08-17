@@ -322,29 +322,56 @@ export default function Header({ title }: HeaderProps) {
 
   return (
     <>
-      <header className="h-20 bg-[#2D2575] text-white px-6 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xl shadow-purple-950/20 rounded-b-[22px] border-b border-white/10">
-        <div className="flex items-center gap-3.5">
-          <span className="w-1.5 h-6 rounded-full bg-[#F36C21] shadow-[0_0_12px_rgba(243,108,33,0.6)]"></span>
+      <header className="relative h-20 bg-gradient-to-r from-[#2D2575] via-[#241D5E] to-[#2D2575] text-white px-6 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xl shadow-purple-950/25 rounded-b-[24px] border-b border-white/10 overflow-hidden">
+        {/* Subtle Background ECG Wave */}
+        <div className="absolute right-1/4 top-0 h-full w-96 opacity-15 pointer-events-none flex items-center">
+          <svg viewBox="0 0 400 60" fill="none" className="w-full h-8" preserveAspectRatio="none">
+            <path
+              d="M0 30 H70 L80 30 L90 15 L100 48 L110 5 L120 40 L130 30 L180 30 L190 30 L200 15 L210 48 L220 5 L230 40 L240 30 L310 30 L320 20 L330 30 H400"
+              stroke="#FFFFFF"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+
+        <div className="relative z-10 flex items-center gap-4">
+          <span className="w-1.5 h-7 rounded-full bg-[#F36C21] shadow-[0_0_14px_rgba(243,108,33,0.7)]"></span>
           <div>
-            <h2 className="text-sm font-black text-white tracking-wider uppercase font-sans">
+            <h2 className="text-sm sm:text-base font-black text-white tracking-wide uppercase font-sans">
               {title}
             </h2>
-            <p className="text-[10px] text-purple-200/80 font-medium">MedERP Medical College Management System</p>
+            <p className="text-[10px] text-purple-200/80 font-medium truncate max-w-sm">
+              {(typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || 'UNICAMPUS PLUS'} — Medical College Platform
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="relative z-10 flex items-center gap-3 sm:gap-4">
+          {/* Quick Search */}
+          <div className="hidden lg:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/15 text-white/80 focus-within:bg-white/15 focus-within:border-white/30 transition-all w-52">
+            <svg className="w-4 h-4 text-white/60 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search ERP..."
+              className="bg-transparent border-none text-xs text-white placeholder-white/50 focus:outline-none w-full font-medium"
+            />
+          </div>
+
           {/* Live Badge */}
-          <span className="text-[10px] px-3 py-1 rounded-full bg-white/10 text-emerald-300 border border-white/15 font-extrabold uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+          <span className="hidden sm:inline-flex text-[10px] px-3 py-1 rounded-full bg-white/10 text-emerald-300 border border-white/15 font-extrabold uppercase tracking-wider items-center gap-1.5 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-[#00C48C] animate-pulse"></span>
-            System Live
+            Live
           </span>
 
           {/* Theme Switcher Button */}
           <button
             type="button"
             onClick={toggleTheme}
-            className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm"
+            className="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
           >
             {theme === 'dark' ? (
