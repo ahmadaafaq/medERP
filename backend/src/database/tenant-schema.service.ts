@@ -991,6 +991,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       )
     `);
     await runner.query(`CREATE INDEX IF NOT EXISTS idx_results_student ON "${schema}".student_results(student_id)`);
+    await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_res_stud_paper_att ON "${schema}".student_results(student_id, paper_id, attempt_number)`);
 
     await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS question_marks JSONB DEFAULT '{}'::jsonb;`);
     await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS sub_part_marks JSONB DEFAULT '{}'::jsonb;`);

@@ -187,14 +187,15 @@ export class ExaminationService {
 
       const isPass = Number(dto.marksObtained) >= passingMarks;
 
-      // Ensure missing student_results table columns exist in active tenant schema
+      // Ensure missing student_results table columns and unique constraint exist in active tenant schema
       try {
         await this.tenantSchemaService.queryInTenant(
           slug,
           `ALTER TABLE student_results ADD COLUMN IF NOT EXISTS question_marks JSONB DEFAULT '{}'::jsonb;
            ALTER TABLE student_results ADD COLUMN IF NOT EXISTS sub_part_marks JSONB DEFAULT '{}'::jsonb;
            ALTER TABLE student_results ADD COLUMN IF NOT EXISTS practical_mark NUMERIC(6,2) DEFAULT 0;
-           ALTER TABLE student_results ADD COLUMN IF NOT EXISTS eval_status VARCHAR(50) DEFAULT 'EVALUATED';`
+           ALTER TABLE student_results ADD COLUMN IF NOT EXISTS eval_status VARCHAR(50) DEFAULT 'EVALUATED';
+           CREATE UNIQUE INDEX IF NOT EXISTS uq_student_results_stud_paper_attempt ON student_results (student_id, paper_id, attempt_number);`
         );
       } catch (e) {}
 

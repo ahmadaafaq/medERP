@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 9vtCbBsDnW8UQTiaQVOm29JdSW6Aros9S8BaeOdqYWd4usipwqeaz0xyzHoyMgV
+\restrict QFQyveWFweO5a95UjbYwA1fAOJpId22IwFVC3En4QAvUbQOkIhveMmHca14COox
 
 -- Dumped from database version 16.14
 -- Dumped by pg_dump version 16.14
@@ -392,6 +392,7 @@ DROP INDEX IF EXISTS "tenant_unicamp-med".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_unicamp-med".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_unicamp-med".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_unicamp-med".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-trust-bareilly".uq_tenant_srms_trust_bareilly_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-trust-bareilly".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-trust-bareilly".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-trust-bareilly".idx_students_batch;
@@ -403,6 +404,7 @@ DROP INDEX IF EXISTS "tenant_srms-trust-bareilly".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-trust-bareilly".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-trust-bareilly".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-trust-bareilly".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-riddhima-bareilly".uq_tenant_srms_riddhima_bareilly_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-riddhima-bareilly".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-riddhima-bareilly".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-riddhima-bareilly".idx_students_batch;
@@ -414,6 +416,7 @@ DROP INDEX IF EXISTS "tenant_srms-riddhima-bareilly".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-riddhima-bareilly".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-riddhima-bareilly".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-riddhima-bareilly".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-quiz-panel".uq_tenant_srms_quiz_panel_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-quiz-panel".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-quiz-panel".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-quiz-panel".idx_students_batch;
@@ -425,6 +428,7 @@ DROP INDEX IF EXISTS "tenant_srms-quiz-panel".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-quiz-panel".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-quiz-panel".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-quiz-panel".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-nursing-school".uq_tenant_srms_nursing_school_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-nursing-school".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-nursing-school".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-nursing-school".idx_students_batch;
@@ -436,6 +440,7 @@ DROP INDEX IF EXISTS "tenant_srms-nursing-school".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-nursing-school".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-nursing-school".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-nursing-school".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-nursing-college".uq_tenant_srms_nursing_college_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-nursing-college".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-nursing-college".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-nursing-college".idx_students_batch;
@@ -447,6 +452,7 @@ DROP INDEX IF EXISTS "tenant_srms-nursing-college".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-nursing-college".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-nursing-college".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-nursing-college".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-ims".uq_tenant_srms_ims_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-ims".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-ims".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-ims".idx_students_batch;
@@ -458,6 +464,7 @@ DROP INDEX IF EXISTS "tenant_srms-ims".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-ims".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-ims".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-ims".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-ibs-lucknow".uq_tenant_srms_ibs_lucknow_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-ibs-lucknow".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-ibs-lucknow".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-ibs-lucknow".idx_students_batch;
@@ -469,6 +476,7 @@ DROP INDEX IF EXISTS "tenant_srms-ibs-lucknow".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-ibs-lucknow".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-ibs-lucknow".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-ibs-lucknow".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-iahs-bareilly".uq_tenant_srms_iahs_bareilly_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-iahs-bareilly".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-iahs-bareilly".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-iahs-bareilly".idx_students_batch;
@@ -480,6 +488,7 @@ DROP INDEX IF EXISTS "tenant_srms-iahs-bareilly".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-iahs-bareilly".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-iahs-bareilly".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-iahs-bareilly".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-cricket-academy".uq_tenant_srms_cricket_academy_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-cricket-academy".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-cricket-academy".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-cricket-academy".idx_students_batch;
@@ -491,6 +500,7 @@ DROP INDEX IF EXISTS "tenant_srms-cricket-academy".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-cricket-academy".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-cricket-academy".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-cricket-academy".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-college-of-nursing-paramedical-sciences-unnao".uq_tenant_srms_college_of_nursing_paramedical_sciences_unnao_re;
 DROP INDEX IF EXISTS "tenant_srms-college-of-nursing-paramedical-sciences-unnao".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-college-of-nursing-paramedical-sciences-unnao".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-college-of-nursing-paramedical-sciences-unnao".idx_students_batch;
@@ -502,6 +512,7 @@ DROP INDEX IF EXISTS "tenant_srms-college-of-nursing-paramedical-sciences-unnao"
 DROP INDEX IF EXISTS "tenant_srms-college-of-nursing-paramedical-sciences-unnao".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-college-of-nursing-paramedical-sciences-unnao".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-college-of-nursing-paramedical-sciences-unnao".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-college-of-law".uq_tenant_srms_college_of_law_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-college-of-law".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-college-of-law".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-college-of-law".idx_students_batch;
@@ -513,6 +524,7 @@ DROP INDEX IF EXISTS "tenant_srms-college-of-law".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-college-of-law".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-college-of-law".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-college-of-law".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-cetr-bareilly".uq_tenant_srms_cetr_bareilly_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-cetr-bareilly".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-cetr-bareilly".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-cetr-bareilly".idx_students_batch;
@@ -524,6 +536,7 @@ DROP INDEX IF EXISTS "tenant_srms-cetr-bareilly".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-cetr-bareilly".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-cetr-bareilly".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-cetr-bareilly".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-cet-unnao".uq_tenant_srms_cet_unnao_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_students_rollno;
 DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_students_dept;
 DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_students_batch;
@@ -535,6 +548,7 @@ DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_faculty_dept;
 DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_chat_msg_group;
 DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_att_sess_date;
 DROP INDEX IF EXISTS "tenant_srms-cet-unnao".idx_att_rec_student;
+DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".uq_tenant_srms_cet_bareilly_res_stud_paper_att;
 DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".units_code_uq_idx;
 DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".topics_code_uq_idx;
 DROP INDEX IF EXISTS "tenant_srms-cet-bareilly".subjects_code_uq_idx;
@@ -935,6 +949,7 @@ ALTER TABLE IF EXISTS ONLY "tenant_srms-nursing-college".attendance_sessions DRO
 ALTER TABLE IF EXISTS ONLY "tenant_srms-nursing-college".attendance_records DROP CONSTRAINT IF EXISTS attendance_records_session_id_student_id_key;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-nursing-college".attendance_records DROP CONSTRAINT IF EXISTS attendance_records_pkey;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-nursing-college".academic_sessions DROP CONSTRAINT IF EXISTS academic_sessions_pkey;
+ALTER TABLE IF EXISTS ONLY "tenant_srms-ims".student_results DROP CONSTRAINT IF EXISTS uq_tenant_srms_ims_student_paper_attempt;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-ims".subject_offerings DROP CONSTRAINT IF EXISTS uq_subject_offering;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-ims".faculty_subjects DROP CONSTRAINT IF EXISTS uq_faculty_subject;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-ims".units DROP CONSTRAINT IF EXISTS units_pkey;
@@ -1343,6 +1358,7 @@ ALTER TABLE IF EXISTS ONLY "tenant_srms-cet-unnao".attendance_sessions DROP CONS
 ALTER TABLE IF EXISTS ONLY "tenant_srms-cet-unnao".attendance_records DROP CONSTRAINT IF EXISTS attendance_records_session_id_student_id_key;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-cet-unnao".attendance_records DROP CONSTRAINT IF EXISTS attendance_records_pkey;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-cet-unnao".academic_sessions DROP CONSTRAINT IF EXISTS academic_sessions_pkey;
+ALTER TABLE IF EXISTS ONLY "tenant_srms-cet-bareilly".student_results DROP CONSTRAINT IF EXISTS uq_tenant_srms_cet_bareilly_student_paper_attempt;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-cet-bareilly".student_transport DROP CONSTRAINT IF EXISTS student_transport_pkey;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-cet-bareilly".student_phase_progressions DROP CONSTRAINT IF EXISTS student_phase_progressions_pkey;
 ALTER TABLE IF EXISTS ONLY "tenant_srms-cet-bareilly".student_neet_details DROP CONSTRAINT IF EXISTS student_neet_details_pkey;
@@ -24561,20 +24577,20 @@ de5955a0-3e7a-4880-b3af-aad4d2c536d5	enterprise	9999	999	{"hostel": true, "logbo
 --
 
 COPY public.tenants (id, name, slug, domain, plan, logo_url, primary_color, smtp_host, smtp_port, smtp_user, smtp_pass_encrypted, is_active, schema_provisioned, created_at, updated_at, code) FROM stdin;
-dba52d00-c45a-4b65-8ff4-2bd85fdea2b6	SRMS CET,BAREILLY	srms-cet-bareilly	srms-cet-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.894725+00	2026-08-16 11:27:09.616301+00	1
-13c02e33-1783-4ff7-9aa1-1358e02124b6	SRMS CETR,BAREILLY	srms-cetr-bareilly	srms-cetr-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.900283+00	2026-08-16 11:27:09.629495+00	2
-761e9045-cc93-47ca-915e-0bddbbaa4d81	SRMS CET, UNNAO	srms-cet-unnao	srms-cet-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.904482+00	2026-08-16 11:27:09.6363+00	3
-c612bf02-4721-4907-8ab7-72a662b56fc7	SRMS COLLEGE OF LAW	srms-college-of-law	srms-college-of-law.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.908321+00	2026-08-16 11:27:09.642283+00	4
-1c157dec-058f-4443-be92-140f8bf8bac8	SRMS IBS, LUCKNOW	srms-ibs-lucknow	srms-ibs-lucknow.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.911916+00	2026-08-16 11:27:09.647995+00	5
-94b71ecf-77ef-4436-97ee-8568253b7f41	SRMS IAHS,BAREILLY	srms-iahs-bareilly	srms-iahs-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.915599+00	2026-08-16 11:27:09.655066+00	6
-92787eb6-9ec6-4daf-9cf8-1da875d976dc	SRMS TRUST, BAREILLY	srms-trust-bareilly	srms-trust-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.919291+00	2026-08-16 11:27:09.662142+00	7
-366914bb-7547-4af7-bf8e-692b49474a2e	SRMS NURSING SCHOOL	srms-nursing-school	srms-nursing-school.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.923904+00	2026-08-16 11:27:09.668324+00	8
-3cc6a15c-6b62-4e80-9851-ac58a352cf72	SRMS NURSING COLLEGE	srms-nursing-college	srms-nursing-college.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.928317+00	2026-08-16 11:27:09.675825+00	9
-e6e311a7-76d3-4b76-b055-7ddceec8d0f3	SRMS RIDDHIMA,BAREILLY	srms-riddhima-bareilly	srms-riddhima-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.932472+00	2026-08-16 11:27:09.681984+00	10
-74f9f5ee-89c7-4250-88e4-5d912b5070cf	SRMS IMS,BAREILLY	srms-ims	https:srms.ac.in/ims	Standard	\N	#6366F1	\N	587	\N	\N	t	t	2026-07-27 17:58:48.559489+00	2026-08-16 11:27:09.691604+00	11
-5f7ae960-6a43-4957-8a10-9a2234737da2	SRMS COLLEGE OF NURSING & PARAMEDICAL SCIENCES,UNNAO	srms-college-of-nursing-paramedical-sciences-unnao	srms-college-of-nursing-paramedical-sciences-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.941002+00	2026-08-16 11:27:09.697898+00	12
-806339cb-821e-44f8-b710-138c95634066	SRMS QUIZ PANEL	srms-quiz-panel	srms-quiz-panel.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.94495+00	2026-08-16 11:27:09.704085+00	13
-8a7f0788-3437-4d3b-ad9c-6cc4d6e4024d	SRMS CRICKET ACADEMY	srms-cricket-academy	srms-cricket-academy.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.948556+00	2026-08-16 11:27:09.709882+00	14
+dba52d00-c45a-4b65-8ff4-2bd85fdea2b6	SRMS CET,BAREILLY	srms-cet-bareilly	srms-cet-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.894725+00	2026-08-17 16:14:36.791593+00	1
+13c02e33-1783-4ff7-9aa1-1358e02124b6	SRMS CETR,BAREILLY	srms-cetr-bareilly	srms-cetr-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.900283+00	2026-08-17 16:14:36.803425+00	2
+761e9045-cc93-47ca-915e-0bddbbaa4d81	SRMS CET, UNNAO	srms-cet-unnao	srms-cet-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.904482+00	2026-08-17 16:14:36.808826+00	3
+c612bf02-4721-4907-8ab7-72a662b56fc7	SRMS COLLEGE OF LAW	srms-college-of-law	srms-college-of-law.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.908321+00	2026-08-17 16:14:36.81444+00	4
+1c157dec-058f-4443-be92-140f8bf8bac8	SRMS IBS, LUCKNOW	srms-ibs-lucknow	srms-ibs-lucknow.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.911916+00	2026-08-17 16:14:36.819696+00	5
+94b71ecf-77ef-4436-97ee-8568253b7f41	SRMS IAHS,BAREILLY	srms-iahs-bareilly	srms-iahs-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.915599+00	2026-08-17 16:14:36.825166+00	6
+92787eb6-9ec6-4daf-9cf8-1da875d976dc	SRMS TRUST, BAREILLY	srms-trust-bareilly	srms-trust-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.919291+00	2026-08-17 16:14:36.83075+00	7
+366914bb-7547-4af7-bf8e-692b49474a2e	SRMS NURSING SCHOOL	srms-nursing-school	srms-nursing-school.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.923904+00	2026-08-17 16:14:36.835996+00	8
+3cc6a15c-6b62-4e80-9851-ac58a352cf72	SRMS NURSING COLLEGE	srms-nursing-college	srms-nursing-college.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.928317+00	2026-08-17 16:14:36.841521+00	9
+e6e311a7-76d3-4b76-b055-7ddceec8d0f3	SRMS RIDDHIMA,BAREILLY	srms-riddhima-bareilly	srms-riddhima-bareilly.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.932472+00	2026-08-17 16:14:36.847254+00	10
+74f9f5ee-89c7-4250-88e4-5d912b5070cf	SRMS IMS,BAREILLY	srms-ims	https:srms.ac.in/ims	Standard	\N	#6366F1	\N	587	\N	\N	t	t	2026-07-27 17:58:48.559489+00	2026-08-17 16:14:36.869301+00	11
+5f7ae960-6a43-4957-8a10-9a2234737da2	SRMS COLLEGE OF NURSING & PARAMEDICAL SCIENCES,UNNAO	srms-college-of-nursing-paramedical-sciences-unnao	srms-college-of-nursing-paramedical-sciences-unnao.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.941002+00	2026-08-17 16:14:36.877915+00	12
+806339cb-821e-44f8-b710-138c95634066	SRMS QUIZ PANEL	srms-quiz-panel	srms-quiz-panel.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.94495+00	2026-08-17 16:14:36.884179+00	13
+8a7f0788-3437-4d3b-ad9c-6cc4d6e4024d	SRMS CRICKET ACADEMY	srms-cricket-academy	srms-cricket-academy.mederp.app	enterprise	\N	#6366F1	\N	587	\N	\N	t	t	2026-08-14 14:33:32.948556+00	2026-08-17 16:14:36.891447+00	14
 \.
 
 
@@ -27251,6 +27267,9 @@ c4bd81ae-9107-4593-a1b4-e62b9fce0b30	84724489-8aee-425a-8a39-56c668d4ca0b	e0c5d8
 --
 
 COPY "tenant_srms-cet-bareilly".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
+346f2269-944d-4016-a872-98c7d5048538	11	BA.LL.B	UG	5.0	Semester 1 (1st Year)	f	2026-08-14 14:33:34.184395+00	semester	11	UG
+98b1a0ed-c6d4-4d0a-bfa3-d3c117dfa65f	12	BBA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.189445+00	semester	12	UG
+30e6cde5-9c63-4dd2-ac97-eb347d5d289f	13	BCA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.193317+00	semester	13	UG
 6300b3a8-cb6f-45d0-a1e9-a5d1b5dc9d57	1	B.TECH.	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.14844+00	semester	1	UG
 2b7119de-454f-4d5e-8799-20069fc137a0	2	B.PHARM.	UG	4.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.152879+00	semester	2	UG
 e8358b99-6368-44b4-a9a6-7a3f68b37609	3	MCA	PG	2.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.156598+00	semester	3	PG
@@ -27260,9 +27279,6 @@ cbc0b730-4ddb-4b5c-aa30-8363d2d1a80f	6	M. PHARM.	PG	2.0	Semester 1 (1st Year)	t	
 8f809d1f-b13b-48e4-a9e4-0efa86f8e47b	7	B.Tech (Lateral Entry)	UG	4.0	Semester 1 (1st Year)	f	2026-08-14 14:33:34.172139+00	semester	7	UG
 edfdae3e-d06a-4070-aec7-aa3984cc1178	8	B.Pharma (Lateral Entry)	UG	4.0	Semester 1 (1st Year)	f	2026-08-14 14:33:34.175657+00	semester	8	UG
 6bd9cd62-e8e8-4981-b4bb-eeb08ee36287	9	MCA (Lateral Entry)	PG	2.0	Semester 1 (1st Year)	f	2026-08-14 14:33:34.179595+00	semester	9	PG
-346f2269-944d-4016-a872-98c7d5048538	11	BA.LL.B	UG	5.0	Semester 1 (1st Year)	f	2026-08-14 14:33:34.184395+00	semester	11	UG
-98b1a0ed-c6d4-4d0a-bfa3-d3c117dfa65f	12	BBA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.189445+00	semester	12	UG
-30e6cde5-9c63-4dd2-ac97-eb347d5d289f	13	BCA	UG	3.0	Semester 1 (1st Year)	t	2026-08-14 14:33:34.193317+00	semester	13	UG
 \.
 
 
@@ -29558,6 +29574,7 @@ COPY "tenant_srms-cet-bareilly".student_results (id, student_id, paper_id, marks
 516a5f23-5e6c-4cae-9ac3-87ce14870e06	b1cce9ef-2696-41e2-9834-275dba417c8a	cb9fbf49-9f0b-45a0-943c-ca905792c543	74.50	t	1	\N	2026-08-16 11:25:31.890854+00	{}	{}	0.00	EVALUATED	2026-08-16 11:25:31.890854+00
 5eaf470e-0d84-4f9b-9dd6-a53d163ab19e	e5e55f18-e827-4978-8872-bc37f7db030a	cb9fbf49-9f0b-45a0-943c-ca905792c543	68.00	t	1	\N	2026-08-16 11:25:31.907104+00	{}	{}	0.00	EVALUATED	2026-08-16 11:25:31.907104+00
 bf412d8d-524c-402f-9559-b201ea343203	2653e41f-92af-42af-8745-1c4e3790d19b	cb9fbf49-9f0b-45a0-943c-ca905792c543	78.00	t	1	\N	2026-08-16 11:25:31.912254+00	{}	{}	0.00	EVALUATED	2026-08-16 11:25:31.912254+00
+55e9b2f2-61bb-43e2-8c73-8673b53ea341	330e61a5-556c-4403-bc5a-ea7e5c59249e	cb9fbf49-9f0b-45a0-943c-ca905792c543	67.50	t	1	\N	2026-08-17 16:13:25.614973+00	{"23279a21-1e3d-4252-8386-24a2ae0b2f49": 0, "27e4ea29-c237-4511-8c7b-0d16aaba55cb": 2, "5c975005-aa31-485d-92f9-90305995ecfe": 0, "73970ac1-5ff6-474f-a02c-c62e5c97cc6b": 2, "922fe003-735e-4eef-bfba-1a1c37b1bd43": 2}	{"0a2b83d6-1481-4de8-9518-ac27c5ae3478___1": 2, "0a2b83d6-1481-4de8-9518-ac27c5ae3478___2": 1, "0a2b83d6-1481-4de8-9518-ac27c5ae3478___3": 1, "0a2b83d6-1481-4de8-9518-ac27c5ae3478___4": 1, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___1": 2, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___2": 1.5, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___3": 1.5, "0f0b47ad-6390-4fdd-964e-aa2250ef4db8___4": 2, "6995039e-c3e0-4657-8f04-f5141dc36158___1": 2, "6995039e-c3e0-4657-8f04-f5141dc36158___2": 1, "6995039e-c3e0-4657-8f04-f5141dc36158___3": 1, "6995039e-c3e0-4657-8f04-f5141dc36158___4": 1.5, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___1": 2, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___2": 2, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___3": 1, "f0f8769f-718e-4e7c-b0ad-2d5f4d236464___4": 2}	37.00	EVALUATED	2026-08-17 16:13:25.614973+00
 \.
 
 
@@ -35523,10 +35540,6 @@ COPY "tenant_srms-ims".student_results (id, student_id, paper_id, marks_obtained
 70043103-532f-4556-97d1-fa8a5f1f4992	6795b36b-766b-457b-b582-547c1a71cfd6	bb47ccf6-1c23-4f4b-bc9d-ecb33e538547	10.00	t	1	\N	2026-08-06 00:36:47.499135+00	{"q_26442a2e-62c7-4c3e-976e-6b884fa292a5": 2, "q_3e809a4a-2b8d-4e17-9141-84c4436ecbb7": 3, "q_60fe8e2d-beac-4e3e-9890-9b4da4752797": 0, "q_78f663cb-4b5e-4755-bc50-77a9f59d63c4": 2, "q_7f090f88-c243-4eea-a8cb-74266c38dca7": 0, "q_8c3f6cf2-5b38-46f8-8e1f-01ebf1b31b62": 2, "q_9e5327d3-8e7c-47b9-b64a-26316bfacef4": 0, "q_ae33e191-b563-400a-9a83-fde5892b26ae": 0, "q_60fe8e2d-beac-4e3e-9890-9b4da4752797_sq_0": 1, "q_60fe8e2d-beac-4e3e-9890-9b4da4752797_sq_1": 0}	{"PY1.1(2024)": {"percent": 40, "scoreStr": "4/10"}, "PY2.1(2024)": {"percent": 60, "scoreStr": "6/10"}}	Priya M Nair	20260007	{}	0.00	EVALUATED
 3b27338b-3e34-4baa-8dcf-3366eb8982eb	3fff3c45-cc54-4f35-a3d4-2cae032f28d1	4632f2fa-70cd-46e9-a046-34930c93ae2f	82.00	t	1	\N	2026-08-07 16:43:41.782208+00	{}	{}	\N	20260008	{}	0.00	EVALUATED
 b6419a81-07c4-49ac-a656-c27f74ff55d7	3fff3c45-cc54-4f35-a3d4-2cae032f28d1	1e3dd283-e919-4c0e-9d3e-a30e5a842954	35.50	t	1	\N	2026-08-10 17:29:34.53838+00	{"26442a2e-62c7-4c3e-976e-6b884fa292a5": 0, "3e809a4a-2b8d-4e17-9141-84c4436ecbb7": 8, "60fe8e2d-beac-4e3e-9890-9b4da4752797": 0, "7f090f88-c243-4eea-a8cb-74266c38dca7": 2, "8c3f6cf2-5b38-46f8-8e1f-01ebf1b31b62": 7, "9e5327d3-8e7c-47b9-b64a-26316bfacef4": 0, "ae33e191-b563-400a-9a83-fde5892b26ae": 2, "bc5a3dfe-0e3d-4fb5-b85e-248cdc43ab98": 2}	{}	\N	\N	{"1": 3, "2": 2.5}	9.00	EVALUATED
-76f68312-fd19-4f10-aa8c-84b1f3565ed5	3fff3c45-cc54-4f35-a3d4-2cae032f28d1	bb47ccf6-1c23-4f4b-bc9d-ecb33e538547	14.00	t	1	\N	2026-08-06 00:25:21.291943+00	{"q_26442a2e-62c7-4c3e-976e-6b884fa292a5": 0, "q_3e809a4a-2b8d-4e17-9141-84c4436ecbb7": 3, "q_60fe8e2d-beac-4e3e-9890-9b4da4752797": 0, "q_78f663cb-4b5e-4755-bc50-77a9f59d63c4": 0, "q_7f090f88-c243-4eea-a8cb-74266c38dca7": 2, "q_8c3f6cf2-5b38-46f8-8e1f-01ebf1b31b62": 3, "q_9e5327d3-8e7c-47b9-b64a-26316bfacef4": 2, "q_ae33e191-b563-400a-9a83-fde5892b26ae": 2, "q_60fe8e2d-beac-4e3e-9890-9b4da4752797_sq_0": 1, "q_60fe8e2d-beac-4e3e-9890-9b4da4752797_sq_1": 1}	{"PY1.1(2024)": {"percent": 70, "scoreStr": "7/10"}, "PY2.1(2024)": {"percent": 70, "scoreStr": "7/10"}}	Kabir Rao Deshmukh	20260008	{}	0.00	EVALUATED
-70043103-532f-4556-97d1-fa8a5f1f4992	6795b36b-766b-457b-b582-547c1a71cfd6	bb47ccf6-1c23-4f4b-bc9d-ecb33e538547	10.00	t	1	\N	2026-08-06 00:36:47.499135+00	{"q_26442a2e-62c7-4c3e-976e-6b884fa292a5": 2, "q_3e809a4a-2b8d-4e17-9141-84c4436ecbb7": 3, "q_60fe8e2d-beac-4e3e-9890-9b4da4752797": 0, "q_78f663cb-4b5e-4755-bc50-77a9f59d63c4": 2, "q_7f090f88-c243-4eea-a8cb-74266c38dca7": 0, "q_8c3f6cf2-5b38-46f8-8e1f-01ebf1b31b62": 2, "q_9e5327d3-8e7c-47b9-b64a-26316bfacef4": 0, "q_ae33e191-b563-400a-9a83-fde5892b26ae": 0, "q_60fe8e2d-beac-4e3e-9890-9b4da4752797_sq_0": 1, "q_60fe8e2d-beac-4e3e-9890-9b4da4752797_sq_1": 0}	{"PY1.1(2024)": {"percent": 40, "scoreStr": "4/10"}, "PY2.1(2024)": {"percent": 60, "scoreStr": "6/10"}}	Priya M Nair	20260007	{}	0.00	EVALUATED
-3b27338b-3e34-4baa-8dcf-3366eb8982eb	3fff3c45-cc54-4f35-a3d4-2cae032f28d1	4632f2fa-70cd-46e9-a046-34930c93ae2f	82.00	t	1	\N	2026-08-07 16:43:41.782208+00	{}	{}	\N	20260008	{}	0.00	EVALUATED
-b6419a81-07c4-49ac-a656-c27f74ff55d7	3fff3c45-cc54-4f35-a3d4-2cae032f28d1	1e3dd283-e919-4c0e-9d3e-a30e5a842954	35.50	t	1	\N	2026-08-10 17:29:34.53838+00	{"26442a2e-62c7-4c3e-976e-6b884fa292a5": 0, "3e809a4a-2b8d-4e17-9141-84c4436ecbb7": 8, "60fe8e2d-beac-4e3e-9890-9b4da4752797": 0, "7f090f88-c243-4eea-a8cb-74266c38dca7": 2, "8c3f6cf2-5b38-46f8-8e1f-01ebf1b31b62": 7, "9e5327d3-8e7c-47b9-b64a-26316bfacef4": 0, "ae33e191-b563-400a-9a83-fde5892b26ae": 2, "bc5a3dfe-0e3d-4fb5-b85e-248cdc43ab98": 2}	{}	\N	\N	{"1": 3, "2": 2.5}	9.00	EVALUATED
 \.
 
 
@@ -37680,8 +37693,6 @@ ed87dcbe-7a1b-4690-9b2a-13500d25cb9f	\N	\N	\N	AN2.3	Describe brachial plexus for
 --
 
 COPY "tenant_srms-riddhima-bareilly".courses (id, code, name, degree_level, duration_years, professional_phase, is_active, created_at, academic_system, course_cd, course_type) FROM stdin;
-1f924e15-c6b3-4e2f-bb29-0a55f9d8e310	1	CERTIFICATE COURSE (6MONTHS)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.278193+00	semester	1	Certificate
-11e2b65b-9615-47ca-8029-1de6f193dfee	2	ADVANCE CERTIFICATE (1 YEAR)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.282023+00	semester	2	Certificate
 d790873b-86e5-4260-80f5-f3ebff0fd9df	3	DIPLOMA (2 YEARS)	PG	2.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.28836+00	semester	3	PG
 5435514a-6bea-421b-9246-02d14fd25220	4	ADVANCE DIPLOMA (3 YEARS)	UG	3.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.291974+00	semester	4	UG
 f16383bd-86d4-43ee-bdeb-0116564f8b01	5	HOBBY CLASSES (45 DAYS)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.295261+00	semester	5	Certificate
@@ -37695,6 +37706,8 @@ fed71bf3-6167-40e0-9034-56f9f912def0	11	Theatre Workshop (6 months)	Certificate	
 6d88dd62-e899-4076-ad04-b0dde55260bb	13	Professional Photography Diploma (6 Months)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.330072+00	semester	13	Certificate
 223f0121-42d3-4618-b47d-a4c7fe32e7b5	14	Professional Photography - Advance Diploma (12 Months)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.801885+00	semester	14	Certificate
 5f3b350d-903c-46e3-946d-629186dac91a	15	30 Hours certificate Photography	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-14 14:33:43.815163+00	semester	15	Certificate
+1f924e15-c6b3-4e2f-bb29-0a55f9d8e310	1	CERTIFICATE COURSE (6MONTHS)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.278193+00	semester	1	Certificate
+11e2b65b-9615-47ca-8029-1de6f193dfee	2	ADVANCE CERTIFICATE (1 YEAR)	Certificate	1.0	Semester 1 (1st Year)	t	2026-08-16 09:01:50.282023+00	semester	2	Certificate
 \.
 
 
@@ -41968,6 +41981,14 @@ ALTER TABLE ONLY "tenant_srms-cet-bareilly".student_transport
 
 
 --
+-- Name: student_results uq_tenant_srms_cet_bareilly_student_paper_attempt; Type: CONSTRAINT; Schema: tenant_srms-cet-bareilly; Owner: unicampus
+--
+
+ALTER TABLE ONLY "tenant_srms-cet-bareilly".student_results
+    ADD CONSTRAINT uq_tenant_srms_cet_bareilly_student_paper_attempt UNIQUE (student_id, paper_id, attempt_number);
+
+
+--
 -- Name: academic_sessions academic_sessions_pkey; Type: CONSTRAINT; Schema: tenant_srms-cet-unnao; Owner: unicampus
 --
 
@@ -45232,6 +45253,14 @@ ALTER TABLE ONLY "tenant_srms-ims".subject_offerings
 
 
 --
+-- Name: student_results uq_tenant_srms_ims_student_paper_attempt; Type: CONSTRAINT; Schema: tenant_srms-ims; Owner: unicampus
+--
+
+ALTER TABLE ONLY "tenant_srms-ims".student_results
+    ADD CONSTRAINT uq_tenant_srms_ims_student_paper_attempt UNIQUE (student_id, paper_id, attempt_number);
+
+
+--
 -- Name: academic_sessions academic_sessions_pkey; Type: CONSTRAINT; Schema: tenant_srms-nursing-college; Owner: unicampus
 --
 
@@ -48358,6 +48387,13 @@ CREATE UNIQUE INDEX units_code_uq_idx ON "tenant_srms-cet-bareilly".units USING 
 
 
 --
+-- Name: uq_tenant_srms_cet_bareilly_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-cet-bareilly; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_cet_bareilly_res_stud_paper_att ON "tenant_srms-cet-bareilly".student_results USING btree (student_id, paper_id, attempt_number);
+
+
+--
 -- Name: idx_att_rec_student; Type: INDEX; Schema: tenant_srms-cet-unnao; Owner: unicampus
 --
 
@@ -48432,6 +48468,13 @@ CREATE INDEX idx_students_dept ON "tenant_srms-cet-unnao".students USING btree (
 --
 
 CREATE INDEX idx_students_rollno ON "tenant_srms-cet-unnao".students USING btree (rollno);
+
+
+--
+-- Name: uq_tenant_srms_cet_unnao_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-cet-unnao; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_cet_unnao_res_stud_paper_att ON "tenant_srms-cet-unnao".student_results USING btree (student_id, paper_id, attempt_number);
 
 
 --
@@ -48512,6 +48555,13 @@ CREATE INDEX idx_students_rollno ON "tenant_srms-cetr-bareilly".students USING b
 
 
 --
+-- Name: uq_tenant_srms_cetr_bareilly_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-cetr-bareilly; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_cetr_bareilly_res_stud_paper_att ON "tenant_srms-cetr-bareilly".student_results USING btree (student_id, paper_id, attempt_number);
+
+
+--
 -- Name: idx_att_rec_student; Type: INDEX; Schema: tenant_srms-college-of-law; Owner: unicampus
 --
 
@@ -48586,6 +48636,13 @@ CREATE INDEX idx_students_dept ON "tenant_srms-college-of-law".students USING bt
 --
 
 CREATE INDEX idx_students_rollno ON "tenant_srms-college-of-law".students USING btree (rollno);
+
+
+--
+-- Name: uq_tenant_srms_college_of_law_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-college-of-law; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_college_of_law_res_stud_paper_att ON "tenant_srms-college-of-law".student_results USING btree (student_id, paper_id, attempt_number);
 
 
 --
@@ -48666,6 +48723,13 @@ CREATE INDEX idx_students_rollno ON "tenant_srms-college-of-nursing-paramedical-
 
 
 --
+-- Name: uq_tenant_srms_college_of_nursing_paramedical_sciences_unnao_re; Type: INDEX; Schema: tenant_srms-college-of-nursing-paramedical-sciences-unnao; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_college_of_nursing_paramedical_sciences_unnao_re ON "tenant_srms-college-of-nursing-paramedical-sciences-unnao".student_results USING btree (student_id, paper_id, attempt_number);
+
+
+--
 -- Name: idx_att_rec_student; Type: INDEX; Schema: tenant_srms-cricket-academy; Owner: unicampus
 --
 
@@ -48740,6 +48804,13 @@ CREATE INDEX idx_students_dept ON "tenant_srms-cricket-academy".students USING b
 --
 
 CREATE INDEX idx_students_rollno ON "tenant_srms-cricket-academy".students USING btree (rollno);
+
+
+--
+-- Name: uq_tenant_srms_cricket_academy_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-cricket-academy; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_cricket_academy_res_stud_paper_att ON "tenant_srms-cricket-academy".student_results USING btree (student_id, paper_id, attempt_number);
 
 
 --
@@ -48820,6 +48891,13 @@ CREATE INDEX idx_students_rollno ON "tenant_srms-iahs-bareilly".students USING b
 
 
 --
+-- Name: uq_tenant_srms_iahs_bareilly_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-iahs-bareilly; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_iahs_bareilly_res_stud_paper_att ON "tenant_srms-iahs-bareilly".student_results USING btree (student_id, paper_id, attempt_number);
+
+
+--
 -- Name: idx_att_rec_student; Type: INDEX; Schema: tenant_srms-ibs-lucknow; Owner: unicampus
 --
 
@@ -48894,6 +48972,13 @@ CREATE INDEX idx_students_dept ON "tenant_srms-ibs-lucknow".students USING btree
 --
 
 CREATE INDEX idx_students_rollno ON "tenant_srms-ibs-lucknow".students USING btree (rollno);
+
+
+--
+-- Name: uq_tenant_srms_ibs_lucknow_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-ibs-lucknow; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_ibs_lucknow_res_stud_paper_att ON "tenant_srms-ibs-lucknow".student_results USING btree (student_id, paper_id, attempt_number);
 
 
 --
@@ -48974,6 +49059,13 @@ CREATE INDEX idx_students_rollno ON "tenant_srms-ims".students USING btree (roll
 
 
 --
+-- Name: uq_tenant_srms_ims_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-ims; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_ims_res_stud_paper_att ON "tenant_srms-ims".student_results USING btree (student_id, paper_id, attempt_number);
+
+
+--
 -- Name: idx_att_rec_student; Type: INDEX; Schema: tenant_srms-nursing-college; Owner: unicampus
 --
 
@@ -49048,6 +49140,13 @@ CREATE INDEX idx_students_dept ON "tenant_srms-nursing-college".students USING b
 --
 
 CREATE INDEX idx_students_rollno ON "tenant_srms-nursing-college".students USING btree (rollno);
+
+
+--
+-- Name: uq_tenant_srms_nursing_college_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-nursing-college; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_nursing_college_res_stud_paper_att ON "tenant_srms-nursing-college".student_results USING btree (student_id, paper_id, attempt_number);
 
 
 --
@@ -49128,6 +49227,13 @@ CREATE INDEX idx_students_rollno ON "tenant_srms-nursing-school".students USING 
 
 
 --
+-- Name: uq_tenant_srms_nursing_school_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-nursing-school; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_nursing_school_res_stud_paper_att ON "tenant_srms-nursing-school".student_results USING btree (student_id, paper_id, attempt_number);
+
+
+--
 -- Name: idx_att_rec_student; Type: INDEX; Schema: tenant_srms-quiz-panel; Owner: unicampus
 --
 
@@ -49202,6 +49308,13 @@ CREATE INDEX idx_students_dept ON "tenant_srms-quiz-panel".students USING btree 
 --
 
 CREATE INDEX idx_students_rollno ON "tenant_srms-quiz-panel".students USING btree (rollno);
+
+
+--
+-- Name: uq_tenant_srms_quiz_panel_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-quiz-panel; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_quiz_panel_res_stud_paper_att ON "tenant_srms-quiz-panel".student_results USING btree (student_id, paper_id, attempt_number);
 
 
 --
@@ -49282,6 +49395,13 @@ CREATE INDEX idx_students_rollno ON "tenant_srms-riddhima-bareilly".students USI
 
 
 --
+-- Name: uq_tenant_srms_riddhima_bareilly_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-riddhima-bareilly; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_riddhima_bareilly_res_stud_paper_att ON "tenant_srms-riddhima-bareilly".student_results USING btree (student_id, paper_id, attempt_number);
+
+
+--
 -- Name: idx_att_rec_student; Type: INDEX; Schema: tenant_srms-trust-bareilly; Owner: unicampus
 --
 
@@ -49356,6 +49476,13 @@ CREATE INDEX idx_students_dept ON "tenant_srms-trust-bareilly".students USING bt
 --
 
 CREATE INDEX idx_students_rollno ON "tenant_srms-trust-bareilly".students USING btree (rollno);
+
+
+--
+-- Name: uq_tenant_srms_trust_bareilly_res_stud_paper_att; Type: INDEX; Schema: tenant_srms-trust-bareilly; Owner: unicampus
+--
+
+CREATE UNIQUE INDEX uq_tenant_srms_trust_bareilly_res_stud_paper_att ON "tenant_srms-trust-bareilly".student_results USING btree (student_id, paper_id, attempt_number);
 
 
 --
@@ -52343,5 +52470,5 @@ ALTER TABLE ONLY "tenant_unicamp-med".topics
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 9vtCbBsDnW8UQTiaQVOm29JdSW6Aros9S8BaeOdqYWd4usipwqeaz0xyzHoyMgV
+\unrestrict QFQyveWFweO5a95UjbYwA1fAOJpId22IwFVC3En4QAvUbQOkIhveMmHca14COox
 
