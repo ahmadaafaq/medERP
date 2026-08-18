@@ -480,10 +480,10 @@ export default function AdminMasterPage() {
 
   const handleAddNew = () => {
     setEditingItem(null);
-    const defaultCol = selectedCollegeFilter !== 'all' 
-      ? colleges.find(c => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter) || colleges[0] 
+    const defaultCol = selectedCollegeFilter !== 'all'
+      ? colleges.find(c => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter) || colleges[0]
       : colleges[0];
-    
+
     const defaultCollegeId = defaultCol?.code || defaultCol?.id || '1';
     const defaultCollegeSlug = defaultCol?.slug || 'srms-cet-bareilly';
 
@@ -503,7 +503,7 @@ export default function AdminMasterPage() {
     } else if (activeTab === 'subjects') {
       const colCourses = getCoursesForCollege(defaultCollegeId || defaultCollegeSlug);
       const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '1';
-      const availableDepts = departments.filter(d => 
+      const availableDepts = departments.filter(d =>
         (d.college_id === defaultCollegeId || d.college_slug === defaultCollegeSlug || String(d.colg_cd) === String(defaultCollegeId)) &&
         (!firstCourseCd || d.course_cd === firstCourseCd || d.course_code === firstCourseCd)
       );
@@ -522,9 +522,9 @@ export default function AdminMasterPage() {
       setFormData({
         college_id: defaultCollegeId,
         college_slug: defaultCollegeSlug,
-        code: 'LINK-MBBS-P1',
+        code: 'LINK-BTECH-P1',
         name: '',
-        course_cd: 'MBBS',
+        course_cd: '',
         professional_phase: '1st Professional (Phase I)',
         academic_session: '2024-2025',
         description: '',
@@ -532,7 +532,7 @@ export default function AdminMasterPage() {
     } else if (activeTab === 'subject-offerings') {
       const colCourses = getCoursesForCollege(defaultCollegeId || defaultCollegeSlug);
       const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '1';
-      const availableDepts = departments.filter(d => 
+      const availableDepts = departments.filter(d =>
         (d.college_id === defaultCollegeId || d.college_slug === defaultCollegeSlug || String(d.colg_cd) === String(defaultCollegeId)) &&
         (!firstCourseCd || d.course_cd === firstCourseCd || d.course_code === firstCourseCd)
       );
@@ -573,8 +573,8 @@ export default function AdminMasterPage() {
       const targetColSlug = targetCol?.slug || defaultCollegeSlug || '';
       const colCourses = getCoursesForCollege(targetCol?.id || targetCol?.slug);
       const chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
-      
-      const availableDepts = departments.filter(d => 
+
+      const availableDepts = departments.filter(d =>
         (d.college_id === targetCol?.id || d.college_slug === targetCol?.slug || String(d.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || d.course_cd === chosenCourseCd || d.course_code === chosenCourseCd)
       );
@@ -617,7 +617,7 @@ export default function AdminMasterPage() {
       const colCourses = getCoursesForCollege(targetCol?.id || targetCol?.slug);
       const chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
 
-      const availableDepts = departments.filter(d => 
+      const availableDepts = departments.filter(d =>
         (d.college_id === targetCol?.id || d.college_slug === targetCol?.slug || String(d.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || d.course_cd === chosenCourseCd || d.course_code === chosenCourseCd)
       );
@@ -670,7 +670,7 @@ export default function AdminMasterPage() {
       const colCourses = getCoursesForCollege(targetCol?.id || targetCol?.slug);
       const chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
 
-      const availableDepts = departments.filter(d => 
+      const availableDepts = departments.filter(d =>
         (d.college_id === targetCol?.id || d.college_slug === targetCol?.slug || String(d.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || d.course_cd === chosenCourseCd || d.course_code === chosenCourseCd)
       );
@@ -931,9 +931,11 @@ export default function AdminMasterPage() {
   const handleDelete = async (id: string, itemCollegeSlug?: string) => {
     if (!confirm('Are you sure you want to delete this record?')) return;
     const targetSlug = getFormCollegeSlug(itemCollegeSlug || selectedCollegeFilter);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     try {
       const res = await fetch(`${API_BASE}/${activeTab}/${id}?tenant=${targetSlug}`, {
         method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       if (res.ok) {
         await Promise.all([
@@ -1121,10 +1123,14 @@ export default function AdminMasterPage() {
       if (isEdit) payload.is_active = formData.is_active !== false;
     }
 
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     try {
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
       if (res.ok) {
@@ -1181,9 +1187,9 @@ export default function AdminMasterPage() {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetColCd = targetCol?.code || targetCol?.id;
     return departments.filter(d => {
-      const matchCol = selectedCollegeFilter === 'all' || 
-        d.college_id === targetCol?.id || 
-        d.college_slug === targetCol?.slug || 
+      const matchCol = selectedCollegeFilter === 'all' ||
+        d.college_id === targetCol?.id ||
+        d.college_slug === targetCol?.slug ||
         String(d.colg_cd) === String(targetColCd);
       if (!matchCol) return false;
       if (selectedCourseFilter === 'all') return true;
@@ -1195,9 +1201,9 @@ export default function AdminMasterPage() {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetColCd = targetCol?.code || targetCol?.id;
     return subjects.filter(s => {
-      const matchCol = selectedCollegeFilter === 'all' || 
-        s.college_id === targetCol?.id || 
-        s.college_slug === targetCol?.slug || 
+      const matchCol = selectedCollegeFilter === 'all' ||
+        s.college_id === targetCol?.id ||
+        s.college_slug === targetCol?.slug ||
         String(s.colg_cd) === String(targetColCd);
       if (!matchCol) return false;
       if (selectedCourseFilter !== 'all' && s.course_cd !== selectedCourseFilter) return false;
@@ -1210,9 +1216,9 @@ export default function AdminMasterPage() {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetColCd = targetCol?.code || targetCol?.id;
     return units.filter(u => {
-      const matchCol = selectedCollegeFilter === 'all' || 
-        u.college_id === targetCol?.id || 
-        u.college_slug === targetCol?.slug || 
+      const matchCol = selectedCollegeFilter === 'all' ||
+        u.college_id === targetCol?.id ||
+        u.college_slug === targetCol?.slug ||
         String(u.college_code) === String(targetColCd);
       if (!matchCol) return false;
       if (selectedCourseFilter !== 'all' && u.course_cd !== selectedCourseFilter) return false;
@@ -1226,9 +1232,9 @@ export default function AdminMasterPage() {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetColCd = targetCol?.code || targetCol?.id;
     return topics.filter(t => {
-      const matchCol = selectedCollegeFilter === 'all' || 
-        t.college_id === targetCol?.id || 
-        t.college_slug === targetCol?.slug || 
+      const matchCol = selectedCollegeFilter === 'all' ||
+        t.college_id === targetCol?.id ||
+        t.college_slug === targetCol?.slug ||
         String(t.college_code) === String(targetColCd);
       if (!matchCol) return false;
       if (selectedCourseFilter !== 'all' && t.course_cd !== selectedCourseFilter) return false;
@@ -1257,24 +1263,24 @@ export default function AdminMasterPage() {
     // Filter by Subject
     if (selectedSubjectFilter !== 'all') {
       const isSubMatch = (item.subject_code && String(item.subject_code) === String(selectedSubjectFilter)) ||
-                         (item.subject_id && String(item.subject_id) === String(selectedSubjectFilter)) ||
-                         (activeTab === 'subjects' && (String(item.code) === String(selectedSubjectFilter) || String(item.id) === String(selectedSubjectFilter)));
+        (item.subject_id && String(item.subject_id) === String(selectedSubjectFilter)) ||
+        (activeTab === 'subjects' && (String(item.code) === String(selectedSubjectFilter) || String(item.id) === String(selectedSubjectFilter)));
       if (!isSubMatch) return false;
     }
 
     // Filter by Unit
     if (selectedUnitFilter !== 'all') {
       const isUnitMatch = (item.unit_code && String(item.unit_code) === String(selectedUnitFilter)) ||
-                          (item.unit_id && String(item.unit_id) === String(selectedUnitFilter)) ||
-                          (activeTab === 'units' && (String(item.code) === String(selectedUnitFilter) || String(item.id) === String(selectedUnitFilter)));
+        (item.unit_id && String(item.unit_id) === String(selectedUnitFilter)) ||
+        (activeTab === 'units' && (String(item.code) === String(selectedUnitFilter) || String(item.id) === String(selectedUnitFilter)));
       if (!isUnitMatch) return false;
     }
 
     // Filter by Topic (for Competencies / Sub-Topics & Topics)
     if (selectedTopicFilter !== 'all') {
       const isTopicMatch = (item.topic_code && String(item.topic_code) === String(selectedTopicFilter)) ||
-                           (item.topic_id && String(item.topic_id) === String(selectedTopicFilter)) ||
-                           (activeTab === 'topics' && (String(item.code) === String(selectedTopicFilter) || String(item.id) === String(selectedTopicFilter)));
+        (item.topic_id && String(item.topic_id) === String(selectedTopicFilter)) ||
+        (activeTab === 'topics' && (String(item.code) === String(selectedTopicFilter) || String(item.id) === String(selectedTopicFilter)));
       if (!isTopicMatch) return false;
     }
 
@@ -1313,21 +1319,19 @@ export default function AdminMasterPage() {
               <button
                 key={cat.key}
                 onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
-                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 text-left border ${
-                  activeTab === cat.key
-                    ? 'bg-[#2D2575] text-white shadow-md border-[#2D2575] relative after:absolute after:left-3 after:bottom-1 after:w-5 after:h-[2px] after:bg-[#F36C21]'
-                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 border-slate-200 dark:border-slate-800'
-                }`}
+                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 text-left border ${activeTab === cat.key
+                  ? 'bg-[#2D2575] text-white shadow-md border-[#2D2575] relative after:absolute after:left-3 after:bottom-1 after:w-5 after:h-[2px] after:bg-[#F36C21]'
+                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 border-slate-200 dark:border-slate-800'
+                  }`}
               >
                 <div className="flex items-center gap-2 truncate">
                   <span className="text-sm shrink-0">{cat.icon}</span>
                   <span className="truncate text-[11px] font-bold">{cat.label.split('. ')[1]}</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 border ${
-                  activeTab === cat.key
-                    ? 'bg-white/20 text-white border-transparent'
-                    : 'bg-slate-100 dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-400 border-slate-200 dark:border-slate-700'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 border ${activeTab === cat.key
+                  ? 'bg-white/20 text-white border-transparent'
+                  : 'bg-slate-100 dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-400 border-slate-200 dark:border-slate-700'
+                  }`}>
                   {cat.count}
                 </span>
               </button>
@@ -2035,9 +2039,8 @@ export default function AdminMasterPage() {
                             <td className="p-4 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-slate-800 dark:text-slate-200 font-bold text-xs">{c.level || 'Knows How'}</span>
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                                  c.is_core ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'
-                                }`}>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${c.is_core ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'
+                                  }`}>
                                   {c.is_core ? '⭐ CORE' : 'OPT'}
                                 </span>
                               </div>
@@ -2077,11 +2080,10 @@ export default function AdminMasterPage() {
                             key={pg}
                             type="button"
                             onClick={() => setCurrentPage(pg)}
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
-                              currentPage === pg
-                                ? 'bg-[#5B4BFF] text-white font-bold'
-                                : 'hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
-                            }`}
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${currentPage === pg
+                              ? 'bg-[#5B4BFF] text-white font-bold'
+                              : 'hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                              }`}
                           >
                             {pg}
                           </button>
@@ -2206,9 +2208,6 @@ export default function AdminMasterPage() {
                               <option value="Pharmacy">Pharmacy Sciences</option>
                               <option value="Management">Management Studies</option>
                               <option value="Law">Legal Studies</option>
-                              <option value="Pre-Clinical">Pre-Clinical (Anatomy, Physiology, Biochemistry)</option>
-                              <option value="Para-Clinical">Para-Clinical (Pathology, Pharmacology, Microbiology)</option>
-                              <option value="Clinical">Clinical Specialties (Medicine, Surgery, Pediatrics)</option>
                               <option value="Administrative">Administrative / Support</option>
                             </select>
                           </div>
@@ -2221,7 +2220,7 @@ export default function AdminMasterPage() {
                             required
                             value={formData.name || ''}
                             onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            placeholder="e.g. (CSE) / BCA Department / Department of Anatomy"
+                            placeholder="e.g. (CSE) / BCA Department"
                             className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                           />
                         </div>
@@ -2350,7 +2349,7 @@ export default function AdminMasterPage() {
                               required
                               value={formData.code || ''}
                               onChange={e => setFormData({ ...formData, code: e.target.value })}
-                              placeholder="e.g. CS101, ANAT-101"
+                              placeholder="e.g. CS101"
                               className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
                             />
                           </div>
@@ -2374,7 +2373,7 @@ export default function AdminMasterPage() {
                             required
                             value={formData.name || ''}
                             onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            placeholder="e.g. Human Anatomy & Histology, Data Structures"
+                            placeholder="e.g. Data Structures and Algorithms"
                             className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                           />
                         </div>
@@ -2439,7 +2438,7 @@ export default function AdminMasterPage() {
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Course Code</label>
-                          <input type="text" value={formData.course_cd || ''} onChange={e => setFormData({ ...formData, course_cd: e.target.value })} placeholder="e.g. MBBS, BTECH, BCA" className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]" />
+                          <input type="text" value={formData.course_cd || ''} onChange={e => setFormData({ ...formData, course_cd: e.target.value })} placeholder="e.g. BTECH, BCA" className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]" />
                         </div>
                       </div>
                       <div>
@@ -2514,7 +2513,7 @@ export default function AdminMasterPage() {
                               const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
                               const colCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
                               const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '';
-                              const newDepts = departments.filter(d => 
+                              const newDepts = departments.filter(d =>
                                 (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newCol?.code)) &&
                                 (!firstCourseCd || d.course_cd === firstCourseCd)
                               );
@@ -2558,7 +2557,7 @@ export default function AdminMasterPage() {
                             value={selectedCourseCd}
                             onChange={(e) => {
                               const newCourseCd = e.target.value;
-                              const newDepts = departments.filter(d => 
+                              const newDepts = departments.filter(d =>
                                 (d.college_id === currentCollege?.id || d.college_slug === currentCollege?.slug || String(d.colg_cd) === String(currentCollege?.code)) &&
                                 (!newCourseCd || d.course_cd === newCourseCd || d.course_code === newCourseCd)
                               );
@@ -2838,7 +2837,7 @@ export default function AdminMasterPage() {
                               const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
                               const colCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
                               const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '';
-                              const newDepts = departments.filter(d => 
+                              const newDepts = departments.filter(d =>
                                 (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newCol?.code)) &&
                                 (!firstCourseCd || d.course_cd === firstCourseCd)
                               );
@@ -2883,7 +2882,7 @@ export default function AdminMasterPage() {
                             value={selectedCourseCd}
                             onChange={(e) => {
                               const newCourseCd = e.target.value;
-                              const newDepts = departments.filter(d => 
+                              const newDepts = departments.filter(d =>
                                 (d.college_id === currentCollege?.id || d.college_slug === currentCollege?.slug || String(d.colg_cd) === String(currentCollege?.code)) &&
                                 (!newCourseCd || d.course_cd === newCourseCd || d.course_code === newCourseCd)
                               );
@@ -3146,7 +3145,7 @@ export default function AdminMasterPage() {
                                 const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
                                 const colCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
                                 const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '';
-                                const newDepts = departments.filter(d => 
+                                const newDepts = departments.filter(d =>
                                   (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newCol?.code)) &&
                                   (!firstCourseCd || d.course_cd === firstCourseCd)
                                 );
@@ -3197,7 +3196,7 @@ export default function AdminMasterPage() {
                               value={selectedCourseCd}
                               onChange={(e) => {
                                 const newCourseCd = e.target.value;
-                                const newDepts = departments.filter(d => 
+                                const newDepts = departments.filter(d =>
                                   (d.college_id === currentCollege?.id || d.college_slug === currentCollege?.slug || String(d.colg_cd) === String(currentCollege?.code)) &&
                                   (!newCourseCd || d.course_cd === newCourseCd || d.course_code === newCourseCd)
                                 );
@@ -3511,8 +3510,8 @@ export default function AdminMasterPage() {
 
                     // Check if current typed code already exists in this subject
                     const activeCheckCode = (subTopicCode || formData.code || '').trim().toUpperCase();
-                    const codeExistsInSubject = activeCheckCode ? competencies.some(c => 
-                      c.code?.toUpperCase() === activeCheckCode && 
+                    const codeExistsInSubject = activeCheckCode ? competencies.some(c =>
+                      c.code?.toUpperCase() === activeCheckCode &&
                       (c.subject_code === selectedSubCode || c.subject_id === selectedSubCode || !selectedSubCode)
                     ) : false;
 
@@ -3573,7 +3572,7 @@ export default function AdminMasterPage() {
                                 const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
                                 const colCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
                                 const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '';
-                                const newDepts = departments.filter(d => 
+                                const newDepts = departments.filter(d =>
                                   (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newCol?.code)) &&
                                   (!firstCourseCd || d.course_cd === firstCourseCd)
                                 );
@@ -3634,7 +3633,7 @@ export default function AdminMasterPage() {
                               value={selectedCourseCd}
                               onChange={(e) => {
                                 const newCourseCd = e.target.value;
-                                const newDepts = departments.filter(d => 
+                                const newDepts = departments.filter(d =>
                                   (d.college_id === currentCollege?.id || d.college_slug === currentCollege?.slug || String(d.colg_cd) === String(currentCollege?.code)) &&
                                   (!newCourseCd || d.course_cd === newCourseCd || d.course_code === newCourseCd)
                                 );
@@ -4005,7 +4004,7 @@ export default function AdminMasterPage() {
                                   setSubTopicName(e.target.value);
                                   setFormData({ ...formData, name: e.target.value });
                                 }}
-                                placeholder="e.g. Anatomical Planes Overview"
+                                placeholder="e.g. Introduction to Python"
                                 className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                               />
                             </div>
@@ -4021,7 +4020,7 @@ export default function AdminMasterPage() {
                                   setSubTopicDesc(e.target.value);
                                   setFormData({ ...formData, description: e.target.value });
                                 }}
-                                placeholder="Describe anatomical position, planes, and clinical importance..."
+                                placeholder="Describe the importance..."
                                 className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#5B4BFF]"
                               />
                             </div>

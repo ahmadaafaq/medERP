@@ -708,11 +708,10 @@ export default function StaffMasterPage() {
 
           {/* Flash Alert */}
           {alert && (
-            <div className={`p-4 rounded-2xl border text-xs font-extrabold transition-all shadow-md flex items-center gap-2 ${
-              alert.type === 'success'
+            <div className={`p-4 rounded-2xl border text-xs font-extrabold transition-all shadow-md flex items-center gap-2 ${alert.type === 'success'
                 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
                 : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30'
-            }`}>
+              }`}>
               <span>{alert.type === 'success' ? '✅' : '⚠️'}</span>
               <span>{alert.message}</span>
             </div>
@@ -797,7 +796,7 @@ export default function StaffMasterPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
-              + Register New Staff
+              Register New Staff
             </button>
           </div>
 
@@ -915,11 +914,10 @@ export default function StaffMasterPage() {
                           </td>
 
                           <td className="py-4">
-                            <span className={`px-2.5 py-0.5 rounded-full font-extrabold uppercase text-[9px] tracking-wide inline-block ${
-                              fac.is_active
+                            <span className={`px-2.5 py-0.5 rounded-full font-extrabold uppercase text-[9px] tracking-wide inline-block ${fac.is_active
                                 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
                                 : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                            }`}>
+                              }`}>
                               {fac.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </td>
@@ -1025,11 +1023,10 @@ export default function StaffMasterPage() {
                   <div className="w-full rounded-[22px] bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 p-5 flex flex-col items-center text-center space-y-3 relative overflow-hidden shadow-sm">
 
                     <div className="absolute top-3 right-3">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
-                        formData.isActive
+                      <span className={`px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${formData.isActive
                           ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
                           : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                      }`}>
+                        }`}>
                         {formData.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </div>

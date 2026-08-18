@@ -537,7 +537,7 @@ export default function CollegeMasterPage() {
 
   // ─── ON MOUNT: Load colleges from public.tenants (PostgreSQL) ───────────────
   useEffect(() => {
-    ['mederp_colleges','mederp_courses','mederp_batches','mederp_branches','mederp_sessions','mederp_residencies','mederp_professionals']
+    ['mederp_colleges', 'mederp_courses', 'mederp_batches', 'mederp_branches', 'mederp_sessions', 'mederp_residencies', 'mederp_professionals']
       .forEach((k) => localStorage.removeItem(k));
 
     const loadColleges = async () => {
@@ -728,7 +728,7 @@ export default function CollegeMasterPage() {
     const targetSlug = selectedCol?.slug;
     const targetCode = selectedCol?.code;
 
-    const filtered = courses.filter((c) => 
+    const filtered = courses.filter((c) =>
       c.college_id === targetId ||
       (targetCode && c.college_id === targetCode) ||
       (targetSlug && c.college_slug === targetSlug) ||
@@ -740,7 +740,7 @@ export default function CollegeMasterPage() {
   // Helper: Available Branches under currently selected Form College & Course
   const getBranchesForCollegeAndCourse = (collegeIdOrSlug: string, courseIdOrCd?: string) => {
     if (!collegeIdOrSlug && !courseIdOrCd) return branches;
-    
+
     const selectedCol = colleges.find(c => c.id === collegeIdOrSlug || c.slug === collegeIdOrSlug || c.code === collegeIdOrSlug);
     const targetColId = selectedCol?.id || collegeIdOrSlug;
     const targetSlug = selectedCol?.slug;
@@ -749,7 +749,7 @@ export default function CollegeMasterPage() {
     const selectedCrs = courses.find(c => c.id === courseIdOrCd || c.code === courseIdOrCd || (c as any).course_cd === courseIdOrCd);
     const targetCourseCd = (selectedCrs as any)?.course_cd || selectedCrs?.code || courseIdOrCd;
 
-    const colBranches = branches.filter((b: any) => 
+    const colBranches = branches.filter((b: any) =>
       (targetColId && b.college_id === targetColId) ||
       (targetSlug && b.college_slug === targetSlug) ||
       (targetColgCd && String(b.colg_cd) === String(targetColgCd)) ||
@@ -758,8 +758,8 @@ export default function CollegeMasterPage() {
 
     if (!targetCourseCd) return colBranches.length > 0 ? colBranches : branches;
 
-    const courseSpecific = colBranches.filter((b: any) => 
-      String(b.course_cd) === String(targetCourseCd) || 
+    const courseSpecific = colBranches.filter((b: any) =>
+      String(b.course_cd) === String(targetCourseCd) ||
       String(b.course_code) === String(targetCourseCd) ||
       (selectedCrs?.name && b.course_name && b.course_name.toLowerCase().trim() === selectedCrs.name.toLowerCase().trim())
     );
@@ -1155,7 +1155,7 @@ export default function CollegeMasterPage() {
     const selectedCol = colleges.find(c => c.id === cId || c.slug === cId || c.code === cId);
     const isColIms = selectedCol?.slug === 'srms-ims' || selectedCol?.code === '11';
     const targetSlug = selectedCol?.slug || cId;
-    
+
     let availableCourses = getCoursesForCollege(selectedCol?.id || cId);
     if (availableCourses.length === 0 && selectedCol) {
       try {
@@ -1257,7 +1257,7 @@ export default function CollegeMasterPage() {
             availableBranches = bList;
           }
         }
-      } catch (err) {}
+      } catch (err) { }
     }
 
     const courseBranches = getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.id, crsId);
@@ -1702,7 +1702,7 @@ export default function CollegeMasterPage() {
     const endpoint = endpointMap[activeTab] || activeTab;
 
     try {
-      const res = await fetch(`${API_BASE}/${endpoint}/${id}?tenant=${slug}`, { 
+      const res = await fetch(`${API_BASE}/${endpoint}/${id}?tenant=${slug}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -1777,19 +1777,17 @@ export default function CollegeMasterPage() {
               <button
                 key={cat.key}
                 onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
-                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-between gap-1.5 text-center sm:text-left ${
-                  activeTab === cat.key
-                    ? 'bg-indigo-600 text-slate-900 dark:text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/50'
-                    : 'bg-white dark:bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-200 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-300 dark:border-slate-800 shadow-sm'
-                }`}
+                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-between gap-1.5 text-center sm:text-left ${activeTab === cat.key
+                  ? 'bg-indigo-600 text-slate-900 dark:text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/50'
+                  : 'bg-white dark:bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-200 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-300 dark:border-slate-800 shadow-sm'
+                  }`}
               >
                 <div className="flex items-center gap-2 truncate">
                   <span className="text-sm shrink-0">{cat.icon}</span>
                   <span className="truncate text-[11px] font-bold">{cat.label}</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${
-                  activeTab === cat.key ? 'bg-white/20 text-slate-900 dark:text-white' : 'bg-slate-100 dark:bg-slate-200 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${activeTab === cat.key ? 'bg-white/20 text-slate-900 dark:text-white' : 'bg-slate-100 dark:bg-slate-200 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
+                  }`}>
                   {cat.count}
                 </span>
               </button>
@@ -1930,8 +1928,8 @@ export default function CollegeMasterPage() {
                     {syncing
                       ? 'Syncing Courses...'
                       : selectedCollegeFilter !== 'all'
-                      ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Courses`
-                      : 'Sync All from GetCourse'}
+                        ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Courses`
+                        : 'Sync All from GetCourse'}
                   </span>
                 </button>
               )}
@@ -1955,8 +1953,8 @@ export default function CollegeMasterPage() {
                     {syncing
                       ? 'Syncing Batches...'
                       : selectedCollegeFilter !== 'all'
-                      ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Batches`
-                      : 'Sync All from GetBatch'}
+                        ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Batches`
+                        : 'Sync All from GetBatch'}
                   </span>
                 </button>
               )}
@@ -1980,8 +1978,8 @@ export default function CollegeMasterPage() {
                     {syncing
                       ? 'Syncing Branches...'
                       : selectedCollegeFilter !== 'all'
-                      ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Branches`
-                      : 'Sync All from GetBranch'}
+                        ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Branches`
+                        : 'Sync All from GetBranch'}
                   </span>
                 </button>
               )}
@@ -2116,8 +2114,8 @@ export default function CollegeMasterPage() {
                   </thead>
                   <TableSkeleton colCount={
                     activeTab === 'residencies' ? 9 :
-                    activeTab === 'professionals' || activeTab === 'batches' || activeTab === 'branches' || activeTab === 'courses' || activeTab === 'sessions' ? 7 :
-                    6
+                      activeTab === 'professionals' || activeTab === 'batches' || activeTab === 'branches' || activeTab === 'courses' || activeTab === 'sessions' ? 7 :
+                        6
                   } />
                 </table>
               </div>
@@ -2328,8 +2326,8 @@ export default function CollegeMasterPage() {
                       getGroupedAcademicYears(
                         professionals
                           .filter((p) => isMatchCollege(p.college_id))
-                          .filter((p) => 
-                            (p.phase_name || (p as any).name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                          .filter((p) =>
+                            (p.phase_name || (p as any).name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                             (p.course_code || (p as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                             ((p as any).branch_name || '').toLowerCase().includes((searchTerm || '').toLowerCase())
                           )
@@ -2414,8 +2412,8 @@ export default function CollegeMasterPage() {
                     {activeTab === 'batches' &&
                       batches
                         .filter((b) => isMatchCollege(b.college_id))
-                        .filter((b) => 
-                          (b.code || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                        .filter((b) =>
+                          (b.code || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (b.course_code || (b as any).course_cd || (b as any).course_name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           String(b.year || '').includes(searchTerm || '')
                         )
@@ -2470,8 +2468,8 @@ export default function CollegeMasterPage() {
                     {activeTab === 'branches' &&
                       branches
                         .filter((br) => isMatchCollege(br.college_id))
-                        .filter((br) => 
-                          (br.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                        .filter((br) =>
+                          (br.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (br.code || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           ((br as any).course_name || (br as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase())
                         )
@@ -2518,8 +2516,8 @@ export default function CollegeMasterPage() {
                     {activeTab === 'groups' &&
                       groups
                         .filter((g) => isMatchCollege(g.college_id))
-                        .filter((g) => 
-                          (g.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                        .filter((g) =>
+                          (g.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (g.code || '').toLowerCase().includes((searchTerm || '').toLowerCase())
                         )
                         .map((grp) => {
@@ -2565,7 +2563,7 @@ export default function CollegeMasterPage() {
                     {activeTab === 'sessions' &&
                       sessions
                         .filter((s) => isMatchCollege(s.college_id))
-                        .filter((s) => 
+                        .filter((s) =>
                           (s.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (s.session_cd ? String(s.session_cd).toLowerCase().includes((searchTerm || '').toLowerCase()) : false) ||
                           (s.code ? String(s.code).toLowerCase().includes((searchTerm || '').toLowerCase()) : false)
@@ -2608,8 +2606,8 @@ export default function CollegeMasterPage() {
                     {activeTab === 'residencies' &&
                       residencies
                         .filter((r) => isMatchCollege(r.college_id))
-                        .filter((r) => 
-                          (r.category_name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                        .filter((r) =>
+                          (r.category_name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (r.residency_type || '').toLowerCase().includes((searchTerm || '').toLowerCase())
                         )
                         .map((resItem) => {
@@ -2652,9 +2650,8 @@ export default function CollegeMasterPage() {
                                   </div>
                                   <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                                     <div
-                                      className={`h-full rounded-full transition-all ${
-                                        fillPct > 90 ? 'bg-rose-500' : fillPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                                      }`}
+                                      className={`h-full rounded-full transition-all ${fillPct > 90 ? 'bg-rose-500' : fillPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                                        }`}
                                       style={{ width: `${fillPct}%` }}
                                     />
                                   </div>
@@ -2874,7 +2871,7 @@ export default function CollegeMasterPage() {
                       value={formData.name || ''}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                      placeholder="e.g. Bachelor of Medicine and Bachelor of Surgery"
+                      placeholder="e.g. Computer Applications"
                     />
                   </div>
 
@@ -3128,7 +3125,7 @@ export default function CollegeMasterPage() {
                       value={formData.name || ''}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                      placeholder="e.g. (CSE) / BCA Department / Department of Anatomy"
+                      placeholder="e.g. (CSE) / BCA Department"
                     />
                   </div>
                 </>
@@ -3186,9 +3183,9 @@ export default function CollegeMasterPage() {
                       )}
                     </div>
 
-                    {/* Step 3 — Select Department (optional) */}
+                    {/* Step 3 — Select Department */}
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wide">Step 3 — Select Department (Optional, e.g. Pathology, Anesthesia)</label>
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wide">Step 3 — Select Department</label>
                       <select
                         value={formData.departmentId || ''}
                         onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
@@ -3318,7 +3315,7 @@ export default function CollegeMasterPage() {
                       value={formData.categoryName || ''}
                       onChange={(e) => setFormData({ ...formData, categoryName: e.target.value })}
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
-                      placeholder="e.g. PG Doctor Residency Block A / UG MBBS Boys Hostel"
+                      placeholder="e.g. PG Engineer Residency Block A / UG BTECH Boys Hostel"
                     />
                   </div>
 

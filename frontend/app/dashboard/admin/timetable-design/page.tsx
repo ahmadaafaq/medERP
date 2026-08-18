@@ -494,7 +494,7 @@ export default function TimetableDesignPage() {
 
       // 1. Fetch Colleges
       const allColleges = await fetchColleges();
-      
+
       // Strict Tenant Isolation: Non-SuperAdmins are hard-locked to their assigned college!
       let filteredColleges = allColleges;
       if (role !== 'SUPER_ADMIN') {
@@ -512,7 +512,7 @@ export default function TimetableDesignPage() {
         }
       }
       setCollegesList(filteredColleges);
-      
+
       const activeColCode = role === 'SUPER_ADMIN' ? (filteredColleges[0]?.code || '1') : userColg;
       setSelectedCollege(activeColCode);
 
@@ -965,25 +965,6 @@ export default function TimetableDesignPage() {
                   {batchesList.map((batch, idx) => (
                     <option key={batch.code || idx} value={batch.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       [#{batch.code}] Batch {batch.name || batch.year} {batch.year && batch.name !== String(batch.year) ? `(${batch.year})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 5. Department Selector */}
-              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
-                  <span>🏷️</span> Dept <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({availableDepartments.length})</span>:
-                </span>
-                <select
-                  value={selectedDept}
-                  onChange={(e) => handleFilterDeptChange(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[200px] truncate"
-                >
-                  <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Departments</option>
-                  {availableDepartments.map((d, idx) => (
-                    <option key={d.id || d.code || idx} value={d.id || d.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                      [#{d.code || idx + 1}] {d.name} {d.course_name ? `(${d.course_name})` : ''}
                     </option>
                   ))}
                 </select>

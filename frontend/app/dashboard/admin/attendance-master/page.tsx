@@ -183,7 +183,7 @@ export default function AttendanceMasterPage() {
     const today = new Date();
     const dayOfWeek = today.getDay(); // 0 is Sun, 1 is Mon...
     const distanceToMonday = (dayOfWeek + 6) % 7;
-    
+
     const monday = new Date(today);
     monday.setDate(today.getDate() - distanceToMonday + offsetWeeks * 7);
 
@@ -530,7 +530,8 @@ export default function AttendanceMasterPage() {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const json = await res.json();
-      setBatchReport(json.data || json || []);
+      const reportData = json.data ?? json;
+      setBatchReport(Array.isArray(reportData) ? reportData : []);
     } catch (err) {
       console.error('Failed to fetch batch report', err);
     } finally {
@@ -591,7 +592,7 @@ export default function AttendanceMasterPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Attendance Master & Subject Roster Console" />
         <main className="p-6 space-y-6 flex-1 flex flex-col bg-slate-50 dark:bg-[#0F172A]">
-          
+
           {/* Navigation Bar & Mode Switcher */}
           <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
@@ -621,33 +622,30 @@ export default function AttendanceMasterPage() {
             <div className="bg-slate-900/90 p-1 rounded-xl flex items-center border border-slate-800 shrink-0 gap-1">
               <button
                 onClick={() => setActiveTab('mark')}
-                className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
-                  activeTab === 'mark'
+                className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${activeTab === 'mark'
                     ? 'bg-indigo-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
+                  }`}
               >
                 <span>📝</span> Mark Attendance
               </button>
 
               <button
                 onClick={() => { setActiveTab('roster'); fetchBatchReport(); }}
-                className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
-                  activeTab === 'roster'
+                className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${activeTab === 'roster'
                     ? 'bg-purple-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
+                  }`}
               >
-                <span>📊</span> Subject Roster &amp; %
+                <span>📊</span> Subject Roster
               </button>
 
               <button
                 onClick={() => { setActiveTab('history'); fetchPastSessions(); }}
-                className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
-                  activeTab === 'history'
+                className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${activeTab === 'history'
                     ? 'bg-emerald-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
+                  }`}
               >
                 <span>📜</span> Session Audit Log
               </button>
@@ -655,11 +653,10 @@ export default function AttendanceMasterPage() {
           </div>
 
           {alert && (
-            <div className={`p-4 rounded-2xl border text-xs font-extrabold shadow-lg flex items-center justify-between ${
-              alert.type === 'success'
+            <div className={`p-4 rounded-2xl border text-xs font-extrabold shadow-lg flex items-center justify-between ${alert.type === 'success'
                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                 : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-            }`}>
+              }`}>
               <div className="flex items-center gap-2">
                 <span>{alert.type === 'success' ? '✅' : '⚠️'}</span>
                 <span>{alert.message}</span>
@@ -678,7 +675,7 @@ export default function AttendanceMasterPage() {
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-                  
+
                   {/* 1. Department */}
                   <div className="space-y-1">
                     <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
@@ -824,11 +821,10 @@ export default function AttendanceMasterPage() {
                         <div
                           key={slot.id}
                           onClick={() => handleSelectSlot(slot)}
-                          className={`bg-white dark:bg-slate-900 border rounded-[22px] p-5 cursor-pointer transition-all duration-300 relative overflow-hidden shadow-soft hover:shadow-hover hover:-translate-y-0.5 ${
-                            isSelected
+                          className={`bg-white dark:bg-slate-900 border rounded-[22px] p-5 cursor-pointer transition-all duration-300 relative overflow-hidden shadow-soft hover:shadow-hover hover:-translate-y-0.5 ${isSelected
                               ? 'ring-2 ring-[#5B4BFF] border-[#5B4BFF] bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/20 dark:from-slate-900 dark:to-indigo-950/40 shadow-xl'
                               : 'border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/60'
-                          }`}
+                            }`}
                         >
                           {/* Active Ribbon Bar */}
                           {isSelected && (
@@ -1027,9 +1023,8 @@ export default function AttendanceMasterPage() {
                               <td className="py-2.5 px-4 text-center font-mono font-bold text-emerald-400">{sess.present_count || 0}</td>
                               <td className="py-2.5 px-4 text-center">
                                 {pct !== null ? (
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black font-mono border ${
-                                    pct >= 75 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                                  }`}>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black font-mono border ${pct >= 75 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                    }`}>
                                     {pct}%
                                   </span>
                                 ) : <span className="text-slate-600">—</span>}
@@ -1043,11 +1038,10 @@ export default function AttendanceMasterPage() {
                                     if (sess.subject_id) setSelectedSubjectId(sess.subject_id);
                                     // roster will auto-reload via useEffect
                                   }}
-                                  className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all border ${
-                                    isSelectedSession
+                                  className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all border ${isSelectedSession
                                       ? 'bg-purple-600 text-white border-purple-500'
                                       : 'bg-slate-800 hover:bg-purple-700 text-slate-300 hover:text-white border-slate-700 hover:border-purple-500'
-                                  }`}
+                                    }`}
                                 >
                                   {isSelectedSession ? '✏️ Editing' : '▶ Load & Mark'}
                                 </button>
@@ -1064,10 +1058,10 @@ export default function AttendanceMasterPage() {
 
               {/* Student Attendance Marking Roster Card */}
               <div className="bg-[#1E293B]/80 backdrop-blur-xl border border-indigo-500/20 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-                
+
                 {/* Header & Bulk Quick Action Bar */}
                 <div className="p-5 border-b border-indigo-500/20 bg-gradient-to-r from-slate-900/90 via-slate-900 to-indigo-950/80 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                  
+
                   {/* Left: Summary Stats */}
                   <div>
                     <h3 className="text-sm font-black text-white flex items-center gap-2">
@@ -1194,44 +1188,40 @@ export default function AttendanceMasterPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleIndividualStatusChange(s.id, 'PRESENT')}
-                                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all ${
-                                    s.status === 'PRESENT'
+                                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all ${s.status === 'PRESENT'
                                       ? 'bg-emerald-600 text-white shadow-md'
                                       : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                                  }`}
+                                    }`}
                                 >
                                   P
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleIndividualStatusChange(s.id, 'ABSENT')}
-                                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all ${
-                                    s.status === 'ABSENT'
+                                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all ${s.status === 'ABSENT'
                                       ? 'bg-rose-600 text-white shadow-md'
                                       : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                                  }`}
+                                    }`}
                                 >
                                   A
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleIndividualStatusChange(s.id, 'LATE')}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${
-                                    s.status === 'LATE'
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${s.status === 'LATE'
                                       ? 'bg-amber-600 text-white shadow-md'
                                       : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                                  }`}
+                                    }`}
                                 >
                                   L
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleIndividualStatusChange(s.id, 'EXCUSED')}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${
-                                    s.status === 'EXCUSED'
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${s.status === 'EXCUSED'
                                       ? 'bg-purple-600 text-white shadow-md'
                                       : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                                  }`}
+                                    }`}
                                 >
                                   E
                                 </button>
@@ -1262,7 +1252,7 @@ export default function AttendanceMasterPage() {
           {/* TAB 2: SUBJECT-WISE ATTENDANCE ROSTER ANALYTICS & CUMULATIVE MATRIX */}
           {activeTab === 'roster' && (
             <div className="space-y-6">
-              
+
               {/* Report Controls & Filter Bar */}
               <div className="bg-[#1E293B]/80 backdrop-blur-xl border border-indigo-500/20 p-5 rounded-2xl space-y-4 shadow-xl">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -1279,21 +1269,19 @@ export default function AttendanceMasterPage() {
                   <div className="bg-slate-950 p-1 rounded-xl flex items-center border border-slate-800 shrink-0 gap-1">
                     <button
                       onClick={() => setReportViewMode('single')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        reportViewMode === 'single'
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${reportViewMode === 'single'
                           ? 'bg-purple-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
-                      }`}
+                        }`}
                     >
                       📚 Subject Roster Report
                     </button>
                     <button
                       onClick={() => { setReportViewMode('matrix'); fetchMatrixReport(); }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        reportViewMode === 'matrix'
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${reportViewMode === 'matrix'
                           ? 'bg-indigo-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
-                      }`}
+                        }`}
                     >
                       📐 Cumulative Matrix
                     </button>
@@ -1301,7 +1289,7 @@ export default function AttendanceMasterPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-                  
+
                   {/* Phase Select */}
                   <div className="space-y-1">
                     <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Professional Phase *</label>
@@ -1458,7 +1446,7 @@ export default function AttendanceMasterPage() {
                                   <td className="py-3 px-4 font-mono text-indigo-400 font-bold">{row.rollno || '—'}</td>
                                   <td className="py-3 px-4 font-bold text-white">{row.name}</td>
                                   <td className="py-3 px-4 text-center font-mono font-bold text-slate-300">{row.total_classes || 0}</td>
-                                  
+
                                   {/* Attendance Status (P / A or Subject-wise) */}
                                   <td className="py-3 px-4 text-center">
                                     {!reportSubjectId && Array.isArray((row as any).subject_sessions) && (row as any).subject_sessions.length > 0 ? (
@@ -1473,11 +1461,10 @@ export default function AttendanceMasterPage() {
                                           return (
                                             <span
                                               key={code}
-                                              className={`px-2 py-0.5 rounded font-black border ${
-                                                isP
+                                              className={`px-2 py-0.5 rounded font-black border ${isP
                                                   ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
                                                   : 'bg-rose-500/20 text-rose-400 border-rose-500/40'
-                                              }`}
+                                                }`}
                                             >
                                               {code}: {isP ? 'P' : 'A'}
                                             </span>
@@ -1510,20 +1497,18 @@ export default function AttendanceMasterPage() {
                                     {(Number((row as any).late || 0) + Number((row as any).excused || 0))}
                                   </td>
                                   <td className="py-3 px-4 text-center">
-                                    <span className={`px-2.5 py-1 rounded-full text-xs font-black font-mono border ${
-                                      isEligible
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-black font-mono border ${isEligible
                                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                                         : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                                    }`}>
+                                      }`}>
                                       {pct.toFixed(1)}%
                                     </span>
                                   </td>
                                   <td className="py-3 px-4 text-center">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                                      isEligible
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${isEligible
                                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                                         : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                                    }`}>
+                                      }`}>
                                       {isEligible ? 'ELIGIBLE (≥ 75%)' : 'SHORTAGE (< 75%)'}
                                     </span>
                                   </td>
@@ -1592,7 +1577,7 @@ export default function AttendanceMasterPage() {
                                   <td className="py-3 px-3 text-center font-mono text-slate-400 font-bold">{idx + 1}</td>
                                   <td className="py-3 px-4 font-mono text-indigo-400 font-bold">{st.rollno || '—'}</td>
                                   <td className="py-3 px-4 font-bold text-white whitespace-nowrap">{st.name}</td>
-                                  
+
                                   {/* Subject Columns with Attended / Conducted (Pct%) */}
                                   {matrixReport.subjects.map(s => {
                                     const subData = st.subjects[s.id];
@@ -1603,9 +1588,8 @@ export default function AttendanceMasterPage() {
                                     const isPass = pct >= 75.0;
                                     return (
                                       <td key={s.id} className="py-3 px-3 text-center font-mono font-bold">
-                                        <span className={`px-2 py-0.5 rounded text-[11px] font-black ${
-                                          isPass ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border border-rose-500/20'
-                                        }`}>
+                                        <span className={`px-2 py-0.5 rounded text-[11px] font-black ${isPass ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border border-rose-500/20'
+                                          }`}>
                                           {present}/{total} ({pct.toFixed(0)}%)
                                         </span>
                                       </td>
@@ -1614,20 +1598,18 @@ export default function AttendanceMasterPage() {
 
                                   {/* Overall Cumulative Percentage */}
                                   <td className="py-3 px-4 text-center font-mono font-black text-sm text-white">
-                                    <span className={`px-2.5 py-1 rounded-full border ${
-                                      isEligible ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                                    }`}>
+                                    <span className={`px-2.5 py-1 rounded-full border ${isEligible ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                      }`}>
                                       {st.overallPct.toFixed(1)}%
                                     </span>
                                   </td>
 
                                   {/* Status */}
                                   <td className="py-3 px-4 text-center">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                                      isEligible
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${isEligible
                                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                                         : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                                    }`}>
+                                      }`}>
                                       {isEligible ? 'ELIGIBLE' : 'SHORTAGE'}
                                     </span>
                                   </td>
@@ -1706,11 +1688,10 @@ export default function AttendanceMasterPage() {
                             <td className="py-3 px-4 text-center font-mono font-bold text-emerald-400">{sess.present_count || 0}</td>
                             <td className="py-3 px-4 font-semibold text-slate-300">{sess.faculty_name || 'Clerk / Admin'}</td>
                             <td className="py-3 px-4 text-center">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                                sess.is_cancelled
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${sess.is_cancelled
                                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                                   : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                              }`}>
+                                }`}>
                                 {sess.is_cancelled ? 'CANCELLED' : 'ACTIVE'}
                               </span>
                             </td>
