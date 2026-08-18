@@ -10,6 +10,8 @@ export interface JwtPayload {
   role: UserRole;
   tenantId: string | null;
   tenantSlug: string | null;
+  colgCd?: string | null;
+  collegeName?: string | null;
   iat?: number;
   exp?: number;
 }

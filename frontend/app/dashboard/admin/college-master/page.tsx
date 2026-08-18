@@ -122,6 +122,8 @@ interface ProfessionalPhase {
   name?: string;
   college_id: string;
   college_name: string;
+  college_code?: string;
+  college_slug?: string;
   course_id: string;
   course_code: string;
   course_name: string;
@@ -217,6 +219,10 @@ interface AcademicSession {
   college_id: string;
   college_name: string;
   name: string;
+  session_cd?: string;
+  session_name?: string;
+  code?: string;
+  colg_cd?: string;
   start_date: string;
   end_date: string;
   is_current: boolean;
@@ -246,6 +252,11 @@ export default function CollegeMasterPage() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  // User Auth & Tenant Context State
+  const [userRole, setUserRole] = useState<string>('ADMIN');
+  const [userColgCd, setUserColgCd] = useState<string>('1');
+  const [userTenantSlug, setUserTenantSlug] = useState<string>('srms-cet-bareilly');
+  const [userTenantId, setUserTenantId] = useState<string>('');
   const [selectedCollegeFilter, setSelectedCollegeFilter] = useState<string>('all');
 
   // All data starts empty — loaded from PostgreSQL via API
@@ -265,16 +276,22 @@ export default function CollegeMasterPage() {
 
   // ─── TENANT SLUG RESOLVER ────────────────────────────────────────────────────
   const getActiveTenantSlug = (): string => {
+    if (userRole !== 'SUPER_ADMIN') {
+      return userTenantSlug || 'srms-cet-bareilly';
+    }
     if (selectedCollegeFilter !== 'all') {
       return colleges.find((c) => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter)?.slug || '';
     }
-    return colleges[0]?.slug || '';
+    return colleges[0]?.slug || 'srms-cet-bareilly';
   };
 
   const getFormCollegeSlug = (): string => {
+    if (userRole !== 'SUPER_ADMIN') {
+      return userTenantSlug || 'srms-cet-bareilly';
+    }
     return colleges.find((c) => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId)?.slug
       || colleges[0]?.slug
-      || '';
+      || 'srms-cet-bareilly';
   };
 
   // ─── SYNC FROM SRMS PORTAL API ───────────────────────────────────────────────
@@ -525,6 +542,21 @@ export default function CollegeMasterPage() {
 
     const loadColleges = async () => {
       try {
+        let role = 'ADMIN';
+        let userColg = '1';
+        let userSlug = 'srms-cet-bareilly';
+        let uTenantId = '';
+        if (typeof window !== 'undefined') {
+          role = (localStorage.getItem('role') || 'ADMIN').toUpperCase();
+          userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+          userSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+          uTenantId = localStorage.getItem('tenantId') || '';
+          setUserRole(role);
+          setUserColgCd(userColg);
+          setUserTenantSlug(userSlug);
+          setUserTenantId(uTenantId);
+        }
+
         const res = await fetch(`${API_BASE}/colleges`);
         if (res.ok) {
           const data = await res.json();
@@ -540,8 +572,16 @@ export default function CollegeMasterPage() {
             schema_provisioned: t.schema_provisioned ?? false,
             created_at: t.created_at,
           }));
-          setColleges(list);
-          console.log(`[CollegeMaster] Loaded ${list.length} colleges from PostgreSQL ✅`);
+
+          if (role !== 'SUPER_ADMIN') {
+            const myCol = list.find((c: any) => String(c.code) === String(userColg) || c.slug === userSlug || (uTenantId && c.id === uTenantId));
+            const scopedList = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SHRI RAM MURTI SMARAK COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY', slug: userSlug, is_active: true }];
+            setColleges(scopedList);
+            setSelectedCollegeFilter(scopedList[0].id || scopedList[0].code || userColg);
+          } else {
+            setColleges(list);
+          }
+          console.log(`[CollegeMaster] Loaded colleges for role ${role} ✅`);
         } else {
           console.error('[CollegeMaster] Failed to load colleges from API');
         }
@@ -574,7 +614,13 @@ export default function CollegeMasterPage() {
             schema_provisioned: t.schema_provisioned ?? false,
             created_at: t.created_at,
           }));
-          setColleges(list);
+          if (userRole !== 'SUPER_ADMIN') {
+            const myCol = list.find((c: any) => String(c.code) === String(userColgCd) || c.slug === userTenantSlug || (userTenantId && c.id === userTenantId));
+            const scopedList = myCol ? [myCol] : [{ id: userColgCd, code: userColgCd, name: 'SHRI RAM MURTI SMARAK COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY', slug: userTenantSlug, is_active: true }];
+            setColleges(scopedList);
+          } else {
+            setColleges(list);
+          }
         }
       } catch (err) {
         console.error('[CollegeMaster] Error fetching colleges:', err);
@@ -605,7 +651,9 @@ export default function CollegeMasterPage() {
         residencies: 'residencies',
       };
       const endpoint = endpointMap[tab] || tab;
-      const tenantParam = (selectedCollegeFilter === 'all' || tab === 'courses' || tab === 'professionals') && selectedCollegeFilter === 'all' ? 'all' : slug;
+      const tenantParam = userRole === 'SUPER_ADMIN'
+        ? ((selectedCollegeFilter === 'all' || tab === 'courses' || tab === 'professionals') && selectedCollegeFilter === 'all' ? 'all' : slug)
+        : (userTenantSlug || slug || 'srms-cet-bareilly');
       const res = await fetch(`${API_BASE}/${endpoint}?tenant=${tenantParam}`);
       if (!res.ok) {
         const errText = await res.text();
@@ -662,7 +710,7 @@ export default function CollegeMasterPage() {
 
   useEffect(() => {
     fetchData(activeTab);
-    // Always preload courses and branches so cascading Step 2 and Step 3 dropdowns are immediately populated
+    // Preload courses and branches so cascading dropdowns are populated
     fetchData('courses');
     if (['batches', 'branches', 'groups', 'professionals', 'residencies'].includes(activeTab)) {
       fetchData('branches');
@@ -671,19 +719,6 @@ export default function CollegeMasterPage() {
       fetchData('batches');
     }
   }, [activeTab, selectedCollegeFilter]);
-
-  // Re-fetch dependencies once colleges load (so slug is available)
-  useEffect(() => {
-    if (colleges.length > 0) {
-      fetchData('courses');
-      if (['batches', 'branches', 'groups', 'professionals', 'residencies'].includes(activeTab)) {
-        fetchData('branches');
-      }
-      if (activeTab === 'groups') {
-        fetchData('batches');
-      }
-    }
-  }, [colleges, selectedCollegeFilter]);
 
   // Helper: Available Courses under currently selected Form College (robust matching by ID, slug, or code)
   const getCoursesForCollege = (collegeIdOrSlug: string) => {
@@ -1043,6 +1078,26 @@ export default function CollegeMasterPage() {
       return;
     }
 
+    if (activeTab === 'sessions') {
+      const col = colleges.find(c => c.id === item.college_id || c.code === item.college_code || c.slug === item.college_slug) || colleges[0];
+      const rawStartDate = item.start_date || item.startDate || '';
+      const rawEndDate = item.end_date || item.endDate || '';
+      const sessionCdVal = item.session_cd || item.code || '';
+      setFormData({
+        ...item,
+        collegeId: col?.code || col?.id || colleges[0]?.code || colleges[0]?.id,
+        session_cd: sessionCdVal,
+        code: sessionCdVal,
+        name: item.name || item.session_name || '',
+        startDate: rawStartDate && rawStartDate !== '—' ? formatDate(rawStartDate) : '',
+        endDate: rawEndDate && rawEndDate !== '—' ? formatDate(rawEndDate) : '',
+        isCurrent: item.is_current ?? item.isCurrent ?? false,
+        isActive: item.is_active ?? true,
+      });
+      setIsModalOpen(true);
+      return;
+    }
+
     const rawStartDate = item.start_date || item.startDate || '';
     const rawEndDate = item.end_date || item.endDate || '';
     const startDate = rawStartDate && rawStartDate !== '—' ? formatDate(rawStartDate) : '';
@@ -1066,6 +1121,33 @@ export default function CollegeMasterPage() {
       monthlyFee: item.monthly_fee || item.monthlyFee || 0,
     });
     setIsModalOpen(true);
+  };
+
+  const syncSessionsFromExternalApi = async () => {
+    setSyncing(true);
+    setSyncMessage('');
+    try {
+      const slug = getActiveTenantSlug();
+      const res = await fetch(`${API_BASE}/sessions/sync-external?tenant=${slug}`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setSyncMessage(`✅ Synced ${json.data?.length || 7} academic sessions successfully from SRMS GetSession API to PostgreSQL!`);
+        fetchData('sessions');
+      } else {
+        const localRes = await fetch('/api/srms/sessions');
+        if (localRes.ok) {
+          const list = await localRes.json();
+          setSyncMessage(`✅ Synced ${list.length} sessions from SRMS FeeAdmin/GetSession API.`);
+          fetchData('sessions');
+        }
+      }
+    } catch (e: any) {
+      setSyncMessage('⚠️ Error syncing sessions: ' + e.message);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   // Handle Form College Change -> Automatically update Cascading Course Dropdown
@@ -1543,13 +1625,19 @@ export default function CollegeMasterPage() {
         bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
       }
     } else if (activeTab === 'sessions') {
+      const sessionCdVal = String(formData.session_cd || formData.code || '').trim();
       bodyPayload = {
         name: formData.name,
+        session_cd: sessionCdVal,
+        code: sessionCdVal,
         startDate: formData.startDate,
         endDate: formData.endDate,
         isCurrent: Boolean(formData.isCurrent),
         collegeId: formData.collegeId,
       };
+      if (isEdit) {
+        bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
+      }
     } else if (activeTab === 'groups') {
       bodyPayload = {
         code: formData.code,
@@ -1648,21 +1736,27 @@ export default function CollegeMasterPage() {
   };
 
   // Helper filter by search term AND selected college filter
-  const isMatchCollege = (itemCollegeId?: string) => {
+  const isMatchCollege = (itemCollegeId?: string, itemCollegeCode?: string, itemCollegeSlug?: string) => {
+    if (userRole !== 'SUPER_ADMIN') return true;
     if (selectedCollegeFilter === 'all') return true;
-    return !itemCollegeId || itemCollegeId === selectedCollegeFilter;
+    return (
+      !itemCollegeId ||
+      itemCollegeId === selectedCollegeFilter ||
+      itemCollegeCode === selectedCollegeFilter ||
+      itemCollegeSlug === selectedCollegeFilter
+    );
   };
 
   // Sub-Category Definition Tabs
   const categories = [
     { key: 'colleges', label: '1. College', icon: '🏢', count: colleges.length },
-    { key: 'courses', label: '2. Courses', icon: '🎓', count: courses.filter((c) => isMatchCollege(c.college_id)).length },
-    { key: 'professionals', label: '3. Academic Year', icon: '📅', count: professionals.filter((p) => isMatchCollege(p.college_id)).length },
-    { key: 'batches', label: '4. Batch', icon: '📅', count: batches.filter((b) => isMatchCollege(b.college_id)).length },
-    { key: 'branches', label: '5. Departments & Specialties', icon: '🩺', count: branches.filter((br) => isMatchCollege(br.college_id)).length },
-    { key: 'groups', label: '6. Group Master', icon: '👥', count: groups.filter((g) => isMatchCollege(g.college_id)).length },
-    { key: 'sessions', label: '7. Session', icon: '⏱️', count: sessions.filter((s) => isMatchCollege(s.college_id)).length },
-    { key: 'residencies', label: '8. Residency Category', icon: '🏥', count: residencies.filter((r) => isMatchCollege(r.college_id)).length },
+    { key: 'courses', label: '2. Courses', icon: '🎓', count: courses.filter((c) => isMatchCollege(c.college_id, c.college_code, c.college_slug)).length },
+    { key: 'professionals', label: '3. Academic Year', icon: '📅', count: professionals.filter((p) => isMatchCollege(p.college_id, p.college_code, p.college_slug)).length },
+    { key: 'batches', label: '4. Batch', icon: '📅', count: batches.filter((b) => isMatchCollege(b.college_id, b.college_code, b.college_slug)).length },
+    { key: 'branches', label: '5. Departments & Specialties', icon: '🩺', count: branches.filter((br) => isMatchCollege(br.college_id, br.college_code, br.college_slug)).length },
+    { key: 'groups', label: '6. Group Master', icon: '👥', count: groups.filter((g) => isMatchCollege(g.college_id, (g as any).college_code, (g as any).college_slug)).length },
+    { key: 'sessions', label: '7. Session', icon: '⏱️', count: sessions.filter((s) => isMatchCollege(s.college_id, (s as any).college_code, (s as any).college_slug)).length },
+    { key: 'residencies', label: '8. Residency Category', icon: '🏥', count: residencies.filter((r) => isMatchCollege(r.college_id, (r as any).college_code, (r as any).college_slug)).length },
   ];
 
   // Currently selected course object inside Form for dynamic rendering
@@ -1705,45 +1799,45 @@ export default function CollegeMasterPage() {
           {/* Dynamic Cascading Dropdown: 3-Level Batch on Tab 4, 3-Level Dept on Tab 5, 2-Level on other tabs */}
           {activeTab === 'batches' ? (
             <LiveCollegeCourseBatchCascadingDropdown
-              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || ''}
+              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || userColgCd || ''}
               onCollegeSelect={async (colg) => {
                 if (colg) {
                   const matched = colleges.find((c) => c.code === colg.colg_cd);
-                  if (matched) {
+                  if (matched && matched.id !== selectedCollegeFilter) {
                     setSelectedCollegeFilter(matched.id);
                     await syncBatchesForCollege(matched, true);
                   }
-                } else {
+                } else if (selectedCollegeFilter !== 'all') {
                   setSelectedCollegeFilter('all');
                 }
               }}
             />
           ) : activeTab === 'branches' ? (
             <Live3LevelDepartmentCascadingDropdown
-              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || ''}
+              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || userColgCd || ''}
               onCollegeSelect={async (colg) => {
                 if (colg) {
                   const matched = colleges.find((c) => c.code === colg.colg_cd);
-                  if (matched) {
+                  if (matched && matched.id !== selectedCollegeFilter) {
                     setSelectedCollegeFilter(matched.id);
                     await syncBranchesForCollege(matched, true);
                   }
-                } else {
+                } else if (selectedCollegeFilter !== 'all') {
                   setSelectedCollegeFilter('all');
                 }
               }}
             />
           ) : (
             <LiveCollegeCourseCascadingDropdown
-              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || ''}
+              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || userColgCd || ''}
               onCollegeSelect={async (colg) => {
                 if (colg) {
                   const matched = colleges.find((c) => c.code === colg.colg_cd);
-                  if (matched) {
+                  if (matched && matched.id !== selectedCollegeFilter) {
                     setSelectedCollegeFilter(matched.id);
                     await syncCoursesForCollege(matched, true);
                   }
-                } else {
+                } else if (selectedCollegeFilter !== 'all') {
                   setSelectedCollegeFilter('all');
                 }
               }}
@@ -1760,16 +1854,22 @@ export default function CollegeMasterPage() {
                 </span>
                 <select
                   value={selectedCollegeFilter}
+                  disabled={userRole !== 'SUPER_ADMIN'}
                   onChange={(e) => handleCollegeFilterSelect(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-slate-900 dark:text-white font-bold focus:outline-none cursor-pointer"
+                  className="bg-transparent text-slate-900 dark:text-slate-900 dark:text-white font-bold focus:outline-none cursor-pointer disabled:cursor-not-allowed"
                 >
-                  <option value="all">All Registered Colleges ({colleges.length})</option>
+                  {userRole === 'SUPER_ADMIN' && <option value="all">All Registered Colleges ({colleges.length})</option>}
                   {colleges.map((col) => (
                     <option key={col.id} value={col.id}>
                       {col.code ? `[#${col.code}] ` : ''}{col.name}
                     </option>
                   ))}
                 </select>
+                {userRole !== 'SUPER_ADMIN' && (
+                  <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shrink-0 ml-1">
+                    🔒 Locked
+                  </span>
+                )}
               </div>
 
               {/* Search Bar */}
@@ -1883,6 +1983,18 @@ export default function CollegeMasterPage() {
                       ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Branches`
                       : 'Sync All from GetBranch'}
                   </span>
+                </button>
+              )}
+
+              {activeTab === 'sessions' && (
+                <button
+                  onClick={syncSessionsFromExternalApi}
+                  disabled={syncing}
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-lg shadow-md shadow-emerald-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                  title="Fetch & sync official academic sessions from SRMS FeeAdmin/GetSession API to PostgreSQL"
+                >
+                  <span className={syncing ? 'animate-spin' : ''}>🗓️</span>
+                  <span>{syncing ? 'Syncing Sessions...' : 'Sync All from GetSession'}</span>
                 </button>
               )}
 
@@ -2071,6 +2183,7 @@ export default function CollegeMasterPage() {
                     )}
                     {activeTab === 'sessions' && (
                       <tr>
+                        <th className="p-4 whitespace-nowrap">Session Code</th>
                         <th className="p-4 whitespace-nowrap">Mapped College</th>
                         <th className="p-4 whitespace-nowrap">Session Title</th>
                         <th className="p-4 whitespace-nowrap">Start Date</th>
@@ -2452,18 +2565,27 @@ export default function CollegeMasterPage() {
                     {activeTab === 'sessions' &&
                       sessions
                         .filter((s) => isMatchCollege(s.college_id))
-                        .filter((s) => (s.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()))
+                        .filter((s) => 
+                          (s.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          (s.session_cd ? String(s.session_cd).toLowerCase().includes((searchTerm || '').toLowerCase()) : false) ||
+                          (s.code ? String(s.code).toLowerCase().includes((searchTerm || '').toLowerCase()) : false)
+                        )
                         .map((ses) => (
-                          <tr key={ses.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
-                            <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <tr key={ses.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="p-4 whitespace-nowrap">
+                              <span className="px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-extrabold text-xs border border-indigo-500/20">
+                                #{ses.session_cd || ses.code || '—'}
+                              </span>
+                            </td>
+                            <td className="p-4 font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <span>🏛️</span>
-                                <span>{colleges.find((c) => c.id === ses.college_id)?.name || ses.college_name}</span>
+                                <span>{colleges.find((c) => c.id === ses.college_id)?.name || ses.college_name || 'SRMS Institution'}</span>
                               </div>
                             </td>
-                            <td className="p-4 font-bold text-slate-900 dark:text-slate-900 dark:text-white">{ses.name}</td>
-                            <td className="p-4 text-slate-700 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">{formatDate(ses.start_date)}</td>
-                            <td className="p-4 text-slate-700 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">{formatDate(ses.end_date)}</td>
+                            <td className="p-4 font-bold text-slate-900 dark:text-white">{ses.name || ses.session_name}</td>
+                            <td className="p-4 text-slate-700 dark:text-slate-300 whitespace-nowrap">{formatDate(ses.start_date)}</td>
+                            <td className="p-4 text-slate-700 dark:text-slate-300 whitespace-nowrap">{formatDate(ses.end_date)}</td>
                             <td className="p-4 whitespace-nowrap">
                               {ses.is_current ? (
                                 <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold text-[10px]">CURRENT SESSION</span>
@@ -3034,9 +3156,12 @@ export default function CollegeMasterPage() {
                         className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 border-2 border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-semibold"
                       >
                         <option value="">-- Select Course --</option>
-                        {groupCollegeCourses.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-                        ))}
+                        {groupCollegeCourses.map((c) => {
+                          const cCode = c.course_cd || c.code || c.id;
+                          return (
+                            <option key={c.id || cCode} value={cCode}>[{c.code || cCode}] {c.name}</option>
+                          );
+                        })}
                       </select>
                     </div>
 
@@ -3049,9 +3174,12 @@ export default function CollegeMasterPage() {
                         className="w-full px-3 py-2 bg-purple-50 dark:bg-purple-950/40 border-2 border-purple-300 dark:border-purple-700 rounded-lg text-slate-900 dark:text-white font-semibold"
                       >
                         <option value="">-- Select Batch --</option>
-                        {(formData.courseId ? groupCourseBatches : batches).map((b) => (
-                          <option key={b.id} value={b.id}>Batch {b.code} — {b.year}</option>
-                        ))}
+                        {(formData.courseId ? groupCourseBatches : batches).map((b) => {
+                          const bCode = b.batch_cd || b.code || String(b.year) || b.id;
+                          return (
+                            <option key={b.id || bCode} value={bCode}>Batch {b.code} — {b.year}</option>
+                          );
+                        })}
                       </select>
                       {formData.courseId && groupCourseBatches.length === 0 && (
                         <p className="text-xs text-amber-500 mt-1">⚠️ No batches found for selected course. Showing all batches.</p>
@@ -3067,9 +3195,12 @@ export default function CollegeMasterPage() {
                         className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white"
                       >
                         <option value="">-- All Branches (No Filter) --</option>
-                        {branches.map((br) => (
-                          <option key={br.id} value={br.id}>{br.name} ({br.code})</option>
-                        ))}
+                        {branches.map((br) => {
+                          const brCode = br.branch_cd || br.code || br.id;
+                          return (
+                            <option key={br.id || brCode} value={brCode}>[{br.code || brCode}] {br.name}</option>
+                          );
+                        })}
                       </select>
                     </div>
 
@@ -3118,23 +3249,44 @@ export default function CollegeMasterPage() {
               {/* SESSION FORM */}
               {activeTab === 'sessions' && (
                 <>
-                  <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Session Title *</label>
-                    <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Session Code (Numeric) *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.session_cd || formData.code || ''}
+                        onChange={(e) => setFormData({ ...formData, session_cd: e.target.value, code: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
+                        placeholder="e.g. 14, 15, 16"
+                      />
+                      <p className="text-[11px] text-slate-400">SRMS FeeAdmin/GetSession Code</p>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Session Title / Year *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name || ''}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
+                        placeholder="e.g. 2026-2027"
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Start Date</label>
-                      <input type="date" required value={formData.startDate || ''} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white" />
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Start Date</label>
+                      <input type="date" required value={formData.startDate || ''} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">End Date</label>
-                      <input type="date" required value={formData.endDate || ''} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white" />
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">End Date</label>
+                      <input type="date" required value={formData.endDate || ''} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
                     </div>
                   </div>
                   <div className="flex items-center gap-2 pt-2">
-                    <input type="checkbox" id="isCurrent" checked={Boolean(formData.isCurrent)} onChange={(e) => setFormData({ ...formData, isCurrent: e.target.checked })} className="rounded bg-slate-50 dark:bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-300 dark:border-slate-800" />
-                    <label htmlFor="isCurrent" className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Set as Current Active Session</label>
+                    <input type="checkbox" id="isCurrent" checked={Boolean(formData.isCurrent)} onChange={(e) => setFormData({ ...formData, isCurrent: e.target.checked })} className="rounded bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-800" />
+                    <label htmlFor="isCurrent" className="text-slate-700 dark:text-slate-300 font-semibold">Set as Current Active Session</label>
                   </div>
                 </>
               )}

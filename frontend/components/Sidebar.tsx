@@ -11,6 +11,27 @@ interface SidebarProps {
 export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
   const [misReportsOpen, setMisReportsOpen] = useState(true);
+  const [collegeDisplayName, setCollegeDisplayName] = useState<string>('SRMS CET, BAREILLY');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedName = localStorage.getItem('college_name') || localStorage.getItem('tenantName');
+      const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '';
+      const colgCd = localStorage.getItem('colg_cd');
+      
+      if (storedName) {
+        setCollegeDisplayName(storedName);
+      } else if (colgCd === '1' || slug.includes('cet-bareilly') || slug === '1') {
+        setCollegeDisplayName('SRMS CET, BAREILLY');
+      } else if (colgCd === '2' || slug.includes('cetr-bareilly') || slug === '2') {
+        setCollegeDisplayName('SRMS CETR, BAREILLY');
+      } else if (slug.includes('ims')) {
+        setCollegeDisplayName('SRMS IMS');
+      } else if (slug) {
+        setCollegeDisplayName(slug.toUpperCase().replace('TENANT_', '').replace('TENANT-', ''));
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (pathname?.startsWith('/dashboard/faculty/reports') || pathname?.startsWith('/dashboard/admin/reports')) {
@@ -20,7 +41,7 @@ export default function Sidebar({ role }: SidebarProps) {
 
   const getLinkClass = (href: string) => {
     const isRootTab = href === '/dashboard/faculty' || href === '/dashboard/student' || href === '/dashboard/admin' || href === '/dashboard/clerk' || href === '/dashboard/warden';
-    const isActive = isRootTab ? pathname === href : (pathname === href || (!!pathname && pathname.startsWith(href)));
+    const isActive = isRootTab ? pathname === href : (pathname === href || (!!pathname && pathname.startsWith(href + '/')));
     return isActive
       ? 'flex items-center gap-2.5 px-3.5 py-2.5 rounded-r-xl font-bold text-white bg-white/15 border-l-4 border-[#F36C21] shadow-lg shadow-purple-950/20 backdrop-blur-md transition-all group'
       : 'flex items-center gap-2.5 px-3.5 py-2.5 rounded-r-xl font-medium text-purple-200/80 hover:text-white hover:bg-white/10 border-l-4 border-transparent transition-all group';
@@ -30,13 +51,20 @@ export default function Sidebar({ role }: SidebarProps) {
     <aside className="w-64 bg-[#2D2575] text-white p-4 sticky top-0 h-screen overflow-y-auto flex flex-col justify-between shrink-0 transition-colors z-20 shadow-2xl shadow-purple-950/40 rounded-r-none">
       <div className="space-y-6">
         {/* Brand Header */}
-        <div className="flex items-center gap-3 px-2 pt-1 pb-3 border-b border-white/10">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#F36C21] via-orange-500 to-amber-500 flex items-center justify-center font-black text-white text-base shadow-lg shadow-orange-500/30 border border-white/20">
+        <div className="flex items-center gap-3 px-2 pt-1 pb-3 border-b border-white/10 min-w-0">
+          <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-tr from-[#F36C21] via-orange-500 to-amber-500 flex items-center justify-center font-black text-white text-base shadow-lg shadow-orange-500/30 border border-white/20">
             M
           </div>
-          <div>
-            <h1 className="font-black text-sm text-white tracking-wide uppercase">MedERP Portal</h1>
-            <p className="text-[10px] text-[#F36C21] font-extrabold uppercase tracking-wider">{role} space</p>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <h1 
+              className="font-black text-sm text-white tracking-wide uppercase truncate block" 
+              title={collegeDisplayName}
+            >
+              {collegeDisplayName}
+            </h1>
+            <p className="text-[10px] text-[#F36C21] font-extrabold uppercase tracking-wider truncate">
+              {role} space
+            </p>
           </div>
         </div>
 
@@ -100,7 +128,14 @@ export default function Sidebar({ role }: SidebarProps) {
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
-                <span>Attendance Master</span>
+                <span>Attendance Portal Sync</span>
+              </Link>
+
+              <Link href="/dashboard/admin/attendance-biometric" className={getLinkClass('/dashboard/admin/attendance-biometric')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Attendance — Bio-Metric/CCTV</span>
               </Link>
 
               <Link href="/dashboard/admin/assessment" className={getLinkClass('/dashboard/admin/assessment')}>
@@ -123,7 +158,7 @@ export default function Sidebar({ role }: SidebarProps) {
                   type="button"
                   onClick={() => setMisReportsOpen(!misReportsOpen)}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-r-xl font-bold transition-all group ${
-                    pathname?.startsWith('/dashboard/admin/reports') || misReportsOpen
+                    pathname?.startsWith('/dashboard/admin/reports')
                       ? 'text-white bg-white/15 border-l-4 border-[#F36C21] shadow-lg shadow-purple-950/20'
                       : 'text-purple-200/80 hover:text-white hover:bg-white/10 border-l-4 border-transparent'
                   }`}
@@ -210,7 +245,14 @@ export default function Sidebar({ role }: SidebarProps) {
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
-                <span>Attendance Marking</span>
+                <span>Attendance Portal Sync</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/attendance-biometric" className={getLinkClass('/dashboard/faculty/attendance-biometric')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Attendance — Bio-Metric/CCTV</span>
               </Link>
 
               <Link href="/dashboard/faculty/assessment" className={getLinkClass('/dashboard/faculty/assessment')}>
@@ -227,13 +269,20 @@ export default function Sidebar({ role }: SidebarProps) {
                 <span>Assessment Marks</span>
               </Link>
 
+              <Link href="/dashboard/faculty/lessons" className={getLinkClass('/dashboard/faculty/lessons')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>Lesson Uploads</span>
+              </Link>
+
               {/* Expandable MIS Reports Accordion */}
               <div className="space-y-1">
                 <button
                   type="button"
                   onClick={() => setMisReportsOpen(!misReportsOpen)}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-r-xl font-bold transition-all group ${
-                    pathname?.startsWith('/dashboard/faculty/reports') || misReportsOpen
+                    pathname?.startsWith('/dashboard/faculty/reports')
                       ? 'text-white bg-white/15 border-l-4 border-[#F36C21] shadow-lg shadow-purple-950/20'
                       : 'text-purple-200/80 hover:text-white hover:bg-white/10 border-l-4 border-transparent'
                   }`}
@@ -302,11 +351,17 @@ export default function Sidebar({ role }: SidebarProps) {
                 </svg>
                 <span>Clerk Data Entry</span>
               </Link>
-              <Link href="/dashboard/admin/attendance-master" className={getLinkClass('/dashboard/admin/attendance-master')}>
+              <Link href="/dashboard/clerk/attendance" className={getLinkClass('/dashboard/clerk/attendance')}>
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
-                <span>Attendance Entry</span>
+                <span>Attendance Portal Sync</span>
+              </Link>
+              <Link href="/dashboard/clerk/attendance-biometric" className={getLinkClass('/dashboard/clerk/attendance-biometric')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Attendance — Bio-Metric/CCTV</span>
               </Link>
               <Link href="/dashboard/admin/assessment-marks" className={getLinkClass('/dashboard/admin/assessment-marks')}>
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -335,7 +390,14 @@ export default function Sidebar({ role }: SidebarProps) {
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
-                <span>Attendance</span>
+                <span>Attendance Portal Sync</span>
+              </Link>
+
+              <Link href="/dashboard/student/attendance-biometric" className={getLinkClass('/dashboard/student/attendance-biometric')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Attendance — Bio-Metric/CCTV</span>
               </Link>
 
               <Link href="/dashboard/student/assessment" className={getLinkClass('/dashboard/student/assessment')}>
@@ -350,6 +412,13 @@ export default function Sidebar({ role }: SidebarProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
                 <span>Assessment Marks & Reports</span>
+              </Link>
+
+              <Link href="/dashboard/student/lessons" className={getLinkClass('/dashboard/student/lessons')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>Lessons & Materials</span>
               </Link>
             </>
           )}

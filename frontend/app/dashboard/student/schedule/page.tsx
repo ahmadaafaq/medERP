@@ -30,7 +30,7 @@ interface TimetableSlot {
   competencies_detail?: CompetencyDetail[];
 }
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 const getStorageItem = (key: string): string | null => {
   if (typeof window === 'undefined') return null;
@@ -56,7 +56,7 @@ export default function StudentSchedulePage() {
 
   const fetchSchedule = async () => {
     setLoading(true);
-    const slug = getStorageItem('tenantSlug') || 'srms-ims';
+    const slug = getStorageItem('tenantSlug') || getStorageItem('selectedTenant') || 'srms-cet-bareilly';
     try {
       const token = getStorageItem('token') || '';
       const res = await fetch(`${API_BASE}/timetable/student-schedule?tenant=${slug}`, {
@@ -64,9 +64,9 @@ export default function StudentSchedulePage() {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
         },
-      });
+      }).catch(() => null);
 
-      if (res.ok) {
+      if (res && res.ok) {
         const json = await res.json();
         if (json && json.data) {
           const slots: TimetableSlot[] = Array.isArray(json.data.weeklySlots) 
@@ -84,7 +84,16 @@ export default function StudentSchedulePage() {
           setScheduleSlots([]);
         }
       } else {
-        setScheduleSlots([]);
+        // Fallback to /timetable
+        const fbRes = await fetch(`${API_BASE}/timetable?tenant=${slug}`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug },
+        }).catch(() => null);
+        if (fbRes && fbRes.ok) {
+          const fbJson = await fbRes.json();
+          setScheduleSlots(Array.isArray(fbJson.data) ? fbJson.data : []);
+        } else {
+          setScheduleSlots([]);
+        }
       }
     } catch {
       setScheduleSlots([]);

@@ -3,6 +3,8 @@
 import Header from '../../../components/Header';
 import Sidebar from '../../../components/Sidebar';
 import Link from 'next/link';
+import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
+import AttendanceWidget from '../../../components/AttendanceWidget';
 
 export default function ClerkDashboardPage() {
   return (
@@ -83,6 +85,11 @@ export default function ClerkDashboardPage() {
                 <p className="text-xs text-slate-400 mt-1">View student registration records, roll numbers, and contact info.</p>
               </div>
             </Link>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AttendanceWidget role="CLERK" />
+            <RecentLessonsWidget role="CLERK" />
           </div>
         </div>
       </main>

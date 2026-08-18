@@ -1,5 +1,6 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { TenantsModule } from './tenants/tenants.module';
@@ -17,7 +18,10 @@ import { CollegeMasterModule } from './college-master/college-master.module';
 import { StudentMasterModule } from './student-master/student-master.module';
 import { AdminMasterModule } from './admin-master/admin-master.module';
 import { TimetableModule } from './timetable/timetable.module';
+import { LessonModule } from './lesson/lesson.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { TenantIsolationGuard } from './common/guards/tenant-isolation.guard';
 import configuration from './config/configuration';
 import { validationSchema } from './config/joi.validation';
 
@@ -45,6 +49,17 @@ import { validationSchema } from './config/joi.validation';
     StudentMasterModule,
     AdminMasterModule,
     TimetableModule,
+    LessonModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: TenantIsolationGuard,
+    },
   ],
 })
 export class AppModule implements NestModule {

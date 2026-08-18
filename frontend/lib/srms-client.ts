@@ -33,8 +33,19 @@ export const FALLBACK_BRANCHES_BCA = [
 ];
 
 export const FALLBACK_BATCHES_BCA = [
-  { batch_cd: '2', batch_name: 'Batch 2025' },
-  { batch_cd: '1', batch_name: 'Batch 2024' },
+  { colg_cd: '1', course_cd: '13', batch_cd: 1, batch_name: '2024', active_flg: '1', curr_bat_Cd: 1 },
+  { colg_cd: '1', course_cd: '13', batch_cd: 2, batch_name: '2025', active_flg: '1', curr_bat_Cd: 2 },
+  { colg_cd: '1', course_cd: '13', batch_cd: 3, batch_name: '2026', active_flg: '1', curr_bat_Cd: 3 },
+];
+
+export const FALLBACK_SESSIONS = [
+  { colg_cd: '1', session_cd: '16', session_name: '2026-2027', active_flg: '1', current_flg: '1' },
+  { colg_cd: '1', session_cd: '15', session_name: '2025-2026', active_flg: '1', current_flg: '1' },
+  { colg_cd: '1', session_cd: '14', session_name: '2024-2025', active_flg: '1', current_flg: '1' },
+  { colg_cd: '1', session_cd: '13', session_name: '2023-2024', active_flg: '1', current_flg: '0' },
+  { colg_cd: '1', session_cd: '12', session_name: '2022-2023', active_flg: '1', current_flg: '0' },
+  { colg_cd: '1', session_cd: '11', session_name: '2021-2022', active_flg: '1', current_flg: '0' },
+  { colg_cd: '1', session_cd: '10', session_name: '2020-2021', active_flg: '1', current_flg: '0' },
 ];
 
 /**

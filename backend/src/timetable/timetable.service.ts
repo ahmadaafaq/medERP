@@ -34,14 +34,8 @@ export class TimetableService implements OnModuleInit {
     }
   }
 
-  async listSlots(tenantSlug: string, query: { departmentId?: string; batchId?: string; dayOfWeek?: number; facultyId?: string; subjectId?: string }) {
+  async listSlots(tenantSlug: string, query: { departmentId?: string; batchId?: string; dayOfWeek?: number; facultyId?: string; subjectId?: string; courseId?: string; sessionId?: string }) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
-
-    // Resolve any incoming codes/emp_ids to UUIDs so query matches DB correctly
-    const resolvedDeptId = await this.resolveToUUID(slug, 'departments', 'departmentId', query.departmentId);
-    const resolvedBatchId = await this.resolveToUUID(slug, 'batches', 'batchId', query.batchId);
-    const resolvedSubjectId = await this.resolveToUUID(slug, 'subjects', 'subjectId', query.subjectId);
-    const resolvedFacultyId = await this.resolveToUUID(slug, 'faculty', 'facultyId', query.facultyId);
 
     const params: any[] = [];
     let sql = `
@@ -50,7 +44,7 @@ export class TimetableService implements OnModuleInit {
              ts.effective_from, ts.effective_until, ts.group_name, ts.topic, ts.competency_codes,
              COALESCE(f.name, '') AS faculty_name, f.emp_id AS faculty_code,
              COALESCE(s.name, '') AS subject_name, COALESCE(s.code, '') AS subject_code,
-             d.name AS department_name,
+             COALESCE(d.name, '') AS department_name, d.code AS department_code,
              b.code AS batch_code, b.year AS batch_year
       FROM timetable_slots ts
       LEFT JOIN faculty f ON f.id = ts.faculty_id
@@ -60,24 +54,62 @@ export class TimetableService implements OnModuleInit {
       WHERE 1=1
     `;
 
-    if (resolvedDeptId && !resolvedFacultyId) {
-      params.push(resolvedDeptId);
-      sql += ` AND (ts.department_id = $${params.length} OR f.department_id = $${params.length} OR s.department_id = $${params.length})`;
-    }
-    if (resolvedFacultyId) {
-      params.push(resolvedFacultyId);
-      sql += ` AND (ts.faculty_id = $${params.length} OR f.id = $${params.length})`;
-    }
-    if (resolvedSubjectId) {
-      params.push(resolvedSubjectId);
-      sql += ` AND ts.subject_id = $${params.length}`;
+    if (query.departmentId && query.departmentId !== 'all') {
+      params.push(query.departmentId);
+      const pIdx = params.length;
+      if (this.isUUID(query.departmentId)) {
+        sql += ` AND (ts.department_id = $${pIdx} OR f.department_id = $${pIdx} OR s.department_id = $${pIdx})`;
+      } else {
+        sql += ` AND (
+          d.code = $${pIdx} OR d.branch_cd = $${pIdx} OR d.id::text = $${pIdx} OR d.name ILIKE '%' || $${pIdx} || '%'
+          OR ts.department_id IN (SELECT id FROM departments WHERE code = $${pIdx} OR branch_cd = $${pIdx} OR name ILIKE '%' || $${pIdx} || '%')
+          OR f.department_id IN (SELECT id FROM departments WHERE code = $${pIdx} OR branch_cd = $${pIdx} OR name ILIKE '%' || $${pIdx} || '%')
+          OR s.department_id IN (SELECT id FROM departments WHERE code = $${pIdx} OR branch_cd = $${pIdx} OR name ILIKE '%' || $${pIdx} || '%')
+        )`;
+      }
     }
 
-    if (resolvedBatchId) {
-      params.push(resolvedBatchId);
-      sql += ` AND ts.batch_id = $${params.length}`;
+    if (query.facultyId && query.facultyId !== 'all') {
+      params.push(query.facultyId);
+      const pIdx = params.length;
+      if (this.isUUID(query.facultyId)) {
+        sql += ` AND (ts.faculty_id = $${pIdx} OR f.id = $${pIdx})`;
+      } else {
+        sql += ` AND (f.emp_id = $${pIdx} OR f.id::text = $${pIdx} OR f.name ILIKE '%' || $${pIdx} || '%')`;
+      }
     }
-    if (query.dayOfWeek !== undefined) {
+
+    if (query.subjectId && query.subjectId !== 'all') {
+      params.push(query.subjectId);
+      const pIdx = params.length;
+      if (this.isUUID(query.subjectId)) {
+        sql += ` AND (ts.subject_id = $${pIdx} OR s.id = $${pIdx})`;
+      } else {
+        sql += ` AND (s.code = $${pIdx} OR s.id::text = $${pIdx} OR s.name ILIKE '%' || $${pIdx} || '%')`;
+      }
+    }
+
+    if (query.batchId && query.batchId !== 'all') {
+      params.push(query.batchId);
+      const pIdx = params.length;
+      if (this.isUUID(query.batchId)) {
+        sql += ` AND (ts.batch_id = $${pIdx} OR b.id = $${pIdx})`;
+      } else {
+        sql += ` AND (b.year::text = $${pIdx} OR b.code = $${pIdx} OR b.name = $${pIdx} OR b.name ILIKE '%' || $${pIdx} || '%' OR ts.batch_id::text = $${pIdx})`;
+      }
+    }
+
+    if (query.courseId && query.courseId !== 'all') {
+      params.push(query.courseId);
+      const pIdx = params.length;
+      if (this.isUUID(query.courseId)) {
+        sql += ` AND (b.course_id = $${pIdx} OR s.course_id = $${pIdx})`;
+      } else {
+        sql += ` AND (b.course_cd = $${pIdx} OR s.course_cd = $${pIdx} OR b.course_name ILIKE '%' || $${pIdx} || '%')`;
+      }
+    }
+
+    if (query.dayOfWeek !== undefined && !isNaN(Number(query.dayOfWeek))) {
       params.push(Number(query.dayOfWeek));
       sql += ` AND ts.day_of_week = $${params.length}`;
     }
@@ -89,17 +121,32 @@ export class TimetableService implements OnModuleInit {
     let sessionParams: any[] = [];
     let sessionWhere: string[] = ['s.is_cancelled = false'];
 
-    if (resolvedFacultyId) {
-      sessionParams.push(resolvedFacultyId);
-      sessionWhere.push(`(s.faculty_id = $${sessionParams.length} OR ts.faculty_id = $${sessionParams.length})`);
+    if (query.facultyId && query.facultyId !== 'all') {
+      sessionParams.push(query.facultyId);
+      const pIdx = sessionParams.length;
+      if (this.isUUID(query.facultyId)) {
+        sessionWhere.push(`(s.faculty_id = $${pIdx} OR ts.faculty_id = $${pIdx})`);
+      } else {
+        sessionWhere.push(`(f.emp_id = $${pIdx} OR f.id::text = $${pIdx} OR f.name ILIKE '%' || $${pIdx} || '%')`);
+      }
     }
-    if (resolvedSubjectId) {
-      sessionParams.push(resolvedSubjectId);
-      sessionWhere.push(`s.subject_id = $${sessionParams.length}`);
+    if (query.subjectId && query.subjectId !== 'all') {
+      sessionParams.push(query.subjectId);
+      const pIdx = sessionParams.length;
+      if (this.isUUID(query.subjectId)) {
+        sessionWhere.push(`s.subject_id = $${pIdx}`);
+      } else {
+        sessionWhere.push(`(sub.code = $${pIdx} OR sub.id::text = $${pIdx} OR sub.name ILIKE '%' || $${pIdx} || '%')`);
+      }
     }
-    if (resolvedBatchId) {
-      sessionParams.push(resolvedBatchId);
-      sessionWhere.push(`s.batch_id = $${sessionParams.length}`);
+    if (query.batchId && query.batchId !== 'all') {
+      sessionParams.push(query.batchId);
+      const pIdx = sessionParams.length;
+      if (this.isUUID(query.batchId)) {
+        sessionWhere.push(`s.batch_id = $${pIdx}`);
+      } else {
+        sessionWhere.push(`(b.year::text = $${pIdx} OR b.code = $${pIdx} OR b.name = $${pIdx} OR b.name ILIKE '%' || $${pIdx} || '%')`);
+      }
     }
 
     let sessionSql = `
@@ -255,13 +302,13 @@ export class TimetableService implements OnModuleInit {
     let query = '';
     const params = [value];
     if (table === 'faculty') {
-      query = `SELECT id FROM faculty WHERE emp_id = $1 OR id::text = $1 LIMIT 1`;
+      query = `SELECT id FROM faculty WHERE emp_id = $1 OR id::text = $1 OR name ILIKE '%' || $1 || '%' LIMIT 1`;
     } else if (table === 'subjects') {
-      query = `SELECT id FROM subjects WHERE code = $1 OR id::text = $1 LIMIT 1`;
+      query = `SELECT id FROM subjects WHERE code = $1 OR id::text = $1 OR name ILIKE '%' || $1 || '%' LIMIT 1`;
     } else if (table === 'departments') {
-      query = `SELECT id FROM departments WHERE branch_cd = $1 OR code = $1 OR id::text = $1 LIMIT 1`;
+      query = `SELECT id FROM departments WHERE branch_cd = $1 OR code = $1 OR id::text = $1 OR name ILIKE '%' || $1 || '%' LIMIT 1`;
     } else if (table === 'batches') {
-      query = `SELECT id FROM batches WHERE code = $1 OR name = $1 OR id::text = $1 LIMIT 1`;
+      query = `SELECT id FROM batches WHERE year::text = $1 OR code = $1 OR name = $1 OR name ILIKE '%' || $1 || '%' OR id::text = $1 LIMIT 1`;
     } else {
       return null;
     }

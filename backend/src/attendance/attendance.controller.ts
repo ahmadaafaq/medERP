@@ -10,6 +10,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { TenantSlug } from '../common/decorators/tenant.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { UserRole } from '../common/enums/role.enum';
 
@@ -214,5 +215,49 @@ export class AttendanceController {
     @Query('toDate') toDate?: string,
   ) {
     return this.attendanceService.getBatchMatrixReport(tenantSlug, batchId, fromDate, toDate);
+  }
+
+  // ─── SRMS Portal Proxy Routes ──────────────────────────────────────────────
+  @Public()
+  @Get('portal/semesters')
+  @ApiOperation({ summary: 'Get Portal Semesters for Course, Branch, and Batch' })
+  getPortalSemesters(
+    @TenantSlug() tenantSlug: string,
+    @Query('colgcd') colgcd?: string,
+    @Query('coursecd') coursecd?: string,
+    @Query('ddl_branch') ddl_branch?: string,
+    @Query('ddl_batch') ddl_batch?: string,
+  ) {
+    return this.attendanceService.getPortalSemesters(tenantSlug, { colgcd, coursecd, ddl_branch, ddl_batch });
+  }
+
+  @Public()
+  @Get('portal/subject-summary')
+  @ApiOperation({ summary: 'Get Subject-wise attendance summary for a student' })
+  getPortalSubjectSummary(
+    @TenantSlug() tenantSlug: string,
+    @Query() query: any,
+  ) {
+    return this.attendanceService.getPortalSubjectSummary(tenantSlug, query);
+  }
+
+  @Public()
+  @Get('portal/lecture-details')
+  @ApiOperation({ summary: 'Get Lecture-by-lecture attendance details for a student and subject' })
+  getPortalLectureDetails(
+    @TenantSlug() tenantSlug: string,
+    @Query() query: any,
+  ) {
+    return this.attendanceService.getPortalLectureDetails(tenantSlug, query);
+  }
+
+  @Public()
+  @Get('portal/section-matrix')
+  @ApiOperation({ summary: 'Get Section-wise multi-subject attendance matrix for full student batch roster' })
+  getSectionAttendanceMatrix(
+    @TenantSlug() tenantSlug: string,
+    @Query() query: any,
+  ) {
+    return this.attendanceService.getSectionAttendanceMatrix(tenantSlug, query);
   }
 }

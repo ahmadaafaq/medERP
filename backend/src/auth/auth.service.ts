@@ -193,14 +193,16 @@ export class AuthService {
     // Fetch tenant context
     let tenantId: string | null = null;
     let tenantName: string | null = null;
+    let colgCd: string | null = null;
     if (resolvedSlug) {
       const rows = await this.ds.query(
-        `SELECT id, name FROM public.tenants WHERE slug=$1 OR slug=$2 LIMIT 1`,
+        `SELECT id, name, slug, code FROM public.tenants WHERE slug=$1 OR slug=$2 LIMIT 1`,
         [resolvedSlug, tenantSlug],
       );
       if (rows[0]) {
         tenantId = rows[0].id;
         tenantName = rows[0].name;
+        colgCd = rows[0].code ? String(rows[0].code) : '1';
       }
     }
 
@@ -210,6 +212,8 @@ export class AuthService {
       role: user.role as UserRole,
       tenantId,
       tenantSlug: resolvedSlug ?? tenantSlug ?? null,
+      colgCd,
+      collegeName: tenantName,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -217,11 +221,11 @@ export class AuthService {
     });
 
     const refreshToken = this.jwtService.sign(
-      { sub: user.id, type: 'refresh', tenantSlug, tenantId },
+      { sub: user.id, type: 'refresh', tenantSlug, tenantId, colgCd, collegeName: tenantName },
       { expiresIn: this.config.get<string>('jwt.refreshExpires') || '7d' },
     );
 
-    this.logger.log(`Login: ${user.email} [${user.role}] tenant=${tenantSlug ?? 'superadmin'}`);
+    this.logger.log(`Login: ${user.email} [${user.role}] tenant=${tenantSlug ?? 'superadmin'} colgCd=${colgCd ?? 'none'}`);
 
     // Fetch full profile details for login response
     const meProfile = await this.getMe({ sub: user.id, email: user.email, role: user.role, tenantId, tenantSlug: resolvedSlug }).catch(() => null);
@@ -250,6 +254,8 @@ export class AuthService {
         tenantId,
         tenantSlug: resolvedSlug ?? tenantSlug ?? null,
         tenantName,
+        collegeName: tenantName,
+        colgCd: colgCd ?? '1',
       },
     };
   }
@@ -463,12 +469,27 @@ export class AuthService {
         throw new UnauthorizedException('User not found or inactive');
       }
 
+      let colgCd: string | null = null;
+      let tenantName: string | null = null;
+      if (tenantSlug) {
+        const rows = await this.ds.query(
+          `SELECT id, name, slug, code FROM public.tenants WHERE slug=$1 LIMIT 1`,
+          [tenantSlug],
+        );
+        if (rows[0]) {
+          colgCd = rows[0].code ? String(rows[0].code) : '1';
+          tenantName = rows[0].name;
+        }
+      }
+
       const payload: JwtPayload = {
         sub: user.id,
         email: user.email,
         role: user.role,
         tenantId: decoded.tenantId ?? null,
         tenantSlug: tenantSlug ?? null,
+        colgCd,
+        collegeName: tenantName,
       };
 
       return {
@@ -476,7 +497,7 @@ export class AuthService {
           expiresIn: this.config.get<string>('jwt.accessExpires') || '15m',
         }),
         refreshToken: this.jwtService.sign(
-          { sub: user.id, type: 'refresh', tenantSlug, tenantId: decoded.tenantId },
+          { sub: user.id, type: 'refresh', tenantSlug, tenantId: decoded.tenantId, colgCd, collegeName: tenantName },
           { expiresIn: this.config.get<string>('jwt.refreshExpires') || '7d' },
         ),
       };

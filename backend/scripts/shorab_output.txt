@@ -1,0 +1,403 @@
+Tenant schemas count: 20
+
+Schema [tenant_aiims-delhi] faculty count: 4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=43dde4fd-99ee-4ba3-bf87-e9015027920a
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=3ecdbd13-c083-4464-bfcd-d7e9d66ef010
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=43dde4fd-99ee-4ba3-bf87-e9015027920a
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=3ecdbd13-c083-4464-bfcd-d7e9d66ef010
+Schema [tenant_aiims-delhi] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Lecture Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Physiology Lab A | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 3ecdbd13-c083-4464-bfcd-d7e9d66ef010) | Room: Dissection Hall 2 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 3ecdbd13-c083-4464-bfcd-d7e9d66ef010) | Room: Dissection Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Lecture Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Lecture Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 3ecdbd13-c083-4464-bfcd-d7e9d66ef010) | Room: Dissection Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Physiology Lab B | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Lecture Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Physiology Lab A | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 3ecdbd13-c083-4464-bfcd-d7e9d66ef010) | Room: Dissection Hall 2 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 3ecdbd13-c083-4464-bfcd-d7e9d66ef010) | Room: Dissection Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Lecture Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Lecture Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 3ecdbd13-c083-4464-bfcd-d7e9d66ef010) | Room: Dissection Hall 1 | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 43dde4fd-99ee-4ba3-bf87-e9015027920a) | Room: Physiology Lab B | Batch: ec7ad700-65fc-4add-ac4f-f1bba7a9a0bb | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_aiims-jodhpur] faculty count: 4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=490d2d99-3fec-4924-8751-ae3f4bfe8cbd
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=dad2eda5-8a8b-4999-baea-a4f82f637f48
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=490d2d99-3fec-4924-8751-ae3f4bfe8cbd
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=dad2eda5-8a8b-4999-baea-a4f82f637f48
+Schema [tenant_aiims-jodhpur] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Lecture Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Physiology Lab A | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: dad2eda5-8a8b-4999-baea-a4f82f637f48) | Room: Dissection Hall 2 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: dad2eda5-8a8b-4999-baea-a4f82f637f48) | Room: Dissection Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Lecture Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Lecture Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: dad2eda5-8a8b-4999-baea-a4f82f637f48) | Room: Dissection Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Physiology Lab B | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Lecture Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Physiology Lab A | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: dad2eda5-8a8b-4999-baea-a4f82f637f48) | Room: Dissection Hall 2 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: dad2eda5-8a8b-4999-baea-a4f82f637f48) | Room: Dissection Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Lecture Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Lecture Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: dad2eda5-8a8b-4999-baea-a4f82f637f48) | Room: Dissection Hall 1 | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 490d2d99-3fec-4924-8751-ae3f4bfe8cbd) | Room: Physiology Lab B | Batch: 295c2f24-0424-4fb2-b44e-777c9f6a9dde | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_kmc-manipal] faculty count: 4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=329d5057-6810-43b3-bf08-7146c5dca450
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=2a3b483d-068f-4cd4-b0de-4c2a7dbfa068
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=329d5057-6810-43b3-bf08-7146c5dca450
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=2a3b483d-068f-4cd4-b0de-4c2a7dbfa068
+Schema [tenant_kmc-manipal] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Lecture Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Physiology Lab A | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2a3b483d-068f-4cd4-b0de-4c2a7dbfa068) | Room: Dissection Hall 2 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2a3b483d-068f-4cd4-b0de-4c2a7dbfa068) | Room: Dissection Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Lecture Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Lecture Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2a3b483d-068f-4cd4-b0de-4c2a7dbfa068) | Room: Dissection Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Physiology Lab B | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Lecture Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Physiology Lab A | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2a3b483d-068f-4cd4-b0de-4c2a7dbfa068) | Room: Dissection Hall 2 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2a3b483d-068f-4cd4-b0de-4c2a7dbfa068) | Room: Dissection Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Lecture Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Lecture Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2a3b483d-068f-4cd4-b0de-4c2a7dbfa068) | Room: Dissection Hall 1 | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 329d5057-6810-43b3-bf08-7146c5dca450) | Room: Physiology Lab B | Batch: fcd54c1f-e497-4c11-a585-36f89a9f85d4 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_rajshreemri] faculty count: 0
+Schema [tenant_rajshreemri] timetable slots count: 0
+
+Schema [tenant_srms-cet] faculty count: 4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=66aa879a-456a-4abe-84db-6706bd3f0560
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=c5a26d3f-2b30-4382-8590-00dd93861bd4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=66aa879a-456a-4abe-84db-6706bd3f0560
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=c5a26d3f-2b30-4382-8590-00dd93861bd4
+Schema [tenant_srms-cet] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Lecture Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Physiology Lab A | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c5a26d3f-2b30-4382-8590-00dd93861bd4) | Room: Dissection Hall 2 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c5a26d3f-2b30-4382-8590-00dd93861bd4) | Room: Dissection Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Lecture Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Lecture Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c5a26d3f-2b30-4382-8590-00dd93861bd4) | Room: Dissection Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Physiology Lab B | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Lecture Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Physiology Lab A | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c5a26d3f-2b30-4382-8590-00dd93861bd4) | Room: Dissection Hall 2 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c5a26d3f-2b30-4382-8590-00dd93861bd4) | Room: Dissection Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Lecture Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Lecture Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c5a26d3f-2b30-4382-8590-00dd93861bd4) | Room: Dissection Hall 1 | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 66aa879a-456a-4abe-84db-6706bd3f0560) | Room: Physiology Lab B | Batch: 2178e799-fcbd-465d-80d4-c7ba38285c42 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-cet-bareilly] faculty count: 1
+  Faculty: emp_id=202516224 | name=Shorab Ahmad | id=879207b0-eaf4-43b0-b664-b6a854bbfe81
+Schema [tenant_srms-cet-bareilly] timetable slots count: 7
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: undefined | Subj: undefined | Fac: undefined (ID: 879207b0-eaf4-43b0-b664-b6a854bbfe81) | Room: Lab 3 (Web Tech) | Batch: ef8d159e-af2d-477f-800b-998022782bd7 | Topic: null
+  Slot: Day 1 | 10:15:00-11:15:00 | Type: undefined | Subj: undefined | Fac: undefined (ID: 879207b0-eaf4-43b0-b664-b6a854bbfe81) | Room: Room 204 (BCA 3rd Sem) | Batch: ef8d159e-af2d-477f-800b-998022782bd7 | Topic: null
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: undefined | Subj: undefined | Fac: undefined (ID: 879207b0-eaf4-43b0-b664-b6a854bbfe81) | Room: Room 204 (BCA 3rd Sem) | Batch: ef8d159e-af2d-477f-800b-998022782bd7 | Topic: null
+  Slot: Day 2 | 11:30:00-12:30:00 | Type: undefined | Subj: undefined | Fac: undefined (ID: 879207b0-eaf4-43b0-b664-b6a854bbfe81) | Room: Lab 3 (Python/Web) | Batch: ef8d159e-af2d-477f-800b-998022782bd7 | Topic: null
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: undefined | Subj: undefined | Fac: undefined (ID: 879207b0-eaf4-43b0-b664-b6a854bbfe81) | Room: Room 204 (BCA 3rd Sem) | Batch: ef8d159e-af2d-477f-800b-998022782bd7 | Topic: null
+  Slot: Day 4 | 09:00:00-10:00:00 | Type: undefined | Subj: undefined | Fac: undefined (ID: 879207b0-eaf4-43b0-b664-b6a854bbfe81) | Room: Lab 3 (Web Tech) | Batch: ef8d159e-af2d-477f-800b-998022782bd7 | Topic: null
+  Slot: Day 5 | 14:00:00-15:30:00 | Type: undefined | Subj: undefined | Fac: undefined (ID: 879207b0-eaf4-43b0-b664-b6a854bbfe81) | Room: Database Lab 2 | Batch: ef8d159e-af2d-477f-800b-998022782bd7 | Topic: null
+
+Schema [tenant_srms-cet-unnao] faculty count: 0
+Schema [tenant_srms-cet-unnao] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Lecture Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Physiology Lab A | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 595bcf38-0fdb-4c6c-8867-f8f0fd976360) | Room: Dissection Hall 2 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 595bcf38-0fdb-4c6c-8867-f8f0fd976360) | Room: Dissection Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Lecture Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Lecture Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 595bcf38-0fdb-4c6c-8867-f8f0fd976360) | Room: Dissection Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Physiology Lab B | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Lecture Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Physiology Lab A | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 595bcf38-0fdb-4c6c-8867-f8f0fd976360) | Room: Dissection Hall 2 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 595bcf38-0fdb-4c6c-8867-f8f0fd976360) | Room: Dissection Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Lecture Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Lecture Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 595bcf38-0fdb-4c6c-8867-f8f0fd976360) | Room: Dissection Hall 1 | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 5f8f18bc-b12d-4667-a9ac-14a4a062c3af) | Room: Physiology Lab B | Batch: 84ecf564-ff7a-49d1-b198-4d137f19e341 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-cetr-bareilly] faculty count: 4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=03f07f8d-3844-43fb-9c69-3d52545724d6
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=a96dbe78-1b08-4ea8-8a68-afc37b92e0aa
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=03f07f8d-3844-43fb-9c69-3d52545724d6
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=a96dbe78-1b08-4ea8-8a68-afc37b92e0aa
+Schema [tenant_srms-cetr-bareilly] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Lecture Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Physiology Lab A | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a96dbe78-1b08-4ea8-8a68-afc37b92e0aa) | Room: Dissection Hall 2 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a96dbe78-1b08-4ea8-8a68-afc37b92e0aa) | Room: Dissection Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Lecture Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Lecture Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a96dbe78-1b08-4ea8-8a68-afc37b92e0aa) | Room: Dissection Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Physiology Lab B | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Lecture Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Physiology Lab A | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a96dbe78-1b08-4ea8-8a68-afc37b92e0aa) | Room: Dissection Hall 2 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a96dbe78-1b08-4ea8-8a68-afc37b92e0aa) | Room: Dissection Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Lecture Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Lecture Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a96dbe78-1b08-4ea8-8a68-afc37b92e0aa) | Room: Dissection Hall 1 | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 03f07f8d-3844-43fb-9c69-3d52545724d6) | Room: Physiology Lab B | Batch: 9374f811-5217-4b09-a033-b6cb0b90e3b2 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-college-of-law] faculty count: 0
+Schema [tenant_srms-college-of-law] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Lecture Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Physiology Lab A | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: eb709765-6f46-4ddd-920a-1a91f4fa41e2) | Room: Dissection Hall 2 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: eb709765-6f46-4ddd-920a-1a91f4fa41e2) | Room: Dissection Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Lecture Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Lecture Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: eb709765-6f46-4ddd-920a-1a91f4fa41e2) | Room: Dissection Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Physiology Lab B | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Lecture Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Physiology Lab A | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: eb709765-6f46-4ddd-920a-1a91f4fa41e2) | Room: Dissection Hall 2 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: eb709765-6f46-4ddd-920a-1a91f4fa41e2) | Room: Dissection Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Lecture Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Lecture Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: eb709765-6f46-4ddd-920a-1a91f4fa41e2) | Room: Dissection Hall 1 | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0b692cac-bfa2-47f8-af1b-97571c0af175) | Room: Physiology Lab B | Batch: 6a7dc286-71c0-4d25-ae81-4953589b7088 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-college-of-nursing-paramedical-sciences-unnao] faculty count: 4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=9cf07b1b-cf40-4436-a13a-e17390d6eaba
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=32a4b96d-7eec-4b7d-b7a1-b8557175b63e
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=9cf07b1b-cf40-4436-a13a-e17390d6eaba
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=32a4b96d-7eec-4b7d-b7a1-b8557175b63e
+Schema [tenant_srms-college-of-nursing-paramedical-sciences-unnao] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Lecture Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Physiology Lab A | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 32a4b96d-7eec-4b7d-b7a1-b8557175b63e) | Room: Dissection Hall 2 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 32a4b96d-7eec-4b7d-b7a1-b8557175b63e) | Room: Dissection Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Lecture Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Lecture Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 32a4b96d-7eec-4b7d-b7a1-b8557175b63e) | Room: Dissection Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Physiology Lab B | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Lecture Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Physiology Lab A | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 32a4b96d-7eec-4b7d-b7a1-b8557175b63e) | Room: Dissection Hall 2 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 32a4b96d-7eec-4b7d-b7a1-b8557175b63e) | Room: Dissection Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Lecture Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Lecture Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 32a4b96d-7eec-4b7d-b7a1-b8557175b63e) | Room: Dissection Hall 1 | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 9cf07b1b-cf40-4436-a13a-e17390d6eaba) | Room: Physiology Lab B | Batch: 01ecc9c8-53a0-4678-aa8b-3cc859e78e9a | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-cricket-academy] faculty count: 4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=9642854c-3fe5-4151-936a-375e7d9ed1ef
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=c03f615a-a02f-41fa-a20b-9b74187268f6
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=9642854c-3fe5-4151-936a-375e7d9ed1ef
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=c03f615a-a02f-41fa-a20b-9b74187268f6
+Schema [tenant_srms-cricket-academy] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Lecture Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Physiology Lab A | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c03f615a-a02f-41fa-a20b-9b74187268f6) | Room: Dissection Hall 2 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c03f615a-a02f-41fa-a20b-9b74187268f6) | Room: Dissection Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Lecture Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Lecture Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c03f615a-a02f-41fa-a20b-9b74187268f6) | Room: Dissection Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Physiology Lab B | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Lecture Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Physiology Lab A | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c03f615a-a02f-41fa-a20b-9b74187268f6) | Room: Dissection Hall 2 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c03f615a-a02f-41fa-a20b-9b74187268f6) | Room: Dissection Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Lecture Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Lecture Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c03f615a-a02f-41fa-a20b-9b74187268f6) | Room: Dissection Hall 1 | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 9642854c-3fe5-4151-936a-375e7d9ed1ef) | Room: Physiology Lab B | Batch: bb5dcbe8-fd12-415e-b71b-cd6072fda38c | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-iahs-bareilly] faculty count: 0
+Schema [tenant_srms-iahs-bareilly] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Lecture Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Physiology Lab A | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 7c249b20-c8d8-4812-bb9c-a6f49383abeb) | Room: Dissection Hall 2 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 7c249b20-c8d8-4812-bb9c-a6f49383abeb) | Room: Dissection Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Lecture Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Lecture Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 7c249b20-c8d8-4812-bb9c-a6f49383abeb) | Room: Dissection Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Physiology Lab B | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Lecture Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Physiology Lab A | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 7c249b20-c8d8-4812-bb9c-a6f49383abeb) | Room: Dissection Hall 2 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 7c249b20-c8d8-4812-bb9c-a6f49383abeb) | Room: Dissection Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Lecture Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Lecture Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 7c249b20-c8d8-4812-bb9c-a6f49383abeb) | Room: Dissection Hall 1 | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 560b9c8b-dc12-4bd0-be6f-0ffbdac73f37) | Room: Physiology Lab B | Batch: f7588554-7458-4473-9339-6d626fff07a1 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-ibs-lucknow] faculty count: 0
+Schema [tenant_srms-ibs-lucknow] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Lecture Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Physiology Lab A | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 140c58db-87a6-49ea-8212-18312e1957fe) | Room: Dissection Hall 2 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 140c58db-87a6-49ea-8212-18312e1957fe) | Room: Dissection Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Lecture Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Lecture Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 140c58db-87a6-49ea-8212-18312e1957fe) | Room: Dissection Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Physiology Lab B | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Lecture Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Physiology Lab A | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 140c58db-87a6-49ea-8212-18312e1957fe) | Room: Dissection Hall 2 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 140c58db-87a6-49ea-8212-18312e1957fe) | Room: Dissection Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Lecture Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Lecture Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 140c58db-87a6-49ea-8212-18312e1957fe) | Room: Dissection Hall 1 | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: c65eaaa8-d9a9-4b61-85a6-8618d0573265) | Room: Physiology Lab B | Batch: 42cf002b-a911-404b-9938-fc94bcc5bb6e | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-ims] faculty count: 16
+  Faculty: emp_id=DR072602 | name=Dr. Shipra Pandey | id=f62f769f-c682-4342-a896-96f0a5fd26bd
+  Faculty: emp_id=DR/07/026 | name=Dr. Sanjay Singh | id=ac3b998c-38bd-4971-b1bb-e4c8c99088da
+  Faculty: emp_id=FAC-002 | name=Dr. V. K. Sharma | id=6f06ef24-47ae-498d-a749-2273dffa894c
+  Faculty: emp_id=FAC-003 | name=Dr. Sneha Roy | id=f26711ca-ab96-4d49-b0ee-a3c4e0db9df4
+  Faculty: emp_id=FAC-004 | name=Dr. R. K. Gupta | id=dc0e6f1e-93b7-4562-92c8-660fe101a504
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=707c5771-e963-470f-ae4a-16c3ab824724
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=8b5d9e0c-f77f-4359-9a6f-09968d11011e
+  Faculty: emp_id=FAC-001 | name=Dr. Aparna Tyagi | id=748a9800-c006-4a5c-b0e9-90f2254221aa
+  Faculty: emp_id=DR072602 | name=Dr. Shipra Pandey | id=f62f769f-c682-4342-a896-96f0a5fd26bd
+  Faculty: emp_id=DR/07/026 | name=Dr. Sanjay Singh | id=ac3b998c-38bd-4971-b1bb-e4c8c99088da
+  Faculty: emp_id=FAC-002 | name=Dr. V. K. Sharma | id=6f06ef24-47ae-498d-a749-2273dffa894c
+  Faculty: emp_id=FAC-003 | name=Dr. Sneha Roy | id=f26711ca-ab96-4d49-b0ee-a3c4e0db9df4
+  Faculty: emp_id=FAC-004 | name=Dr. R. K. Gupta | id=dc0e6f1e-93b7-4562-92c8-660fe101a504
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=707c5771-e963-470f-ae4a-16c3ab824724
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=8b5d9e0c-f77f-4359-9a6f-09968d11011e
+  Faculty: emp_id=FAC-001 | name=Dr. Aparna Tyagi | id=748a9800-c006-4a5c-b0e9-90f2254221aa
+Schema [tenant_srms-ims] timetable slots count: 10
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Lecture Hall 1 | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Physiology Lab A | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Lecture Hall 1 | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Lecture Hall 1 | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Physiology Lab B | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Lecture Hall 1 | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Physiology Lab A | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Lecture Hall 1 | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Lecture Hall 1 | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 707c5771-e963-470f-ae4a-16c3ab824724) | Room: Physiology Lab B | Batch: a67ccceb-8002-4864-a518-84e3eadf0836 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-nursing-college] faculty count: 0
+Schema [tenant_srms-nursing-college] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Lecture Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Physiology Lab A | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a0fe950e-04bf-4e52-9d90-da87e8e195ac) | Room: Dissection Hall 2 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a0fe950e-04bf-4e52-9d90-da87e8e195ac) | Room: Dissection Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Lecture Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Lecture Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a0fe950e-04bf-4e52-9d90-da87e8e195ac) | Room: Dissection Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Physiology Lab B | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Lecture Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Physiology Lab A | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a0fe950e-04bf-4e52-9d90-da87e8e195ac) | Room: Dissection Hall 2 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a0fe950e-04bf-4e52-9d90-da87e8e195ac) | Room: Dissection Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Lecture Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Lecture Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: a0fe950e-04bf-4e52-9d90-da87e8e195ac) | Room: Dissection Hall 1 | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 193a03e0-075f-46e2-a96f-af93e3ebed52) | Room: Physiology Lab B | Batch: de03625b-8fd2-4f67-89b0-36c8a0720a04 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-nursing-school] faculty count: 0
+Schema [tenant_srms-nursing-school] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Lecture Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Physiology Lab A | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2f91c8d2-34a1-4cf4-bb72-2654b3972747) | Room: Dissection Hall 2 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2f91c8d2-34a1-4cf4-bb72-2654b3972747) | Room: Dissection Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Lecture Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Lecture Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2f91c8d2-34a1-4cf4-bb72-2654b3972747) | Room: Dissection Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Physiology Lab B | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Lecture Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Physiology Lab A | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2f91c8d2-34a1-4cf4-bb72-2654b3972747) | Room: Dissection Hall 2 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2f91c8d2-34a1-4cf4-bb72-2654b3972747) | Room: Dissection Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Lecture Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Lecture Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2f91c8d2-34a1-4cf4-bb72-2654b3972747) | Room: Dissection Hall 1 | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0177c860-d525-44d6-b52a-94ec10955d5d) | Room: Physiology Lab B | Batch: 2de2b8ba-edbe-4976-966c-30ed6a4ba9dd | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-quiz-panel] faculty count: 4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=e47a4292-f7fe-4c41-b99a-4176e6ec9a39
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=386ea60c-c4a5-4176-ae20-c450456dd727
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=e47a4292-f7fe-4c41-b99a-4176e6ec9a39
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=386ea60c-c4a5-4176-ae20-c450456dd727
+Schema [tenant_srms-quiz-panel] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Lecture Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Physiology Lab A | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 386ea60c-c4a5-4176-ae20-c450456dd727) | Room: Dissection Hall 2 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 386ea60c-c4a5-4176-ae20-c450456dd727) | Room: Dissection Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Lecture Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Lecture Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 386ea60c-c4a5-4176-ae20-c450456dd727) | Room: Dissection Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Physiology Lab B | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Lecture Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Physiology Lab A | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 386ea60c-c4a5-4176-ae20-c450456dd727) | Room: Dissection Hall 2 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 386ea60c-c4a5-4176-ae20-c450456dd727) | Room: Dissection Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Lecture Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Lecture Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 386ea60c-c4a5-4176-ae20-c450456dd727) | Room: Dissection Hall 1 | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: e47a4292-f7fe-4c41-b99a-4176e6ec9a39) | Room: Physiology Lab B | Batch: bee2705c-6aff-4f21-9c25-a7de12e5370d | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-riddhima-bareilly] faculty count: 0
+Schema [tenant_srms-riddhima-bareilly] timetable slots count: 16
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 47fb4736-ebb6-40de-b26d-ffaea1ef37ea) | Room: Dissection Hall 2 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 47fb4736-ebb6-40de-b26d-ffaea1ef37ea) | Room: Dissection Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 47fb4736-ebb6-40de-b26d-ffaea1ef37ea) | Room: Dissection Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Lecture Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Physiology Lab A | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Lecture Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Lecture Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Physiology Lab B | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 47fb4736-ebb6-40de-b26d-ffaea1ef37ea) | Room: Dissection Hall 2 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 47fb4736-ebb6-40de-b26d-ffaea1ef37ea) | Room: Dissection Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 47fb4736-ebb6-40de-b26d-ffaea1ef37ea) | Room: Dissection Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Lecture Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Physiology Lab A | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Lecture Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Lecture Hall 1 | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: c33fb018-3a3b-4187-a4e1-8a8d9b73120d) | Room: Physiology Lab B | Batch: ebe9f825-7f33-43de-b6e3-0edbbb76a727 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_srms-trust-bareilly] faculty count: 0
+Schema [tenant_srms-trust-bareilly] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Lecture Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Physiology Lab A | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: ac2294d9-3046-41c4-8b56-893f69862159) | Room: Dissection Hall 2 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: ac2294d9-3046-41c4-8b56-893f69862159) | Room: Dissection Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Lecture Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Lecture Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: ac2294d9-3046-41c4-8b56-893f69862159) | Room: Dissection Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Physiology Lab B | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Lecture Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Physiology Lab A | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: ac2294d9-3046-41c4-8b56-893f69862159) | Room: Dissection Hall 2 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: ac2294d9-3046-41c4-8b56-893f69862159) | Room: Dissection Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Lecture Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Lecture Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: ac2294d9-3046-41c4-8b56-893f69862159) | Room: Dissection Hall 1 | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 0b93b70a-f9c1-494c-b550-69957013981e) | Room: Physiology Lab B | Batch: 165eb81e-0752-4581-9d28-707d9cd93a98 | Topic: Synaptic Transmission & Neurotransmitters
+
+Schema [tenant_unicamp-med] faculty count: 4
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=2fca5d6e-30b1-4b30-b93e-eb88f64a3d73
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=635b1aa8-6a3a-473e-948f-c4b57f49a1d1
+  Faculty: emp_id=EMP1001 | name=Dr. Sanjay Singh | id=2fca5d6e-30b1-4b30-b93e-eb88f64a3d73
+  Faculty: emp_id=EMP1002 | name=Dr. Aparna Tyagi | id=635b1aa8-6a3a-473e-948f-c4b57f49a1d1
+Schema [tenant_unicamp-med] timetable slots count: 16
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Lecture Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Physiology Lab A | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 635b1aa8-6a3a-473e-948f-c4b57f49a1d1) | Room: Dissection Hall 2 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 635b1aa8-6a3a-473e-948f-c4b57f49a1d1) | Room: Dissection Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Lecture Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Lecture Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 635b1aa8-6a3a-473e-948f-c4b57f49a1d1) | Room: Dissection Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Physiology Lab B | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Synaptic Transmission & Neurotransmitters
+  Slot: Day 1 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Lecture Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Excitation-Contraction Coupling in Muscle
+  Slot: Day 1 | 14:00:00-16:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Physiology Lab A | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Spirometry & Pulmonary Function Tests
+  Slot: Day 1 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 635b1aa8-6a3a-473e-948f-c4b57f49a1d1) | Room: Dissection Hall 2 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Upper Limb Osteology & Scapula Attachments
+  Slot: Day 2 | 09:00:00-10:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 635b1aa8-6a3a-473e-948f-c4b57f49a1d1) | Room: Dissection Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Brachial Plexus Anatomy & Nerve Lesions
+  Slot: Day 2 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Lecture Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Cardiac Action Potential & ECG Waves
+  Slot: Day 3 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Lecture Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Renal Clearance & Glomerular Filtration
+  Slot: Day 4 | 10:00:00-11:00:00 | Type: LECTURE | Subj: undefined | Fac: undefined (ID: 635b1aa8-6a3a-473e-948f-c4b57f49a1d1) | Room: Dissection Hall 1 | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Scapular Region & Shoulder Abduction
+  Slot: Day 5 | 10:00:00-12:00:00 | Type: PRACTICAL | Subj: undefined | Fac: undefined (ID: 2fca5d6e-30b1-4b30-b93e-eb88f64a3d73) | Room: Physiology Lab B | Batch: e6f7335e-4b6e-4521-825d-ba759fab2a1f | Topic: Synaptic Transmission & Neurotransmitters

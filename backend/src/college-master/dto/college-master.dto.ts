@@ -232,10 +232,30 @@ export class UpdateBranchDto extends PartialType(CreateBranchDto) {
 
 // ─── 5. ACADEMIC SESSIONS ───────────────────────────────────────────────────
 export class CreateSessionDto {
-  @ApiProperty({ example: '2024-2025 Academic Session' })
+  @ApiProperty({ example: '2024-2025' })
   @IsString()
   @MaxLength(100)
   name: string;
+
+  @ApiPropertyOptional({ example: '14' })
+  @IsOptional()
+  @IsString()
+  session_cd?: string;
+
+  @ApiPropertyOptional({ example: '14' })
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  colg_cd?: string;
+
+  @ApiPropertyOptional({ example: '2024-2025' })
+  @IsOptional()
+  @IsString()
+  session_name?: string;
 
   @ApiProperty({ example: '2024-07-01' })
   @IsDateString()

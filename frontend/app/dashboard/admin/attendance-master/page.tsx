@@ -15,12 +15,14 @@ interface Subject {
   code: string;
   name: string;
   department_id?: string;
+  subject_cd?: string;
 }
 
 interface Batch {
   id: string;
   code: string;
   year: number;
+  batch_cd?: string;
 }
 
 interface Group {
@@ -707,9 +709,12 @@ export default function AttendanceMasterPage() {
                       className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-indigo-500/60 focus:outline-none focus:border-indigo-400 text-white font-black"
                     >
                       <option value="" disabled>-- Select Subject --</option>
-                      {departmentSubjects.map((s) => (
-                        <option key={s.id} value={s.id}>[{s.code}] {s.name}</option>
-                      ))}
+                      {departmentSubjects.map((s) => {
+                        const sCode = s.subject_cd || s.code || s.id;
+                        return (
+                          <option key={s.id || sCode} value={sCode}>[{s.code || sCode}] {s.name}</option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -735,9 +740,12 @@ export default function AttendanceMasterPage() {
                       onChange={(e) => setSelectedBatchId(e.target.value)}
                       className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-white font-bold"
                     >
-                      {batches.map((b) => (
-                        <option key={b.id} value={b.id}>Batch {b.code} ({b.year})</option>
-                      ))}
+                      {batches.map((b) => {
+                        const bCode = b.batch_cd || b.code || String(b.year) || b.id;
+                        return (
+                          <option key={b.id || bCode} value={bCode}>Batch {b.code} ({b.year})</option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -1315,9 +1323,12 @@ export default function AttendanceMasterPage() {
                       onChange={(e) => setReportBatchId(e.target.value)}
                       className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-slate-700/80 text-white font-bold"
                     >
-                      {batches.map((b) => (
-                        <option key={b.id} value={b.id}>Batch {b.code} ({b.year})</option>
-                      ))}
+                      {batches.map((b) => {
+                        const bCode = b.batch_cd || b.code || String(b.year) || b.id;
+                        return (
+                          <option key={b.id || bCode} value={bCode}>Batch {b.code} ({b.year})</option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -1331,9 +1342,12 @@ export default function AttendanceMasterPage() {
                         className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-slate-700/80 text-white font-medium"
                       >
                         <option value="">All Subjects Combined</option>
-                        {allSubjects.map((s) => (
-                          <option key={s.id} value={s.id}>[{s.code}] {s.name}</option>
-                        ))}
+                        {allSubjects.map((s) => {
+                          const sCode = s.subject_cd || s.code || s.id;
+                          return (
+                            <option key={s.id || sCode} value={sCode}>[{s.code || sCode}] {s.name}</option>
+                          );
+                        })}
                       </select>
                     </div>
                   )}

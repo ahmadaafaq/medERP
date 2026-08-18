@@ -8,12 +8,14 @@ interface Batch {
   id: string;
   code: string;
   year: number;
+  batch_cd?: string;
 }
 
 interface Subject {
   id: string;
   code: string;
   name: string;
+  subject_cd?: string;
 }
 
 interface StudentReportRow {
@@ -353,9 +355,12 @@ export default function MISAttendanceReportsPage() {
                   onChange={(e) => setSelectedBatchId(e.target.value)}
                   className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
                 >
-                  {batches.map((b) => (
-                    <option key={b.id} value={b.id}>Batch {b.code} ({b.year})</option>
-                  ))}
+                  {batches.map((b) => {
+                    const bCode = b.batch_cd || b.code || String(b.year) || b.id;
+                    return (
+                      <option key={b.id || bCode} value={bCode}>Batch {b.code} ({b.year})</option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -369,9 +374,12 @@ export default function MISAttendanceReportsPage() {
                     className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="all" className="bg-slate-900 text-white font-bold">All Subjects Combined</option>
-                    {subjects.map((s) => (
-                      <option key={s.id} value={s.id} className="bg-slate-900 text-white font-bold">[{s.code}] {s.name}</option>
-                    ))}
+                    {subjects.map((s) => {
+                      const sCode = s.subject_cd || s.code || s.id;
+                      return (
+                        <option key={s.id || sCode} value={sCode} className="bg-slate-900 text-white font-bold">[{s.code || sCode}] {s.name}</option>
+                      );
+                    })}
                   </select>
                 </div>
               )}

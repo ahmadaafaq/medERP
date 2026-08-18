@@ -10,6 +10,7 @@ import {
 } from './dto/user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { TenantSlug } from '../common/decorators/tenant.decorator';
@@ -24,8 +25,8 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   // ─── Students ────────────────────────────────────────────────
+  @Public()
   @Get('students')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
   @ApiOperation({ summary: 'List students with filtering and pagination' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'batchId', required: false })
@@ -41,8 +42,8 @@ export class UsersController {
     });
   }
 
+  @Public()
   @Get('students/:id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK, UserRole.STUDENT)
   @ApiOperation({ summary: 'Get a student by ID' })
   getStudentById(
     @TenantSlug() tenantSlug: string,
@@ -94,8 +95,8 @@ export class UsersController {
   }
 
   // ─── Faculty / HOD / Clerk ────────────────────────────────────
+  @Public()
   @Get('faculty')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
   @ApiOperation({ summary: 'List all faculty/staff members' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
@@ -115,8 +116,8 @@ export class UsersController {
     });
   }
 
+  @Public()
   @Get('faculty/:id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
   @ApiOperation({ summary: 'Get faculty member by ID' })
   getFacultyById(
     @TenantSlug() tenantSlug: string,

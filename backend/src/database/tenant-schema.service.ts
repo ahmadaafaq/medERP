@@ -317,6 +317,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".academic_sessions (
           id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          code         VARCHAR(50),
+          session_cd   VARCHAR(50),
+          colg_cd      VARCHAR(50)  DEFAULT '1',
           name         VARCHAR(100) NOT NULL,
           start_date   DATE         NOT NULL,
           end_date     DATE         NOT NULL,
@@ -324,6 +327,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           is_active    BOOLEAN      DEFAULT true,
           created_at   TIMESTAMPTZ  DEFAULT NOW()
         );
+        ALTER TABLE "${schema}".academic_sessions ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+        ALTER TABLE "${schema}".academic_sessions ADD COLUMN IF NOT EXISTS session_cd VARCHAR(50);
+        ALTER TABLE "${schema}".academic_sessions ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50) DEFAULT '1';
       `);
 
       // ── Professional Linkers ──────────────────────────────────────────────
@@ -1254,13 +1260,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".academic_sessions (
         id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        code         VARCHAR(50),
+        session_cd   VARCHAR(50),
+        colg_cd      VARCHAR(50)  DEFAULT '1',
         name         VARCHAR(100) NOT NULL,
         start_date   DATE         NOT NULL,
         end_date     DATE         NOT NULL,
         is_current   BOOLEAN      DEFAULT false,
         is_active    BOOLEAN      DEFAULT true,
         created_at   TIMESTAMPTZ  DEFAULT NOW()
-      )
+      );
+      ALTER TABLE "${schema}".academic_sessions ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+      ALTER TABLE "${schema}".academic_sessions ADD COLUMN IF NOT EXISTS session_cd VARCHAR(50);
+      ALTER TABLE "${schema}".academic_sessions ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50) DEFAULT '1';
     `);
 
     // ── Professional Linkers ───────────────────────────────────────────────
@@ -1338,6 +1350,34 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         is_active        BOOLEAN     DEFAULT true,
         promoted_at      TIMESTAMPTZ DEFAULT NOW()
       )
+    `);
+
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".lessons (
+        id SERIAL PRIMARY KEY,
+        colg_cd VARCHAR(20) NOT NULL,
+        course_cd VARCHAR(20) NOT NULL,
+        branch_cd VARCHAR(20) NOT NULL,
+        batch_cd VARCHAR(20) NOT NULL,
+        sem_cd VARCHAR(20) NOT NULL,
+        subject_id VARCHAR(100),
+        unit_id VARCHAR(100),
+        topic_id VARCHAR(100),
+        subtopic_id VARCHAR(100),
+        empid VARCHAR(50) NOT NULL,
+        faculty_name VARCHAR(150),
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        file_name VARCHAR(255) NOT NULL,
+        file_type VARCHAR(100) NOT NULL,
+        file_size BIGINT NOT NULL,
+        file_path VARCHAR(500) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_lessons_academic ON "${schema}".lessons(colg_cd, course_cd, branch_cd, batch_cd, sem_cd);
+      CREATE INDEX IF NOT EXISTS idx_lessons_faculty ON "${schema}".lessons(empid);
     `);
 
     this.logger.log(`All tables created in schema: ${schema}`);

@@ -150,28 +150,40 @@ interface Course {
   id: string;
   code: string;
   name: string;
-  college_id: string;
+  college_id?: string;
+  course_cd?: string;
+  colg_cd?: string;
 }
 
 interface Batch {
   id: string;
   code: string;
   year: number;
-  course_cd: string;
-  college_id: string;
+  course_cd?: string;
+  course_code?: string;
+  college_id?: string;
+  colg_cd?: string;
+  batch_cd?: string;
 }
 
 interface AcademicSession {
   id: string;
   name: string;
-  college_id: string;
+  college_id?: string;
+  colg_cd?: string;
+  session_cd?: string;
+  code?: string;
+  session_name?: string;
 }
 
 interface Branch {
   id: string;
   code: string;
   name: string;
-  college_id: string;
+  college_id?: string;
+  colg_cd?: string;
+  branch_cd?: string;
+  course_cd?: string;
 }
 
 const API_BASE = 'http://localhost:3001/api/v1';
@@ -354,9 +366,22 @@ export default function StudentMasterPage() {
 
   // Form-level tenant-specific data (loaded when college is selected in form)
   const filteredCourses = allCourses;
-  const filteredBatches = allBatches;
   const filteredSessions = allSessions;
   const filteredBranches = allBranches;
+
+  // Dynamically filter batches in wizard form modal based on selected course
+  const filteredBatches = useMemo(() => {
+    if (!formData.courseId) return allBatches;
+    const filtered = allBatches.filter(b => b.course_cd === formData.courseId || b.course_code === formData.courseId);
+    return filtered.length > 0 ? filtered : allBatches;
+  }, [allBatches, formData.courseId]);
+
+  // Dynamically filter batches in filter console based on selectedCourse
+  const displayedFilterBatches = useMemo(() => {
+    if (selectedCourse === 'all') return filterBatches;
+    const filtered = filterBatches.filter(b => b.course_cd === selectedCourse || b.course_code === selectedCourse);
+    return filtered.length > 0 ? filtered : filterBatches;
+  }, [filterBatches, selectedCourse]);
 
   // Load all tenant master data for a given college slug
   const loadTenantData = async (slug: string) => {
@@ -367,19 +392,63 @@ export default function StudentMasterPage() {
       const [resCrs, resBat, resSess, resBr, resProf, resGrp] = await Promise.all([
         fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers }),
         fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers }),
-        fetch(`${API_BASE}/college-master/sessions?tenant=${slug}`, { headers }),
+        fetch(`/api/srms/sessions?tenant=${slug}`).catch(() => fetch(`${API_BASE}/college-master/sessions?tenant=${slug}`, { headers })),
         fetch(`${API_BASE}/college-master/branches?tenant=${slug}`, { headers }),
         fetch(`${API_BASE}/college-master/professionals?tenant=${slug}`, { headers }),
         fetch(`${API_BASE}/college-master/groups?tenant=${slug}`, { headers }),
       ]);
       const [crs, bats, sess, branches, profs, grps] = await Promise.all([
-        resCrs.json(), resBat.json(), resSess.json(), resBr.json(), resProf.json(), resGrp.json(),
+        resCrs.json().catch(() => ({ data: [] })),
+        resBat.json().catch(() => ({ data: [] })),
+        resSess.json().catch(() => ({ data: [] })),
+        resBr.json().catch(() => ({ data: [] })),
+        resProf.json().catch(() => ({ data: [] })),
+        resGrp.json().catch(() => ({ data: [] })),
       ]);
+
+      const crsList = Array.isArray(crs) ? crs : (crs.data || []);
+      const batsList = Array.isArray(bats) ? bats : (bats.data || []);
+      const sessList = Array.isArray(sess) ? sess : (sess.data || []);
+      const brList = Array.isArray(branches) ? branches : (branches.data || []);
+
+      const mappedCourses: Course[] = crsList.map((c: any) => ({
+        id: String(c.course_cd || c.code || c.id),
+        code: String(c.course_cd || c.code || c.id),
+        course_cd: String(c.course_cd || c.code || c.id),
+        name: c.name || c.course_name,
+        college_id: c.college_id || c.colg_cd,
+      }));
+
+      const mappedBatches: Batch[] = batsList.map((b: any) => ({
+        id: String(b.batch_cd || b.code || b.year || b.id),
+        code: String(b.batch_cd || b.code || b.year),
+        batch_cd: String(b.batch_cd || b.code || b.year),
+        year: Number(b.year) || Number(b.code) || 2025,
+        course_cd: b.course_cd || b.course_code,
+        college_id: b.college_id || b.colg_cd,
+      }));
+
+      const mappedSessions: AcademicSession[] = sessList.map((s: any) => ({
+        id: String(s.session_cd || s.code || s.name || s.id),
+        code: String(s.session_cd || s.code || s.name),
+        session_cd: String(s.session_cd || s.code || s.name),
+        name: s.session_name || s.name || s.code,
+        college_id: s.college_id || s.colg_cd,
+      }));
+
+      const mappedBranches: Branch[] = brList.map((b: any) => ({
+        id: String(b.branch_cd || b.code || b.id),
+        code: String(b.branch_cd || b.code || b.id),
+        branch_cd: String(b.branch_cd || b.code || b.id),
+        name: b.name || b.branch_name,
+        college_id: b.college_id || b.colg_cd,
+      }));
+
       return {
-        courses: crs.data || [],
-        batches: bats.data || [],
-        sessions: sess.data || [],
-        branches: branches.data || [],
+        courses: mappedCourses,
+        batches: mappedBatches,
+        sessions: mappedSessions,
+        branches: mappedBranches,
         professionals: profs.data || [],
         groups: grps.data || [],
       };
@@ -393,12 +462,13 @@ export default function StudentMasterPage() {
 
   // When college selection changes in form, fetch that college's data
   const handleCollegeChange = async (cId: string) => {
-    const college = colleges.find((c) => c.id === cId);
+    const college = colleges.find((c) => c.code === cId || c.colg_cd === cId || c.slug === cId || c.id === cId);
+    const colCode = college?.code || college?.colg_cd || cId;
     const colName = college?.name || '';
     const colSlug = college?.slug || '';
     setFormData((prev) => ({
       ...prev,
-      collegeId: cId,
+      collegeId: colCode,
       collegeName: colName,
       courseId: '',
       courseCode: '',
@@ -447,7 +517,7 @@ export default function StudentMasterPage() {
       });
       return;
     }
-    const college = colleges.find((c) => c.id === cId || c.slug === cId);
+    const college = colleges.find((c) => c.code === cId || c.colg_cd === cId || c.slug === cId || c.id === cId);
     if (college?.slug) {
       const data = await loadTenantData(college.slug);
       setFilterCourses(data.courses || []);
@@ -464,7 +534,7 @@ export default function StudentMasterPage() {
       }
       fetchStudents({
         overrideTenant: college.slug,
-        collegeId: cId,
+        collegeId: college.code || college.colg_cd || cId,
         courseId: 'all',
         batchId: 'all',
         branchId: 'all',
@@ -476,23 +546,87 @@ export default function StudentMasterPage() {
     }
   };
 
-  // When course selection changes
-  const handleCourseChange = (crsId: string) => {
-    const crs = allCourses.find((c) => c.id === crsId);
+  // When course selection changes in filter console
+  const handleFilterCourseChange = async (crsVal: string) => {
+    setSelectedCourse(crsVal);
+    setSelectedBatch('all');
+
+    if (crsVal !== 'all') {
+      try {
+        const activeCol = colleges.find(c => c.code === selectedCollege || c.colg_cd === selectedCollege || c.slug === selectedCollege || c.id === selectedCollege);
+        const colCd = activeCol?.code || activeCol?.colg_cd || '1';
+        const tenantSlug = activeCol?.slug || 'srms-cet-bareilly';
+        const res = await fetch(`/api/srms/batches?colgcd=${colCd}&coursecd=${crsVal}&tenant=${tenantSlug}`);
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped: Batch[] = list.map((b: any) => ({
+            id: String(b.batch_cd || b.code || b.batch_name || b.id),
+            code: String(b.batch_cd || b.code || b.batch_name),
+            batch_cd: String(b.batch_cd || b.code || b.batch_name),
+            year: Number(b.batch_name) || Number(b.year) || 2025,
+            course_cd: String(b.course_cd || crsVal),
+            colg_cd: String(b.colg_cd || colCd),
+          }));
+          setFilterBatches(prev => {
+            const other = prev.filter(b => b.course_cd !== crsVal);
+            return [...mapped, ...other];
+          });
+        }
+      } catch (err) {
+        console.warn('Live GetBatch fetch error in filter:', err);
+      }
+    }
+
+    fetchStudents({ courseId: crsVal, batchId: 'all' });
+  };
+
+  // When course selection changes in modal form
+  const handleCourseChange = async (crsId: string) => {
+    const crs = allCourses.find((c) => c.course_cd === crsId || c.code === crsId || c.id === crsId);
+    const crsCode = crs ? (crs.course_cd || crs.code) : crsId;
     setFormData((prev) => ({
       ...prev,
-      courseId: crsId,
-      courseCode: crs ? crs.code : '',
+      courseId: crsCode,
+      courseCode: crsCode,
+      batchId: '',
+      batchCode: '',
     }));
+
+    if (crsCode) {
+      try {
+        const colCd = formData.collegeId || '1';
+        const formCollege = colleges.find((c) => c.code === colCd || c.colg_cd === colCd || c.id === colCd);
+        const tenantSlug = formCollege?.slug || 'srms-cet-bareilly';
+        const res = await fetch(`/api/srms/batches?colgcd=${colCd}&coursecd=${crsCode}&tenant=${tenantSlug}`);
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped: Batch[] = list.map((b: any) => ({
+            id: String(b.batch_cd || b.code || b.batch_name || b.id),
+            code: String(b.batch_cd || b.code || b.batch_name),
+            batch_cd: String(b.batch_cd || b.code || b.batch_name),
+            year: Number(b.batch_name) || Number(b.year) || 2025,
+            course_cd: String(b.course_cd || crsCode),
+            colg_cd: String(b.colg_cd || colCd),
+          }));
+          setAllBatches(prev => {
+            const other = prev.filter(b => b.course_cd !== crsCode);
+            return [...mapped, ...other];
+          });
+        }
+      } catch (err) {
+        console.warn('Live GetBatch form fetch error:', err);
+      }
+    }
   };
 
   // When session selection changes, generate auto-reg number
   const handleSessionChange = async (sessId: string) => {
-    const sess = allSessions.find((s) => s.id === sessId);
-    const sessName = sess ? sess.name : '';
+    const sess = allSessions.find((s) => s.session_cd === sessId || s.code === sessId || s.name === sessId || s.id === sessId);
+    const sessCode = sess ? (sess.session_cd || sess.code || sess.name) : sessId;
+    const sessName = sess ? sess.name : sessId;
     setFormData((prev) => ({
       ...prev,
-      sessionId: sessId,
+      sessionId: sessCode,
       academicSession: sessName,
     }));
 
@@ -501,7 +635,7 @@ export default function StudentMasterPage() {
       const year = match ? match[0] : new Date().getFullYear().toString();
       try {
         // Use the selected college's slug for registration number generation
-        const formCollege = colleges.find((c) => c.id === formData.collegeId);
+        const formCollege = colleges.find((c) => c.code === formData.collegeId || c.id === formData.collegeId);
         const tenantSlug = formCollege?.slug || colleges[0]?.slug || 'srms-ims';
         const res = await fetch(`${API_BASE}/student-master/next-registration-no?tenant=${tenantSlug}&sessionYear=${year}`, {
           headers: {
@@ -527,11 +661,12 @@ export default function StudentMasterPage() {
   };
 
   const handleBatchChange = (bId: string) => {
-    const bat = allBatches.find((b) => b.id === bId);
+    const bat = allBatches.find((b) => b.batch_cd === bId || b.code === bId || String(b.year) === bId || b.id === bId);
+    const batchCode = bat ? (bat.batch_cd || bat.code || String(bat.year)) : bId;
     setFormData((prev) => ({
       ...prev,
-      batchId: bId,
-      batchCode: bat ? bat.code : '',
+      batchId: batchCode,
+      batchCode: batchCode,
     }));
   };
 
@@ -543,7 +678,14 @@ export default function StudentMasterPage() {
       // 1. Fetch all colleges (tenants) from public schema
       const resCol = await fetch(`${API_BASE}/college-master/colleges`, { headers });
       const cols = await resCol.json();
-      const collegeList: College[] = cols.data || [];
+      const rawCols = cols.data || [];
+      const collegeList: College[] = rawCols.map((c: any) => ({
+        id: String(c.code || c.colg_cd || c.slug || c.id),
+        code: String(c.code || c.colg_cd || c.id),
+        colg_cd: String(c.colg_cd || c.code || c.id),
+        name: c.name,
+        slug: c.slug || c.id,
+      }));
       setColleges(collegeList);
 
       // 2. Auto-load data from active college (from localStorage or default srms-cet-bareilly)
@@ -557,7 +699,7 @@ export default function StudentMasterPage() {
           String(c.code) === '1'
         ) || collegeList[0];
 
-        setSelectedCollege(defaultCollege.id || defaultCollege.slug || 'all');
+        setSelectedCollege(defaultCollege.code || defaultCollege.colg_cd || defaultCollege.slug || 'all');
 
         const data = await loadTenantData(defaultCollege.slug);
         setAllCourses(data.courses || []);
@@ -583,7 +725,7 @@ export default function StudentMasterPage() {
         // Fetch students for the active college
         fetchStudents({
           overrideTenant: defaultCollege.slug,
-          collegeId: defaultCollege.id || defaultCollege.slug,
+          collegeId: defaultCollege.code || defaultCollege.colg_cd || defaultCollege.slug,
           courseId: 'all',
           batchId: 'all',
           branchId: 'all',
@@ -605,7 +747,7 @@ export default function StudentMasterPage() {
   const getActiveTenantSlug = () => {
     const savedSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null;
     const activeCollege = selectedCollege !== 'all'
-      ? colleges.find((c) => c.id === selectedCollege || c.slug === selectedCollege)
+      ? colleges.find((c) => c.code === selectedCollege || c.colg_cd === selectedCollege || c.id === selectedCollege || c.slug === selectedCollege)
       : colleges.find((c) => c.slug === savedSlug || c.slug === 'srms-cet-bareilly') || colleges[0];
     return activeCollege?.slug || savedSlug || 'srms-cet-bareilly';
   };
@@ -627,7 +769,7 @@ export default function StudentMasterPage() {
     try {
       const token = localStorage.getItem('token') || '';
       const cId = overrides?.collegeId !== undefined ? overrides.collegeId : selectedCollege;
-      const targetCollege = cId !== 'all' ? colleges.find(c => c.id === cId || c.slug === cId) : colleges[0];
+      const targetCollege = cId !== 'all' ? colleges.find(c => c.code === cId || c.colg_cd === cId || c.id === cId || c.slug === cId) : colleges[0];
       const tenantSlug = overrides?.overrideTenant || targetCollege?.slug || getActiveTenantSlug();
 
       const crsId = overrides?.courseId !== undefined ? overrides.courseId : selectedCourse;
@@ -642,20 +784,26 @@ export default function StudentMasterPage() {
 
       let url = `${API_BASE}/student-master?tenant=${tenantSlug}`;
       if (qSearch) url += `&search=${encodeURIComponent(qSearch)}`;
-      if (cId !== 'all') url += `&collegeId=${encodeURIComponent(cId)}`;
+      if (cId !== 'all') {
+        const colgCode = targetCollege?.code || targetCollege?.colg_cd || cId;
+        url += `&collegeId=${encodeURIComponent(colgCode)}`;
+      }
       if (crsId !== 'all') {
-        const crsObj = filterCourses.find(c => c.id === crsId);
-        url += `&courseId=${encodeURIComponent(crsObj?.code || crsId)}`;
+        const crsObj = filterCourses.find(c => c.course_cd === crsId || c.code === crsId || c.id === crsId);
+        url += `&courseId=${encodeURIComponent(crsObj?.course_cd || crsObj?.code || crsId)}`;
       }
       if (batId !== 'all') {
-        const batObj = filterBatches.find(b => b.id === batId);
-        url += `&batchId=${encodeURIComponent(batObj?.code || batId)}`;
+        const batObj = filterBatches.find(b => b.batch_cd === batId || b.code === batId || String(b.year) === batId || b.id === batId);
+        url += `&batchId=${encodeURIComponent(batObj?.batch_cd || batObj?.code || batId)}`;
       }
       if (brId !== 'all') {
-        const brObj = filterBranches.find(b => b.id === brId);
-        url += `&branchId=${encodeURIComponent(brObj?.code || brId)}`;
+        const brObj = filterBranches.find(b => b.branch_cd === brId || b.code === brId || b.id === brId);
+        url += `&branchId=${encodeURIComponent(brObj?.branch_cd || brObj?.code || brId)}`;
       }
-      if (sessId !== 'all') url += `&sessionId=${encodeURIComponent(sessId)}`;
+      if (sessId !== 'all') {
+        const sessObj = filterSessions.find(s => s.session_cd === sessId || s.code === sessId || s.name === sessId || s.id === sessId);
+        url += `&sessionId=${encodeURIComponent(sessObj?.session_cd || sessObj?.code || sessId)}`;
+      }
       if (resType !== 'all') url += `&residencyType=${encodeURIComponent(resType)}`;
       if (grpId !== 'all') url += `&groupId=${encodeURIComponent(grpId)}`;
       if (profFilter !== 'all') url += `&professionalPhase=${encodeURIComponent(profFilter)}`;
@@ -1083,16 +1231,27 @@ export default function StudentMasterPage() {
 
               {/* 2. College */}
               <div>
-                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">College</label>
+                <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>College</span>
+                  {(typeof window !== 'undefined' && localStorage.getItem('role') !== 'SUPER_ADMIN') && (
+                    <span className="text-[9px] text-[#5B4BFF] font-black uppercase tracking-widest">Locked</span>
+                  )}
+                </label>
                 <select
                   value={selectedCollege}
                   onChange={(e) => handleFilterCollegeChange(e.target.value)}
-                  className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px] font-bold"
+                  disabled={typeof window !== 'undefined' && localStorage.getItem('role') !== 'SUPER_ADMIN'}
+                  className="premium-input w-full disabled:opacity-75 disabled:cursor-not-allowed !h-8 !py-1 !px-2.5 !text-[11px] font-bold"
                 >
-                  <option value="all">All Colleges</option>
-                  {colleges.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
+                  {(typeof window !== 'undefined' && localStorage.getItem('role') === 'SUPER_ADMIN') && (
+                    <option value="all">All Colleges</option>
+                  )}
+                  {colleges.map((c) => {
+                    const val = c.code || c.colg_cd || c.slug || c.id;
+                    return (
+                      <option key={c.id || val} value={val}>[#{c.code || c.colg_cd || '1'}] {c.name}</option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -1101,18 +1260,17 @@ export default function StudentMasterPage() {
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Course</label>
                 <select
                   value={selectedCourse}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedCourse(val);
-                    fetchStudents({ courseId: val });
-                  }}
+                  onChange={(e) => handleFilterCourseChange(e.target.value)}
                   disabled={selectedCollege === 'all'}
                   className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px] font-bold"
                 >
                   <option value="all">All Courses ({filterCourses.length})</option>
-                  {filterCourses.map((c) => (
-                    <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
-                  ))}
+                  {filterCourses.map((c) => {
+                    const val = c.course_cd || c.code;
+                    return (
+                      <option key={c.id || val} value={val}>[#{val}] {c.name}</option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -1130,9 +1288,12 @@ export default function StudentMasterPage() {
                   className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px]"
                 >
                   <option value="all">All Branches ({filterBranches.length})</option>
-                  {filterBranches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                  ))}
+                  {filterBranches.map((b) => {
+                    const val = b.branch_cd || b.code;
+                    return (
+                      <option key={b.id || val} value={val}>[#{val}] {b.name}</option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -1149,10 +1310,13 @@ export default function StudentMasterPage() {
                   disabled={selectedCollege === 'all'}
                   className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px] font-bold"
                 >
-                  <option value="all">All Batches ({filterBatches.length})</option>
-                  {filterBatches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.code} ({b.year})</option>
-                  ))}
+                  <option value="all">All Batches ({displayedFilterBatches.length})</option>
+                  {displayedFilterBatches.map((b) => {
+                    const val = b.batch_cd || b.code || String(b.year);
+                    return (
+                      <option key={b.id || val} value={val}>[#{val}] {b.code} ({b.year})</option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -1160,6 +1324,7 @@ export default function StudentMasterPage() {
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5">Session</label>
                 <select
+                  id="ddl_session"
                   value={selectedSession}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -1170,9 +1335,12 @@ export default function StudentMasterPage() {
                   className="premium-input w-full disabled:opacity-50 !h-8 !py-1 !px-2.5 !text-[11px]"
                 >
                   <option value="all">All Sessions</option>
-                  {filterSessions.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
+                  {filterSessions.map((s) => {
+                    const val = s.session_cd || s.code || s.name;
+                    return (
+                      <option key={s.id || val} value={val}>[#{val}] {s.name || s.session_name}</option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -1833,9 +2001,12 @@ export default function StudentMasterPage() {
                           className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors disabled:opacity-50"
                         >
                           <option value="">{metadataLoading ? 'Loading sessions...' : 'Select Academic Session'}</option>
-                          {filteredSessions.map((s) => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
+                          {filteredSessions.map((s) => {
+                            const val = s.session_cd || s.code || s.name;
+                            return (
+                              <option key={s.id || val} value={val}>[#{val}] {s.name || s.session_name}</option>
+                            );
+                          })}
                         </select>
                       </div>
 
@@ -1844,13 +2015,16 @@ export default function StudentMasterPage() {
                         <select
                           value={formData.batchId}
                           onChange={(e) => handleBatchChange(e.target.value)}
-                          disabled={!formData.collegeId || metadataLoading}
+                          disabled={!formData.courseId || metadataLoading}
                           className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors disabled:opacity-50"
                         >
-                          <option value="">{metadataLoading ? 'Loading batches...' : 'Select Batch'}</option>
-                          {filteredBatches.map((b) => (
-                            <option key={b.id} value={b.id}>{b.code} ({b.year})</option>
-                          ))}
+                          <option value="">{metadataLoading ? 'Loading batches...' : (!formData.courseId ? 'Select Course First' : 'Select Batch')}</option>
+                          {filteredBatches.map((b) => {
+                            const val = b.batch_cd || b.code || String(b.year);
+                            return (
+                              <option key={b.id || val} value={val}>[#{val}] {b.code} ({b.year})</option>
+                            );
+                          })}
                         </select>
                       </div>
 
@@ -1863,9 +2037,12 @@ export default function StudentMasterPage() {
                           className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors disabled:opacity-50"
                         >
                           <option value="">{metadataLoading ? 'Loading branches...' : 'Select Branch (Optional)'}</option>
-                          {filteredBranches.map((b) => (
-                            <option key={b.id} value={b.id}>{b.code} — {b.name}</option>
-                          ))}
+                          {filteredBranches.map((b) => {
+                            const val = b.branch_cd || b.code;
+                            return (
+                              <option key={b.id || val} value={val}>[#{val}] {b.name}</option>
+                            );
+                          })}
                         </select>
                       </div>
 

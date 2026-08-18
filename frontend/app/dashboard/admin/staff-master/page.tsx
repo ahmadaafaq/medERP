@@ -138,17 +138,39 @@ export default function StaffMasterPage() {
     setTimeout(() => setAlert(null), 4500);
   };
 
-  // 1. Initial Metadata Fetch (Colleges, All Depts, All Subjects)
+  // User Auth & Tenant Context State
+  const [userRole, setUserRole] = useState<string>('ADMIN');
+  const [userColgCd, setUserColgCd] = useState<string>('1');
+  const [userTenantSlug, setUserTenantSlug] = useState<string>('srms-cet-bareilly');
+
+  // 1. Initial Metadata Fetch (Colleges, Depts, Subjects scoped by tenant)
   const fetchMetadata = async () => {
     setMetadataLoading(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
 
+      let role = 'ADMIN';
+      let userColg = '1';
+      let userSlug = 'srms-cet-bareilly';
+      if (typeof window !== 'undefined') {
+        role = (localStorage.getItem('role') || 'ADMIN').toUpperCase();
+        userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+        userSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+        setUserRole(role);
+        setUserColgCd(userColg);
+        setUserTenantSlug(userSlug);
+        if (role !== 'SUPER_ADMIN') {
+          setSelectedCollegeFilter(userColg);
+        }
+      }
+
+      const activeTenantSlug = role === 'SUPER_ADMIN' ? 'all' : userSlug;
+
       const [colRes, deptRes, subRes] = await Promise.all([
         fetch(`${API_BASE}/college-master/colleges`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/departments?tenant=all`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=all`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/departments?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
       ]);
 
       let loadedColleges: College[] = [];
@@ -159,8 +181,13 @@ export default function StaffMasterPage() {
         const colJson = await colRes.json();
         const colList = colJson.data || colJson;
         if (Array.isArray(colList)) {
-          loadedColleges = colList;
-          setColleges(colList);
+          if (role !== 'SUPER_ADMIN') {
+            const myCol = colList.find((c: any) => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
+            loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SRMS CET, Bareilly', slug: userSlug }];
+          } else {
+            loadedColleges = colList;
+          }
+          setColleges(loadedColleges);
         }
       }
 
@@ -215,8 +242,14 @@ export default function StaffMasterPage() {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const targetCollege = colleges.find(c => String(c.code) === String(colFilter) || String(c.id) === String(colFilter) || c.slug === colFilter);
-      const querySlug = colFilter === 'all' ? 'all' : (targetCollege?.slug || colFilter || 'srms-cet-bareilly');
+      const role = typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN').toUpperCase() : 'ADMIN';
+      const userSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+
+      let querySlug = userSlug;
+      if (role === 'SUPER_ADMIN') {
+        const targetCollege = colleges.find(c => String(c.code) === String(colFilter) || String(c.id) === String(colFilter) || c.slug === colFilter);
+        querySlug = colFilter === 'all' ? 'all' : (targetCollege?.slug || colFilter || 'srms-cet-bareilly');
+      }
 
       const res = await fetch(`${API_BASE}/users/faculty?tenant=${querySlug}&limit=500`, { headers });
       if (res.ok) {
@@ -690,19 +723,25 @@ export default function StaffMasterPage() {
             <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
 
               {/* 1. College Selector */}
-              <div className="relative">
+              <div className="relative flex items-center gap-1.5">
                 <select
                   value={selectedCollegeFilter}
+                  disabled={userRole !== 'SUPER_ADMIN'}
                   onChange={(e) => { setSelectedCollegeFilter(e.target.value); setSelectedDeptFilter('all'); setCurrentPage(1); }}
-                  className="px-3.5 py-2.5 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white shadow-sm"
+                  className="px-3.5 py-2.5 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white shadow-sm disabled:cursor-not-allowed"
                 >
-                  <option value="all">🏛️ All Colleges ({colleges.length})</option>
+                  {userRole === 'SUPER_ADMIN' && <option value="all">🏛️ All Colleges ({colleges.length})</option>}
                   {colleges.map((col) => (
                     <option key={col.id} value={col.code || col.id}>
                       🏛️ [#{col.code || col.id}] {col.name}
                     </option>
                   ))}
                 </select>
+                {userRole !== 'SUPER_ADMIN' && (
+                  <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shrink-0">
+                    🔒 Locked
+                  </span>
+                )}
               </div>
 
               {/* 2. Department Selector (College Filtered) */}

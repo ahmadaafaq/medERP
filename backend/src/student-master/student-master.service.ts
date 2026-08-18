@@ -50,17 +50,23 @@ export class StudentMasterService {
       groupId?: string;
       linkedOnly?: string;
     },
+    user?: any,
   ) {
-    const rawSlug = query.collegeId && query.collegeId !== 'all' ? query.collegeId : tenantSlug;
-    const resolvedSlug = await this.resolveTenantSlug(rawSlug);
-
     const colleges = await this.dataSource.query(
       `SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`
     ).catch(() => []);
 
-    const targetSlugs = resolvedSlug === 'all'
-      ? colleges.map((c: any) => c.slug).filter(Boolean)
-      : [colleges.find((c: any) => c.slug === resolvedSlug || c.id === resolvedSlug || c.code === resolvedSlug)?.slug || resolvedSlug];
+    let targetSlugs: string[] = [];
+    if (user && user.role && user.role !== 'SUPER_ADMIN' && user.tenantSlug) {
+      targetSlugs = [user.tenantSlug];
+    } else {
+      const rawSlug = query.collegeId && query.collegeId !== 'all' ? query.collegeId : tenantSlug;
+      const resolvedSlug = await this.resolveTenantSlug(rawSlug);
+
+      targetSlugs = resolvedSlug === 'all'
+        ? colleges.map((c: any) => c.slug).filter(Boolean)
+        : [colleges.find((c: any) => c.slug === resolvedSlug || c.id === resolvedSlug || c.code === resolvedSlug)?.slug || resolvedSlug];
+    }
 
     const allResults: any[] = [];
 

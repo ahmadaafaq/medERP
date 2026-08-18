@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
+import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
+import AttendanceWidget from '../../../components/AttendanceWidget';
 
 interface CollegeKPIs {
   totalStudents: number;
@@ -333,6 +335,11 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </Link>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AttendanceWidget role="ADMIN" />
+            <RecentLessonsWidget role="ADMIN" />
           </div>
 
           {/* 5 & 6. Mid Section: Marks Results & Department Timetable Schedule */}

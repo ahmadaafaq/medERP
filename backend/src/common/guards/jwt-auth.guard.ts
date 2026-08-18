@@ -14,17 +14,37 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   canActivate(context: ExecutionContext) {
-    // Check if route is marked @Public()
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (isPublic) return true;
+
+    if (isPublic) {
+      const request = context.switchToHttp().getRequest();
+      const authHeader = request.headers?.authorization;
+      if (!authHeader) {
+        return true;
+      }
+      try {
+        return super.canActivate(context);
+      } catch {
+        return true;
+      }
+    }
 
     return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any, info: any) {
+  handleRequest(err: any, user: any, info: any, context: ExecutionContext) {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return user || null;
+    }
+
     if (err || !user) {
       throw err || new UnauthorizedException('Invalid or expired token');
     }

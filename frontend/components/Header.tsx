@@ -25,6 +25,9 @@ interface UserProfileData {
   gender?: string;
   staffType?: string;
   tenantSlug?: string;
+  tenantName?: string;
+  collegeName?: string;
+  colgCd?: string;
   created_at?: string;
 }
 
@@ -168,6 +171,9 @@ export default function Header({ title }: HeaderProps) {
       gender,
       staffType,
       tenantSlug,
+      tenantName: data.tenantName || p.tenantName || data.collegeName || p.collegeName || '',
+      collegeName: data.collegeName || p.collegeName || data.tenantName || p.tenantName || '',
+      colgCd: data.colgCd || p.colgCd || data.colg_cd || p.colg_cd || '',
       created_at: data.created_at || p.created_at || '',
     };
   };
@@ -324,6 +330,10 @@ export default function Header({ title }: HeaderProps) {
         ? `ID: ${user.id.slice(0, 8)}...`
         : 'ID: Active';
 
+  const collegeDisplayName = (userRole === 'SUPER_ADMIN')
+    ? 'UniCampus Central University Administration'
+    : (user?.collegeName || user?.tenantName || (mounted ? (getStorageItem('collegeName') || getStorageItem('tenantName')) : '') || 'SRMS College of Engineering & Technology, Bareilly');
+
   return (
     <>
       <header className="h-20 bg-[#2D2575] text-white px-6 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xl shadow-purple-950/20 rounded-b-[22px] border-b border-white/10">
@@ -333,7 +343,9 @@ export default function Header({ title }: HeaderProps) {
             <h2 className="text-sm font-black text-white tracking-wider uppercase font-sans">
               {title}
             </h2>
-            <p className="text-[10px] text-purple-200/80 font-medium">Engineering College Management System</p>
+            <p className="text-[10px] text-purple-200/90 font-bold truncate max-w-[420px]" title={collegeDisplayName}>
+              {collegeDisplayName}
+            </p>
           </div>
         </div>
 

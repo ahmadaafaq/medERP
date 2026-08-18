@@ -3,6 +3,8 @@
 import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
 import AttendanceMarkerGrid from '../../../components/AttendanceMarkerGrid';
+import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
+import AttendanceWidget from '../../../components/AttendanceWidget';
 
 export default function FacultyDashboard() {
   return (
@@ -27,6 +29,11 @@ export default function FacultyDashboard() {
               <p className="text-2xl font-black text-[#00C48C]">18 Days Available</p>
               <span className="text-xs text-[#4E5969] dark:text-slate-400 font-medium">Casual / Earned Leave</span>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AttendanceWidget role="FACULTY" />
+            <RecentLessonsWidget role="FACULTY" />
           </div>
 
           <AttendanceMarkerGrid />

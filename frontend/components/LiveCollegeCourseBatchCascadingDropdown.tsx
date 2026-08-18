@@ -67,6 +67,18 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
   onBatchSelect,
   onSelectionChange,
 }: LiveCollegeCourseBatchCascadingDropdownProps) {
+  const onCollegeSelectRef = React.useRef(onCollegeSelect);
+  useEffect(() => { onCollegeSelectRef.current = onCollegeSelect; }, [onCollegeSelect]);
+
+  const onCourseSelectRef = React.useRef(onCourseSelect);
+  useEffect(() => { onCourseSelectRef.current = onCourseSelect; }, [onCourseSelect]);
+
+  const onBatchSelectRef = React.useRef(onBatchSelect);
+  useEffect(() => { onBatchSelectRef.current = onBatchSelect; }, [onBatchSelect]);
+
+  const onSelectionChangeRef = React.useRef(onSelectionChange);
+  useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
+
   // ─── STATE ─────────────────────────────────────────────────────────────────
   const [colleges, setColleges] = useState<LiveCollegeItem[]>([]);
   const [courses, setCourses] = useState<LiveCourseItem[]>([]);
@@ -88,44 +100,64 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const [batchesError, setBatchesError] = useState<string | null>(null);
 
-  // ─── STEP 1: FETCH COLLEGES ON MOUNT ───────────────────────────────────────
-  const fetchColleges = useCallback(async () => {
-    setCollegesLoading(true);
-    setCollegesError(null);
+  // ─── STEP 3: FETCH BATCHES (DEPENDS ON COLLEGE + COURSE) ───────────────────
+  const fetchBatchesForCourse = useCallback(async (colgCd: string, courseCd: string) => {
+    if (!colgCd || !courseCd) {
+      setBatches([]);
+      setSelectedBatchCd('');
+      setSelectedBatch(null);
+      if (onBatchSelectRef.current) onBatchSelectRef.current(null);
+      return;
+    }
+
+    setBatchesLoading(true);
+    setBatchesError(null);
+    setBatches([]);
+    setSelectedBatchCd('');
+    setSelectedBatch(null);
+    if (onBatchSelectRef.current) onBatchSelectRef.current(null);
+
     try {
       // 1. Next.js server proxy route
-      let res = await fetch('/api/srms/colleges', {
+      let res = await fetch('/api/srms/batches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ colgcd: colgCd, coursecd: courseCd }),
       }).catch(() => null);
 
-      // Fallback 1: Backend live endpoint
+      // Fallback 1: Backend live proxy
       if (!res || !res.ok) {
-        res = await fetch('http://localhost:3001/api/v1/college-master/live/colleges', {
+        res = await fetch(`http://localhost:3001/api/v1/college-master/live/batches?colgcd=${colgCd}&coursecd=${courseCd}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
       }
 
       if (!res || !res.ok) {
-        throw new Error(`Failed to load live colleges`);
+        throw new Error(`Failed to load live batches`);
       }
 
       const data = await res.json();
-      const list: LiveCollegeItem[] = Array.isArray(data) ? data : data.data || [];
-      setColleges(list);
+      const rawList: LiveBatchItem[] = Array.isArray(data) ? data : data.data || [];
+
+      // Filter: only show active batches where active_flg == "1"
+      const activeBatches = rawList.filter((b) => String(b.active_flg) === '1');
+
+      // Sort batches descending by batch_name (year)
+      const sortedBatches = activeBatches.sort((a, b) => {
+        const aYear = parseInt(a.batch_name, 10) || 0;
+        const bYear = parseInt(b.batch_name, 10) || 0;
+        return bYear - aYear;
+      });
+
+      setBatches(sortedBatches);
     } catch (err: any) {
-      console.error('[LiveBatchCascade] Fetch Colleges Error:', err);
-      setCollegesError(err.message || 'Unable to load institutions from SRMS live API');
+      console.error('[LiveBatchCascade] Fetch Batches Error:', err);
+      setBatchesError(err.message || 'No active batches found for this course');
     } finally {
-      setCollegesLoading(false);
+      setBatchesLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    fetchColleges();
-  }, [fetchColleges]);
 
   // ─── STEP 2: FETCH COURSES (DEPENDS ON COLLEGE) ────────────────────────────
   const fetchCoursesForCollege = useCallback(async (colgCd: string) => {
@@ -136,8 +168,8 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
       setBatches([]);
       setSelectedBatchCd('');
       setSelectedBatch(null);
-      if (onCourseSelect) onCourseSelect(null);
-      if (onBatchSelect) onBatchSelect(null);
+      if (onCourseSelectRef.current) onCourseSelectRef.current(null);
+      if (onBatchSelectRef.current) onBatchSelectRef.current(null);
       return;
     }
 
@@ -149,8 +181,8 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
     setBatches([]);
     setSelectedBatchCd('');
     setSelectedBatch(null);
-    if (onCourseSelect) onCourseSelect(null);
-    if (onBatchSelect) onBatchSelect(null);
+    if (onCourseSelectRef.current) onCourseSelectRef.current(null);
+    if (onBatchSelectRef.current) onBatchSelectRef.current(null);
 
     try {
       // 1. Next.js server proxy route
@@ -187,62 +219,7 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
     } finally {
       setCoursesLoading(false);
     }
-  }, [onCourseSelect, onBatchSelect]);
-
-  // ─── STEP 3: FETCH BATCHES (DEPENDS ON COLLEGE + COURSE) ───────────────────
-  const fetchBatchesForCourse = useCallback(async (colgCd: string, courseCd: string) => {
-    if (!colgCd || !courseCd) {
-      setBatches([]);
-      setSelectedBatchCd('');
-      setSelectedBatch(null);
-      if (onBatchSelect) onBatchSelect(null);
-      return;
-    }
-
-    setBatchesLoading(true);
-    setBatchesError(null);
-    setBatches([]);
-    setSelectedBatchCd('');
-    setSelectedBatch(null);
-    if (onBatchSelect) onBatchSelect(null);
-
-    try {
-      // 1. Next.js server proxy route
-      let res = await fetch('/api/srms/batches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colgcd: colgCd, coursecd: courseCd }),
-      }).catch(() => null);
-
-      // Fallback 1: Backend live proxy
-      if (!res || !res.ok) {
-        res = await fetch(`http://localhost:3001/api/v1/college-master/live/batches?colgcd=${colgCd}&coursecd=${courseCd}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        }).catch(() => null);
-      }
-
-      if (!res || !res.ok) {
-        throw new Error(`Failed to load live batches`);
-      }
-
-      const data = await res.json();
-      const rawList: LiveBatchItem[] = Array.isArray(data) ? data : data.data || [];
-
-      // Filter: only show active batches where active_flg == "1"
-      const activeBatches = rawList.filter((b) => String(b.active_flg) === '1');
-
-      // Sort batches descending by batch_name (year)
-      activeBatches.sort((a, b) => (Number(b.batch_name) || 0) - (Number(a.batch_name) || 0));
-
-      setBatches(activeBatches);
-    } catch (err: any) {
-      console.error('[LiveBatchCascade] Fetch Batches Error:', err);
-      setBatchesError(err.message || 'No active batches found for this course');
-    } finally {
-      setBatchesLoading(false);
-    }
-  }, [onBatchSelect]);
+  }, []);
 
   // ─── CONTROLLED PROPS SYNCHRONIZATION ──────────────────────────────────────
   useEffect(() => {

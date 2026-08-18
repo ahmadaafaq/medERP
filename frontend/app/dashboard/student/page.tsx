@@ -6,6 +6,8 @@ import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
 import LogbookSubmitModal from '../../../components/LogbookSubmitModal';
 import FeeReceiptModal from '../../../components/FeeReceiptModal';
+import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
+import AttendanceWidget from '../../../components/AttendanceWidget';
 
 interface StudentInfo {
   name: string;
@@ -350,6 +352,11 @@ export default function StudentDashboard() {
               </span>
             </Link>
 
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AttendanceWidget role="STUDENT" />
+            <RecentLessonsWidget role="STUDENT" />
           </div>
 
           {/* TWO COLUMN CONTENT SECTION */}

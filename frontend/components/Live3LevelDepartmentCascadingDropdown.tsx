@@ -52,6 +52,18 @@ export default function Live3LevelDepartmentCascadingDropdown({
   onSelectionChange,
   compact = false,
 }: Live3LevelDepartmentCascadingDropdownProps) {
+  const onCollegeSelectRef = React.useRef(onCollegeSelect);
+  useEffect(() => { onCollegeSelectRef.current = onCollegeSelect; }, [onCollegeSelect]);
+
+  const onCourseSelectRef = React.useRef(onCourseSelect);
+  useEffect(() => { onCourseSelectRef.current = onCourseSelect; }, [onCourseSelect]);
+
+  const onBranchSelectRef = React.useRef(onBranchSelect);
+  useEffect(() => { onBranchSelectRef.current = onBranchSelect; }, [onBranchSelect]);
+
+  const onSelectionChangeRef = React.useRef(onSelectionChange);
+  useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
+
   // ─── STATE ─────────────────────────────────────────────────────────────────
   const [colleges, setColleges] = useState<LiveCollegeItem[]>([]);
   const [courses, setCourses] = useState<LiveCourseItem[]>([]);
@@ -73,114 +85,13 @@ export default function Live3LevelDepartmentCascadingDropdown({
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const [branchesError, setBranchesError] = useState<string | null>(null);
 
-  // ─── STEP 1: FETCH COLLEGES ON MOUNT ───────────────────────────────────────
-  const fetchColleges = useCallback(async () => {
-    setCollegesLoading(true);
-    setCollegesError(null);
-    try {
-      // 1. Next.js server proxy route
-      let res = await fetch('/api/srms/colleges', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      }).catch(() => null);
-
-      // Fallback 1: Backend live endpoint
-      if (!res || !res.ok) {
-        res = await fetch('http://localhost:3001/api/v1/college-master/live/colleges', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        }).catch(() => null);
-      }
-
-      if (!res || !res.ok) {
-        throw new Error(`Failed to load live colleges`);
-      }
-
-      const data = await res.json();
-      const list: LiveCollegeItem[] = Array.isArray(data) ? data : data.data || [];
-      setColleges(list);
-    } catch (err: any) {
-      console.error('[Live3LevelCascade] Fetch Colleges Error:', err);
-      setCollegesError(err.message || 'Unable to load institutions from SRMS live API');
-    } finally {
-      setCollegesLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchColleges();
-  }, [fetchColleges]);
-
-  // ─── STEP 2: FETCH COURSES (DEPENDS ON COLLEGE) ────────────────────────────
-  const fetchCoursesForCollege = useCallback(async (colgCd: string) => {
-    if (!colgCd) {
-      setCourses([]);
-      setSelectedCourseCd('');
-      setSelectedCourse(null);
-      setBranches([]);
-      setSelectedBranchCd('');
-      setSelectedBranch(null);
-      if (onCourseSelect) onCourseSelect(null);
-      if (onBranchSelect) onBranchSelect(null);
-      return;
-    }
-
-    setCoursesLoading(true);
-    setCoursesError(null);
-    setCourses([]);
-    setSelectedCourseCd('');
-    setSelectedCourse(null);
-    setBranches([]);
-    setSelectedBranchCd('');
-    setSelectedBranch(null);
-    if (onCourseSelect) onCourseSelect(null);
-    if (onBranchSelect) onBranchSelect(null);
-
-    try {
-      // 1. Next.js server proxy route
-      let res = await fetch('/api/srms/courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colgcd: colgCd }),
-      }).catch(() => null);
-
-      // Fallback 1: Backend live proxy
-      if (!res || !res.ok) {
-        res = await fetch(`http://localhost:3001/api/v1/college-master/live/courses?colgcd=${colgCd}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        }).catch(() => null);
-      }
-
-      if (!res || !res.ok) {
-        throw new Error(`Failed to load live courses`);
-      }
-
-      const data = await res.json();
-      const rawList: LiveCourseItem[] = Array.isArray(data) ? data : data.data || [];
-
-      // Filter: only show active courses where active_flg == "1"
-      const activeCourses = rawList.filter(
-        (c) => String(c.active_flg) === '1' || c.ACTIVESTS === 'ACTIVE'
-      );
-
-      setCourses(activeCourses);
-    } catch (err: any) {
-      console.error('[Live3LevelCascade] Fetch Courses Error:', err);
-      setCoursesError(err.message || 'No active courses found for selected institution');
-    } finally {
-      setCoursesLoading(false);
-    }
-  }, [onCourseSelect, onBranchSelect]);
-
-  // ─── STEP 3: FETCH BRANCHES (DEPENDS ON COLLEGE + COURSE) ──────────────────
+  // ─── STEP 3: FETCH BRANCHES / DEPARTMENTS (DEPENDS ON COLLEGE + COURSE) ────
   const fetchBranchesForCourse = useCallback(async (colgCd: string, courseCd: string) => {
     if (!colgCd || !courseCd) {
       setBranches([]);
       setSelectedBranchCd('');
       setSelectedBranch(null);
-      if (onBranchSelect) onBranchSelect(null);
+      if (onBranchSelectRef.current) onBranchSelectRef.current(null);
       return;
     }
 
@@ -189,7 +100,7 @@ export default function Live3LevelDepartmentCascadingDropdown({
     setBranches([]);
     setSelectedBranchCd('');
     setSelectedBranch(null);
-    if (onBranchSelect) onBranchSelect(null);
+    if (onBranchSelectRef.current) onBranchSelectRef.current(null);
 
     try {
       // 1. Next.js server proxy route
@@ -226,7 +137,69 @@ export default function Live3LevelDepartmentCascadingDropdown({
     } finally {
       setBranchesLoading(false);
     }
-  }, [onBranchSelect]);
+  }, []);
+
+  // ─── STEP 2: FETCH COURSES (DEPENDS ON COLLEGE) ────────────────────────────
+  const fetchCoursesForCollege = useCallback(async (colgCd: string) => {
+    if (!colgCd) {
+      setCourses([]);
+      setSelectedCourseCd('');
+      setSelectedCourse(null);
+      setBranches([]);
+      setSelectedBranchCd('');
+      setSelectedBranch(null);
+      if (onCourseSelectRef.current) onCourseSelectRef.current(null);
+      if (onBranchSelectRef.current) onBranchSelectRef.current(null);
+      return;
+    }
+
+    setCoursesLoading(true);
+    setCoursesError(null);
+    setCourses([]);
+    setSelectedCourseCd('');
+    setSelectedCourse(null);
+    setBranches([]);
+    setSelectedBranchCd('');
+    setSelectedBranch(null);
+    if (onCourseSelectRef.current) onCourseSelectRef.current(null);
+    if (onBranchSelectRef.current) onBranchSelectRef.current(null);
+
+    try {
+      // 1. Next.js server proxy route
+      let res = await fetch('/api/srms/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ colgcd: colgCd }),
+      }).catch(() => null);
+
+      // Fallback 1: Backend live proxy
+      if (!res || !res.ok) {
+        res = await fetch(`http://localhost:3001/api/v1/college-master/live/courses?colgcd=${colgCd}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(() => null);
+      }
+
+      if (!res || !res.ok) {
+        throw new Error(`Failed to load live courses`);
+      }
+
+      const data = await res.json();
+      const rawList: LiveCourseItem[] = Array.isArray(data) ? data : data.data || [];
+
+      // Filter: only show active courses where active_flg == "1"
+      const activeCourses = rawList.filter(
+        (c) => String(c.active_flg) === '1' || c.ACTIVESTS === 'ACTIVE'
+      );
+
+      setCourses(activeCourses);
+    } catch (err: any) {
+      console.error('[Live3LevelCascade] Fetch Courses Error:', err);
+      setCoursesError(err.message || 'No active courses found for selected institution');
+    } finally {
+      setCoursesLoading(false);
+    }
+  }, []);
 
   // ─── CONTROLLED PROPS SYNCHRONIZATION ──────────────────────────────────────
   useEffect(() => {

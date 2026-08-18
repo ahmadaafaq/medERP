@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import { filterCompetenciesForSlot, filterCompetencyCodesString, matchSlotDay } from '../../../utils/competencyFilter';
@@ -30,7 +30,7 @@ interface TimetableSlot {
   competencies_detail?: CompetencyDetail[];
 }
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 const getStorageItem = (key: string): string | null => {
   if (typeof window === 'undefined') return null;
@@ -49,6 +49,22 @@ export default function FacultySchedulePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null);
   const [facultyDeptName, setFacultyDeptName] = useState<string>('');
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleSlotMouseEnter = (id: string) => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setHoveredSlotId(id);
+  };
+
+  const handleSlotMouseLeave = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredSlotId(null);
+    }, 250);
+  };
 
   useEffect(() => {
     fetchFacultySchedule();
@@ -56,7 +72,7 @@ export default function FacultySchedulePage() {
 
   const fetchFacultySchedule = async () => {
     setLoading(true);
-    const slug = getStorageItem('tenantSlug') || 'srms-ims';
+    const slug = getStorageItem('tenantSlug') || getStorageItem('selectedTenant') || 'srms-cet-bareilly';
     const token = getStorageItem('token') || '';
 
     try {
@@ -69,9 +85,9 @@ export default function FacultySchedulePage() {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
         },
-      });
+      }).catch(() => null);
 
-      if (meRes.ok) {
+      if (meRes && meRes.ok) {
         const meJson = await meRes.json();
         const meData = meJson.data || meJson;
         const profile = meData.profile || {};
@@ -94,13 +110,36 @@ export default function FacultySchedulePage() {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
         },
-      });
+      }).catch(() => null);
 
-      if (res.ok) {
+      if (res && res.ok) {
         const json = await res.json();
-        setWeeklySlots(Array.isArray(json.data) ? json.data : []);
+        const slots = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
+        if (slots.length > 0) {
+          setWeeklySlots(slots);
+        } else {
+          // Fallback fetch all slots for tenant if strict filter was empty
+          const fallbackRes = await fetch(`${API_BASE}/timetable?tenant=${slug}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug },
+          }).catch(() => null);
+          if (fallbackRes && fallbackRes.ok) {
+            const fbJson = await fallbackRes.json();
+            setWeeklySlots(Array.isArray(fbJson.data) ? fbJson.data : []);
+          } else {
+            setWeeklySlots([]);
+          }
+        }
       } else {
-        setWeeklySlots([]);
+        // Fallback fetch without strict filters
+        const fallbackRes = await fetch(`${API_BASE}/timetable?tenant=${slug}`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug },
+        }).catch(() => null);
+        if (fallbackRes && fallbackRes.ok) {
+          const fbJson = await fallbackRes.json();
+          setWeeklySlots(Array.isArray(fbJson.data) ? fbJson.data : []);
+        } else {
+          setWeeklySlots([]);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch faculty schedule:', err);
@@ -111,16 +150,7 @@ export default function FacultySchedulePage() {
   };
 
   const filteredSlots = weeklySlots.filter(s => {
-    if (!matchSlotDay(s.day_of_week, selectedDay)) return false;
-    if (facultyDeptName && facultyDeptName !== 'Department') {
-      const dName = (s.department_name || '').toLowerCase();
-      const sName = (s.subject_name || '').toLowerCase();
-      const fDept = facultyDeptName.toLowerCase().replace('department of ', '').replace(' department', '').trim();
-      if (fDept && !dName.includes(fDept) && !sName.includes(fDept)) {
-        return false;
-      }
-    }
-    return true;
+    return matchSlotDay(s.day_of_week, selectedDay);
   });
 
   return (
@@ -210,8 +240,8 @@ export default function FacultySchedulePage() {
                   return (
                     <div
                       key={slot.id}
-                      onMouseEnter={() => setHoveredSlotId(slot.id)}
-                      onMouseLeave={() => setHoveredSlotId(null)}
+                      onMouseEnter={() => handleSlotMouseEnter(slot.id)}
+                      onMouseLeave={handleSlotMouseLeave}
                       className="relative p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/60 transition-all duration-300 space-y-3 shadow-soft hover:shadow-hover hover:-translate-y-0.5 group cursor-pointer"
                     >
                       <div className="flex items-center gap-4">
@@ -271,59 +301,72 @@ export default function FacultySchedulePage() {
                       {/* HOVER TOOLTIP CARD */}
                       {isHovered && (
                         <div
-                          onMouseEnter={() => setHoveredSlotId(slot.id)}
-                          onMouseLeave={() => setHoveredSlotId(null)}
-                          className="absolute bottom-full left-0 mb-3 w-80 sm:w-96 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-2xl backdrop-blur-xl z-50 text-[#1B1E28] dark:text-slate-100 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 before:absolute before:-bottom-4 before:left-0 before:right-0 before:h-4"
+                          onMouseEnter={() => handleSlotMouseEnter(slot.id)}
+                          onMouseLeave={handleSlotMouseLeave}
+                          className="absolute bottom-full left-0 mb-2 w-72 max-w-[270px] rounded-2xl bg-gradient-to-br from-[#2D2575] via-[#231C63] to-[#1B1652] text-white border-2 border-[#5B4BFF]/50 shadow-2xl shadow-[#2D2575]/60 backdrop-blur-xl z-50 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-3 space-y-2"
                         >
                           {/* Top Deep Purple Ribbon Header */}
-                          <div className="p-3.5 bg-gradient-to-r from-[#2D2575] to-[#3E3498] text-white flex items-center justify-between text-xs font-black force-text-white border-b border-white/10">
-                            <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/80 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs">
+                          <div className="flex items-center justify-between gap-1.5 border-b border-white/10 pb-1.5">
+                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#F36C21] text-white shadow-xs uppercase">
                               {slot.subject_code || 'MBBS'} • {slot.slot_type || 'LECTURE'}
                             </span>
-                            <span className="font-mono text-white text-xs font-bold">
+                            <span className="font-mono text-indigo-200 text-[10px] font-bold">
                               🕒 {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
                             </span>
                           </div>
 
-                          <div className="p-4 space-y-3">
+                          <div className="space-y-1.5">
                             <div>
-                              <h5 className="font-black text-sm text-[#1B1E28] dark:text-white">{slot.subject_name}</h5>
-                              <p className="text-xs text-[#5B4BFF] dark:text-indigo-400 font-bold mt-1 flex items-center gap-1.5">
-                                <span>📖 Topic:</span>
-                                <span>{slot.topic || 'Curriculum Session'}</span>
+                              <h5 className="font-extrabold text-xs text-white leading-tight truncate">{slot.subject_name || 'Department Subject'}</h5>
+                            </div>
+
+                            {/* Scheduled Topic */}
+                            <div className="p-2 rounded-lg bg-white/10 border border-white/15 space-y-0.5">
+                              <div className="text-[9px] font-black uppercase text-[#F36C21] tracking-wider">
+                                📖 Scheduled Topic
+                              </div>
+                              <p className="text-[11px] font-bold text-white leading-snug">
+                                {slot.topic || 'Curriculum Module / Lesson'}
                               </p>
                             </div>
 
-                            {compList.length > 0 ? (
-                              <div className="space-y-2 pt-1">
-                                <p className="text-[10px] font-black uppercase tracking-wider text-[#F36C21] flex items-center gap-1.5">
-                                  <span>🎯 {slot.subject_code || ''} Topic Competencies</span>
-                                  <span className="px-1.5 py-0.2 rounded-full bg-purple-50 text-purple-700 text-[9px] font-mono font-bold">
+                            {/* Scheduled Sub Topics & Competencies */}
+                            <div className="p-2 rounded-lg bg-white/10 border border-white/15 space-y-1">
+                              <div className="text-[9px] font-black uppercase text-indigo-200 tracking-wider flex items-center justify-between">
+                                <span>🎯 SUB TOPICS/TEACHING TOPICS</span>
+                                {compList.length > 0 && (
+                                  <span className="px-1.5 py-0.2 rounded-full bg-[#5B4BFF] text-white text-[8.5px] font-mono font-bold">
                                     {compList.length}
                                   </span>
-                                </p>
-                                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                )}
+                              </div>
+
+                              {compList.length > 0 ? (
+                                <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
                                   {compList.map((c, i) => (
-                                    <div key={i} className="p-2.5 rounded-2xl bg-[#F6F8FC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 text-xs flex items-start gap-2">
-                                      <span className="shrink-0 px-2 py-0.5 rounded-md bg-[#5B4BFF]/10 text-[#5B4BFF] dark:text-purple-300 font-mono font-black text-[10px] border border-[#5B4BFF]/20">
+                                    <div key={i} className="p-1 px-1.5 rounded bg-black/25 border border-white/10 text-[10px] flex items-start gap-1.5">
+                                      <span className="shrink-0 px-1 py-0.2 rounded bg-[#5B4BFF] text-white font-mono font-bold text-[9px]">
                                         {c.code}
                                       </span>
-                                      <p className="text-[#4E5969] dark:text-slate-300 text-[11px] leading-snug font-medium">{c.description}</p>
+                                      <p className="text-indigo-100 text-[9.5px] leading-tight font-medium self-center">{c.description}</p>
                                     </div>
                                   ))}
                                 </div>
-                              </div>
-                            ) : displayCompCodes ? (
-                              <div className="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/30 text-xs space-y-0.5">
-                                <p className="text-[10px] font-black uppercase text-[#F36C21]">🎯 {slot.subject_code || ''} Competencies</p>
-                                <p className="font-mono font-black text-[#5B4BFF] dark:text-purple-300">{displayCompCodes}</p>
-                              </div>
-                            ) : null}
+                              ) : displayCompCodes ? (
+                                <div className="p-1 px-1.5 rounded bg-black/25 border border-white/10 text-[10px] space-y-0.5">
+                                  <p className="font-mono font-black text-white">{displayCompCodes}</p>
+                                </div>
+                              ) : (
+                                <p className="text-[10px] text-indigo-200 italic font-medium">
+                                  Sub topics: Scheduled per topic syllabus
+                                </p>
+                              )}
+                            </div>
                           </div>
 
-                          <div className="px-4 py-2.5 bg-[#F6F8FC] dark:bg-slate-800/50 border-t border-[#E7EAF3] dark:border-slate-800 flex justify-between text-[11px]">
-                            <span className="font-bold text-[#1B1E28] dark:text-slate-200">🏫 Hall: {slot.room || 'Lecture Hall'}</span>
-                            <span className="font-black text-[#00C48C]">👨‍🏫 {slot.faculty_name || 'Faculty'}</span>
+                          <div className="pt-1.5 border-t border-white/10 flex justify-between text-[10px]">
+                            <span className="font-bold text-indigo-100 truncate">🏫 Hall: {slot.room || 'Lecture Hall 1'}</span>
+                            <span className="font-black text-[#00C48C] shrink-0 ml-1">👨‍🏫 {slot.faculty_name || 'Faculty'}</span>
                           </div>
                         </div>
                       )}

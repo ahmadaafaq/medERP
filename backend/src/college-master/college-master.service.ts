@@ -14,6 +14,7 @@ import {
   CreateProfessionalDto, UpdateProfessionalDto,
   CreateGroupDto, UpdateGroupDto,
 } from './dto/college-master.dto';
+import { UserRole } from '../common/enums/role.enum';
 
 const FALLBACK_SRMS_COLLEGES = [
   { colg_cd: '1', colg_name: 'SRMS CET,BAREILLY' },
@@ -198,6 +199,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       try {
         await this.syncExternalColleges();
         await this.syncExternalCourses();
+        await this.syncExternalSessions();
       } catch (err: any) {
         this.logger.error('Error during initial sync:', err?.message || err);
       }
@@ -358,8 +360,18 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return Array.isArray(data) ? data : [];
   }
 
-  async listColleges(): Promise<any[]> {
+  async listColleges(user?: any): Promise<any[]> {
     await this.ds.query(`ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS code VARCHAR(50);`).catch(() => {});
+    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+      const rows = await this.ds.query(
+        `SELECT id, code, name, slug, domain, plan, primary_color, is_active, schema_provisioned, created_at
+         FROM public.tenants
+         WHERE LOWER(slug) = LOWER($1) OR code = $2
+         LIMIT 1`,
+        [user.tenantSlug, user.colgCd || '1'],
+      );
+      if (rows.length > 0) return rows;
+    }
     const rows = await this.ds.query(
       `SELECT DISTINCT ON (code) id, code, name, slug, domain, plan, primary_color, is_active, schema_provisioned, created_at
        FROM public.tenants
@@ -637,8 +649,11 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return syncedCourses;
   }
 
-  async listCourses(tenantSlug?: string): Promise<any[]> {
-    const colleges = await this.listColleges();
+  async listCourses(tenantSlug?: string, user?: any): Promise<any[]> {
+    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+      tenantSlug = user.tenantSlug;
+    }
+    const colleges = await this.listColleges(user);
 
     if (tenantSlug && tenantSlug !== 'all') {
       const slug = await this.resolveTenantSlug(tenantSlug);
@@ -978,8 +993,11 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return syncedBatches;
   }
 
-  async listBatches(tenantSlug?: string): Promise<any[]> {
-    const colleges = await this.listColleges();
+  async listBatches(tenantSlug?: string, courseCd?: string, user?: any): Promise<any[]> {
+    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+      tenantSlug = user.tenantSlug;
+    }
+    const colleges = await this.listColleges(user);
 
     if (tenantSlug && tenantSlug !== 'all') {
       const slug = await this.resolveTenantSlug(tenantSlug);
@@ -991,24 +1009,31 @@ export class CollegeMasterService implements OnApplicationBootstrap {
 
       try {
         await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
+        let querySql = `
+          SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
+                 b.course_cd AS course_code
+          FROM batches b
+          LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
+        `;
+        const queryParams: any[] = [];
+        if (courseCd && courseCd !== 'all') {
+          queryParams.push(courseCd);
+          querySql += ` WHERE (b.course_cd = $1 OR c.code = $1 OR c.course_cd = $1 OR b.course_name ILIKE $1)`;
+        }
+        querySql += ` ORDER BY b.year DESC, b.code ASC`;
+
         let rows = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
-                  b.course_cd AS course_code
-           FROM batches b
-           LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
-           ORDER BY b.year DESC, b.code ASC`,
+          querySql,
+          queryParams,
         ).catch(() => []);
 
-        if (rows.length === 0) {
+        if (rows.length === 0 && (!courseCd || courseCd === 'all')) {
           await this.syncExternalBatches(slug);
           rows = await this.tenantSchemaService.queryInTenant(
             slug,
-            `SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
-                    b.course_cd AS course_code
-             FROM batches b
-             LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
-             ORDER BY b.year DESC, b.code ASC`,
+            querySql,
+            queryParams,
           ).catch(() => []);
         }
 
@@ -1029,13 +1054,23 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     const allBatches: any[] = [];
     for (const col of colleges) {
       try {
+        let querySql = `
+          SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
+                 b.course_cd AS course_code
+          FROM batches b
+          LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
+        `;
+        const queryParams: any[] = [];
+        if (courseCd && courseCd !== 'all') {
+          queryParams.push(courseCd);
+          querySql += ` WHERE (b.course_cd = $1 OR c.code = $1 OR c.course_cd = $1 OR b.course_name ILIKE $1)`;
+        }
+        querySql += ` ORDER BY b.year DESC, b.code ASC`;
+
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
-          `SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
-                  b.course_cd AS course_code
-           FROM batches b
-           LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
-           ORDER BY b.year DESC, b.code ASC`,
+          querySql,
+          queryParams,
         ).catch(() => []);
 
         allBatches.push(
@@ -1296,8 +1331,11 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return syncedBranches;
   }
 
-  async listBranches(tenantSlug?: string): Promise<any[]> {
-    const colleges = await this.listColleges();
+  async listBranches(tenantSlug?: string, courseCd?: string, user?: any): Promise<any[]> {
+    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+      tenantSlug = user.tenantSlug;
+    }
+    const colleges = await this.listColleges(user);
 
     if (tenantSlug && tenantSlug !== 'all') {
       const slug = await this.resolveTenantSlug(tenantSlug);
@@ -1434,18 +1472,88 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   // ─── 5. ACADEMIC SESSIONS ──────────────────────────────────────────────────
-  async listSessions(tenantSlug?: string) {
+  async listSessions(tenantSlug?: string, user?: any) {
+    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+      tenantSlug = user.tenantSlug;
+    }
     const slug = await this.resolveTenantSlug(tenantSlug);
     const collegeId = await this.getCollegeIdBySlug(slug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT * FROM academic_sessions ORDER BY start_date DESC`,
     );
-    return rows.map(r => ({ ...r, college_id: collegeId }));
+    if (rows.length === 0) {
+      await this.syncExternalSessions(slug);
+      const synced = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT * FROM academic_sessions ORDER BY start_date DESC`,
+      );
+      return synced.map(r => ({
+        ...r,
+        session_cd: r.session_cd || r.code || '',
+        session_name: r.name,
+        code: r.session_cd || r.code || r.name,
+        colg_cd: r.colg_cd || '1',
+        college_id: collegeId,
+      }));
+    }
+    return rows.map(r => ({
+      ...r,
+      session_cd: r.session_cd || r.code || '',
+      session_name: r.name,
+      code: r.session_cd || r.code || r.name,
+      colg_cd: r.colg_cd || '1',
+      college_id: collegeId,
+    }));
+  }
+
+  async syncExternalSessions(tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const officialSessions = [
+      { colg_cd: '1', session_cd: '16', session_name: '2026-2027', active_flg: '1', current_flg: '1', start_date: '2026-07-01', end_date: '2027-06-30' },
+      { colg_cd: '1', session_cd: '15', session_name: '2025-2026', active_flg: '1', current_flg: '1', start_date: '2025-07-01', end_date: '2026-06-30' },
+      { colg_cd: '1', session_cd: '14', session_name: '2024-2025', active_flg: '1', current_flg: '1', start_date: '2024-07-01', end_date: '2025-06-30' },
+      { colg_cd: '1', session_cd: '13', session_name: '2023-2024', active_flg: '1', current_flg: '0', start_date: '2023-07-01', end_date: '2024-06-30' },
+      { colg_cd: '1', session_cd: '12', session_name: '2022-2023', active_flg: '1', current_flg: '0', start_date: '2022-07-01', end_date: '2023-06-30' },
+      { colg_cd: '1', session_cd: '11', session_name: '2021-2022', active_flg: '1', current_flg: '0', start_date: '2021-07-01', end_date: '2022-06-30' },
+      { colg_cd: '1', session_cd: '10', session_name: '2020-2021', active_flg: '1', current_flg: '0', start_date: '2020-07-01', end_date: '2021-06-30' },
+    ];
+
+    for (const sess of officialSessions) {
+      const isCurrent = sess.current_flg === '1';
+      const isActive = sess.active_flg === '1';
+      // Upsert by session_cd or name in tenant schema
+      const existing = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM academic_sessions WHERE session_cd = $1 OR name = $2 OR name LIKE $3 LIMIT 1`,
+        [sess.session_cd, sess.session_name, `%${sess.session_name}%`],
+      );
+
+      if (existing.length > 0) {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `UPDATE academic_sessions 
+           SET name = $1, session_cd = $2, code = $2, colg_cd = $3, start_date = $4, end_date = $5, is_current = $6, is_active = $7
+           WHERE id = $8`,
+          [sess.session_name, sess.session_cd, sess.colg_cd, sess.start_date, sess.end_date, isCurrent, isActive, existing[0].id],
+        );
+      } else {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO academic_sessions (name, code, session_cd, colg_cd, start_date, end_date, is_current, is_active)
+           VALUES ($1, $2, $2, $3, $4, $5, $6, $7)`,
+          [sess.session_name, sess.session_cd, sess.colg_cd, sess.start_date, sess.end_date, isCurrent, isActive],
+        );
+      }
+    }
+
+    return this.listSessions(slug);
   }
 
   async createSession(dto: CreateSessionDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
+    const sessionCd = dto.session_cd || dto.code || '';
+    const colgCd = dto.colg_cd || '1';
 
     // If this session is marked as current, unset any previous current session first
     if (dto.isCurrent) {
@@ -1457,25 +1565,31 @@ export class CollegeMasterService implements OnApplicationBootstrap {
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO academic_sessions (name, start_date, end_date, is_current, is_active)
-       VALUES ($1, $2, $3, $4, true)
+      `INSERT INTO academic_sessions (name, code, session_cd, colg_cd, start_date, end_date, is_current, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
        RETURNING *`,
-      [dto.name, dto.startDate, dto.endDate, dto.isCurrent ?? false],
+      [dto.name, sessionCd, sessionCd, colgCd, dto.startDate, dto.endDate, dto.isCurrent ?? false],
     );
     return rows[0];
   }
 
   async updateSession(id: string, dto: UpdateSessionDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
+    const sessionCd = dto.session_cd || dto.code;
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE academic_sessions
        SET name = COALESCE($1, name),
            start_date = COALESCE($2, start_date),
-                     is_active = COALESCE($5, is_active)
-       WHERE id = $6
+           end_date = COALESCE($3, end_date),
+           is_current = COALESCE($4, is_current),
+           is_active = COALESCE($5, is_active),
+           session_cd = COALESCE($6, session_cd),
+           code = COALESCE($6, code),
+           colg_cd = COALESCE($7, colg_cd)
+       WHERE id = $8
        RETURNING *`,
-      [dto.name, dto.startDate, dto.endDate, dto.isCurrent, dto.isActive, id],
+      [dto.name, dto.startDate, dto.endDate, dto.isCurrent, dto.isActive, sessionCd, dto.colg_cd, id],
     );
     if (rows.length === 0) throw new NotFoundException('Academic Session not found');
     return rows[0];
@@ -1505,8 +1619,11 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     }
   }
 
-  async listProfessionals(tenantSlug?: string) {
-    const colleges = await this.listColleges();
+  async listProfessionals(tenantSlug?: string, user?: any) {
+    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+      tenantSlug = user.tenantSlug;
+    }
+    const colleges = await this.listColleges(user);
 
     if (tenantSlug && tenantSlug !== 'all') {
       const slug = await this.resolveTenantSlug(tenantSlug);
@@ -1661,7 +1778,10 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str);
   }
 
-  async listGroups(tenantSlug?: string, batchId?: string, departmentId?: string) {
+  async listGroups(tenantSlug?: string, batchId?: string, departmentId?: string, user?: any) {
+    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+      tenantSlug = user.tenantSlug;
+    }
     const slug = await this.resolveTenantSlug(tenantSlug);
     const collegeId = await this.getCollegeIdBySlug(slug);
     const params: any[] = [];
