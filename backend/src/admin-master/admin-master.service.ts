@@ -25,13 +25,41 @@ export class AdminMasterService {
     return this.tenantSchemaService.resolveTenantSlug(tenantSlug);
   }
 
-  // ─── 1. PROFESSIONAL LINKER ───────────────────────────────────────────────
+  // ─── 1. PROFESSIONAL LINKER & PHASES ─────────────────────────────────────
   async listProfessionalLinkers(tenantSlug?: string) {
     const slug = this.resolveTenantSlug(tenantSlug);
     return this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT * FROM professional_linkers ORDER BY created_at DESC`,
     );
+  }
+
+  async listProfessionalPhases(tenantSlug?: string) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    let rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM professional_phases ORDER BY phase_order ASC`,
+    ).catch(() => []);
+
+    if (!rows || rows.length === 0) {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO professional_phases (name, phase_order, is_active)
+         VALUES 
+           ('1st Professional MBBS (Phase I)', 1, true),
+           ('2nd Professional MBBS (Phase II)', 2, true),
+           ('3rd Professional MBBS Part I (Phase III-1)', 3, true),
+           ('3rd Professional MBBS Part II (Phase III-2)', 4, true)
+         ON CONFLICT DO NOTHING`,
+      ).catch(() => {});
+
+      rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT * FROM professional_phases ORDER BY phase_order ASC`,
+      ).catch(() => []);
+    }
+
+    return rows;
   }
 
   async createProfessionalLinker(dto: CreateProfessionalLinkerDto, tenantSlug?: string) {
@@ -440,11 +468,48 @@ export class AdminMasterService {
 
   async createSubjectOffering(dto: CreateSubjectOfferingDto, tenantSlug?: string) {
     const slug = this.resolveTenantSlug(tenantSlug);
+
+    // Resolve prof_id: verify it exists in professional_phases, otherwise fall back or match
+    let resolvedProfId = dto.prof_id;
+    const phaseCheck = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT id FROM professional_phases WHERE id = $1`,
+      [dto.prof_id],
+    ).catch(() => []);
+
+    if (phaseCheck.length === 0) {
+      // Check if prof_id came from professional_linkers
+      const linkerCheck = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT professional_phase FROM professional_linkers WHERE id = $1`,
+        [dto.prof_id],
+      ).catch(() => []);
+
+      if (linkerCheck.length > 0 && linkerCheck[0].professional_phase) {
+        const matchedPhase = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id FROM professional_phases WHERE name ILIKE $1 LIMIT 1`,
+          [`%${linkerCheck[0].professional_phase}%`],
+        ).catch(() => []);
+        if (matchedPhase.length > 0) {
+          resolvedProfId = matchedPhase[0].id;
+        }
+      }
+
+      // If still not matched, grab the first available professional phase
+      if (resolvedProfId === dto.prof_id) {
+        const defaultPhase = await this.listProfessionalPhases(slug);
+        if (defaultPhase.length > 0) {
+          resolvedProfId = defaultPhase[0].id;
+        }
+      }
+    }
+
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM subject_offerings 
        WHERE subject_id = $1 AND prof_id = $2 AND dtype_id = $3 AND batch_year = $4`,
-      [dto.subject_id, dto.prof_id, dto.dtype_id, dto.batch_year],
+      [dto.subject_id, resolvedProfId, dto.dtype_id, dto.batch_year],
     );
     if (existing.length > 0) {
       throw new BadRequestException('This subject offering mapping already exists.');
@@ -454,7 +519,7 @@ export class AdminMasterService {
       `INSERT INTO subject_offerings (subject_id, prof_id, dtype_id, batch_year, hours_allotted, is_active)
        VALUES ($1, $2, $3, $4, $5, true)
        RETURNING *`,
-      [dto.subject_id, dto.prof_id, dto.dtype_id, dto.batch_year, dto.hours_allotted ?? 0],
+      [dto.subject_id, resolvedProfId, dto.dtype_id, dto.batch_year, dto.hours_allotted ?? 0],
     );
     return rows[0];
   }

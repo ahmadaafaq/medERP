@@ -22,11 +22,18 @@ import { UserRole } from '../common/enums/role.enum';
 export class AdminMasterController {
   constructor(private readonly adminMasterService: AdminMasterService) {}
 
-  // ─── 1. PROFESSIONAL LINKERS ──────────────────────────────────────────────
+  // ─── 1. PROFESSIONAL LINKERS & PHASES ────────────────────────────────────
   @Get('professional-linkers')
   @ApiOperation({ summary: 'List Professional Linkers — tenant read' })
   async listProfessionalLinkers(@Query('tenant') tenant?: string) {
     const data = await this.adminMasterService.listProfessionalLinkers(tenant);
+    return { success: true, data };
+  }
+
+  @Get('professional-phases')
+  @ApiOperation({ summary: 'List Professional Phases — tenant read' })
+  async listProfessionalPhases(@Query('tenant') tenant?: string) {
+    const data = await this.adminMasterService.listProfessionalPhases(tenant);
     return { success: true, data };
   }
 

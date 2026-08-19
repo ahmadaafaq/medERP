@@ -212,7 +212,7 @@ export default function AdminMasterPage() {
   const fetchPhases = async () => {
     const slug = getTenantSlug();
     try {
-      const res = await fetch(`${API_BASE}/professional-linkers?tenant=${slug}`, {
+      const res = await fetch(`${API_BASE}/professional-phases?tenant=${slug}`, {
         headers: getAuthHeaders(),
       });
       if (res.ok) {
