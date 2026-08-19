@@ -3,6 +3,8 @@
 import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
 import AttendanceMarkerGrid from '../../../components/AttendanceMarkerGrid';
+import NoticeListWidget from '../../../components/notices/NoticeListWidget';
+import NoticeLoginAlertModal from '../../../components/notices/NoticeLoginAlertModal';
 
 export default function FacultyDashboard() {
   return (
@@ -29,6 +31,9 @@ export default function FacultyDashboard() {
             </div>
           </div>
 
+          {/* Department Notices & Circulars */}
+          <NoticeListWidget limit={3} title="Faculty Circulars & Institutional Notices" role="faculty" />
+
           <AttendanceMarkerGrid />
 
           <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
@@ -48,6 +53,8 @@ export default function FacultyDashboard() {
           </div>
         </main>
       </div>
+
+      <NoticeLoginAlertModal />
     </div>
   );
 }

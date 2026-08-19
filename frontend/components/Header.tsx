@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import { useNotices, NoticeItem } from '../hooks/useNotices';
+import NoticeDetailModal from './notices/NoticeDetailModal';
 
 interface HeaderProps {
   title: string;
@@ -32,7 +35,14 @@ export default function Header({ title }: HeaderProps) {
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
   const [user, setUser] = useState<UserProfileData | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [noticesDropdownOpen, setNoticesDropdownOpen] = useState(false);
+  const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
+  const [isNoticeDetailOpen, setIsNoticeDetailOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
+
+  const { notices, unreadCounts, markAsRead, acknowledgeNotice } = useNotices('all');
+
+  const noticesRef = useRef<HTMLDivElement>(null);
 
   // Modals state
   const [activeModal, setActiveModal] = useState<'NONE' | 'PROFILE' | 'SETTINGS' | 'PASSWORD'>('NONE');
@@ -80,11 +90,14 @@ export default function Header({ title }: HeaderProps) {
     fetchUserProfile();
   }, []);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (noticesRef.current && !noticesRef.current.contains(e.target as Node)) {
+        setNoticesDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -366,6 +379,101 @@ export default function Header({ title }: HeaderProps) {
             <span className="w-2 h-2 rounded-full bg-[#00C48C] animate-pulse"></span>
             Live
           </span>
+
+          {/* Notification Bell Dropdown */}
+          <div className="relative" ref={noticesRef}>
+            <button
+              type="button"
+              onClick={() => setNoticesDropdownOpen(!noticesDropdownOpen)}
+              className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm relative"
+              title="Campus Notices & Alerts"
+            >
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+              {unreadCounts.totalUnread > 0 && (
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-[#F36C21] text-white text-[9px] font-black leading-none shadow-md shadow-orange-500/40 animate-pulse">
+                  {unreadCounts.totalUnread > 99 ? '99+' : unreadCounts.totalUnread}
+                </span>
+              )}
+            </button>
+
+            {/* Notifications Popover Dropdown */}
+            {noticesDropdownOpen && (
+              <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-slate-900/95 border border-slate-800 backdrop-blur-xl shadow-2xl rounded-2xl p-4 text-slate-100 font-sans z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-white">Campus Alerts</span>
+                    {unreadCounts.totalUnread > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-[#F36C21] text-white text-[10px] font-black">
+                        {unreadCounts.totalUnread} New
+                      </span>
+                    )}
+                  </div>
+
+                  <Link
+                    href="/dashboard/notices"
+                    onClick={() => setNoticesDropdownOpen(false)}
+                    className="text-[11px] font-bold text-[#5B4BFF] hover:underline"
+                  >
+                    View All →
+                  </Link>
+                </div>
+
+                {/* Notices Items List */}
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-800/80 my-2 pr-1">
+                  {notices.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-slate-400">
+                      No notices at this time
+                    </div>
+                  ) : (
+                    notices.slice(0, 5).map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          setSelectedNotice(n);
+                          setIsNoticeDetailOpen(true);
+                          setNoticesDropdownOpen(false);
+                          if (!n.is_read) markAsRead(n.id);
+                        }}
+                        className={`p-2.5 rounded-xl transition-all cursor-pointer hover:bg-slate-800/80 flex items-start gap-2.5 ${
+                          !n.is_read ? 'bg-slate-800/40' : ''
+                        }`}
+                      >
+                        <span className="text-base shrink-0 mt-0.5">
+                          {n.priority === 'urgent' ? '🚨' : n.priority === 'important' ? '📢' : '📄'}
+                        </span>
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            {!n.is_read && (
+                              <span className="w-2 h-2 rounded-full bg-[#F36C21] shrink-0"></span>
+                            )}
+                            <h4 className={`text-xs truncate ${!n.is_read ? 'font-black text-white' : 'font-bold text-slate-300'}`}>
+                              {n.title}
+                            </h4>
+                          </div>
+                          <p className="text-[11px] text-slate-400 line-clamp-1">{n.body}</p>
+                          <span className="text-[9px] text-purple-300/70 font-semibold block">
+                            {new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-800 text-center">
+                  <Link
+                    href="/dashboard/notices"
+                    onClick={() => setNoticesDropdownOpen(false)}
+                    className="text-xs font-black text-[#5B4BFF] hover:underline"
+                  >
+                    Open Notices Hub →
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Theme Switcher Button */}
           <button
@@ -880,6 +988,18 @@ export default function Header({ title }: HeaderProps) {
           </div>
         </div>
       )}
+
+      {/* Notice Detail Reader Modal */}
+      <NoticeDetailModal
+        notice={selectedNotice}
+        isOpen={isNoticeDetailOpen}
+        onClose={() => {
+          setIsNoticeDetailOpen(false);
+          setSelectedNotice(null);
+        }}
+        onMarkRead={markAsRead}
+        onAcknowledge={acknowledgeNotice}
+      />
     </>
   );
 }

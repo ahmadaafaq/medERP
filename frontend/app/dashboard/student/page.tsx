@@ -6,6 +6,8 @@ import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
 import LogbookSubmitModal from '../../../components/LogbookSubmitModal';
 import FeeReceiptModal from '../../../components/FeeReceiptModal';
+import NoticeListWidget from '../../../components/notices/NoticeListWidget';
+import NoticeLoginAlertModal from '../../../components/notices/NoticeLoginAlertModal';
 
 interface StudentInfo {
   name: string;
@@ -352,6 +354,9 @@ export default function StudentDashboard() {
 
           </div>
 
+          {/* CAMPUS ALERTS & NOTICES WIDGET */}
+          <NoticeListWidget limit={4} role="student" />
+
           {/* TWO COLUMN CONTENT SECTION */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
@@ -495,6 +500,9 @@ export default function StudentDashboard() {
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
       />
+
+      {/* Floating Login Alert for Urgent Notices */}
+      <NoticeLoginAlertModal />
     </div>
   );
 }

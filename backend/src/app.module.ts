@@ -17,6 +17,8 @@ import { CollegeMasterModule } from './college-master/college-master.module';
 import { StudentMasterModule } from './student-master/student-master.module';
 import { AdminMasterModule } from './admin-master/admin-master.module';
 import { TimetableModule } from './timetable/timetable.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { NoticesModule } from './notices/notices.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import configuration from './config/configuration';
 import { validationSchema } from './config/joi.validation';
@@ -45,6 +47,8 @@ import { validationSchema } from './config/joi.validation';
     StudentMasterModule,
     AdminMasterModule,
     TimetableModule,
+    NotificationsModule,
+    NoticesModule,
   ],
 })
 export class AppModule implements NestModule {
