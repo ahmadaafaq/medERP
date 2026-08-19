@@ -1250,14 +1250,14 @@ export default function TimetableDesignPage() {
               
               {/* Day of Week */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-extrabold uppercase text-slate-300 tracking-wider">Day of Week *</label>
+                <label className="text-[11px] font-extrabold uppercase text-[#4E5969] tracking-wider">Day of Week *</label>
                 <select
                   value={formData.dayOfWeek}
                   onChange={(e) => setFormData({ ...formData, dayOfWeek: parseInt(e.target.value, 10) })}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-xs text-[#1B1E28] transition-all font-medium"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-xs text-[#1B1E28] transition-all font-medium"
                 >
                   {currentWeek.weekDays.map(day => (
-                    <option key={day.value} value={day.value} className="bg-slate-900 text-white">
+                    <option key={day.value} value={day.value}>
                       {day.dayName} ({day.displayDate})
                     </option>
                   ))}
@@ -1337,77 +1337,56 @@ export default function TimetableDesignPage() {
 
                 {/* Subject */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold uppercase text-slate-300 tracking-wider">Subject</label>
-                  <select
-                    value={formData.subjectId}
-                    onChange={(e) => handleFormSubjectChange(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-xs text-white transition-all font-medium"
-                  >
-                    <option value="" className="bg-slate-900 text-white">-- Select Subject --</option>
+                  <label className="text-[11px] font-extrabold uppercase text-[#4E5969] tracking-wider">Subject</label>
+                  <select value={formData.subjectId} onChange={(e) => handleFormSubjectChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] text-xs text-[#1B1E28] transition-all font-medium">
+                    <option value="">-- Select Subject --</option>
                     {availableFormSubjects.map((sub) => (
-                      <option key={sub.id} value={sub.id} className="bg-slate-900 text-white">
-                        {sub.name} ({sub.code})
-                      </option>
+                      <option key={sub.id} value={sub.id}>{sub.name} ({sub.code})</option>
                     ))}
                   </select>
                 </div>
-
               </div>
 
               {/* TOPIC AUTO-COMPLETE INPUT (Fetched from Topic Master DB) */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-[11px] font-extrabold uppercase text-indigo-400 tracking-wider">
-                    Session Topic (Topic Master DB)
-                  </label>
+                  <label className="text-[11px] font-extrabold uppercase text-[#5B4BFF] tracking-wider">Session Topic (Topic Master DB)</label>
                   {subjectTopics.length > 0 && (
-                    <span className="text-[9px] font-extrabold text-indigo-300 uppercase tracking-wide">
-                      {subjectTopics.length} DB Topic(s)
-                    </span>
+                    <span className="text-[9px] font-extrabold text-[#5B4BFF] uppercase tracking-wide">{subjectTopics.length} DB Topic(s)</span>
                   )}
                 </div>
-
-                <select
-                  value={formData.topic}
-                  onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                <select value={formData.topic} onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
                   disabled={!formData.subjectId}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-xs text-white transition-all font-medium disabled:opacity-50"
-                >
-                  <option value="" className="bg-slate-900 text-white">-- Select Topic from Topic Master --</option>
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-xs text-[#1B1E28] transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                  <option value="">-- Select Topic from Topic Master --</option>
                   {subjectTopics.map((top) => (
-                    <option key={top.id || top.code} value={top.code || top.name} className="bg-slate-900 text-white">
-                      {top.code} : {top.name}
-                    </option>
+                    <option key={top.id || top.code} value={top.code || top.name}>{top.code} : {top.name}</option>
                   ))}
                 </select>
               </div>
 
               {/* TOPIC-WISE NMC CBME COMPETENCIES MULTI-SELECT CHECKLIST */}
               {formData.subjectId && (
-                <div className="space-y-2 p-4 rounded-2xl bg-indigo-950/30 border border-indigo-500/30">
+                <div className="space-y-2 p-4 rounded-[18px] bg-[#F3F0FF] border border-[#5B4BFF]/20">
                   <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-black uppercase text-purple-300 tracking-wider flex items-center gap-1.5">
+                    <label className="text-[11px] font-black uppercase text-[#5B4BFF] tracking-wider flex items-center gap-1.5">
                       <span>🏷️</span> Topic-Wise Competencies ({topicWiseCompetenciesList.length} DB Records)
                     </label>
-                    <span className="text-[9px] font-bold text-slate-400">
-                      {selectedCompetencies.length} Selected
-                    </span>
+                    <span className="text-[9px] font-bold text-[#4E5969]">{selectedCompetencies.length} Selected</span>
                   </div>
 
-                  {/* Selected Competencies Badges */}
+                  {/* Selected Competency Badges */}
                   {selectedCompetencies.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-white border border-[#E7EAF3]">
                       {selectedCompetencies.map(code => {
                         const compObj = subjectCompetencies.find(c => c.code === code);
                         return (
-                          <span 
-                            key={code} 
-                            onClick={() => toggleCompetency(code)}
-                            className="px-2 py-1 text-[10px] font-black rounded-lg bg-purple-600 text-white border border-purple-400/40 flex items-center gap-1 cursor-pointer hover:bg-rose-600 transition-all shadow-sm"
-                            title="Click to remove"
-                          >
+                          <span key={code} onClick={() => toggleCompetency(code)}
+                            className="px-2 py-1 text-[10px] font-black rounded-lg bg-[#5B4BFF] text-white border border-[#5B4BFF]/20 flex items-center gap-1 cursor-pointer hover:bg-[#F04438] transition-all shadow-sm"
+                            title="Click to remove">
                             <span>[{code}]</span>
-                            <span className="max-w-[160px] truncate">{compObj?.description || ''}</span>
+                            <span className="max-w-[140px] truncate">{compObj?.description || ''}</span>
                             <span>✕</span>
                           </span>
                         );
@@ -1415,41 +1394,36 @@ export default function TimetableDesignPage() {
                     </div>
                   )}
 
-                  {/* Search Filter for Competencies */}
-                  <input
-                    type="text"
-                    value={competencySearchTerm}
+                  {/* Search Filter */}
+                  <input type="text" value={competencySearchTerm}
                     onChange={(e) => setCompetencySearchTerm(e.target.value)}
                     placeholder="Search competency code or statement (e.g. PY2.1)..."
-                    className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-900 border border-slate-700/80 focus:outline-none focus:border-purple-500 text-white placeholder:text-slate-500 font-medium"
+                    className="w-full px-3 py-1.5 text-xs rounded-xl bg-white border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] text-[#1B1E28] placeholder:text-[#9BA5B5] font-medium"
                   />
 
                   {/* Checklist Items */}
-                  <div className="max-h-40 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-800/40">
+                  <div className="max-h-40 overflow-y-auto space-y-0.5 pr-1">
                     {filteredCompetenciesList.length === 0 ? (
-                      <p className="text-[10px] text-slate-400 p-2 italic">
-                        {formData.topic 
-                          ? `No competencies feeded for "${formData.topic}" in Competency Master.` 
+                      <p className="text-[10px] text-[#9BA5B5] p-2 italic">
+                        {formData.topic
+                          ? `No competencies found for "${formData.topic}" in Competency Master.`
                           : 'Select a Topic above to view topic-specific competencies.'}
                       </p>
                     ) : (
                       filteredCompetenciesList.map(comp => {
                         const isChecked = selectedCompetencies.includes(comp.code);
                         return (
-                          <label 
-                            key={comp.id || comp.code} 
-                            className={`flex items-start gap-2.5 p-1.5 rounded-lg cursor-pointer transition-all text-xs ${
-                              isChecked ? 'bg-purple-950/60 text-purple-200' : 'hover:bg-slate-800/60 text-slate-300'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => toggleCompetency(comp.code)}
-                              className="mt-0.5 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500"
+                          <label key={comp.id || comp.code}
+                            className={`flex items-start gap-2.5 p-1.5 rounded-lg cursor-pointer transition-all text-xs border ${
+                              isChecked
+                                ? 'bg-[#EEF2FF] border-[#5B4BFF]/30 text-[#2D2575]'
+                                : 'border-transparent hover:bg-white hover:border-[#E7EAF3] text-[#4E5969]'
+                            }`}>
+                            <input type="checkbox" checked={isChecked} onChange={() => toggleCompetency(comp.code)}
+                              className="mt-0.5 rounded border-[#E7EAF3] text-[#5B4BFF] focus:ring-[#5B4BFF]"
                             />
                             <div>
-                              <span className="font-black text-purple-400 mr-1 font-mono">[{comp.code}]</span>
+                              <span className="font-black text-[#5B4BFF] mr-1 font-mono">[{comp.code}]</span>
                               <span className="text-[11px] font-medium">{comp.description}</span>
                             </div>
                           </label>
