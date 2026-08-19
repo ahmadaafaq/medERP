@@ -809,8 +809,75 @@ export default function TimetableDesignPage() {
     (c.description || '').toLowerCase().includes(competencySearchTerm.toLowerCase())
   );
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200">
+      <style>{`
+        @media print {
+          @page { size: A4 landscape; margin: 8mm 10mm; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          body { background: #fff !important; }
+
+          /* Hide all screen-only elements */
+          .no-print { display: none !important; }
+          nav, aside, header { display: none !important; }
+
+          /* Show print section */
+          .print-only { display: block !important; }
+          #timetable-print-root { display: block !important; }
+
+          /* Expand print root to full page */
+          body, html { margin: 0; padding: 0; }
+          #timetable-print-root {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%;
+            font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+          }
+
+          .print-grid {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 8pt;
+          }
+          .print-grid th, .print-grid td {
+            border: 1px solid #d1d5db;
+            padding: 4px 5px;
+            vertical-align: top;
+            min-width: 0;
+          }
+          .print-grid th {
+            background: #2D2575 !important;
+            color: #fff !important;
+            text-align: center;
+            font-weight: 800;
+            font-size: 8pt;
+            white-space: nowrap;
+          }
+          .print-grid td.time-col {
+            background: #f3f0ff !important;
+            color: #2D2575 !important;
+            font-weight: 700;
+            text-align: center;
+            white-space: nowrap;
+            font-size: 7.5pt;
+          }
+          .print-slot {
+            border-radius: 3px;
+            padding: 3px 4px;
+            margin-bottom: 2px;
+            font-size: 7.5pt;
+          }
+          .print-header-logo { background: linear-gradient(135deg, #2D2575, #5B4BFF) !important; }
+          .print-footer { border-top: 2px solid #2D2575; margin-top: 4mm; padding-top: 3mm; }
+        }
+        @media screen {
+          .print-only { display: none !important; }
+        }
+      `}</style>
       <Sidebar role="admin" />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Medical College Timetable Designer" />
@@ -935,8 +1002,129 @@ export default function TimetableDesignPage() {
             </div>
           </div>
 
-          {/* Timetable Weekly Grid */}
-          <div className="bg-[#1E293B]/80 backdrop-blur-xl border border-indigo-500/20 rounded-2xl flex-1 min-h-[540px] overflow-hidden flex flex-col shadow-2xl">
+          {/* Print Button Bar */}
+          <div className="flex items-center justify-between no-print">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-6 rounded-full bg-gradient-to-b from-[#5B4BFF] to-[#F36C21]" />
+              <h3 className="text-sm font-black text-[#1B1E28] dark:text-white uppercase tracking-wide">Weekly Teaching Schedule</h3>
+            </div>
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-[#2D2575] to-[#5B4BFF] text-white shadow-lg hover:shadow-indigo-500/30 hover:scale-105 active:scale-95 transition-all duration-200 border border-white/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Landscape Timetable (A4)
+            </button>
+          </div>
+
+          {/* ═══ PRINT-ONLY PREMIUM LANDSCAPE TIMETABLE ═══ */}
+          <div id="timetable-print-root" className="hidden print-only" style={{display:'none'}}>
+            {/* Institutional Header */}
+            <div className="print-header-logo" style={{background:'linear-gradient(135deg,#2D2575,#5B4BFF)',color:'#fff',padding:'8px 14px',borderRadius:'6px 6px 0 0',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div>
+                <div style={{fontSize:'13pt',fontWeight:900,letterSpacing:'0.03em'}}>
+                  {selectedCollege || (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || 'Medical Research Institute'}
+                </div>
+                <div style={{fontSize:'8pt',fontWeight:600,opacity:0.85,marginTop:'2px'}}>
+                  Weekly Academic Timetable &nbsp;|&nbsp; {selectedCourse} — {selectedBranch} &nbsp;|&nbsp; Session: {selectedSession}
+                </div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:'8pt',fontWeight:700,opacity:0.9}}>MedERP — CBME Timetable System</div>
+                <div style={{fontSize:'7pt',opacity:0.7,marginTop:'2px'}}>Batch: {batches.find(b => b.id === selectedBatch)?.code || selectedBatch} &nbsp;|&nbsp; Generated: {new Date().toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'})}</div>
+              </div>
+            </div>
+
+            {/* Print Table */}
+            <table className="print-grid" style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead>
+                <tr>
+                  <th style={{width:'9%',padding:'5px',background:'#2D2575',color:'#fff',fontSize:'8pt',textAlign:'center',border:'1px solid #d1d5db'}}>TIME</th>
+                  {currentWeek.weekDays.map(day => (
+                    <th key={day.value} style={{background:'#2D2575',color:'#fff',fontSize:'8pt',textAlign:'center',border:'1px solid #d1d5db',padding:'5px'}}>
+                      <div style={{fontWeight:900}}>{day.dayName.toUpperCase()}</div>
+                      <div style={{fontSize:'7pt',fontWeight:600,opacity:0.85}}>{day.displayDate}</div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {TIME_SLOTS.map((tSlot, rowIdx) => (
+                  <tr key={tSlot.start} style={{background: rowIdx % 2 === 0 ? '#fafafa' : '#ffffff'}}>
+                    <td className="time-col" style={{background:'#f3f0ff',color:'#2D2575',textAlign:'center',fontWeight:700,fontSize:'7.5pt',border:'1px solid #d1d5db',padding:'4px 3px',whiteSpace:'nowrap'}}>
+                      <div style={{fontWeight:900}}>{tSlot.start.slice(0,5)}</div>
+                      <div style={{fontSize:'6.5pt',opacity:0.7}}>–{tSlot.end.slice(0,5)}</div>
+                    </td>
+                    {currentWeek.weekDays.map(day => {
+                      const cellSlots = slots.filter(s =>
+                        s.day_of_week === day.value &&
+                        s.start_time.slice(0,5) === tSlot.start.slice(0,5)
+                      );
+                      return (
+                        <td key={day.value} style={{border:'1px solid #d1d5db',padding:'3px',verticalAlign:'top',minWidth:0}}>
+                          {cellSlots.length === 0 ? (
+                            <div style={{color:'#d1d5db',textAlign:'center',fontSize:'7pt'}}>—</div>
+                          ) : cellSlots.map(cell => {
+                            const modeClass = `print-slot-type-${cell.slot_type}`;
+                            const slotBg = cell.slot_type === 'Practical' ? '#F3EEFF' :
+                              cell.slot_type === 'DOAP' ? '#ECFDF5' :
+                              cell.slot_type === 'SGT' ? '#FFFBEB' :
+                              cell.slot_type === 'Tutorial' ? '#FFF7ED' :
+                              cell.slot_type === 'SDL' ? '#ECFEFF' :
+                              cell.slot_type === 'Seminar' ? '#FDF2F8' :
+                              cell.slot_type === 'Lunch Break' ? '#f8fafc' :
+                              cell.slot_type === 'Clinical Posting' ? '#FFF1F2' : '#EEF2FF';
+                            const slotBorder = cell.slot_type === 'Practical' ? '#7C3AED' :
+                              cell.slot_type === 'DOAP' ? '#059669' :
+                              cell.slot_type === 'SGT' ? '#D97706' :
+                              cell.slot_type === 'Tutorial' ? '#EA580C' :
+                              cell.slot_type === 'SDL' ? '#0891B2' :
+                              cell.slot_type === 'Seminar' ? '#DB2777' :
+                              cell.slot_type === 'Lunch Break' ? '#94a3b8' :
+                              cell.slot_type === 'Clinical Posting' ? '#E11D48' : '#5B4BFF';
+                            return (
+                              <div key={cell.id} className={`print-slot ${modeClass}`}
+                                style={{background:slotBg,borderLeft:`3px solid ${slotBorder}`,borderRadius:'3px',padding:'3px 4px',marginBottom:'2px'}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                                  <span style={{fontWeight:900,fontSize:'7.5pt',color:'#2D2575'}}>{cell.subject_code || 'SUB'}</span>
+                                  <span style={{fontSize:'6.5pt',color:'#D9530F',fontWeight:700,textTransform:'uppercase',marginLeft:'2px'}}>{cell.slot_type}</span>
+                                </div>
+                                {cell.subject_name && <div style={{fontWeight:700,fontSize:'7pt',color:'#1B1E28',lineHeight:'1.2',marginTop:'1px'}}>{cell.subject_name}</div>}
+                                {cell.topic && <div style={{fontSize:'6pt',color:'#5B4BFF',fontWeight:600,marginTop:'1px',fontStyle:'italic'}}>📖 {cell.topic}</div>}
+                                {cell.faculty_name && <div style={{fontSize:'6.5pt',color:'#00C48C',fontWeight:700,marginTop:'2px'}}>👤 {cell.faculty_name}</div>}
+                                {cell.room && <div style={{fontSize:'6pt',color:'#64748b',marginTop:'1px'}}>🏫 Room {cell.room}</div>}
+                                {cell.group_name && cell.group_name !== 'Whole Batch (All Students)' && <div style={{fontSize:'6pt',color:'#7C3AED',marginTop:'1px'}}>👥 {cell.group_name}</div>}
+                                {cell.competency_codes && <div style={{fontSize:'5.5pt',color:'#7C3AED',fontWeight:700,marginTop:'2px'}}>🎯 {cell.competency_codes}</div>}
+                              </div>
+                            );
+                          })}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Print Footer */}
+            <div className="print-footer" style={{borderTop:'2px solid #2D2575',marginTop:'4mm',paddingTop:'3mm',display:'flex',justifyContent:'space-between',fontSize:'7pt',color:'#4E5969'}}>
+              <div>
+                <strong style={{color:'#2D2575'}}>Legend:</strong>&nbsp;
+                <span style={{background:'#EEF2FF',borderLeft:'3px solid #5B4BFF',padding:'1px 5px',marginRight:'4px',fontSize:'6.5pt'}}>Lecture</span>
+                <span style={{background:'#F3EEFF',borderLeft:'3px solid #7C3AED',padding:'1px 5px',marginRight:'4px',fontSize:'6.5pt'}}>Practical</span>
+                <span style={{background:'#ECFDF5',borderLeft:'3px solid #059669',padding:'1px 5px',marginRight:'4px',fontSize:'6.5pt'}}>DOAP</span>
+                <span style={{background:'#FFFBEB',borderLeft:'3px solid #D97706',padding:'1px 5px',marginRight:'4px',fontSize:'6.5pt'}}>SGT</span>
+                <span style={{background:'#ECFEFF',borderLeft:'3px solid #0891B2',padding:'1px 5px',marginRight:'4px',fontSize:'6.5pt'}}>SDL</span>
+                <span style={{background:'#FDF2F8',borderLeft:'3px solid #DB2777',padding:'1px 5px',fontSize:'6.5pt'}}>Seminar</span>
+              </div>
+              <div style={{textAlign:'right',opacity:0.7}}>MedERP CBME Platform &nbsp;·&nbsp; Confidential — For Internal Academic Use Only</div>
+            </div>
+          </div>
+
+          {/* Timetable Weekly Grid (Screen Only) */}
+          <div className="bg-[#1E293B]/80 backdrop-blur-xl border border-indigo-500/20 rounded-2xl flex-1 min-h-[540px] overflow-hidden flex flex-col shadow-2xl no-print">
             
             {/* Header Days with Dates */}
             <div className="grid grid-cols-7 border-b border-indigo-500/20 text-center font-black text-indigo-300 bg-indigo-950/40 text-xs py-3.5 uppercase tracking-wider">
