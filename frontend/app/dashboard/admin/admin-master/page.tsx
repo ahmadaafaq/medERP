@@ -135,7 +135,7 @@ interface SubjectOffering {
   is_active: boolean;
 }
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = 'http://localhost:3001/api/v1/admin-master';
 const ITEMS_PER_PAGE = 8;
 
 export default function AdminMasterPage() {
@@ -167,51 +167,40 @@ export default function AdminMasterPage() {
     return 'srms-ims';
   };
 
+  const getAuthHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const slug = getTenantSlug();
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'x-tenant-slug': slug,
+    };
+  };
+
   // Fetch Category Data with Database Fallback
   const fetchCategoryData = async (cat: SubCategory) => {
     const slug = getTenantSlug();
     try {
-      if (cat === 'professional-linkers') {
-        const res = await fetch(`${API_BASE}/professional-linkers?tenant=${slug}`);
-        if (res.ok) {
-          const json = await res.json();
-          setLinkers(Array.isArray(json) ? json : json.data || []);
-        }
-      } else if (cat === 'departments') {
-        const res = await fetch(`${API_BASE}/departments?tenant=${slug}`);
-        if (res.ok) {
-          const json = await res.json();
-          setDepartments(Array.isArray(json) ? json : json.data || []);
-        }
-      } else if (cat === 'subjects') {
-        const res = await fetch(`${API_BASE}/subjects?tenant=${slug}`);
-        if (res.ok) {
-          const json = await res.json();
-          setSubjects(Array.isArray(json) ? json : json.data || []);
-        }
-      } else if (cat === 'topics') {
-        const res = await fetch(`${API_BASE}/topics?tenant=${slug}`);
-        if (res.ok) {
-          const json = await res.json();
-          setTopics(Array.isArray(json) ? json : json.data || []);
-        }
-      } else if (cat === 'competencies') {
-        const res = await fetch(`${API_BASE}/competencies?tenant=${slug}`);
-        if (res.ok) {
-          const json = await res.json();
-          setCompetencies(Array.isArray(json) ? json : json.data || []);
-        }
-      } else if (cat === 'delivery-types') {
-        const res = await fetch(`${API_BASE}/delivery-types?tenant=${slug}`);
-        if (res.ok) {
-          const json = await res.json();
-          setDeliveryTypes(Array.isArray(json) ? json : json.data || []);
-        }
-      } else if (cat === 'subject-offerings') {
-        const res = await fetch(`${API_BASE}/subject-offerings?tenant=${slug}`);
-        if (res.ok) {
-          const json = await res.json();
-          setOfferings(Array.isArray(json) ? json : json.data || []);
+      const res = await fetch(`${API_BASE}/${cat}?tenant=${slug}`, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const dataList = Array.isArray(json) ? json : Array.isArray(json.data) ? json.data : [];
+        if (cat === 'professional-linkers') {
+          setLinkers(dataList);
+        } else if (cat === 'departments') {
+          setDepartments(dataList);
+        } else if (cat === 'subjects') {
+          setSubjects(dataList);
+        } else if (cat === 'topics') {
+          setTopics(dataList);
+        } else if (cat === 'competencies') {
+          setCompetencies(dataList);
+        } else if (cat === 'delivery-types') {
+          setDeliveryTypes(dataList);
+        } else if (cat === 'subject-offerings') {
+          setOfferings(dataList);
         }
       }
     } catch (e) {
@@ -223,10 +212,13 @@ export default function AdminMasterPage() {
   const fetchPhases = async () => {
     const slug = getTenantSlug();
     try {
-      const res = await fetch(`${API_BASE}/professionals?tenant=${slug}`);
+      const res = await fetch(`${API_BASE}/professional-linkers?tenant=${slug}`, {
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         const json = await res.json();
-        setProfPhases(Array.isArray(json) ? json : json.data || []);
+        const dataList = Array.isArray(json) ? json : Array.isArray(json.data) ? json.data : [];
+        setProfPhases(dataList);
       }
     } catch (e) {
       console.warn('[AdminMaster] Failed to load professional phases:', e);
@@ -340,6 +332,7 @@ export default function AdminMasterPage() {
     try {
       const res = await fetch(`${API_BASE}/${activeTab}/${id}?tenant=${slug}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
         await fetchCategoryData(activeTab);
@@ -432,7 +425,7 @@ export default function AdminMasterPage() {
     try {
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
       if (res.ok) {
@@ -447,8 +440,14 @@ export default function AdminMasterPage() {
           fetchCategoryData('subject-offerings'),
         ]);
       } else {
-        const err = await res.text();
-        alert(`Save failed: ${err}`);
+        const errText = await res.text();
+        let errMsg = errText;
+        try {
+          const errJson = JSON.parse(errText);
+          errMsg = errJson.message || errText;
+          if (Array.isArray(errMsg)) errMsg = errMsg.join(', ');
+        } catch (_) {}
+        alert(`Save failed: ${errMsg}`);
       }
     } catch (err) {
       console.error('[AdminMaster] Save error:', err);
