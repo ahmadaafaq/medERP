@@ -206,7 +206,8 @@ export default function AttendanceMasterPage() {
       const token = localStorage.getItem('token') || '';
       const { fromDate, toDate } = getStartAndEndOfWeek(weekOffset);
 
-      let url = `${API_BASE}/attendance/weekly-sessions?tenant=${TENANT}&batchId=${selectedBatchId}&fromDate=${fromDate}&toDate=${toDate}`;
+      const slug = getActiveTenantSlug();
+      let url = `${API_BASE}/attendance/weekly-sessions?tenant=${slug}&batchId=${selectedBatchId}&fromDate=${fromDate}&toDate=${toDate}`;
       if (selectedSubjectId) url += `&subjectId=${selectedSubjectId}`;
 
       const res = await fetch(url, {

@@ -524,7 +524,6 @@ export default function StudentMasterPage() {
           id: activeSlug,
           name: storedName,
           slug: activeSlug,
-          code: activeSlug,
         });
       }
 
@@ -1221,7 +1220,7 @@ export default function StudentMasterPage() {
 
                     <button
                       type="button"
-                      onClick={handleBulkGroupLink}
+                      onClick={handleBulkLinkGroup}
                       disabled={isGroupLinking || selectedStudentIds.length === 0 || !targetGroupId}
                       className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs shadow-lg shadow-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 whitespace-nowrap"
                     >

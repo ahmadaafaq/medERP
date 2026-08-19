@@ -238,4 +238,9 @@ export class NoticeFilterDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({ description: 'Tenant slug passed as query param' })
+  @IsOptional()
+  @IsString()
+  tenant?: string;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import NoticeGroupBuilder from './NoticeGroupBuilder';
 import { TargetRule } from '../../hooks/useNoticeGroups';
@@ -42,6 +42,25 @@ export default function NoticeComposer() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Logged-in user name (read from localStorage, same pattern as Sidebar)
+  const [userName, setUserName] = useState('Administration');
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('user');
+      if (cached) {
+        const u = JSON.parse(cached);
+        const name =
+          u.profile?.name ||
+          u.name ||
+          u.student_name ||
+          u.faculty_name ||
+          u.email?.split('@')[0] ||
+          'Administration';
+        setUserName(name);
+      }
+    } catch (_) {}
+  }, []);
 
   const getHeaders = useCallback(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
@@ -283,7 +302,7 @@ export default function NoticeComposer() {
             maxLength={120}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. [ERP] Sujat Khan — Phase II Internal Examination Datesheet Released"
+            placeholder={`e.g. [ERP] ${userName} — Phase II Internal Examination Datesheet Released`}
             className="w-full text-xs font-semibold p-3.5 rounded-2xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-xs"
           />
         </div>

@@ -8,7 +8,7 @@ const ActionButtons = ({ onEdit, onDelete }: { onEdit: () => void, onDelete: () 
   <div className="flex items-center justify-end gap-1.5">
     <button
       onClick={onEdit}
-      className="p-1.5 text-[var(--color-primary-700)] hover:text-white bg-[var(--color-primary-100)] hover:bg-[var(--color-primary-700)] rounded-lg transition-all"
+      className="p-1.5 text-[#5B4BFF] hover:text-white bg-indigo-50 hover:bg-[#5B4BFF] dark:bg-indigo-950/40 dark:hover:bg-indigo-600 rounded-lg transition-all"
       title="Edit"
     >
       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -17,7 +17,7 @@ const ActionButtons = ({ onEdit, onDelete }: { onEdit: () => void, onDelete: () 
     </button>
     <button
       onClick={onDelete}
-      className="p-1.5 text-[var(--color-danger)] hover:text-white bg-[var(--color-danger-tint)] hover:bg-[var(--color-danger)] rounded-lg transition-all"
+      className="p-1.5 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-600 rounded-lg transition-all"
       title="Delete"
     >
       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -28,22 +28,22 @@ const ActionButtons = ({ onEdit, onDelete }: { onEdit: () => void, onDelete: () 
 );
 
 const TableSkeleton = ({ colCount = 6 }: { colCount?: number }) => (
-  <tbody className="divide-y divide-[var(--color-border)]">
+  <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800">
     {[...Array(5)].map((_, rIdx) => (
-      <tr key={rIdx} className="animate-pulse bg-[var(--color-bg-surface)]">
-        <td className="pl-5 py-4"><div className="h-4 bg-slate-200 dark:bg-slate-800/80 rounded w-6"></div></td>
+      <tr key={rIdx} className="animate-pulse bg-white dark:bg-slate-900">
+        <td className="pl-5 py-4"><div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-6"></div></td>
         {[...Array(colCount - 2)].map((_, cIdx) => (
           <td key={cIdx} className="py-4 px-4">
             <div className="space-y-2">
-              <div className="h-4 bg-slate-200 dark:bg-slate-800/80 rounded w-2/3"></div>
-              {cIdx === 0 && <div className="h-3 bg-slate-100 dark:bg-slate-900/50 rounded w-1/2"></div>}
+              <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-2/3"></div>
+              {cIdx === 0 && <div className="h-3 bg-slate-100 dark:bg-slate-850 rounded w-1/2"></div>}
             </div>
           </td>
         ))}
         <td className="pr-5 py-4 text-right">
           <div className="flex items-center justify-end gap-1.5">
-            <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800/80 rounded-lg"></div>
-            <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800/80 rounded-lg"></div>
+            <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800 rounded-lg"></div>
+            <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800 rounded-lg"></div>
           </div>
         </td>
       </tr>
@@ -105,85 +105,137 @@ interface Competency {
   description: string;
   subject_id?: string;
   subject_name?: string;
-  subject_code?: string;
   topic_id?: string;
   topic_name?: string;
-  topic_code?: string;
   domain: string;
   level: string;
   is_core: boolean;
   is_active: boolean;
 }
 
-const API_BASE = 'http://localhost:3001/api/v1/admin-master';
-const TENANT = 'srms-ims';
+interface DeliveryType {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+}
+
+interface SubjectOffering {
+  id: string;
+  subject_id: string;
+  subject_name?: string;
+  subject_code?: string;
+  prof_id: string;
+  prof_name?: string;
+  dtype_id: string;
+  dtype_code?: string;
+  dtype_name?: string;
+  batch_year: number;
+  hours_allotted: number;
+  is_active: boolean;
+}
+
+const API_BASE = 'http://localhost:3001/api/v1';
+const ITEMS_PER_PAGE = 8;
 
 export default function AdminMasterPage() {
   const [activeTab, setActiveTab] = useState<SubCategory>('professional-linkers');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Data states (stored exclusively in PostgreSQL)
+  // Data Store Lists
   const [linkers, setLinkers] = useState<ProfessionalLinker[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [competencies, setCompetencies] = useState<Competency[]>([]);
-  const [deliveryTypes, setDeliveryTypes] = useState<any[]>([]);
-  const [offerings, setOfferings] = useState<any[]>([]);
+  const [deliveryTypes, setDeliveryTypes] = useState<DeliveryType[]>([]);
+  const [offerings, setOfferings] = useState<SubjectOffering[]>([]);
   const [profPhases, setProfPhases] = useState<any[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
 
-  // Modal Form State
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Modal / Form Management
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
 
-  // Fetch data for current category
-  const fetchCategoryData = async (cat?: SubCategory) => {
-    const targetCat = cat || activeTab;
-    setLoading(true);
+  // Resolve tenant slug
+  const getTenantSlug = () => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('tenantSlug') || 'srms-ims';
+    }
+    return 'srms-ims';
+  };
+
+  // Fetch Category Data with Database Fallback
+  const fetchCategoryData = async (cat: SubCategory) => {
+    const slug = getTenantSlug();
     try {
-      const res = await fetch(`${API_BASE}/${targetCat}?tenant=${TENANT}`);
-      if (res.ok) {
-        const json = await res.json();
-        const data = json.data || json || [];
-        if (targetCat === 'professional-linkers') setLinkers(data);
-        if (targetCat === 'departments') setDepartments(data);
-        if (targetCat === 'subjects') setSubjects(data);
-        if (targetCat === 'topics') setTopics(data);
-        if (targetCat === 'competencies') setCompetencies(data);
-        if (targetCat === 'delivery-types') setDeliveryTypes(data);
-        if (targetCat === 'subject-offerings') setOfferings(data);
-      } else {
-        console.error(`[AdminMaster] Failed to fetch ${targetCat}:`, res.statusText);
+      if (cat === 'professional-linkers') {
+        const res = await fetch(`${API_BASE}/professional-linkers?tenant=${slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          setLinkers(Array.isArray(json) ? json : json.data || []);
+        }
+      } else if (cat === 'departments') {
+        const res = await fetch(`${API_BASE}/departments?tenant=${slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          setDepartments(Array.isArray(json) ? json : json.data || []);
+        }
+      } else if (cat === 'subjects') {
+        const res = await fetch(`${API_BASE}/subjects?tenant=${slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          setSubjects(Array.isArray(json) ? json : json.data || []);
+        }
+      } else if (cat === 'topics') {
+        const res = await fetch(`${API_BASE}/topics?tenant=${slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          setTopics(Array.isArray(json) ? json : json.data || []);
+        }
+      } else if (cat === 'competencies') {
+        const res = await fetch(`${API_BASE}/competencies?tenant=${slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          setCompetencies(Array.isArray(json) ? json : json.data || []);
+        }
+      } else if (cat === 'delivery-types') {
+        const res = await fetch(`${API_BASE}/delivery-types?tenant=${slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          setDeliveryTypes(Array.isArray(json) ? json : json.data || []);
+        }
+      } else if (cat === 'subject-offerings') {
+        const res = await fetch(`${API_BASE}/subject-offerings?tenant=${slug}`);
+        if (res.ok) {
+          const json = await res.json();
+          setOfferings(Array.isArray(json) ? json : json.data || []);
+        }
       }
-    } catch (err) {
-      console.error(`[AdminMaster] Error loading ${targetCat}:`, err);
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      console.warn(`[AdminMaster] Failed to load ${cat} from API:`, e);
     }
   };
 
-  const fetchProfessionals = async () => {
+  // Fetch Phases for dropdowns
+  const fetchPhases = async () => {
+    const slug = getTenantSlug();
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/college-master/professionals?tenant=${TENANT}`);
+      const res = await fetch(`${API_BASE}/professionals?tenant=${slug}`);
       if (res.ok) {
         const json = await res.json();
-        setProfPhases(json.data || json || []);
+        setProfPhases(Array.isArray(json) ? json : json.data || []);
       }
-    } catch (err) {
-      console.error('[AdminMaster] Error loading professionals:', err);
+    } catch (e) {
+      console.warn('[AdminMaster] Failed to load professional phases:', e);
     }
   };
 
-  // On mount: load all categories from PostgreSQL (zero localStorage usage)
   useEffect(() => {
-    ['mederp_linkers', 'mederp_admin_depts', 'mederp_subjects', 'mederp_topics', 'mederp_competencies']
-      .forEach(k => localStorage.removeItem(k));
-
     const loadAll = async () => {
+      setLoading(true);
       await Promise.all([
         fetchCategoryData('professional-linkers'),
         fetchCategoryData('departments'),
@@ -192,8 +244,9 @@ export default function AdminMasterPage() {
         fetchCategoryData('competencies'),
         fetchCategoryData('delivery-types'),
         fetchCategoryData('subject-offerings'),
-        fetchProfessionals(),
+        fetchPhases(),
       ]);
+      setLoading(false);
     };
     loadAll();
   }, []);
@@ -202,103 +255,141 @@ export default function AdminMasterPage() {
     setCurrentPage(1);
   }, [activeTab, searchTerm]);
 
+  // Open Modal for Create
   const handleAddNew = () => {
     setEditingItem(null);
     if (activeTab === 'professional-linkers') {
-      setFormData({ code: 'LINK-MBBS-P1', name: '', course_cd: 'MBBS', professional_phase: '1st Professional (Phase I)', academic_session: '2024-2025', description: '' });
+      setFormData({
+        code: `CBME-${new Date().getFullYear()}-01`,
+        name: '1st Professional Phase I Linker',
+        course_cd: 'MBBS',
+        professional_phase: '1st Professional (Phase I)',
+        academic_session: '2024-2025',
+        description: '',
+        is_active: true,
+      });
     } else if (activeTab === 'departments') {
-      setFormData({ code: '', name: '', type: 'Pre-Clinical' });
+      setFormData({
+        code: 'ANAT',
+        name: 'Department of Anatomy',
+        type: 'Pre-Clinical',
+        is_active: true,
+      });
     } else if (activeTab === 'subjects') {
-      setFormData({ code: '', name: '', department_id: departments[0]?.id || '', credits: 4, is_longitudinal: false });
+      setFormData({
+        code: 'ANAT-101',
+        name: 'Human Anatomy & Embryology',
+        department_id: departments[0]?.id || '',
+        credits: 4,
+        type: 'Theory & Practical',
+        is_longitudinal: false,
+        is_active: true,
+      });
     } else if (activeTab === 'subject-offerings') {
-      setFormData({ subject_id: subjects[0]?.id || '', prof_id: profPhases[0]?.id || '', dtype_id: deliveryTypes[0]?.id || '', batch_year: 2024, hours_allotted: 100 });
+      setFormData({
+        subject_id: subjects[0]?.id || '',
+        prof_id: profPhases[0]?.id || '',
+        dtype_id: deliveryTypes[0]?.id || '',
+        batch_year: new Date().getFullYear(),
+        hours_allotted: 60,
+        is_active: true,
+      });
     } else if (activeTab === 'delivery-types') {
-      setFormData({ code: '', name: '' });
+      setFormData({
+        code: 'TH',
+        name: 'Theory Lecture',
+        is_active: true,
+      });
     } else if (activeTab === 'topics') {
-      setFormData({ code: '', name: '', subject_id: subjects[0]?.id || '', description: '', hours: 2 });
+      setFormData({
+        code: 'TOPIC-01',
+        name: 'Gross Anatomy of Upper Limb',
+        subject_id: subjects[0]?.id || '',
+        linker_id: linkers[0]?.id || '',
+        description: 'Shoulder joint, axilla, brachial plexus and arm anatomy',
+        hours: 2,
+        is_active: true,
+      });
     } else if (activeTab === 'competencies') {
-      setFormData({ code: '', description: '', subject_id: subjects[0]?.id || '', topic_id: topics[0]?.id || '', domain: 'Knowledge', level: 'Knows How', is_core: true });
+      setFormData({
+        code: 'AN1.1',
+        description: 'Demonstrate normal anatomical position and planes of the human body',
+        subject_id: subjects[0]?.id || '',
+        topic_id: topics[0]?.id || '',
+        linker_id: linkers[0]?.id || '',
+        domain: 'Knowledge',
+        level: 'Knows How',
+        is_core: true,
+        is_active: true,
+      });
     }
     setIsModalOpen(true);
   };
 
+  // Open Modal for Edit
   const handleEdit = (item: any) => {
     setEditingItem(item);
     setFormData({ ...item });
     setIsModalOpen(true);
   };
 
+  // Delete Item
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this record from the PostgreSQL tenant schema?')) return;
+    if (!confirm('Are you sure you want to delete this record?')) return;
+    const slug = getTenantSlug();
     try {
-      const res = await fetch(`${API_BASE}/${activeTab}/${id}?tenant=${TENANT}`, {
+      const res = await fetch(`${API_BASE}/${activeTab}/${id}?tenant=${slug}`, {
         method: 'DELETE',
       });
       if (res.ok) {
-        console.log(`[AdminMaster] Deleted record ${id} successfully ✅`);
-        await Promise.all([
-          fetchCategoryData('professional-linkers'),
-          fetchCategoryData('departments'),
-          fetchCategoryData('subjects'),
-          fetchCategoryData('topics'),
-          fetchCategoryData('competencies'),
-          fetchCategoryData('delivery-types'),
-          fetchCategoryData('subject-offerings'),
-        ]);
+        await fetchCategoryData(activeTab);
       } else {
-        const err = await res.text();
-        alert(`Delete failed: ${err}`);
+        alert('Failed to delete record.');
       }
-    } catch (err) {
-      console.error('[AdminMaster] Delete error:', err);
+    } catch (e) {
+      console.error('[AdminMaster] Delete error:', e);
+      alert('Network error while deleting record.');
     }
   };
 
+  // Save Record (Create or Update)
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const isEdit = Boolean(editingItem && editingItem.id);
-    const url = isEdit
-      ? `${API_BASE}/${activeTab}/${editingItem.id}?tenant=${TENANT}`
-      : `${API_BASE}/${activeTab}?tenant=${TENANT}`;
+    const slug = getTenantSlug();
+    const isEdit = Boolean(editingItem);
     const method = isEdit ? 'PUT' : 'POST';
+    const url = isEdit
+      ? `${API_BASE}/${activeTab}/${editingItem.id}?tenant=${slug}`
+      : `${API_BASE}/${activeTab}?tenant=${slug}`;
 
-    // Construct whitelisted payload to prevent 400 Bad Request from NestJS ValidationPipe
-    let payload: any = {};
+    let payload: any = { ...formData };
+
     if (activeTab === 'professional-linkers') {
       payload = {
         code: formData.code,
         name: formData.name,
-        course_cd: formData.course_cd || null,
+        course_cd: formData.course_cd || 'MBBS',
         professional_phase: formData.professional_phase || null,
         academic_session: formData.academic_session || null,
         description: formData.description || null,
       };
-      if (isEdit) {
-        payload.is_active = formData.is_active !== false;
-      }
+      if (isEdit) payload.is_active = formData.is_active !== false;
     } else if (activeTab === 'departments') {
       payload = {
         code: formData.code,
         name: formData.name,
-        type: formData.type,
-        hod_user_id: formData.hod_user_id || null,
+        type: formData.type || 'Clinical',
       };
-      if (isEdit) {
-        payload.is_active = formData.is_active !== false;
-      }
+      if (isEdit) payload.is_active = formData.is_active !== false;
     } else if (activeTab === 'subjects') {
       payload = {
         code: formData.code,
         name: formData.name,
         department_id: formData.department_id || null,
-        batch_id: formData.batch_id || null,
-        credits: formData.credits !== undefined ? Number(formData.credits) : 4,
-        type: formData.type || 'Combined',
+        credits: Number(formData.credits) || 4,
         is_longitudinal: Boolean(formData.is_longitudinal),
       };
-      if (isEdit) {
-        payload.is_active = formData.is_active !== false;
-      }
+      if (isEdit) payload.is_active = formData.is_active !== false;
     } else if (activeTab === 'subject-offerings') {
       payload = {
         subject_id: formData.subject_id,
@@ -307,17 +398,13 @@ export default function AdminMasterPage() {
         batch_year: Number(formData.batch_year),
         hours_allotted: formData.hours_allotted !== undefined ? Number(formData.hours_allotted) : 0,
       };
-      if (isEdit) {
-        payload.is_active = formData.is_active !== false;
-      }
+      if (isEdit) payload.is_active = formData.is_active !== false;
     } else if (activeTab === 'delivery-types') {
       payload = {
         code: formData.code,
         name: formData.name,
       };
-      if (isEdit) {
-        payload.is_active = formData.is_active !== false;
-      }
+      if (isEdit) payload.is_active = formData.is_active !== false;
     } else if (activeTab === 'topics') {
       payload = {
         code: formData.code,
@@ -327,9 +414,7 @@ export default function AdminMasterPage() {
         description: formData.description || null,
         hours: formData.hours !== undefined ? Number(formData.hours) : 1,
       };
-      if (isEdit) {
-        payload.is_active = formData.is_active !== false;
-      }
+      if (isEdit) payload.is_active = formData.is_active !== false;
     } else if (activeTab === 'competencies') {
       payload = {
         code: formData.code,
@@ -341,9 +426,7 @@ export default function AdminMasterPage() {
         level: formData.level || 'Knows How',
         is_core: formData.is_core !== false,
       };
-      if (isEdit) {
-        payload.is_active = formData.is_active !== false;
-      }
+      if (isEdit) payload.is_active = formData.is_active !== false;
     }
 
     try {
@@ -353,7 +436,6 @@ export default function AdminMasterPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        console.log(`[AdminMaster] Record saved successfully to PostgreSQL ✅`);
         setIsModalOpen(false);
         await Promise.all([
           fetchCategoryData('professional-linkers'),
@@ -376,13 +458,13 @@ export default function AdminMasterPage() {
 
   // Sub-Category Navigation Tabs
   const categories = [
-    { key: 'professional-linkers', label: '1. CBME Master', icon: '🔗', count: linkers.length },
-    { key: 'departments', label: '2. Department Master', icon: '🏥', count: departments.length },
-    { key: 'subjects', label: '3. Subject Master', icon: '📚', count: subjects.length },
-    { key: 'subject-offerings', label: '4. Subject Offerings', icon: '🎓', count: offerings.length },
-    { key: 'delivery-types', label: '5. Delivery Types', icon: '📖', count: deliveryTypes.length },
-    { key: 'topics', label: '6. Topic Master', icon: '📝', count: topics.length },
-    { key: 'competencies', label: '7. Competency Master', icon: '🎯', count: competencies.length },
+    { key: 'professional-linkers', label: 'CBME Master', icon: '🔗', count: linkers.length },
+    { key: 'departments', label: 'Department Master', icon: '🏥', count: departments.length },
+    { key: 'subjects', label: 'Subject Master', icon: '📚', count: subjects.length },
+    { key: 'subject-offerings', label: 'Subject Offerings', icon: '🎓', count: offerings.length },
+    { key: 'delivery-types', label: 'Delivery Types', icon: '📖', count: deliveryTypes.length },
+    { key: 'topics', label: 'Topic Master', icon: '📝', count: topics.length },
+    { key: 'competencies', label: 'Competency Master', icon: '🎯', count: competencies.length },
   ];
 
   // Filtering records by search term
@@ -426,33 +508,33 @@ export default function AdminMasterPage() {
   const paginatedList = filteredList.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
-    <div className="flex min-h-screen bg-[var(--color-bg-canvas)] text-[var(--color-ink-900)] font-sans transition-colors">
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans transition-colors">
       <Sidebar role="admin" />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="AdminMaster — Medical Curriculum & Academic Structure Setup" />
+        <Header title="Admin Master — Medical Curriculum & Academic Structure Setup" />
 
         <main className="p-6 space-y-6 flex-1">
-          {/* Category Tabs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 border-b border-[var(--color-border)] pb-3">
+          {/* Category Tabs Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
             {categories.map((cat) => (
               <button
                 key={cat.key}
                 onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
-                className={`px-3.5 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 text-left border ${
+                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-1.5 text-left border ${
                   activeTab === cat.key
-                    ? 'bg-[var(--color-primary-700)] text-white shadow-sm border-[var(--color-primary-700)] relative after:absolute after:left-3.5 after:bottom-1 after:w-5 after:h-[2px] after:bg-[var(--color-accent-brass)]'
-                    : 'bg-[var(--color-bg-surface)] text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-[var(--color-bg-sunken)] border-[var(--color-border)]'
+                    ? 'bg-[#5B4BFF] text-white shadow-md shadow-indigo-500/25 border-[#5B4BFF]'
+                    : 'bg-white dark:bg-slate-900 text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 border-[#E7EAF3] dark:border-slate-800 shadow-xs'
                 }`}
               >
-                <div className="flex items-center gap-2 truncate">
-                  <span className="text-base shrink-0">{cat.icon}</span>
-                  <span className="truncate text-[11px] font-bold">{cat.label.split('. ')[1]}</span>
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="text-sm shrink-0">{cat.icon}</span>
+                  <span className="truncate text-[11px] font-bold">{cat.label}</span>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 border ${
                   activeTab === cat.key
                     ? 'bg-white/20 text-white border-transparent'
-                    : 'bg-[var(--color-bg-sunken)] text-[var(--color-primary-700)] border-[var(--color-border)]'
+                    : 'bg-[#F6F8FC] dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-400 border-indigo-500/20'
                 }`}>
                   {cat.count}
                 </span>
@@ -460,151 +542,78 @@ export default function AdminMasterPage() {
             ))}
           </div>
 
-          {/* Search Control Bar */}
-          <div className="flex items-center justify-between gap-4">
+          {/* Search Control & Action Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
               <input
                 type="text"
-                placeholder={`Search ${activeTab === 'professional-linkers' ? 'CBME Master' : activeTab.replace('-', ' ')} by code, name or details...`}
+                placeholder={`Search ${categories.find(c => c.key === activeTab)?.label} by code, name or details...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="premium-input pl-9"
+                className="w-full text-xs font-semibold pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 text-[#1B1E28] dark:text-white placeholder-[#7B8794] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-xs"
               />
-              <span className="absolute left-3 top-3 text-[var(--color-ink-500)] text-xs">🔍</span>
+              <span className="absolute left-3.5 top-3 text-[#7B8794] text-xs">🔍</span>
             </div>
 
             <button
               onClick={handleAddNew}
-              className="premium-btn-primary shadow-sm flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4837E8] text-white text-xs font-bold shadow-md shadow-indigo-500/25 transition-all shrink-0 cursor-pointer"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              Add New {categories.find((c) => c.key === activeTab)?.label.split('. ')[1]}
+              <span>Add New {categories.find((c) => c.key === activeTab)?.label}</span>
             </button>
           </div>
 
-          {/* Table Content Section */}
-          <div className="glass-card overflow-hidden">
+          {/* Table Container Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-[22px] border border-[#E7EAF3] dark:border-slate-800 shadow-sm overflow-hidden">
             {loading ? (
-              <div className="premium-table-wrapper">
-                <table className="premium-table">
-                  <thead>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-[#F6F8FC] dark:bg-slate-800/60 border-b border-[#E7EAF3] dark:border-slate-800">
                     <tr>
-                      {activeTab === 'professional-linkers' && (
-                        <>
-                          <th className="pl-5">SNo</th>
-                          <th>CBME Code</th>
-                          <th>Name</th>
-                          <th>CBME Year</th>
-                          <th>Status</th>
-                          <th className="pr-5 text-right">Actions</th>
-                        </>
-                      )}
-                      {activeTab === 'departments' && (
-                        <>
-                          <th className="pl-5">Code</th>
-                          <th>Department Name</th>
-                          <th>Classification Type</th>
-                          <th>HOD Assigned</th>
-                          <th>Status</th>
-                          <th className="pr-5 text-right">Actions</th>
-                        </>
-                      )}
-                      {activeTab === 'subjects' && (
-                        <>
-                          <th className="pl-5">Subject Code</th>
-                          <th>Subject Name</th>
-                          <th>Department</th>
-                          <th>Longitudinal?</th>
-                          <th>Credits / Units</th>
-                          <th className="pr-5 text-right">Actions</th>
-                        </>
-                      )}
-                      {activeTab === 'subject-offerings' && (
-                        <>
-                          <th className="pl-5">Subject</th>
-                          <th>Prof Year / Phase</th>
-                          <th>Delivery Type</th>
-                          <th>Batch Year</th>
-                          <th>Hours Allotted</th>
-                          <th className="pr-5 text-right">Actions</th>
-                        </>
-                      )}
-                      {activeTab === 'delivery-types' && (
-                        <>
-                          <th className="pl-5">Code</th>
-                          <th>Delivery Type Name</th>
-                          <th>Status</th>
-                          <th className="pr-5 text-right">Actions</th>
-                        </>
-                      )}
-                      {activeTab === 'topics' && (
-                        <>
-                          <th className="pl-5">Topic Code</th>
-                          <th>Topic Name</th>
-                          <th>Linked Subject</th>
-                          <th>Linked CBME</th>
-                          <th>Allocated Hours</th>
-                          <th className="pr-5 text-right">Actions</th>
-                        </>
-                      )}
-                      {activeTab === 'competencies' && (
-                        <>
-                          <th className="pl-5">NMC Code</th>
-                          <th>Competency Statement</th>
-                          <th>Linked CBME</th>
-                          <th>Subject & Topic</th>
-                          <th>Blooms Domain</th>
-                          <th>Level / Type</th>
-                          <th className="pr-5 text-right">Actions</th>
-                        </>
-                      )}
+                      <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Loading</th>
+                      <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Details</th>
+                      <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <TableSkeleton colCount={
-                    activeTab === 'competencies' ? 7 :
-                    activeTab === 'subjects' ? 6 :
-                    activeTab === 'topics' ? 6 :
-                    activeTab === 'subject-offerings' ? 6 :
-                    activeTab === 'professional-linkers' ? 6 :
-                    activeTab === 'departments' ? 6 : 4
-                  } />
+                  <TableSkeleton colCount={6} />
                 </table>
               </div>
             ) : (
-              <div className="premium-table-wrapper">
+              <div className="overflow-x-auto">
                 {activeTab === 'professional-linkers' && (
-                  <table className="premium-table">
-                    <thead>
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/60 border-b border-[#E7EAF3] dark:border-slate-800">
                       <tr>
-                        <th className="pl-5">SNo</th>
-                        <th>CBME Code</th>
-                        <th>Name</th>
-                        <th>CBME Year</th>
-                        <th>Status</th>
-                        <th className="pr-5 text-right">Actions</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pl-5">SNo</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">CBME Code</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Name</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">CBME Year</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Status</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pr-5 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
+                    <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 text-xs font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">No CBME Masters defined in tenant schema. Click &apos;Add New&apos; to create one.</td></tr>
+                        <tr><td colSpan={6} className="p-8 text-center text-[#7B8794] font-semibold">No CBME Masters defined in tenant schema. Click &apos;Add New&apos; to create one.</td></tr>
                       ) : (
                         paginatedList.map((l: any, idx: number) => (
-                          <tr key={l.id} className="transition-colors">
-                            <td className="pl-5 font-bold">{startIndex + idx + 1}</td>
-                            <td className="font-extrabold text-[var(--color-primary-700)] font-mono">{l.code}</td>
-                            <td>
-                              <div className="font-bold text-[var(--color-ink-900)]">{l.name}</div>
-                              <div className="text-[11px] text-[var(--color-ink-500)] line-clamp-1">{l.description || 'No additional details provided'}</div>
+                          <tr key={l.id} className="hover:bg-[#F6F8FC]/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 pl-5 font-bold text-[#1B1E28] dark:text-white">{startIndex + idx + 1}</td>
+                            <td className="py-3.5 px-4 font-extrabold text-[#5B4BFF] font-mono">{l.code}</td>
+                            <td className="py-3.5 px-4">
+                              <div className="font-bold text-[#1B1E28] dark:text-white">{l.name}</div>
+                              <div className="text-[11px] text-[#7B8794] line-clamp-1">{l.description || 'No additional details provided'}</div>
                             </td>
-                            <td className="font-mono text-[11px] text-[var(--color-ink-700)]">{l.academic_session || 'N/A'}</td>
-                            <td>
-                              <span className="premium-badge bg-[var(--color-success-tint)] text-[var(--color-success)] border border-[var(--color-success)]/10">
+                            <td className="py-3.5 px-4 font-mono text-[11px] text-[#4E5969] dark:text-slate-400">{l.academic_session || 'N/A'}</td>
+                            <td className="py-3.5 px-4">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                                 ACTIVE
                               </span>
                             </td>
-                            <td className="pr-5 text-right">
+                            <td className="py-3.5 px-4 pr-5 text-right">
                               <ActionButtons onEdit={() => handleEdit(l)} onDelete={() => handleDelete(l.id)} />
                             </td>
                           </tr>
@@ -615,33 +624,33 @@ export default function AdminMasterPage() {
                 )}
 
                 {activeTab === 'departments' && (
-                  <table className="premium-table">
-                    <thead>
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/60 border-b border-[#E7EAF3] dark:border-slate-800">
                       <tr>
-                        <th className="pl-5">Code</th>
-                        <th>Department Name</th>
-                        <th>Classification Type</th>
-                        <th>HOD Assigned</th>
-                        <th>Status</th>
-                        <th className="pr-5 text-right">Actions</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pl-5">Code</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Department Name</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Classification Type</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">HOD Assigned</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Status</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pr-5 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
+                    <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 text-xs font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">No departments found in PostgreSQL schema. Click &apos;Add New&apos; to populate.</td></tr>
+                        <tr><td colSpan={6} className="p-8 text-center text-[#7B8794] font-semibold">No departments found in PostgreSQL schema. Click &apos;Add New&apos; to populate.</td></tr>
                       ) : (
                         paginatedList.map((d: any) => (
-                          <tr key={d.id} className="transition-colors">
-                            <td className="pl-5 font-extrabold text-[var(--color-primary-700)] font-mono">{d.code}</td>
-                            <td className="font-bold text-[var(--color-ink-900)]">{d.name}</td>
-                            <td className="text-[var(--color-ink-700)]">{d.type}</td>
-                            <td>{d.hod_email ? <code className="text-[var(--color-primary-700)] font-mono text-[11px]">{d.hod_email}</code> : <span className="text-slate-400 font-medium">Unassigned</span>}</td>
-                            <td>
-                              <span className={`premium-badge ${d.is_active ? 'bg-[var(--color-success-tint)] text-[var(--color-success)] border border-[var(--color-success)]/10' : 'bg-[var(--color-danger-tint)] text-[var(--color-danger)] border border-[var(--color-danger)]/10'}`}>
+                          <tr key={d.id} className="hover:bg-[#F6F8FC]/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 pl-5 font-extrabold text-[#5B4BFF] font-mono">{d.code}</td>
+                            <td className="py-3.5 px-4 font-bold text-[#1B1E28] dark:text-white">{d.name}</td>
+                            <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300">{d.type}</td>
+                            <td className="py-3.5 px-4">{d.hod_email ? <code className="text-[#5B4BFF] font-mono text-[11px]">{d.hod_email}</code> : <span className="text-slate-400 font-medium">Unassigned</span>}</td>
+                            <td className="py-3.5 px-4">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${d.is_active ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>
                                 {d.is_active ? 'ACTIVE' : 'INACTIVE'}
                               </span>
                             </td>
-                            <td className="pr-5 text-right">
+                            <td className="py-3.5 px-4 pr-5 text-right">
                               <ActionButtons onEdit={() => handleEdit(d)} onDelete={() => handleDelete(d.id)} />
                             </td>
                           </tr>
@@ -652,35 +661,35 @@ export default function AdminMasterPage() {
                 )}
 
                 {activeTab === 'subjects' && (
-                  <table className="premium-table">
-                    <thead>
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/60 border-b border-[#E7EAF3] dark:border-slate-800">
                       <tr>
-                        <th className="pl-5">Subject Code</th>
-                        <th>Subject Name</th>
-                        <th>Department</th>
-                        <th>Longitudinal?</th>
-                        <th>Credits / Units</th>
-                        <th className="pr-5 text-right">Actions</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pl-5">Subject Code</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Subject Name</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Department</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Longitudinal?</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Credits / Units</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pr-5 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
+                    <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 text-xs font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">No academic subjects found in database. Click &apos;Add New&apos; to create.</td></tr>
+                        <tr><td colSpan={6} className="p-8 text-center text-[#7B8794] font-semibold">No academic subjects found in database. Click &apos;Add New&apos; to create.</td></tr>
                       ) : (
                         paginatedList.map((s: any) => (
-                          <tr key={s.id} className="transition-colors">
-                            <td className="pl-5 font-extrabold text-[var(--color-primary-700)] font-mono">{s.code}</td>
-                            <td className="font-bold text-[var(--color-ink-900)]">{s.name}</td>
-                            <td className="text-[var(--color-ink-700)] font-semibold">{s.department_name || 'General Medical'}</td>
-                            <td>
+                          <tr key={s.id} className="hover:bg-[#F6F8FC]/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 pl-5 font-extrabold text-[#5B4BFF] font-mono">{s.code}</td>
+                            <td className="py-3.5 px-4 font-bold text-[#1B1E28] dark:text-white">{s.name}</td>
+                            <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300 font-semibold">{s.department_name || 'General Medical'}</td>
+                            <td className="py-3.5 px-4">
                               {s.is_longitudinal || s.code === 'CM' ? (
-                                <span className="premium-badge bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold">YES</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">YES</span>
                               ) : (
-                                <span className="premium-badge bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20">NO</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">NO</span>
                               )}
                             </td>
-                            <td className="font-mono text-[var(--color-primary-700)]">{s.credits} Credits</td>
-                            <td className="pr-5 text-right">
+                            <td className="py-3.5 px-4 font-mono text-[#5B4BFF] font-bold">{s.credits} Credits</td>
+                            <td className="py-3.5 px-4 pr-5 text-right">
                               <ActionButtons onEdit={() => handleEdit(s)} onDelete={() => handleDelete(s.id)} />
                             </td>
                           </tr>
@@ -691,35 +700,35 @@ export default function AdminMasterPage() {
                 )}
 
                 {activeTab === 'subject-offerings' && (
-                  <table className="premium-table">
-                    <thead>
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/60 border-b border-[#E7EAF3] dark:border-slate-800">
                       <tr>
-                        <th className="pl-5">Subject</th>
-                        <th>Prof Year / Phase</th>
-                        <th>Delivery Type</th>
-                        <th>Batch Year</th>
-                        <th>Hours Allotted</th>
-                        <th className="pr-5 text-right">Actions</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pl-5">Subject</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Prof Year / Phase</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Delivery Type</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Batch Year</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Hours Allotted</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pr-5 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
+                    <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 text-xs font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">No subject offerings configured. Click &apos;Add New&apos; to create.</td></tr>
+                        <tr><td colSpan={6} className="p-8 text-center text-[#7B8794] font-semibold">No subject offerings configured. Click &apos;Add New&apos; to create.</td></tr>
                       ) : (
                         paginatedList.map((o: any) => (
-                          <tr key={o.id} className="transition-colors">
-                            <td className="pl-5 font-bold text-[var(--color-ink-900)]">
-                              {o.subject_name} <span className="text-[var(--color-primary-700)] font-mono text-[11px]">({o.subject_code})</span>
+                          <tr key={o.id} className="hover:bg-[#F6F8FC]/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 pl-5 font-bold text-[#1B1E28] dark:text-white">
+                              {o.subject_name} <span className="text-[#5B4BFF] font-mono text-[11px]">({o.subject_code})</span>
                             </td>
-                            <td className="text-[var(--color-ink-700)] font-semibold">{o.prof_name}</td>
-                            <td>
-                              <span className="premium-badge bg-[var(--color-primary-100)] text-[var(--color-primary-700)] font-mono text-[11px]">
+                            <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300 font-semibold">{o.prof_name}</td>
+                            <td className="py-3.5 px-4">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-50 text-[#5B4BFF] dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-mono">
                                 {o.dtype_code} ({o.dtype_name})
                               </span>
                             </td>
-                            <td className="text-[var(--color-ink-700)] font-mono text-[11px]">{o.batch_year} Admission</td>
-                            <td className="font-mono text-amber-600 dark:text-amber-400 font-semibold">{o.hours_allotted} hrs</td>
-                            <td className="pr-5 text-right">
+                            <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-400 font-mono text-[11px]">{o.batch_year} Admission</td>
+                            <td className="py-3.5 px-4 font-mono text-amber-600 dark:text-amber-400 font-semibold">{o.hours_allotted} hrs</td>
+                            <td className="py-3.5 px-4 pr-5 text-right">
                               <ActionButtons onEdit={() => handleEdit(o)} onDelete={() => handleDelete(o.id)} />
                             </td>
                           </tr>
@@ -730,29 +739,29 @@ export default function AdminMasterPage() {
                 )}
 
                 {activeTab === 'delivery-types' && (
-                  <table className="premium-table">
-                    <thead>
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/60 border-b border-[#E7EAF3] dark:border-slate-800">
                       <tr>
-                        <th className="pl-5">Code</th>
-                        <th>Delivery Type Name</th>
-                        <th>Status</th>
-                        <th className="pr-5 text-right">Actions</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pl-5">Code</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Delivery Type Name</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Status</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pr-5 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
+                    <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 text-xs font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={4} className="p-8 text-center text-slate-500 font-medium">No delivery types registered. Click &apos;Add New&apos; to create.</td></tr>
+                        <tr><td colSpan={4} className="p-8 text-center text-[#7B8794] font-semibold">No delivery types registered. Click &apos;Add New&apos; to create.</td></tr>
                       ) : (
                         paginatedList.map((dt: any) => (
-                          <tr key={dt.id} className="transition-colors">
-                            <td className="pl-5 font-extrabold text-[var(--color-primary-700)] font-mono">{dt.code}</td>
-                            <td className="font-bold text-[var(--color-ink-900)]">{dt.name}</td>
-                            <td>
-                              <span className={`premium-badge ${dt.is_active ? 'bg-[var(--color-success-tint)] text-[var(--color-success)] border border-[var(--color-success)]/10' : 'bg-[var(--color-danger-tint)] text-[var(--color-danger)] border border-[var(--color-danger)]/10'}`}>
+                          <tr key={dt.id} className="hover:bg-[#F6F8FC]/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 pl-5 font-extrabold text-[#5B4BFF] font-mono">{dt.code}</td>
+                            <td className="py-3.5 px-4 font-bold text-[#1B1E28] dark:text-white">{dt.name}</td>
+                            <td className="py-3.5 px-4">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${dt.is_active ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>
                                 {dt.is_active ? 'ACTIVE' : 'INACTIVE'}
                               </span>
                             </td>
-                            <td className="pr-5 text-right">
+                            <td className="py-3.5 px-4 pr-5 text-right">
                               <ActionButtons onEdit={() => handleEdit(dt)} onDelete={() => handleDelete(dt.id)} />
                             </td>
                           </tr>
@@ -763,41 +772,41 @@ export default function AdminMasterPage() {
                 )}
 
                 {activeTab === 'topics' && (
-                  <table className="premium-table">
-                    <thead>
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/60 border-b border-[#E7EAF3] dark:border-slate-800">
                       <tr>
-                        <th className="pl-5">Topic Code</th>
-                        <th>Topic Name</th>
-                        <th>Linked Subject</th>
-                        <th>Linked CBME</th>
-                        <th>Allocated Hours</th>
-                        <th className="pr-5 text-right">Actions</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pl-5">Topic Code</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Topic Name</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Linked Subject</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Linked CBME</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Allocated Hours</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pr-5 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
+                    <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 text-xs font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">No curriculum topics registered in tenant schema. Click &apos;Add New&apos; to start.</td></tr>
+                        <tr><td colSpan={6} className="p-8 text-center text-[#7B8794] font-semibold">No curriculum topics registered in tenant schema. Click &apos;Add New&apos; to start.</td></tr>
                       ) : (
                         paginatedList.map((t: any) => (
-                          <tr key={t.id} className="transition-colors">
-                            <td className="pl-5 font-extrabold text-[var(--color-primary-700)] font-mono">{t.code}</td>
-                            <td className="font-bold text-[var(--color-ink-900)]">{t.name}</td>
-                            <td>
+                          <tr key={t.id} className="hover:bg-[#F6F8FC]/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 pl-5 font-extrabold text-[#5B4BFF] font-mono">{t.code}</td>
+                            <td className="py-3.5 px-4 font-bold text-[#1B1E28] dark:text-white">{t.name}</td>
+                            <td className="py-3.5 px-4">
                               {t.subject_name ? (
-                                <span className="premium-badge bg-[var(--color-primary-100)] text-[var(--color-primary-700)]">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-[#5B4BFF] dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
                                   {t.subject_name} ({t.subject_code})
                                 </span>
                               ) : <span className="text-slate-400">Unassigned</span>}
                             </td>
-                            <td>
+                            <td className="py-3.5 px-4">
                               {t.cbme_code ? (
-                                <span className="premium-badge bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 font-bold font-mono">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
                                   {t.cbme_code}
                                 </span>
                               ) : <span className="text-slate-400">N/A</span>}
                             </td>
-                            <td className="font-mono text-amber-600 dark:text-amber-400 font-semibold">{t.hours} hrs</td>
-                            <td className="pr-5 text-right">
+                            <td className="py-3.5 px-4 font-mono text-amber-600 dark:text-amber-400 font-semibold">{t.hours} hrs</td>
+                            <td className="py-3.5 px-4 pr-5 text-right">
                               <ActionButtons onEdit={() => handleEdit(t)} onDelete={() => handleDelete(t.id)} />
                             </td>
                           </tr>
@@ -808,53 +817,53 @@ export default function AdminMasterPage() {
                 )}
 
                 {activeTab === 'competencies' && (
-                  <table className="premium-table">
-                    <thead>
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/60 border-b border-[#E7EAF3] dark:border-slate-800">
                       <tr>
-                        <th className="pl-5">NMC Code</th>
-                        <th>Competency Statement</th>
-                        <th>Linked CBME</th>
-                        <th>Subject & Topic</th>
-                        <th>Blooms Domain</th>
-                        <th>Level / Type</th>
-                        <th className="pr-5 text-right">Actions</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pl-5">NMC Code</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Competency Statement</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Linked CBME</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Subject & Topic</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Blooms Domain</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">Level / Type</th>
+                        <th className="py-3.5 px-4 text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 pr-5 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
+                    <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 text-xs font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={7} className="p-8 text-center text-slate-500 font-medium">No medical competencies configured in database. Click &apos;Add New&apos; to create.</td></tr>
+                        <tr><td colSpan={7} className="p-8 text-center text-[#7B8794] font-semibold">No medical competencies configured in database. Click &apos;Add New&apos; to create.</td></tr>
                       ) : (
                         paginatedList.map((c: any) => (
-                          <tr key={c.id} className="transition-colors">
-                            <td className="pl-5 font-extrabold text-[var(--color-primary-700)] font-mono text-sm">{c.code}</td>
-                            <td className="font-semibold text-[var(--color-ink-900)] max-w-md">{c.description}</td>
-                            <td>
+                          <tr key={c.id} className="hover:bg-[#F6F8FC]/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 pl-5 font-extrabold text-[#5B4BFF] font-mono text-sm">{c.code}</td>
+                            <td className="py-3.5 px-4 font-semibold text-[#1B1E28] dark:text-white max-w-md">{c.description}</td>
+                            <td className="py-3.5 px-4">
                               {c.cbme_code ? (
-                                <span className="premium-badge bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 font-bold font-mono">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
                                   {c.cbme_code}
                                 </span>
                               ) : <span className="text-slate-400">N/A</span>}
                             </td>
-                            <td className="text-[11px]">
-                              <div className="font-bold text-[var(--color-ink-700)]">{c.subject_name || 'General'}</div>
-                              <div className="text-[var(--color-primary-700)] font-mono">{c.topic_name || 'All Topics'}</div>
+                            <td className="py-3.5 px-4 text-[11px]">
+                              <div className="font-bold text-[#1B1E28] dark:text-white">{c.subject_name || 'General'}</div>
+                              <div className="text-[#5B4BFF] font-mono">{c.topic_name || 'All Topics'}</div>
                             </td>
-                            <td>
-                              <span className="premium-badge bg-[var(--color-info-tint)] text-[var(--color-info)] border border-[var(--color-info)]/10">
+                            <td className="py-3.5 px-4">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
                                 {c.domain || 'Knowledge'}
                               </span>
                             </td>
-                            <td>
+                            <td className="py-3.5 px-4">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[var(--color-ink-900)] font-extrabold text-xs">{c.level || 'KH'}</span>
-                                <span className={`premium-badge ${
-                                  c.is_core ? 'bg-[var(--color-warning-tint)] text-[var(--color-warning)] border border-[var(--color-warning)]/10' : 'bg-[var(--color-bg-sunken)] text-[var(--color-ink-500)]'
+                                <span className="text-[#1B1E28] dark:text-white font-extrabold text-xs">{c.level || 'KH'}</span>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                                  c.is_core ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                                 }`}>
                                   {c.is_core ? 'CORE' : 'NON-CORE'}
                                 </span>
                               </div>
                             </td>
-                            <td className="pr-5 text-right">
+                            <td className="py-3.5 px-4 pr-5 text-right">
                               <ActionButtons onEdit={() => handleEdit(c)} onDelete={() => handleDelete(c.id)} />
                             </td>
                           </tr>
@@ -866,7 +875,7 @@ export default function AdminMasterPage() {
 
                 {/* Pagination Controls Footer */}
                 {totalItems > 0 && (
-                  <div className="p-4 border-t border-[var(--color-border)] bg-[var(--color-bg-sunken)] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-[var(--color-ink-700)]">
+                  <div className="p-4 border-t border-[#E7EAF3] dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-800/40 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-[#4E5969] dark:text-slate-400">
                     <div>
                       Showing {startIndex + 1}–{Math.min(startIndex + ITEMS_PER_PAGE, totalItems)} of {totalItems} records
                     </div>
@@ -875,7 +884,7 @@ export default function AdminMasterPage() {
                         type="button"
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        className="px-3 py-1.5 rounded bg-[var(--color-bg-surface)] hover:bg-[var(--color-primary-100)] text-[var(--color-primary-700)] border border-[var(--color-border)] disabled:opacity-50 disabled:hover:bg-[var(--color-bg-surface)] transition-all font-bold"
+                        className="px-3.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-[#1B1E28] dark:text-white border border-[#E7EAF3] dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-bold shadow-xs"
                       >
                         ← Previous
                       </button>
@@ -885,10 +894,10 @@ export default function AdminMasterPage() {
                             key={pg}
                             type="button"
                             onClick={() => setCurrentPage(pg)}
-                            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                            className={`w-7 h-7 rounded-lg text-xs flex items-center justify-center transition-all ${
                               currentPage === pg
-                                ? 'bg-[var(--color-accent-brass)] text-white font-bold'
-                                : 'hover:bg-[var(--color-primary-100)] text-[var(--color-ink-700)] hover:text-[var(--color-primary-700)]'
+                                ? 'bg-[#5B4BFF] text-white font-bold shadow-xs'
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-[#4E5969] dark:text-slate-300'
                             }`}
                           >
                             {pg}
@@ -899,7 +908,7 @@ export default function AdminMasterPage() {
                         type="button"
                         disabled={currentPage === totalPages}
                         onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                        className="px-3 py-1.5 rounded bg-[var(--color-bg-surface)] hover:bg-[var(--color-primary-100)] text-[var(--color-primary-700)] border border-[var(--color-border)] disabled:opacity-50 disabled:hover:bg-[var(--color-bg-surface)] transition-all font-bold"
+                        className="px-3.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-[#1B1E28] dark:text-white border border-[#E7EAF3] dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-bold shadow-xs"
                       >
                         Next →
                       </button>
@@ -913,12 +922,12 @@ export default function AdminMasterPage() {
           {/* Dynamic Popup Form Modal */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-              <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border)] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
-                <div className="p-5 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-bg-sunken)]">
-                  <h3 className="font-extrabold text-[var(--color-ink-900)] text-base premium-title-display">
-                    {editingItem ? `Edit ${activeTab === 'professional-linkers' ? 'CBME Master' : activeTab.replace('-', ' ')}` : `Create New ${activeTab === 'professional-linkers' ? 'CBME Master' : activeTab.replace('-', ' ')}`}
+              <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] w-full max-w-xl overflow-hidden shadow-2xl">
+                <div className="p-5 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-[#2D2575] via-[#352B88] to-[#2D2575] text-white">
+                  <h3 className="font-extrabold text-white text-base">
+                    {editingItem ? `Edit ${categories.find(c => c.key === activeTab)?.label}` : `Create New ${categories.find(c => c.key === activeTab)?.label}`}
                   </h3>
-                  <button onClick={() => setIsModalOpen(false)} className="text-[var(--color-ink-500)] hover:text-[var(--color-ink-900)] text-lg font-bold px-2 py-0.5 rounded hover:bg-[var(--color-bg-sunken)] transition-colors">✕</button>
+                  <button onClick={() => setIsModalOpen(false)} className="text-white/80 hover:text-white text-lg font-bold px-2 py-0.5 rounded hover:bg-white/10 transition-colors">✕</button>
                 </div>
 
                 <form onSubmit={handleSave} className="p-6 space-y-4 text-xs font-medium">
@@ -927,31 +936,31 @@ export default function AdminMasterPage() {
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">CBME Code *</label>
-                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. LINK-MBBS-P1" className="premium-input font-mono font-bold" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">CBME Code *</label>
+                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. LINK-MBBS-P1" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono font-bold" />
                         </div>
                         <div>
-                          <label className="premium-label">Course Code</label>
-                          <input type="text" value={formData.course_cd || ''} onChange={e => setFormData({ ...formData, course_cd: e.target.value })} placeholder="e.g. MBBS" className="premium-input" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Course Code</label>
+                          <input type="text" value={formData.course_cd || ''} onChange={e => setFormData({ ...formData, course_cd: e.target.value })} placeholder="e.g. MBBS" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all" />
                         </div>
                       </div>
                       <div>
-                        <label className="premium-label">CBME Name *</label>
-                        <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="1st Professional Phase I Linker" className="premium-input" />
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">CBME Name *</label>
+                        <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="1st Professional Phase I Linker" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">Professional Phase</label>
-                          <input type="text" value={formData.professional_phase || ''} onChange={e => setFormData({ ...formData, professional_phase: e.target.value })} placeholder="1st Professional (Phase I)" className="premium-input" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Professional Phase</label>
+                          <input type="text" value={formData.professional_phase || ''} onChange={e => setFormData({ ...formData, professional_phase: e.target.value })} placeholder="1st Professional (Phase I)" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all" />
                         </div>
                         <div>
-                          <label className="premium-label">CBME Year (Academic Session)</label>
-                          <input type="text" value={formData.academic_session || ''} onChange={e => setFormData({ ...formData, academic_session: e.target.value })} placeholder="2024-2025" className="premium-input font-mono" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">CBME Year (Academic Session)</label>
+                          <input type="text" value={formData.academic_session || ''} onChange={e => setFormData({ ...formData, academic_session: e.target.value })} placeholder="2024-2025" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono" />
                         </div>
                       </div>
                       <div>
-                        <label className="premium-label">Description</label>
-                        <textarea rows={3} value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Linking subjects and modules for this academic phase..." className="premium-input h-auto min-h-[80px] resize-none"></textarea>
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Description</label>
+                        <textarea rows={3} value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Linking subjects and modules for this academic phase..." className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all h-auto min-h-[80px] resize-none"></textarea>
                       </div>
                     </>
                   )}
@@ -961,12 +970,12 @@ export default function AdminMasterPage() {
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">Department Code *</label>
-                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. ANAT, MED, SURG" className="premium-input font-mono font-bold uppercase" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Department Code *</label>
+                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. ANAT, MED, SURG" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono font-bold uppercase" />
                         </div>
                         <div>
-                          <label className="premium-label">Classification Type *</label>
-                          <select required value={formData.type || 'Pre-Clinical'} onChange={e => setFormData({ ...formData, type: e.target.value })} className="premium-input">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Classification Type *</label>
+                          <select required value={formData.type || 'Pre-Clinical'} onChange={e => setFormData({ ...formData, type: e.target.value })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                             <option value="Pre-Clinical">Pre-Clinical (Phase I)</option>
                             <option value="Para-Clinical">Para-Clinical (Phase II)</option>
                             <option value="Clinical">Clinical (Phase III & IV)</option>
@@ -977,8 +986,8 @@ export default function AdminMasterPage() {
                         </div>
                       </div>
                       <div>
-                        <label className="premium-label">Department Name *</label>
-                        <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Department of Human Anatomy" className="premium-input" />
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Department Name *</label>
+                        <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Department of Human Anatomy" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all" />
                       </div>
                     </>
                   )}
@@ -987,17 +996,17 @@ export default function AdminMasterPage() {
                   {activeTab === 'subjects' && (
                     <>
                       <div>
-                        <label className="premium-label">Subject Code *</label>
-                        <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. ANAT-101" className="premium-input font-mono font-bold uppercase" />
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Subject Code *</label>
+                        <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. ANAT-101" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono font-bold uppercase" />
                       </div>
                       <div>
-                        <label className="premium-label">Subject Name *</label>
-                        <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Human Anatomy & Embryology" className="premium-input" />
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Subject Name *</label>
+                        <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Human Anatomy & Embryology" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">Department</label>
-                          <select value={formData.department_id || ''} onChange={e => setFormData({ ...formData, department_id: e.target.value || null })} className="premium-input">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Department</label>
+                          <select value={formData.department_id || ''} onChange={e => setFormData({ ...formData, department_id: e.target.value || null })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                             <option value="">-- Select Department --</option>
                             {departments.map(d => (
                               <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
@@ -1005,17 +1014,17 @@ export default function AdminMasterPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="premium-label">Course Credits / Units</label>
-                          <input type="number" min="1" max="50" value={formData.credits || 4} onChange={e => setFormData({ ...formData, credits: Number(e.target.value) })} className="premium-input font-mono" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Course Credits / Units</label>
+                          <input type="number" min="1" max="50" value={formData.credits || 4} onChange={e => setFormData({ ...formData, credits: Number(e.target.value) })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono" />
                         </div>
                       </div>
                       <div>
-                        <label className="premium-label">Is Longitudinal Subject? *</label>
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Is Longitudinal Subject? *</label>
                         <select
                           required
                           value={formData.is_longitudinal ? 'true' : 'false'}
                           onChange={e => setFormData({ ...formData, is_longitudinal: e.target.value === 'true' })}
-                          className="premium-input"
+                          className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all"
                         >
                           <option value="false">No (Standard Phase-Bound Subject)</option>
                           <option value="true">Yes (Longitudinal Subject runs across multiple phases)</option>
@@ -1028,8 +1037,8 @@ export default function AdminMasterPage() {
                   {activeTab === 'subject-offerings' && (
                     <>
                       <div>
-                        <label className="premium-label">Select Subject *</label>
-                        <select required value={formData.subject_id || ''} onChange={e => setFormData({ ...formData, subject_id: e.target.value })} className="premium-input">
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Select Subject *</label>
+                        <select required value={formData.subject_id || ''} onChange={e => setFormData({ ...formData, subject_id: e.target.value })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                           <option value="">-- Select Subject --</option>
                           {subjects.map(s => (
                             <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
@@ -1038,8 +1047,8 @@ export default function AdminMasterPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">Professional Year / Phase *</label>
-                          <select required value={formData.prof_id || ''} onChange={e => setFormData({ ...formData, prof_id: e.target.value })} className="premium-input">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Professional Year / Phase *</label>
+                          <select required value={formData.prof_id || ''} onChange={e => setFormData({ ...formData, prof_id: e.target.value })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                             <option value="">-- Select Phase --</option>
                             {profPhases.map(p => (
                               <option key={p.id} value={p.id}>{p.name}</option>
@@ -1047,8 +1056,8 @@ export default function AdminMasterPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="premium-label">Delivery Type *</label>
-                          <select required value={formData.dtype_id || ''} onChange={e => setFormData({ ...formData, dtype_id: e.target.value })} className="premium-input">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Delivery Type *</label>
+                          <select required value={formData.dtype_id || ''} onChange={e => setFormData({ ...formData, dtype_id: e.target.value })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                             <option value="">-- Select Delivery Type --</option>
                             {deliveryTypes.map(dt => (
                               <option key={dt.id} value={dt.id}>{dt.name} ({dt.code})</option>
@@ -1058,12 +1067,12 @@ export default function AdminMasterPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">Batch Admission Year *</label>
-                          <input type="number" required min="2000" max="2100" value={formData.batch_year || 2024} onChange={e => setFormData({ ...formData, batch_year: Number(e.target.value) })} className="premium-input font-mono" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Batch Admission Year *</label>
+                          <input type="number" required min="2000" max="2100" value={formData.batch_year || 2024} onChange={e => setFormData({ ...formData, batch_year: Number(e.target.value) })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono" />
                         </div>
                         <div>
-                          <label className="premium-label">Hours Allotted</label>
-                          <input type="number" min="0" max="1000" value={formData.hours_allotted || 0} onChange={e => setFormData({ ...formData, hours_allotted: Number(e.target.value) })} className="premium-input font-mono" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Hours Allotted</label>
+                          <input type="number" min="0" max="1000" value={formData.hours_allotted || 0} onChange={e => setFormData({ ...formData, hours_allotted: Number(e.target.value) })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono" />
                         </div>
                       </div>
                     </>
@@ -1074,12 +1083,12 @@ export default function AdminMasterPage() {
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">Code *</label>
-                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. TH, PR" className="premium-input font-mono font-bold uppercase" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Code *</label>
+                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. TH, PR" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono font-bold uppercase" />
                         </div>
                         <div>
-                          <label className="premium-label">Name *</label>
-                          <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Theory, Practical" className="premium-input" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Name *</label>
+                          <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Theory, Practical" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all" />
                         </div>
                       </div>
                     </>
@@ -1090,12 +1099,12 @@ export default function AdminMasterPage() {
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">Topic Code *</label>
-                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. ANAT-TOPIC-1" className="premium-input font-mono font-bold uppercase" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Topic Code *</label>
+                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. ANAT-TOPIC-1" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono font-bold uppercase" />
                         </div>
                         <div>
-                          <label className="premium-label">Linked Subject</label>
-                          <select value={formData.subject_id || ''} onChange={e => setFormData({ ...formData, subject_id: e.target.value || null })} className="premium-input">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Linked Subject</label>
+                          <select value={formData.subject_id || ''} onChange={e => setFormData({ ...formData, subject_id: e.target.value || null })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                             <option value="">-- Select Subject --</option>
                             {subjects.map(s => (
                               <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
@@ -1104,8 +1113,8 @@ export default function AdminMasterPage() {
                         </div>
                       </div>
                       <div>
-                        <label className="premium-label">Linked CBME Master</label>
-                        <select value={formData.linker_id || ''} onChange={e => setFormData({ ...formData, linker_id: e.target.value || null })} className="premium-input">
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Linked CBME Master</label>
+                        <select value={formData.linker_id || ''} onChange={e => setFormData({ ...formData, linker_id: e.target.value || null })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                           <option value="">-- Select CBME Master --</option>
                           {linkers.map(l => (
                             <option key={l.id} value={l.id}>{l.name} ({l.code})</option>
@@ -1113,16 +1122,16 @@ export default function AdminMasterPage() {
                         </select>
                       </div>
                       <div>
-                        <label className="premium-label">Topic Title / Module Name *</label>
-                        <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Upper & Lower Limb Gross Anatomy" className="premium-input" />
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Topic Title / Module Name *</label>
+                        <input type="text" required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Upper & Lower Limb Gross Anatomy" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all" />
                       </div>
                       <div>
-                        <label className="premium-label">Description / Syllabus Scope</label>
-                        <textarea rows={3} value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Key structures, neurovascular bundles, musculotendinous anatomy..." className="premium-input h-auto min-h-[80px] resize-none"></textarea>
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Description / Syllabus Scope</label>
+                        <textarea rows={3} value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Key structures, neurovascular bundles, musculotendinous anatomy..." className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all h-auto min-h-[80px] resize-none"></textarea>
                       </div>
                       <div className="w-1/2 pr-1">
-                        <label className="premium-label">Allocated Teaching Hours</label>
-                        <input type="number" min="1" max="200" value={formData.hours || 2} onChange={e => setFormData({ ...formData, hours: Number(e.target.value) })} className="premium-input font-mono" />
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Allocated Teaching Hours</label>
+                        <input type="number" min="1" max="200" value={formData.hours || 2} onChange={e => setFormData({ ...formData, hours: Number(e.target.value) })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono" />
                       </div>
                     </>
                   )}
@@ -1132,12 +1141,12 @@ export default function AdminMasterPage() {
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">NMC Competency Code *</label>
-                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. AN1.1, PY2.4" className="premium-input font-mono font-bold uppercase" />
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">NMC Competency Code *</label>
+                          <input type="text" required value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} placeholder="e.g. AN1.1, PY2.4" className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono font-bold uppercase" />
                         </div>
                         <div>
-                          <label className="premium-label">Blooms Learning Domain</label>
-                          <select value={formData.domain || 'Knowledge'} onChange={e => setFormData({ ...formData, domain: e.target.value })} className="premium-input">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Blooms Learning Domain</label>
+                          <select value={formData.domain || 'Knowledge'} onChange={e => setFormData({ ...formData, domain: e.target.value })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                             <option value="Knowledge">Knowledge (Cognitive)</option>
                             <option value="Skill">Skill (Psychomotor)</option>
                             <option value="Attitude">Attitude (Affective)</option>
@@ -1146,12 +1155,12 @@ export default function AdminMasterPage() {
                         </div>
                       </div>
                       <div>
-                        <label className="premium-label">Competency Statement *</label>
-                        <textarea rows={2} required value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Describe normal anatomical positions, planes and standard terminology..." className="premium-input h-auto min-h-[60px] resize-none"></textarea>
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Competency Statement *</label>
+                        <textarea rows={2} required value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Describe normal anatomical positions, planes and standard terminology..." className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all h-auto min-h-[60px] resize-none"></textarea>
                       </div>
                       <div>
-                        <label className="premium-label">Linked CBME Master</label>
-                        <select value={formData.linker_id || ''} onChange={e => setFormData({ ...formData, linker_id: e.target.value || null })} className="premium-input">
+                        <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Linked CBME Master</label>
+                        <select value={formData.linker_id || ''} onChange={e => setFormData({ ...formData, linker_id: e.target.value || null })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                           <option value="">-- Select CBME Master --</option>
                           {linkers.map(l => (
                             <option key={l.id} value={l.id}>{l.name} ({l.code})</option>
@@ -1160,8 +1169,8 @@ export default function AdminMasterPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">Subject</label>
-                          <select value={formData.subject_id || ''} onChange={e => setFormData({ ...formData, subject_id: e.target.value || null, topic_id: null })} className="premium-input">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Subject</label>
+                          <select value={formData.subject_id || ''} onChange={e => setFormData({ ...formData, subject_id: e.target.value || null, topic_id: null })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                             <option value="">-- Select Subject --</option>
                             {subjects.map(s => (
                               <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
@@ -1169,8 +1178,8 @@ export default function AdminMasterPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="premium-label">Topic</label>
-                          <select value={formData.topic_id || ''} onChange={e => setFormData({ ...formData, topic_id: e.target.value || null })} className="premium-input">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Topic</label>
+                          <select value={formData.topic_id || ''} onChange={e => setFormData({ ...formData, topic_id: e.target.value || null })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all">
                             <option value="">-- Select Topic --</option>
                             {topics.filter(t => !formData.subject_id || t.subject_id === formData.subject_id).map(t => (
                               <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
@@ -1180,8 +1189,8 @@ export default function AdminMasterPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="premium-label">Mastery Level</label>
-                          <select value={formData.level || 'Knows How'} onChange={e => setFormData({ ...formData, level: e.target.value })} className="premium-input font-bold">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-white block mb-1.5">Mastery Level</label>
+                          <select value={formData.level || 'Knows How'} onChange={e => setFormData({ ...formData, level: e.target.value })} className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-indigo-500/20 transition-all font-bold">
                             <option value="Knows">Knows (K)</option>
                             <option value="Knows How">Knows How (KH)</option>
                             <option value="Shows How">Shows How (SH)</option>
@@ -1189,8 +1198,8 @@ export default function AdminMasterPage() {
                           </select>
                         </div>
                         <div className="flex items-center pt-5">
-                          <label className="flex items-center gap-2.5 cursor-pointer text-[var(--color-ink-900)] font-bold text-xs select-none">
-                            <input type="checkbox" checked={formData.is_core !== false} onChange={e => setFormData({ ...formData, is_core: e.target.checked })} className="w-4 h-4 rounded text-[var(--color-accent-brass)] focus:ring-[var(--color-accent-brass)] bg-[var(--color-bg-sunken)] border-[var(--color-border)]" />
+                          <label className="flex items-center gap-2.5 cursor-pointer text-[#1B1E28] dark:text-white font-bold text-xs select-none">
+                            <input type="checkbox" checked={formData.is_core !== false} onChange={e => setFormData({ ...formData, is_core: e.target.checked })} className="w-4 h-4 rounded text-[#5B4BFF] focus:ring-[#5B4BFF] bg-white border-[#E7EAF3]" />
                             Core Competency (NMC Mandatory)
                           </label>
                         </div>
@@ -1198,11 +1207,11 @@ export default function AdminMasterPage() {
                     </>
                   )}
 
-                  <div className="pt-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
-                    <button type="button" onClick={() => setIsModalOpen(false)} className="premium-btn-secondary">
+                  <div className="pt-4 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-end gap-3">
+                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 transition-all">
                       Cancel
                     </button>
-                    <button type="submit" className="premium-btn-accent shadow-sm">
+                    <button type="submit" className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#5B4BFF] hover:bg-[#4837E8] text-white shadow-md shadow-indigo-500/25 transition-all">
                       Save Record to PostgreSQL
                     </button>
                   </div>

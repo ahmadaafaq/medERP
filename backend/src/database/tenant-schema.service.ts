@@ -1700,7 +1700,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         // Notice 1: Testing Notice (Urgent)
         const n1 = (await runner.query(`
           INSERT INTO "${schema}".notices (title, body, priority, category, creator_name, creator_role, created_by, status, created_at)
-          VALUES ('[ERP] SUJAT KHAN', 'Hello This is Notification Testing from Admin. Please ensure your profile registration number and biometric device mapping are validated.', 'urgent', 'announcement', 'Sujat Khan (IT Cell)', 'Admin Office', $1, 'sent', NOW() - INTERVAL '1 hour')
+          VALUES ('[ERP] Admin — Biometric Device & Profile Validation', 'Please ensure your profile registration number and biometric device mapping are validated with the IT Cell.', 'urgent', 'announcement', 'Admin (IT Cell)', 'Admin Office', $1, 'sent', NOW() - INTERVAL '1 hour')
           RETURNING id;
         `, [adminUserId]))[0]?.id;
 
@@ -1725,7 +1725,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         // Notice 2: Important Notice
         const n2 = (await runner.query(`
           INSERT INTO "${schema}".notices (title, body, priority, category, creator_name, creator_role, created_by, status, created_at)
-          VALUES ('[ERP] KAMAL DATT JOSHI', 'Push Notification alerts not getting at student end. Mobile app update v2.4 released with background service fix.', 'important', 'announcement', 'Kamal Datt Joshi', 'System Admin', $1, 'sent', NOW() - INTERVAL '6 hours')
+          VALUES ('[ERP] Admin — Student Mobile App Update v2.4', 'Push Notification alerts sync update. Mobile app update v2.4 released with background service optimizations.', 'important', 'announcement', 'Admin', 'System Admin', $1, 'sent', NOW() - INTERVAL '6 hours')
           RETURNING id;
         `, [adminUserId]))[0]?.id;
 
@@ -1746,7 +1746,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         // Notice 3: Normal Notice
         const n3 = (await runner.query(`
           INSERT INTO "${schema}".notices (title, body, priority, category, creator_name, creator_role, created_by, status, created_at)
-          VALUES ('[ERP] KAMAL DATT JOSHI', 'Mr. Aakarsh Pradhan will meet to Mr. Sujat Khan (IT Cell) on Today at 04:30pm regarding logbook evaluation module sync.', 'normal', 'general', 'Kamal Datt Joshi', 'Admin Coordinator', $1, 'sent', NOW() - INTERVAL '1 day')
+          VALUES ('[ERP] Admin — Faculty Logbook Module Sync Meeting', 'Faculty coordinators will meet on Today at 04:30pm regarding logbook evaluation module sync.', 'normal', 'general', 'Admin', 'Admin Coordinator', $1, 'sent', NOW() - INTERVAL '1 day')
           RETURNING id;
         `, [adminUserId]))[0]?.id;
 
@@ -1767,7 +1767,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         // Notice 4: Deadlines / Batch 2023 Notice
         const n4 = (await runner.query(`
           INSERT INTO "${schema}".notices (title, body, priority, category, creator_name, creator_role, created_by, status, created_at)
-          VALUES ('[ERP] SUJAT KHAN', 'Good Afternoon, Today''s Notice declared for 2023 Batch. All Physiology logbook competencies (PY2.1 - PY5.1) must be submitted for faculty audit by this Friday 5:00 PM.', 'important', 'deadline', 'Sujat Khan (Academic Cell)', 'Academic Dean Office', $1, 'sent', NOW() - INTERVAL '2 days')
+          VALUES ('[ERP] Admin — 2023 MBBS Batch Physiology Logbook Audit Deadline', 'All Physiology logbook competencies (PY2.1 - PY5.1) must be submitted for faculty audit by this Friday 5:00 PM.', 'important', 'deadline', 'Admin (Academic Cell)', 'Academic Dean Office', $1, 'sent', NOW() - INTERVAL '2 days')
           RETURNING id;
         `, [adminUserId]))[0]?.id;
 
