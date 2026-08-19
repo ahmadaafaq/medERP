@@ -814,7 +814,7 @@ export default function TimetableDesignPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200">
+    <div className="flex min-h-screen bg-[#F6F8FC] text-[#1B1E28] font-sans">
       <style>{`
         @media print {
           @page { size: A4 landscape; margin: 8mm 10mm; }
@@ -881,13 +881,13 @@ export default function TimetableDesignPage() {
       <Sidebar role="admin" />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Medical College Timetable Designer" />
-        <main className="p-6 space-y-6 flex-1 flex flex-col bg-slate-50 dark:bg-[#0F172A]">
+        <main className="p-6 space-y-5 flex-1 flex flex-col bg-[#F6F8FC]">
           
           {alert && (
             <div className={`p-4 rounded-2xl border text-xs font-extrabold transition-all shadow-lg animate-fade-in flex items-center gap-2 ${
               alert.type === 'success' 
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' 
-                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                ? 'bg-[#EDFFF8] text-[#00C48C] border-[#00C48C]/30' 
+                : 'bg-[#FFF2F2] text-[#F04438] border-[#F04438]/30'
             }`}>
               <span>{alert.type === 'success' ? '✅' : '⚠️'}</span>
               <span>{alert.message}</span>
@@ -895,75 +895,57 @@ export default function TimetableDesignPage() {
           )}
 
           {/* Master Cascading Filters Bar */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 gap-2">
-              <div>
-                <h3 className="text-xs font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider flex items-center gap-2">
-                  <span>🗓️</span> Cascading Academic Filters
-                </h3>
-                <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
-                  Select College ➔ Course ➔ Branch ➔ Batch to load specific timetables.
-                </p>
+          <div className="rounded-[22px] bg-white border border-[#E7EAF3] shadow-sm hover:shadow-md transition-all overflow-hidden">
+            {/* Bar Title */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-5 py-3 border-b border-[#E7EAF3] bg-gradient-to-r from-[#F6F8FC] to-white gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#EEF2FF] flex items-center justify-center text-sm">🗓️</div>
+                <div>
+                  <h3 className="text-xs font-black uppercase text-[#2D2575] tracking-wider">Cascading Academic Filters</h3>
+                  <p className="text-[11px] text-[#4E5969] font-medium mt-0.5">Select College ➔ Course ➔ Branch ➔ Batch</p>
+                </div>
               </div>
-
-              {/* Week Navigation Arrows */}
-              <div className="flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-slate-700/80">
-                <button
-                  onClick={() => setWeekOffset(prev => prev - 1)}
-                  className="px-2.5 py-1 text-xs font-extrabold rounded-lg bg-slate-800 hover:bg-indigo-600 hover:text-white transition-all text-slate-300"
-                  title="Previous Week"
-                >
-                  ◀ Prev Week
+              {/* Week Navigation */}
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] p-1 rounded-xl border border-[#E7EAF3]">
+                <button onClick={() => setWeekOffset(prev => prev - 1)}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-white border border-[#E7EAF3] hover:bg-[#EEF2FF] hover:text-[#5B4BFF] hover:border-[#5B4BFF]/30 text-[#4E5969] transition-all shadow-sm">
+                  ◀ Prev
                 </button>
-                
-                <button
-                  onClick={() => setWeekOffset(0)}
-                  className="px-3 py-1 text-xs font-black rounded-lg bg-indigo-600 text-white shadow-sm"
-                >
+                <button onClick={() => setWeekOffset(0)}
+                  className="px-4 py-1.5 text-xs font-black rounded-lg bg-gradient-to-r from-[#2D2575] to-[#5B4BFF] text-white shadow-md">
                   Current Week
                 </button>
-
-                <button
-                  onClick={() => setWeekOffset(prev => prev + 1)}
-                  className="px-2.5 py-1 text-xs font-extrabold rounded-lg bg-slate-800 hover:bg-indigo-600 hover:text-white transition-all text-slate-300"
-                  title="Next Week"
-                >
-                  Next Week ▶
+                <button onClick={() => setWeekOffset(prev => prev + 1)}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-white border border-[#E7EAF3] hover:bg-[#EEF2FF] hover:text-[#5B4BFF] hover:border-[#5B4BFF]/30 text-[#4E5969] transition-all shadow-sm">
+                  Next ▶
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              
-              {/* 1. College (Locked to active tenant) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4">
+              {/* 1. College */}
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Active College</label>
-                <div className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-slate-700/80 text-indigo-300 font-bold truncate">
+                <label className="text-[10px] font-extrabold uppercase text-[#4E5969] tracking-wider">Active College</label>
+                <div className="w-full px-3 py-2 text-xs rounded-xl bg-[#EEF2FF] border border-[#5B4BFF]/20 text-[#2D2575] font-bold truncate">
                   {selectedCollege || (typeof window !== 'undefined' ? localStorage.getItem('collegeName') : null) || 'Current Institution'}
                 </div>
               </div>
 
               {/* 2. Session */}
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Session</label>
-                <select
-                  value={selectedSession}
-                  onChange={(e) => setSelectedSession(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-white font-medium"
-                >
-                  <option value="2024-2025">2024 - 2025</option>
-                  <option value="2025-2026">2025 - 2026</option>
+                <label className="text-[10px] font-extrabold uppercase text-[#4E5969] tracking-wider">Session</label>
+                <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-[#1B1E28] font-medium transition-all">
+                  <option value="2024-2025">2024 – 2025</option>
+                  <option value="2025-2026">2025 – 2026</option>
                 </select>
               </div>
 
               {/* 3. Course */}
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Course</label>
-                <select
-                  value={selectedCourse}
-                  onChange={(e) => setSelectedCourse(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-white font-medium"
-                >
+                <label className="text-[10px] font-extrabold uppercase text-[#4E5969] tracking-wider">Course</label>
+                <select value={selectedCourse} onChange={(e) => setSelectedCourse(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-[#1B1E28] font-medium transition-all">
                   <option value="MBBS">MBBS (Undergraduate)</option>
                   <option value="MD/MS">MD / MS (Postgraduate)</option>
                   <option value="BDS">BDS (Dental)</option>
@@ -972,12 +954,9 @@ export default function TimetableDesignPage() {
 
               {/* 4. Branch Track */}
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Branch Track</label>
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-white font-medium"
-                >
+                <label className="text-[10px] font-extrabold uppercase text-[#4E5969] tracking-wider">Branch Track</label>
+                <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-[#1B1E28] font-medium transition-all">
                   <option value="General Medicine">General Track</option>
                   <option value="Clinical Rotation">Clinical Rotation</option>
                 </select>
@@ -985,12 +964,9 @@ export default function TimetableDesignPage() {
 
               {/* 5. Batch */}
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-indigo-400 tracking-wider">Batch *</label>
-                <select
-                  value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 border border-indigo-500/50 focus:outline-none focus:border-indigo-400 text-white font-black"
-                >
+                <label className="text-[10px] font-extrabold uppercase text-[#5B4BFF] tracking-wider">Batch *</label>
+                <select value={selectedBatch} onChange={(e) => setSelectedBatch(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[#F6F8FC] border-2 border-[#5B4BFF]/40 focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-[#2D2575] font-black transition-all">
                   {batches.map((batch) => (
                     <option key={batch.id || batch.code} value={batch.id || batch.code}>
                       Batch {batch.code} {batch.year ? `(${batch.year})` : ''}
@@ -998,7 +974,6 @@ export default function TimetableDesignPage() {
                   ))}
                 </select>
               </div>
-
             </div>
           </div>
 
@@ -1124,102 +1099,117 @@ export default function TimetableDesignPage() {
           </div>
 
           {/* Timetable Weekly Grid (Screen Only) */}
-          <div className="bg-[#1E293B]/80 backdrop-blur-xl border border-indigo-500/20 rounded-2xl flex-1 min-h-[540px] overflow-hidden flex flex-col shadow-2xl no-print">
-            
+          <div className="bg-white border border-[#E7EAF3] rounded-[22px] flex-1 min-h-[540px] overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-all no-print">
+
             {/* Header Days with Dates */}
-            <div className="grid grid-cols-7 border-b border-indigo-500/20 text-center font-black text-indigo-300 bg-indigo-950/40 text-xs py-3.5 uppercase tracking-wider">
-              <div className="border-r border-indigo-500/20">Time Duration</div>
+            <div className="grid grid-cols-7 border-b border-[#E7EAF3] text-center bg-gradient-to-r from-[#2D2575] via-[#3A2F8A] to-[#5B4BFF]">
+              <div className="border-r border-white/20 px-2 py-3 flex flex-col items-center justify-center">
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/70">Time</span>
+                <span className="text-[8px] text-white/50 font-mono mt-0.5">Slot</span>
+              </div>
               {currentWeek.weekDays.map(day => (
-                <div key={day.value} className={`py-0.5 ${day.value !== 6 ? 'border-r border-indigo-500/20' : ''}`}>
-                  <p className="text-white font-black">{day.dayName}</p>
-                  <p className="text-[10px] text-indigo-400 font-mono">{day.displayDate}</p>
+                <div key={day.value} className={`py-3 px-1 ${day.value !== 6 ? 'border-r border-white/20' : ''}`}>
+                  <p className="text-white font-black text-xs uppercase tracking-wide">{day.dayName}</p>
+                  <p className="text-[10px] text-white/60 font-mono mt-0.5">{day.displayDate}</p>
                 </div>
               ))}
             </div>
 
             {/* Time Rows */}
-            <div className="flex-1 divide-y divide-slate-800/60 overflow-y-auto">
-              {TIME_SLOTS.map((slot) => (
-                <div key={slot.start} className="grid grid-cols-7 min-h-[85px]">
-                  
+            <div className="flex-1 divide-y divide-[#E7EAF3] overflow-y-auto">
+              {TIME_SLOTS.map((slot, rowIdx) => (
+                <div key={slot.start} className={`grid grid-cols-7 min-h-[90px] ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-[#FAFBFF]'}`}>
+
                   {/* Time Duration Label */}
-                  <div className="border-r border-indigo-500/20 flex flex-col justify-center items-center p-2 text-center bg-slate-950/40 select-none">
-                    <span className="font-mono font-extrabold text-[11px] text-white">{slot.start.slice(0, 5)}</span>
-                    <span className="text-[9px] text-slate-400 font-mono">to {slot.end.slice(0, 5)}</span>
+                  <div className="border-r border-[#E7EAF3] flex flex-col justify-center items-center px-2 py-3 text-center bg-[#F6F8FC] select-none">
+                    <span className="font-mono font-black text-[11px] text-[#2D2575]">{slot.start.slice(0, 5)}</span>
+                    <span className="text-[9px] text-[#9BA5B5] font-mono mt-0.5">–{slot.end.slice(0, 5)}</span>
                   </div>
 
                   {/* Day Columns */}
                   {currentWeek.weekDays.map((day) => {
-                    // Filter active slots for this day & start time
-                    const cellSlots = slots.filter(s => 
-                      s.day_of_week === day.value && 
+                    const cellSlots = slots.filter(s =>
+                      s.day_of_week === day.value &&
                       s.start_time.slice(0, 5) === slot.start.slice(0, 5)
+                    );
+                    const slotBg = (type: string) => (
+                      type === 'Practical' ? {bg:'#F3EEFF', border:'#7C3AED', badge:'bg-purple-100 text-purple-700'} :
+                      type === 'DOAP' ? {bg:'#ECFDF5', border:'#059669', badge:'bg-emerald-100 text-emerald-700'} :
+                      type === 'SGT' ? {bg:'#FFFBEB', border:'#D97706', badge:'bg-amber-100 text-amber-700'} :
+                      type === 'Tutorial' ? {bg:'#FFF7ED', border:'#EA580C', badge:'bg-orange-100 text-orange-700'} :
+                      type === 'SDL' ? {bg:'#ECFEFF', border:'#0891B2', badge:'bg-cyan-100 text-cyan-700'} :
+                      type === 'Seminar' ? {bg:'#FDF2F8', border:'#DB2777', badge:'bg-pink-100 text-pink-700'} :
+                      type === 'Clinical Posting' ? {bg:'#FFF1F2', border:'#E11D48', badge:'bg-rose-100 text-rose-700'} :
+                      type === 'Lunch Break' ? {bg:'#F8FAFC', border:'#94a3b8', badge:'bg-slate-100 text-slate-500'} :
+                      {bg:'#EEF2FF', border:'#5B4BFF', badge:'bg-indigo-100 text-indigo-700'}
                     );
 
                     return (
                       <div
                         key={day.value}
                         onClick={() => handleGridCellClick(day.value, slot.start, slot.end)}
-                        className="p-2 border-r border-slate-800/40 relative flex flex-col gap-1.5 transition-all hover:bg-indigo-950/30 cursor-pointer"
+                        className="p-1.5 border-r border-[#E7EAF3] flex flex-col gap-1.5 transition-all hover:bg-[#EEF2FF]/50 cursor-pointer group"
                       >
-                        {cellSlots.map(cell => (
-                          <div
-                            key={cell.id}
-                            onClick={(e) => handleSlotClick(cell, e)}
-                            onMouseEnter={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setHoveredSlotInfo({ slot: cell, x: rect.left, y: rect.top });
-                            }}
-                            onMouseLeave={() => setHoveredSlotInfo(null)}
-                            className="p-2.5 rounded-[18px] text-xs flex flex-col justify-between shadow-soft hover:scale-[1.02] transition-all h-full border cursor-pointer bg-white dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/60"
-                          >
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between font-black">
-                                <span className="text-[#1B1E28] dark:text-white font-extrabold">{cell.subject_code || 'SUB'}</span>
-                                <span className="text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-[#FFF4EC] text-[#D9530F] dark:text-[#F36C21] border border-[#F36C21]/40">
+                        {cellSlots.length === 0 && (
+                          <div className="h-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-[10px] text-[#5B4BFF] font-bold">+ Add</span>
+                          </div>
+                        )}
+                        {cellSlots.map(cell => {
+                          const style = slotBg(cell.slot_type);
+                          return (
+                            <div
+                              key={cell.id}
+                              onClick={(e) => handleSlotClick(cell, e)}
+                              onMouseEnter={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setHoveredSlotInfo({ slot: cell, x: rect.left, y: rect.top });
+                              }}
+                              onMouseLeave={() => setHoveredSlotInfo(null)}
+                              style={{background: style.bg, borderLeft: `3px solid ${style.border}`}}
+                              className="rounded-xl text-xs flex flex-col gap-0.5 cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all border border-transparent hover:border-[#5B4BFF]/20 p-2"
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-black text-[11px] text-[#1B1E28]">{cell.subject_code || 'SUB'}</span>
+                                <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${style.badge}`}>
                                   {cell.slot_type}
                                 </span>
                               </div>
-                              
-                              <p className="font-black text-[11px] leading-tight text-[#1B1E28] dark:text-white truncate">
+
+                              <p className="font-bold text-[10px] leading-tight text-[#1B1E28] line-clamp-2">
                                 {cell.subject_name || cell.topic || cell.slot_type}
                               </p>
 
                               {cell.topic && (
-                                <p className="text-[10px] text-[#5B4BFF] dark:text-indigo-400 font-semibold truncate">📖 "{cell.topic}"</p>
+                                <p className="text-[9px] text-[#5B4BFF] font-semibold truncate">📖 {cell.topic}</p>
                               )}
 
                               {cell.competency_codes && (
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {cell.competency_codes.split(',').map(cCode => (
-                                    <span key={cCode.trim()} className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900/30">
-                                      🎯 {cCode.trim()}
+                                <div className="flex flex-wrap gap-0.5 mt-0.5">
+                                  {cell.competency_codes.split(',').slice(0,3).map(cCode => (
+                                    <span key={cCode.trim()} className="text-[7px] font-black uppercase px-1 py-0.5 rounded bg-white/80 text-purple-700 border border-purple-200">
+                                      {cCode.trim()}
                                     </span>
                                   ))}
                                 </div>
                               )}
-                            </div>
 
-                            <div className="mt-1.5 pt-1.5 border-t border-[#E7EAF3] dark:border-slate-800 flex flex-col gap-0.5 text-[10px]">
-                              <p className="truncate font-black text-[#00C48C] flex items-center gap-1">
-                                <span>👨‍🏫</span>
-                                <span>{cell.faculty_name || 'No Lecturer'}</span>
-                              </p>
-                              <div className="flex items-center justify-between text-[9px] text-[#7B8794] dark:text-slate-400 mt-0.5">
-                                <span>{cell.room ? `🏫 ${cell.room}` : ''}</span>
-                                <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">{cell.group_name ? cell.group_name.slice(0, 10) : ''}</span>
+                              <div className="mt-1 pt-1 border-t border-black/5 flex flex-col gap-0.5">
+                                <p className="truncate font-bold text-[9px] text-[#00C48C] flex items-center gap-0.5">
+                                  <span>👤</span>
+                                  <span>{cell.faculty_name || 'No Lecturer'}</span>
+                                </p>
+                                {cell.room && <span className="text-[8px] text-[#9BA5B5]">🏫 {cell.room}</span>}
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     );
                   })}
-
                 </div>
               ))}
             </div>
-
           </div>
         </main>
       </div>
@@ -1233,21 +1223,21 @@ export default function TimetableDesignPage() {
 
       {/* CREATE / EDIT TIMETABLE SLOT MODAL POPUP */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-fade-in">
-          <div className="relative w-full max-w-xl overflow-hidden shadow-2xl rounded-3xl bg-[#0F172A] border border-indigo-500/30 text-slate-100 flex flex-col max-h-[92vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1B1E28]/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-xl overflow-hidden shadow-2xl rounded-[22px] bg-white border border-[#E7EAF3] text-[#1B1E28] flex flex-col max-h-[92vh]">
             
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-indigo-950/80 via-slate-900 to-indigo-950/80 px-6 py-4 border-b border-indigo-500/20 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-[#2D2575] via-[#3A2F8A] to-[#5B4BFF] px-6 py-4 border-b border-white/10 flex items-center justify-between">
               <div>
-                <h2 className="text-base font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-white to-purple-300 uppercase flex items-center gap-2">
+                <h2 className="text-base font-black tracking-wide text-white uppercase flex items-center gap-2">
                   <span>⏰</span>
                   <span>{editingSlot ? 'Edit Scheduled Session' : 'Assign Timetable Session'}</span>
                 </h2>
-                <p className="text-[11px] text-slate-400 font-medium">Configure teaching mode, topic auto-complete, NMC competencies, and assigned faculty.</p>
+                <p className="text-[11px] text-white/60 font-medium mt-0.5">Configure teaching mode, topic, NMC competencies, and faculty.</p>
               </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 rounded-xl bg-slate-800/60 text-slate-400 hover:text-white hover:bg-rose-500/20 hover:border-rose-500/40 border border-slate-700/60 transition-all"
+                className="p-2 rounded-xl bg-white/10 text-white/70 hover:text-white hover:bg-white/20 border border-white/20 transition-all"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1256,7 +1246,7 @@ export default function TimetableDesignPage() {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-5 flex-1 bg-slate-900/40">
+            <form onSubmit={handleSave} className="p-5 overflow-y-auto space-y-4 flex-1 bg-white">
               
               {/* Day of Week */}
               <div className="space-y-1.5">
@@ -1264,7 +1254,7 @@ export default function TimetableDesignPage() {
                 <select
                   value={formData.dayOfWeek}
                   onChange={(e) => setFormData({ ...formData, dayOfWeek: parseInt(e.target.value, 10) })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-xs text-white transition-all font-medium"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-xs text-[#1B1E28] transition-all font-medium"
                 >
                   {currentWeek.weekDays.map(day => (
                     <option key={day.value} value={day.value} className="bg-slate-900 text-white">
@@ -1277,36 +1267,24 @@ export default function TimetableDesignPage() {
               {/* Start & End Times + Quick Duration Presets */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <label className="text-[11px] font-extrabold uppercase text-indigo-400 tracking-wider">
+                  <label className="text-[11px] font-extrabold uppercase text-[#5B4BFF] tracking-wider">
                     Session Duration & Time Range *
                   </label>
                   <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleDurationPreset(1)}
-                      className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600 hover:text-white transition-all"
-                    >
+                    <button type="button" onClick={() => handleDurationPreset(1)}
+                      className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/20 hover:bg-[#5B4BFF] hover:text-white transition-all">
                       1 Hour
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDurationPreset(1.5)}
-                      className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600 hover:text-white transition-all"
-                    >
+                    <button type="button" onClick={() => handleDurationPreset(1.5)}
+                      className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/20 hover:bg-[#5B4BFF] hover:text-white transition-all">
                       1.5 Hours
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDurationPreset(2)}
-                      className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600 hover:text-white transition-all"
-                    >
+                    <button type="button" onClick={() => handleDurationPreset(2)}
+                      className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-[#F3EEFF] text-[#7C3AED] border border-[#7C3AED]/20 hover:bg-[#7C3AED] hover:text-white transition-all">
                       2 Hours
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDurationPreset(3)}
-                      className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white transition-all"
-                    >
+                    <button type="button" onClick={() => handleDurationPreset(3)}
+                      className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-[#ECFDF5] text-[#059669] border border-[#059669]/20 hover:bg-[#059669] hover:text-white transition-all">
                       3 Hours
                     </button>
                   </div>
@@ -1314,58 +1292,45 @@ export default function TimetableDesignPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Start Time</span>
-                    <input
-                      type="text"
-                      required
-                      value={formData.startTime}
+                    <span className="text-[10px] font-bold text-[#4E5969] uppercase">Start Time</span>
+                    <input type="text" required value={formData.startTime}
                       onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
                       placeholder="e.g. 08:00:00"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-xs text-white font-mono font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-xs text-[#1B1E28] font-mono font-medium"
                     />
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">End Time</span>
-                    <input
-                      type="text"
-                      required
-                      value={formData.endTime}
+                    <span className="text-[10px] font-bold text-[#4E5969] uppercase">End Time</span>
+                    <input type="text" required value={formData.endTime}
                       onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
                       placeholder="e.g. 09:30:00"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-xs text-white font-mono font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-xs text-[#1B1E28] font-mono font-medium"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Mode of Teaching (NMC CBME Standards & Flexible Lunch) */}
+              {/* Mode of Teaching */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-extrabold uppercase text-slate-300 tracking-wider">Mode of Teaching / Session Type *</label>
-                <select
-                  value={formData.slotType}
-                  onChange={(e) => setFormData({ ...formData, slotType: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-xs text-white transition-all font-medium"
-                >
+                <label className="text-[11px] font-extrabold uppercase text-[#4E5969] tracking-wider">Mode of Teaching / Session Type *</label>
+                <select value={formData.slotType} onChange={(e) => setFormData({ ...formData, slotType: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-xs text-[#1B1E28] transition-all font-medium">
                   {TEACHING_MODES.map(mode => (
-                    <option key={mode.value} value={mode.value} className="bg-slate-900 text-white">{mode.label}</option>
+                    <option key={mode.value} value={mode.value}>{mode.label}</option>
                   ))}
                 </select>
               </div>
 
               {/* Department & Subject Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
                 {/* Department */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold uppercase text-slate-300 tracking-wider">Department</label>
-                  <select
-                    value={formData.departmentId}
-                    onChange={(e) => handleFormDeptChange(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-xs text-white transition-all font-medium"
-                  >
-                    <option value="" className="bg-slate-900 text-white">-- Select Department --</option>
+                  <label className="text-[11px] font-extrabold uppercase text-[#4E5969] tracking-wider">Department</label>
+                  <select value={formData.departmentId} onChange={(e) => handleFormDeptChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] text-xs text-[#1B1E28] transition-all font-medium">
+                    <option value="">-- Select Department --</option>
                     {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id} className="bg-slate-900 text-white">{dept.name}</option>
+                      <option key={dept.id} value={dept.id}>{dept.name}</option>
                     ))}
                   </select>
                 </div>
@@ -1498,25 +1463,17 @@ export default function TimetableDesignPage() {
               {/* Faculty Selection */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-[11px] font-extrabold uppercase text-indigo-400 tracking-wider">
-                    Assign Faculty Member
-                  </label>
+                  <label className="text-[11px] font-extrabold uppercase text-[#5B4BFF] tracking-wider">Assign Faculty Member</label>
                   {relevantFaculties.length > 0 && (
-                    <span className="text-[9px] font-extrabold text-emerald-400 uppercase tracking-wide">
-                      {relevantFaculties.length} Eligible Lecturer(s)
-                    </span>
+                    <span className="text-[9px] font-extrabold text-[#00C48C] uppercase tracking-wide">{relevantFaculties.length} Eligible</span>
                   )}
                 </div>
-
-                <select
-                  value={formData.facultyId}
-                  onChange={(e) => setFormData({ ...formData, facultyId: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-xs text-white transition-all font-medium"
-                >
-                  <option value="" className="bg-slate-900 text-white">-- Choose Assigned Faculty (None) --</option>
+                <select value={formData.facultyId} onChange={(e) => setFormData({ ...formData, facultyId: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-xs text-[#1B1E28] transition-all font-medium">
+                  <option value="">-- Choose Assigned Faculty (None) --</option>
                   {relevantFaculties.map((fac) => (
-                    <option key={fac.id} value={fac.id} className="bg-slate-900 text-white">
-                      {fac.name} ({fac.emp_id}) {fac.priority === 1 ? '⭐ Primary / Linked Specialist' : '👥 Department Lecturer'}
+                    <option key={fac.id} value={fac.id}>
+                      {fac.name} ({fac.emp_id}) {fac.priority === 1 ? '⭐ Primary' : '👥 Dept'}
                     </option>
                   ))}
                 </select>
@@ -1524,60 +1481,40 @@ export default function TimetableDesignPage() {
 
               {/* Batch Group & Room Location */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
-                {/* Batch Group */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold uppercase text-slate-300 tracking-wider">Batch Sub-Group</label>
-                  <select
-                    value={formData.groupName}
-                    onChange={(e) => setFormData({ ...formData, groupName: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 text-xs text-white transition-all font-medium"
-                  >
+                  <label className="text-[11px] font-extrabold uppercase text-[#4E5969] tracking-wider">Batch Sub-Group</label>
+                  <select value={formData.groupName} onChange={(e) => setFormData({ ...formData, groupName: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] text-xs text-[#1B1E28] transition-all font-medium">
                     {BATCH_GROUPS.map((grp) => (
-                      <option key={grp} value={grp} className="bg-slate-900 text-white">{grp}</option>
+                      <option key={grp} value={grp}>{grp}</option>
                     ))}
                   </select>
                 </div>
-
-                {/* Room / Location */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold uppercase text-slate-300 tracking-wider">Room / Location</label>
-                  <input
-                    type="text"
-                    value={formData.room}
+                  <label className="text-[11px] font-extrabold uppercase text-[#4E5969] tracking-wider">Room / Location</label>
+                  <input type="text" value={formData.room}
                     onChange={(e) => setFormData({ ...formData, room: e.target.value })}
                     placeholder="e.g. 209, Lecture Theater 1"
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-xs text-white placeholder:text-slate-500 transition-all font-medium"
+                    className="w-full px-4 py-2.5 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/10 text-xs text-[#1B1E28] placeholder:text-[#9BA5B5] transition-all font-medium"
                   />
                 </div>
-
               </div>
 
               {/* Form Action Buttons */}
-              <div className="flex items-center justify-between pt-6 border-t border-indigo-500/20">
+              <div className="flex items-center justify-between pt-5 border-t border-[#E7EAF3]">
                 {editingSlot ? (
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    className="px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white font-extrabold text-xs border border-rose-500/30 transition-all shadow-sm"
-                  >
+                  <button type="button" onClick={handleDelete}
+                    className="px-4 py-2.5 rounded-xl bg-[#FFF2F2] hover:bg-[#F04438] text-[#F04438] hover:text-white font-extrabold text-xs border border-[#F04438]/30 transition-all shadow-sm">
                     Delete Session
                   </button>
                 ) : <div />}
-
                 <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs border border-slate-700 transition-all shadow-md"
-                  >
+                  <button type="button" onClick={() => setIsModalOpen(false)}
+                    className="px-5 py-2.5 rounded-xl bg-[#F6F8FC] hover:bg-[#E7EAF3] text-[#4E5969] font-bold text-xs border border-[#E7EAF3] transition-all">
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-extrabold text-xs border border-indigo-400/30 shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2"
-                  >
+                  <button type="submit" disabled={loading}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#2D2575] to-[#5B4BFF] hover:from-[#3A2F8A] hover:to-[#7867FF] text-white font-extrabold text-xs shadow-lg shadow-[#5B4BFF]/25 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2">
                     <span>💾</span>
                     <span>{editingSlot ? 'Save Update' : 'Schedule Session'}</span>
                   </button>
