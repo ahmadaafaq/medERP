@@ -47,19 +47,21 @@ const API_BASE = 'http://localhost:3001/api/v1';
 
 const getTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantSlug') || 'srms-ims';
+    return localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
   }
-  return 'srms-ims';
+  return 'srms-cet-bareilly';
 };
 
 export default function MISAttendanceReportsPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [phases, setPhases] = useState<{ id: string; name: string }[]>([
-    { id: '1st-prof', name: '1st Prof (MBBS Year 1)' },
-    { id: '2nd-prof', name: '2nd Prof (MBBS Year 2)' },
-    { id: '3rd-prof-1', name: '3rd Prof Part-1' },
-    { id: '3rd-prof-2', name: '3rd Prof Part-2 / Final Prof' },
+    { id: 'sem-1', name: 'Semester 1 / Year 1' },
+    { id: 'sem-2', name: 'Semester 2 / Year 1' },
+    { id: 'sem-3', name: 'Semester 3 / Year 2' },
+    { id: 'sem-4', name: 'Semester 4 / Year 2' },
+    { id: 'sem-5', name: 'Semester 5 / Year 3' },
+    { id: 'sem-6', name: 'Semester 6 / Year 3' },
   ]);
   
   // Selection Filters

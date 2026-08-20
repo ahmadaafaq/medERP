@@ -152,6 +152,20 @@ export default function Sidebar({ role }: SidebarProps) {
                 <span>Assessment Marks Entry</span>
               </Link>
 
+              <Link href="/dashboard/admin/placement" className={getLinkClass('/dashboard/admin/placement')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span className="font-bold text-[#F36C21]">Placement Drive</span>
+              </Link>
+
+              <Link href="/dashboard/admin/notices/sent" className={getLinkClass('/dashboard/admin/notices')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-orange-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                </svg>
+                <span className="font-bold text-orange-200">Notices & Circulars</span>
+              </Link>
+
               {/* Expandable MIS Reports Accordion for Admin */}
               <div className="space-y-1">
                 <button
@@ -276,6 +290,20 @@ export default function Sidebar({ role }: SidebarProps) {
                 <span>Lesson Uploads</span>
               </Link>
 
+              <Link href="/dashboard/faculty/repository" className={getLinkClass('/dashboard/faculty/repository')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span className="font-bold text-indigo-200">Repository Evaluation</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/notices" className={getLinkClass('/dashboard/faculty/notices')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-orange-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                </svg>
+                <span className="font-bold text-orange-200">Notices & Circulars</span>
+              </Link>
+
               {/* Expandable MIS Reports Accordion */}
               <div className="space-y-1">
                 <button
@@ -369,6 +397,13 @@ export default function Sidebar({ role }: SidebarProps) {
                 </svg>
                 <span>Marks Entry</span>
               </Link>
+
+              <Link href="/dashboard/clerk/notices" className={getLinkClass('/dashboard/clerk/notices')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-orange-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                </svg>
+                <span className="font-bold text-orange-200">Notices & Circulars</span>
+              </Link>
             </>
           ) : (
             <>
@@ -377,6 +412,13 @@ export default function Sidebar({ role }: SidebarProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
                 <span>Dashboard</span>
+              </Link>
+
+              <Link href="/dashboard/student/profile" className={getLinkClass('/dashboard/student/profile')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>Student Profile</span>
               </Link>
 
               <Link href="/dashboard/student/timetable" className={getLinkClass('/dashboard/student/timetable')}>
@@ -419,6 +461,27 @@ export default function Sidebar({ role }: SidebarProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
                 <span>Lessons & Materials</span>
+              </Link>
+
+              <Link href="/dashboard/student/repository" className={getLinkClass('/dashboard/student/repository')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span className="font-bold text-indigo-200">My Repository</span>
+              </Link>
+
+              <Link href="/dashboard/student/placement" className={getLinkClass('/dashboard/student/placement')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span className="font-bold text-[#F36C21]">Placement Drive</span>
+              </Link>
+
+              <Link href="/dashboard/student/notices" className={getLinkClass('/dashboard/student/notices')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-orange-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                </svg>
+                <span className="font-bold text-orange-200">Notices & Circulars</span>
               </Link>
             </>
           )}

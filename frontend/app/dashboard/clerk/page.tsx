@@ -5,6 +5,7 @@ import Sidebar from '../../../components/Sidebar';
 import Link from 'next/link';
 import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
 import AttendanceWidget from '../../../components/AttendanceWidget';
+import NoticeDashboardWidget from '../../../components/notices/NoticeDashboardWidget';
 
 export default function ClerkDashboardPage() {
   return (
@@ -87,9 +88,18 @@ export default function ClerkDashboardPage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Notices & Key Highlights Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1">
+              <NoticeDashboardWidget role="clerk" />
+            </div>
+            <div className="lg:col-span-2">
+              <RecentLessonsWidget role="CLERK" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
             <AttendanceWidget role="CLERK" />
-            <RecentLessonsWidget role="CLERK" />
           </div>
         </div>
       </main>

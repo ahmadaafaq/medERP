@@ -8,6 +8,7 @@ import LogbookSubmitModal from '../../../components/LogbookSubmitModal';
 import FeeReceiptModal from '../../../components/FeeReceiptModal';
 import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
 import AttendanceWidget from '../../../components/AttendanceWidget';
+import NoticeDashboardWidget from '../../../components/notices/NoticeDashboardWidget';
 
 interface StudentInfo {
   name: string;
@@ -33,9 +34,9 @@ const API_BASE = 'http://localhost:3001/api/v1';
 
 const getTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantSlug') || 'srms-ims';
+    return localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
   }
-  return 'srms-ims';
+  return 'srms-cet-bareilly';
 };
 
 export default function StudentDashboard() {
@@ -69,30 +70,34 @@ export default function StudentDashboard() {
     try {
       // 1. Fetch Logged-In Student Profile
       const meRes = await fetch(`${API_BASE}/auth/me`, { headers });
-      let regNo = '2023MBBS045';
-      if (meRes.ok) {
-        const user = await meRes.json();
-        if (user.profile) {
-          regNo = user.profile.registration_no || user.profile.rollno || '2023MBBS045';
-          setStudentInfo({
-            name: user.profile.name || user.email || 'Rahul Verma',
-            rollno: user.profile.rollno || 'MBBS2023045',
-            registration_no: regNo,
-            batch: user.profile.batch_cd || '2023-MBBS Batch',
-            course: user.profile.course_cd || 'MBBS',
-            department: user.profile.department_name || 'Phase 2 MBBS',
-          });
-        }
-      }
+      const isMed = slug.includes('ims') || slug.includes('med');
+      let regNo = isMed ? '2023MBBS045' : '2025107715';
 
-      if (!studentInfo) {
+      if (meRes.ok) {
+        const json = await meRes.json();
+        const meData = json.data || json;
+        const p = meData.profile || meData;
+        regNo = p.registration_no || meData.registrationNo || p.rollno || meData.rollno || regNo;
+
+        const courseStr = meData.courseName || p.course_name || p.course_cd || (isMed ? 'MBBS' : 'BCA');
+        const deptStr = meData.departmentName || p.department_name || (isMed ? 'Phase 2 MBBS' : 'Computer Applications (BCA)');
+
         setStudentInfo({
-          name: 'Rahul Verma',
-          rollno: 'MBBS2023045',
-          registration_no: '2023MBBS045',
-          batch: '2023-MBBS Batch',
-          course: 'MBBS',
-          department: 'Phase 2 MBBS',
+          name: meData.name || p.name || (isMed ? 'Rahul Verma' : 'Tanish Pandey'),
+          rollno: p.rollno || meData.rollno || (isMed ? 'MBBS2023045' : '2500141790053'),
+          registration_no: regNo,
+          batch: p.batch_cd || meData.batchCd || (isMed ? '2023-MBBS Batch' : 'Batch 2025'),
+          course: courseStr,
+          department: deptStr,
+        });
+      } else {
+        setStudentInfo({
+          name: isMed ? 'Rahul Verma' : 'Tanish Pandey',
+          rollno: isMed ? 'MBBS2023045' : '2500141790053',
+          registration_no: isMed ? '2023MBBS045' : '2025107715',
+          batch: isMed ? '2023-MBBS Batch' : 'Batch 2025',
+          course: isMed ? 'MBBS' : 'BCA',
+          department: isMed ? 'Phase 2 MBBS' : 'Computer Applications (BCA)',
         });
       }
 
@@ -119,10 +124,10 @@ export default function StudentDashboard() {
         if (Array.isArray(list) && list.length > 0) {
           setExamResults(list.slice(0, 4));
         } else {
-          setExamResults(getFallbackExamResults());
+          setExamResults(getFallbackExamResults(slug));
         }
       } else {
-        setExamResults(getFallbackExamResults());
+        setExamResults(getFallbackExamResults(slug));
       }
 
       // 4. Fetch Logbook Entries Count
@@ -136,44 +141,81 @@ export default function StudentDashboard() {
         }
       }
     } catch {
-      setExamResults(getFallbackExamResults());
+      setExamResults(getFallbackExamResults(slug));
     } finally {
       setLoading(false);
     }
   };
 
-  const getFallbackExamResults = (): ExamResult[] => [
-    {
-      id: 'res-1',
-      paper_name: 'Physiology 1st Internal Assessment (Theory)',
-      paper_code: 'PHY_IA1_2026',
-      subject_name: 'Physiology',
-      marks_obtained: 85,
-      max_marks: 100,
-      is_pass: true,
-      paper_type: 'THEORY',
-    },
-    {
-      id: 'res-2',
-      paper_name: 'Anatomy Histology & Gross Viva',
-      paper_code: 'ANA_VIVA_2026',
-      subject_name: 'Anatomy',
-      marks_obtained: 78,
-      max_marks: 100,
-      is_pass: true,
-      paper_type: 'PRACTICAL_VIVA',
-    },
-    {
-      id: 'res-3',
-      paper_name: 'Biochemistry Formative Quiz 1',
-      paper_code: 'BIC_FA1_2026',
-      subject_name: 'Biochemistry',
-      marks_obtained: 42,
-      max_marks: 50,
-      is_pass: true,
-      paper_type: 'MCQ',
-    },
-  ];
+  const getFallbackExamResults = (slug?: string): ExamResult[] => {
+    const isMed = slug && (slug.includes('ims') || slug.includes('med'));
+    if (isMed) {
+      return [
+        {
+          id: 'res-1',
+          paper_name: 'Physiology 1st Internal Assessment (Theory)',
+          paper_code: 'PHY_IA1_2026',
+          subject_name: 'Physiology',
+          marks_obtained: 85,
+          max_marks: 100,
+          is_pass: true,
+          paper_type: 'THEORY',
+        },
+        {
+          id: 'res-2',
+          paper_name: 'Anatomy Histology & Gross Viva',
+          paper_code: 'ANA_VIVA_2026',
+          subject_name: 'Anatomy',
+          marks_obtained: 78,
+          max_marks: 100,
+          is_pass: true,
+          paper_type: 'PRACTICAL_VIVA',
+        },
+        {
+          id: 'res-3',
+          paper_name: 'Biochemistry Formative Quiz 1',
+          paper_code: 'BIC_FA1_2026',
+          subject_name: 'Biochemistry',
+          marks_obtained: 42,
+          max_marks: 50,
+          is_pass: true,
+          paper_type: 'MCQ',
+        },
+      ];
+    }
+    return [
+      {
+        id: 'res-1',
+        paper_name: 'Database Management Systems Midterm',
+        paper_code: 'BCA-301',
+        subject_name: 'Database Systems',
+        marks_obtained: 88,
+        max_marks: 100,
+        is_pass: true,
+        paper_type: 'THEORY',
+      },
+      {
+        id: 'res-2',
+        paper_name: 'Data Structures & Algorithms Practical Viva',
+        paper_code: 'KCS-351',
+        subject_name: 'Data Structures',
+        marks_obtained: 92,
+        max_marks: 100,
+        is_pass: true,
+        paper_type: 'PRACTICAL_VIVA',
+      },
+      {
+        id: 'res-3',
+        paper_name: 'Object Oriented Programming with Java',
+        paper_code: 'BCA-302',
+        subject_name: 'Java Programming',
+        marks_obtained: 45,
+        max_marks: 50,
+        is_pass: true,
+        paper_type: 'THEORY',
+      },
+    ];
+  };
 
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#4E5969] dark:text-slate-100 font-sans transition-colors duration-200">
@@ -191,25 +233,25 @@ export default function StudentDashboard() {
                   ACTIVE STUDENT PORTAL
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white/90 border border-white/20 text-xs font-mono font-bold">
-                  {studentInfo?.course || 'MBBS'}
+                  {studentInfo?.course || 'BCA'}
                 </span>
               </div>
               <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white">
-                Welcome back, {studentInfo?.name || 'Rahul Verma'}! 👋
+                Welcome back, {studentInfo?.name || 'Tanish Pandey'}! 👋
               </h1>
               <p className="text-xs text-white/80 max-w-2xl leading-relaxed">
-                NMC CBME Compliant Student Ledger. Track subject-wise attendance across Theory, Practical, Clinical & SGT, examine published test results, and manage your UG clinical logbooks.
+                Official College Student Ledger. Track subject-wise attendance across Theory & Practical Lectures, examine published test results, and manage your academic syllabus.
               </p>
               
               <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
                 <span className="px-3 py-1 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-medium">
-                  🆔 <strong>Reg No:</strong> {studentInfo?.registration_no || '2023MBBS045'}
+                  🆔 <strong>Reg No:</strong> {studentInfo?.registration_no || '2025107715'}
                 </span>
                 <span className="px-3 py-1 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-medium">
-                  🎓 <strong>Batch:</strong> {studentInfo?.batch || '2023-MBBS'}
+                  🎓 <strong>Batch:</strong> {studentInfo?.batch || 'Batch 2025'}
                 </span>
                 <span className="px-3 py-1 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-medium">
-                  🏥 <strong>Department:</strong> {studentInfo?.department || 'Phase 2 MBBS'}
+                  🏛️ <strong>Department:</strong> {studentInfo?.department || 'Computer Science & Engineering'}
                 </span>
               </div>
             </div>
@@ -354,9 +396,18 @@ export default function StudentDashboard() {
 
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Notices & Key Highlights Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1">
+              <NoticeDashboardWidget role="student" />
+            </div>
+            <div className="lg:col-span-2">
+              <RecentLessonsWidget role="STUDENT" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
             <AttendanceWidget role="STUDENT" />
-            <RecentLessonsWidget role="STUDENT" />
           </div>
 
           {/* TWO COLUMN CONTENT SECTION */}
@@ -449,20 +500,20 @@ export default function StudentDashboard() {
                 <div className="space-y-3 text-xs">
                   <div className="p-3.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700/60 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-[#5B4BFF]">Physiology Lecture</span>
-                      <span className="font-mono text-[10px] font-bold bg-[#5B4BFF]/10 text-[#5B4BFF] px-2 py-0.5 rounded">08:00 - 09:00</span>
+                      <span className="font-bold text-[#5B4BFF]">Data Structures Lecture</span>
+                      <span className="font-mono text-[10px] font-bold bg-[#5B4BFF]/10 text-[#5B4BFF] px-2 py-0.5 rounded">09:00 - 10:00</span>
                     </div>
-                    <p className="text-[#1B1E28] dark:text-white font-semibold">Hematopathology & Anemia</p>
-                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400">Faculty: Dr. Sanjay Singh | Room: 209</p>
+                    <p className="text-[#1B1E28] dark:text-white font-semibold">Binary Search Trees & AVL Balancing</p>
+                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400">Faculty: Dr. Anuj Kumar | Room: CS-Lab 102</p>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700/60 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-purple-600 dark:text-purple-400">Anatomy Practical</span>
-                      <span className="font-mono text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded">09:00 - 11:00</span>
+                      <span className="font-bold text-purple-600 dark:text-purple-400">DBMS Practical Lab</span>
+                      <span className="font-mono text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded">10:00 - 12:00</span>
                     </div>
-                    <p className="text-[#1B1E28] dark:text-white font-semibold">Gross Anatomy Dissection</p>
-                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400">Faculty: Dr. Shipra Pandey | Room: Dissection Hall 1</p>
+                    <p className="text-[#1B1E28] dark:text-white font-semibold">SQL Indexing & Complex Joins</p>
+                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400">Faculty: Er. Shailesh Saxena | Room: Server Lab 3</p>
                   </div>
                 </div>
               </div>

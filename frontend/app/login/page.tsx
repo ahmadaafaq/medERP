@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import Image from 'next/image';
 
 interface College {
   id?: string;
@@ -16,7 +18,6 @@ interface College {
 
 const API_BASE = 'http://localhost:3001/api/v1';
 
-// Default standard list of SRMS group institutions for instant zero-latency loading
 const DEFAULT_COLLEGES: College[] = [
   {
     code: '1',
@@ -97,18 +98,19 @@ export default function LoginPage() {
 
   // ─── 1. College Selection State ────────────────────────────────────────────
   const [colleges, setColleges] = useState<College[]>(DEFAULT_COLLEGES);
-  const [selectedCollege, setSelectedCollege] = useState<College | null>(null);
+  const [selectedCollege, setSelectedCollege] = useState<College>(DEFAULT_COLLEGES[0]);
+  const [isCollegePickerOpen, setIsCollegePickerOpen] = useState<boolean>(false);
   const [collegeSearchQuery, setCollegeSearchQuery] = useState<string>('');
-  const [isSearchingColleges, setIsSearchingColleges] = useState<boolean>(false);
 
   // ─── 2. Auth Credentials & Role State ──────────────────────────────────────
   const [role, setRole] = useState<'STUDENT' | 'FACULTY' | 'ADMIN' | 'CLERK' | 'WARDEN'>('STUDENT');
-  const [email, setEmail] = useState('2023MBBS045');
-  const [password, setPassword] = useState('2023MBBS045');
+  const [email, setEmail] = useState('2500141790009');
+  const [password, setPassword] = useState('2500141790009');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // ─── 3. Fetch Colleges from Backend on Mount ───────────────────────────────
+  // ─── 3. Fetch Colleges & Check URL / Session on Mount ───────────────────────
   useEffect(() => {
     fetchCollegesList();
     checkExistingCollegeSession();
@@ -116,16 +118,37 @@ export default function LoginPage() {
 
   const checkExistingCollegeSession = () => {
     if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlRole = urlParams.get('role');
+      const urlCollege = urlParams.get('college');
+
+      if (urlRole && ['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN'].includes(urlRole.toUpperCase())) {
+        applyRolePreset(urlRole.toUpperCase() as any);
+      }
+
+      if (urlCollege) {
+        const found = DEFAULT_COLLEGES.find((c) => c.slug === urlCollege || String(c.code) === urlCollege);
+        if (found) {
+          setSelectedCollege(found);
+          localStorage.setItem('colg_cd', String(found.colg_cd || found.code));
+          localStorage.setItem('tenantSlug', found.slug);
+          localStorage.setItem('selectedTenant', found.slug);
+          return;
+        }
+      }
+
       const savedColgCd = localStorage.getItem('colg_cd');
       const savedSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant');
       if (savedColgCd || savedSlug) {
         const found = DEFAULT_COLLEGES.find(
           (c) => String(c.colg_cd || c.code) === savedColgCd || c.slug === savedSlug
         );
-        if (found) {
-          // Pre-populate if saved
-          setSelectedCollege(found);
-        }
+        if (found) setSelectedCollege(found);
+      } else {
+        setSelectedCollege(DEFAULT_COLLEGES[0]);
+        localStorage.setItem('colg_cd', '1');
+        localStorage.setItem('tenantSlug', 'srms-cet-bareilly');
+        localStorage.setItem('selectedTenant', 'srms-cet-bareilly');
       }
     }
   };
@@ -137,7 +160,6 @@ export default function LoginPage() {
         const json = await res.json();
         const list: any[] = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
         if (list.length > 0) {
-          // Deduplicate and normalize
           const map = new Map<string, College>();
           list.forEach((item) => {
             const code = String(item.code || item.colg_cd || '1');
@@ -155,15 +177,14 @@ export default function LoginPage() {
             }
           });
           const combined = Array.from(map.values());
-          setColleges(combined.length > 0 ? combined : DEFAULT_COLLEGES);
+          if (combined.length > 0) setColleges(combined);
         }
       }
-    } catch (e) {
-      console.warn('Using default college master roster fallback');
+    } catch {
+      // Keep default roster fallback
     }
   };
 
-  // ─── 4. Filtered Search Roster for Autocomplete ────────────────────────────
   const filteredColleges = useMemo(() => {
     if (!collegeSearchQuery.trim()) return colleges;
     const q = collegeSearchQuery.toLowerCase();
@@ -171,19 +192,18 @@ export default function LoginPage() {
       (c) =>
         (c.name && c.name.toLowerCase().includes(q)) ||
         (c.code && String(c.code).toLowerCase().includes(q)) ||
-        (c.slug && c.slug.toLowerCase().includes(q)) ||
-        (c.domain && c.domain.toLowerCase().includes(q))
+        (c.slug && c.slug.toLowerCase().includes(q))
     );
   }, [colleges, collegeSearchQuery]);
 
-  // ─── 5. Handle College Selection ───────────────────────────────────────────
   const handleSelectCollege = (college: College) => {
     setSelectedCollege(college);
+    setIsCollegePickerOpen(false);
+    setCollegeSearchQuery('');
     setErrorMsg('');
     const code = String(college.colg_cd || college.code);
     const slug = college.slug || 'srms-cet-bareilly';
 
-    // Store in localStorage across the whole ERP
     if (typeof window !== 'undefined') {
       localStorage.setItem('colg_cd', code);
       localStorage.setItem('tenantSlug', slug);
@@ -194,27 +214,39 @@ export default function LoginPage() {
       localStorage.setItem('colg_name', college.name);
     }
 
-    // Role preset values adjustment
+    // Adjust demo presets based on college type
     if (role === 'STUDENT') {
       setEmail(code === '1' ? '2500141790009' : '2023MBBS045');
       setPassword(code === '1' ? '2500141790009' : '2023MBBS045');
     }
   };
 
-  const handleResetCollege = () => {
-    setSelectedCollege(null);
-    setCollegeSearchQuery('');
+  const applyRolePreset = (newRole: 'STUDENT' | 'FACULTY' | 'ADMIN' | 'CLERK' | 'WARDEN') => {
+    setRole(newRole);
     setErrorMsg('');
+    const code = String(selectedCollege.colg_cd || selectedCollege.code || '1');
+
+    if (newRole === 'STUDENT') {
+      setEmail(code === '1' ? '2500141790009' : '2023MBBS045');
+      setPassword(code === '1' ? '2500141790009' : '2023MBBS045');
+    } else if (newRole === 'FACULTY') {
+      setEmail(code === '1' ? 'CET-FAC-001' : 'EMP1001');
+      setPassword('Password@123');
+    } else if (newRole === 'ADMIN') {
+      setEmail('admin');
+      setPassword('admin@123');
+    } else if (newRole === 'CLERK') {
+      setEmail('1234');
+      setPassword('1234');
+    } else if (newRole === 'WARDEN') {
+      setEmail('warden');
+      setPassword('warden123');
+    }
   };
 
-  // ─── 6. Handle Login Submission ────────────────────────────────────────────
+  // ─── 4. Handle Login Submission ────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCollege) {
-      setErrorMsg('Please select a college institution first');
-      return;
-    }
-
     setLoading(true);
     setErrorMsg('');
 
@@ -248,295 +280,278 @@ export default function LoginPage() {
 
           if (authData.user) {
             localStorage.setItem('user', JSON.stringify(authData.user));
-            const uDeptId = authData.user.departmentId || authData.user.department_id || authData.user.profile?.department_id || '';
-            const uDeptName = authData.user.departmentName || authData.user.department_name || authData.user.profile?.department_name || '';
-            const uSubjId = authData.user.subjectId || authData.user.subject_id || authData.user.profile?.subject_id || '';
-            const uSubjName = authData.user.subjectName || authData.user.subject_name || authData.user.profile?.primary_subject_name || '';
-
-            if (uDeptId) localStorage.setItem('departmentId', uDeptId);
-            if (uDeptName) localStorage.setItem('departmentName', uDeptName);
-            if (uSubjId) localStorage.setItem('subjectId', uSubjId);
-            if (uSubjName) localStorage.setItem('subjectName', uSubjName);
           }
 
-          // Direct route navigation
-          window.location.href = `/dashboard/${role.toLowerCase()}`;
+          if (role === 'ADMIN') {
+            router.push('/dashboard/admin');
+          } else if (role === 'FACULTY') {
+            router.push('/dashboard/faculty');
+          } else if (role === 'STUDENT') {
+            router.push('/dashboard/student');
+          } else if (role === 'CLERK') {
+            router.push('/dashboard/clerk');
+          } else if (role === 'WARDEN') {
+            router.push('/dashboard/warden');
+          } else {
+            router.push('/dashboard');
+          }
           return;
         }
       }
 
       const errData = await res.json().catch(() => ({}));
-      const msg = errData.message || 'Invalid credentials for this institution';
-      setErrorMsg(msg);
-    } catch (err) {
-      setErrorMsg('Failed to connect to backend authentication service');
+      setErrorMsg(errData.message || 'Invalid username or password for this institution');
+    } catch {
+      setErrorMsg('Cannot connect to backend server. Please verify network or credentials.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 bg-[#F6F8FC] dark:bg-[#0B1120] text-[#1B1E28] dark:text-white font-sans transition-colors">
+    <div className="min-h-screen relative flex flex-col justify-center items-center p-3 sm:p-4 bg-[#0E0A24] text-white font-sans overflow-hidden selection:bg-[#5B4BFF]">
       
-      {/* Brand Header */}
-      <div className="text-center mb-6 space-y-2">
-        <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-[#2D2575] text-white shadow-md">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#00C48C] animate-pulse" />
-          <span className="text-xs font-black uppercase tracking-wider">UniCampus MedERP Core Engine</span>
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#1B1E28] dark:text-white">
-          Institutional Access Portal
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-          Single sign-on gateway for Engineering, Medical, Business, and Law colleges.
-        </p>
+      {/* ─── BLURRED CAMPUS BACKGROUND OVERLAY ──────────────────────────────── */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <Image
+          src="/images/srms_campus.png"
+          alt="SRMS Campus"
+          fill
+          priority
+          className="object-cover object-center opacity-30 filter blur-sm scale-105"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#18123B]/85 via-[#0E0A24]/90 to-[#0E0A24]" />
       </div>
 
-      {/* Main Container Card */}
-      <div className="w-full max-w-xl bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 rounded-[28px] p-6 sm:p-8 shadow-[0_12px_40px_rgba(45,37,117,0.08)] space-y-6">
+      {/* Floating Accent Glows */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-80 h-80 bg-[#5B4BFF]/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-10 right-10 w-60 h-60 bg-[#F36C21]/15 rounded-full blur-3xl pointer-events-none" />
 
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* STAGE 1: COLLEGE AUTOCOMPLETE SEARCH SELECTOR (When Form is Hidden) */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {!selectedCollege ? (
-          <div className="space-y-5 animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-sm font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-xs font-bold">1</span>
-                  Select Your College Institution
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Search by College Name, Code (e.g. 1, 2), or Campus
+      {/* ─── TOP HEADER BAR ─────────────────────────────────────────────────── */}
+      <div className="relative z-10 w-full max-w-[440px] flex items-center justify-between mb-3 px-1">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-xs text-white/80 hover:text-white font-bold transition-all py-1 px-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/15 cursor-pointer shadow-sm"
+        >
+          <span>←</span>
+          <span>Campus Home</span>
+        </Link>
+
+        <span className="text-[11px] text-white/70 font-mono flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-[#00C48C] animate-pulse" />
+          ERP Secure v2.4
+        </span>
+      </div>
+
+      {/* ─── COMPACT PREMIUM LOGIN CARD (SMALL FORM, SMALL PADDING) ─────────── */}
+      <div className="relative z-10 w-full max-w-[440px] bg-[#1E1945]/90 dark:bg-[#140F30]/90 backdrop-blur-xl border border-white/20 rounded-[24px] p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] space-y-4">
+        
+        {/* Brand Header */}
+        <div className="text-center space-y-1">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white text-[#2D2575] font-black text-lg shadow-md mb-1">
+            SRMS
+          </div>
+          <h1 className="text-xl font-black tracking-tight text-white">
+            Institutional Access Portal
+          </h1>
+          <p className="text-[11px] text-white/70 font-medium">
+            Shri Ram Murti Smarak Institutions • Estd. 1990
+          </p>
+        </div>
+
+        {/* ─── COMPACT COLLEGE SELECTOR BAR ─────────────────────────────────── */}
+        <div className="relative">
+          <div
+            onClick={() => setIsCollegePickerOpen(!isCollegePickerOpen)}
+            className="p-2.5 rounded-xl bg-black/25 hover:bg-black/35 border border-white/15 cursor-pointer transition-all flex items-center justify-between gap-2 text-xs group"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-6 h-6 rounded-lg bg-[#5B4BFF] text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+                {selectedCollege.code || '1'}
+              </span>
+              <div className="min-w-0">
+                <p className="font-bold text-white text-xs truncate leading-tight">
+                  {selectedCollege.name}
+                </p>
+                <p className="text-[10px] text-[#F36C21] font-mono font-semibold">
+                  tenant: {selectedCollege.slug}
                 </p>
               </div>
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950 text-[#5B4BFF] border border-indigo-100 dark:border-indigo-900">
-                {colleges.length} Institutions
-              </span>
             </div>
+            <span className="text-xs text-white/60 group-hover:text-white shrink-0">
+              {isCollegePickerOpen ? '▲' : '▼'}
+            </span>
+          </div>
 
-            {/* Auto Complete Search Input */}
-            <div className="relative">
+          {/* Autocomplete Dropdown */}
+          {isCollegePickerOpen && (
+            <div className="absolute left-0 right-0 top-full mt-1.5 p-2 bg-[#1C1646] border border-white/20 rounded-2xl shadow-2xl z-50 space-y-2 animate-fadeIn max-h-56 overflow-hidden flex flex-col">
               <input
                 type="text"
                 value={collegeSearchQuery}
-                onChange={(e) => {
-                  setCollegeSearchQuery(e.target.value);
-                  setIsSearchingColleges(true);
-                }}
-                onFocus={() => setIsSearchingColleges(true)}
-                placeholder="🔍 Type college name, 'CET', 'IMS', 'Law', '1', '2'..."
-                className="w-full px-4 py-3.5 rounded-2xl bg-[#F6F8FC] dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold text-sm focus:outline-none focus:border-[#5B4BFF] transition shadow-inner placeholder-slate-400"
+                onChange={(e) => setCollegeSearchQuery(e.target.value)}
+                placeholder="🔍 Search college..."
+                className="w-full px-3 py-1.5 rounded-xl bg-black/30 border border-white/20 text-white text-xs font-semibold focus:outline-none focus:border-[#5B4BFF]"
                 autoFocus
               />
-              {collegeSearchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setCollegeSearchQuery('')}
-                  className="absolute right-3.5 top-3.5 w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs font-bold hover:bg-slate-400"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            {/* Colleges List / Autocomplete Results */}
-            <div className="max-h-[380px] overflow-y-auto space-y-2.5 pr-1">
-              {filteredColleges.length === 0 ? (
-                <div className="p-8 text-center bg-[#F6F8FC] dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-xs text-slate-400">
-                  No institution found matching &quot;{collegeSearchQuery}&quot;
-                </div>
-              ) : (
-                filteredColleges.map((colg) => {
-                  const colgCode = String(colg.colg_cd || colg.code);
-                  return (
-                    <div
-                      key={colg.code || colg.slug}
-                      onClick={() => handleSelectCollege(colg)}
-                      className="p-4 rounded-2xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#5B4BFF] hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 cursor-pointer transition-all duration-200 shadow-xs flex items-center justify-between gap-3 group"
-                    >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center font-black text-sm text-[#5B4BFF] shadow-xs group-hover:scale-105 transition-transform flex-shrink-0">
-                          🏛️
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate group-hover:text-[#5B4BFF] transition-colors">
-                            {colg.name}
-                          </h4>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className="px-2 py-0.5 rounded font-mono font-black text-[10px] bg-[#F36C21]/10 text-[#F36C21] border border-[#F36C21]/20">
-                              colg_cd: {colgCode}
-                            </span>
-                            <span className="px-2 py-0.5 rounded font-mono text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                              tenant: {colg.slug}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex-shrink-0">
-                        <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-white dark:bg-slate-800 text-[#5B4BFF] border border-slate-200 dark:border-slate-700 group-hover:bg-[#5B4BFF] group-hover:text-white transition-all shadow-xs">
-                          Select →
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        ) : (
-          /* ═══════════════════════════════════════════════════════════════════ */
-          /* STAGE 2: LOGIN FORM WITH SELECTED TENANT DISPLAY AT TOP             */
-          /* ═══════════════════════════════════════════════════════════════════ */
-          <div className="space-y-6 animate-fadeIn">
-            
-            {/* Top Selected College Tenant Display Header */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-[#2D2575] via-[#372E8E] to-[#2D2575] text-white flex items-center justify-between gap-3 shadow-md border border-indigo-400/20">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-lg flex-shrink-0">
-                  🏛️
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-black bg-[#F36C21] text-white uppercase shadow-xs">
-                      colg_cd: {selectedCollege.colg_cd || selectedCollege.code}
-                    </span>
-                    <span className="text-[10px] font-mono text-indigo-200">
-                      tenant: {selectedCollege.slug}
+              <div className="overflow-y-auto space-y-1 pr-1 flex-1">
+                {filteredColleges.map((colg) => (
+                  <div
+                    key={colg.code}
+                    onClick={() => handleSelectCollege(colg)}
+                    className="p-2 rounded-lg hover:bg-white/10 cursor-pointer text-xs flex items-center justify-between gap-2 transition"
+                  >
+                    <span className="truncate font-semibold text-white/90">{colg.name}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-white/10 text-[9px] font-mono shrink-0">
+                      Code {colg.code}
                     </span>
                   </div>
-                  <h3 className="text-xs sm:text-sm font-black text-white truncate mt-0.5">
-                    {selectedCollege.name}
-                  </h3>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleResetCollege}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/20 transition flex-shrink-0 flex items-center gap-1 shadow-xs"
-                title="Choose different college"
-              >
-                <span>🔄</span>
-                <span className="hidden sm:inline">Change</span>
-              </button>
-            </div>
-
-            {/* Portal Role Selector Tabs */}
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                Portal Access Role
-              </label>
-              <div className="grid grid-cols-5 gap-1.5 p-1.5 bg-[#F6F8FC] dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs font-black">
-                {(['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN'] as const).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => {
-                      setRole(r);
-                      setErrorMsg('');
-                      const code = String(selectedCollege.colg_cd || selectedCollege.code);
-                      if (r === 'ADMIN') {
-                        setEmail('admin');
-                        setPassword('admin@123');
-                      } else if (r === 'CLERK') {
-                        setEmail('1234');
-                        setPassword('1234');
-                      } else if (r === 'STUDENT') {
-                        setEmail(code === '1' ? '2500141790009' : '2023MBBS045');
-                        setPassword(code === '1' ? '2500141790009' : '2023MBBS045');
-                      } else if (r === 'FACULTY') {
-                        setEmail('EMP1001');
-                        setPassword('Password@123');
-                      } else if (r === 'WARDEN') {
-                        setEmail('warden');
-                        setPassword('warden123');
-                      }
-                    }}
-                    className={`py-2 rounded-xl transition-all text-center text-[11px] ${
-                      role === r
-                        ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/25'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    {r === 'ADMIN' ? 'Admin' : r === 'CLERK' ? 'Clerk' : r.charAt(0) + r.slice(1).toLowerCase()}
-                  </button>
                 ))}
               </div>
             </div>
+          )}
+        </div>
 
-            {/* Dynamic Role Banner Hint */}
-            {role === 'STUDENT' && (
-              <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/40 text-xs text-[#5B4BFF] flex items-center gap-2">
-                <span>🎓</span>
-                <span>Student Login: Use <strong>Registration No / Roll No</strong> as Username &amp; Password.</span>
-              </div>
-            )}
-            {role === 'FACULTY' && (
-              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/40 text-xs text-[#00C48C] flex items-center gap-2">
-                <span>👨‍🏫</span>
-                <span>Faculty Login: Use registered <strong>Emp ID</strong> (e.g. <code>EMP1001</code>) and Password.</span>
-              </div>
-            )}
-            {role === 'ADMIN' && (
-              <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/40 text-xs text-purple-700 dark:text-purple-300 flex items-center gap-2">
-                <span>⚡</span>
-                <span>Admin Login: Username <code>admin</code> and Password <code>admin@123</code>.</span>
-              </div>
-            )}
+        {/* ─── ROLE SELECTOR PILLS ───────────────────────────────────────────── */}
+        <div>
+          <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-black/25 border border-white/15 text-[11px] font-bold">
+            {(['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN'] as const).map((r) => {
+              const isActive = role === r;
+              const labelMap: Record<string, string> = {
+                STUDENT: 'Student',
+                FACULTY: 'Faculty',
+                ADMIN: 'Admin',
+                CLERK: 'Clerk',
+                WARDEN: 'Warden',
+              };
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => applyRolePreset(r)}
+                  className={`py-1.5 rounded-lg text-center transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[#5B4BFF] text-white font-extrabold shadow-sm'
+                      : 'text-white/70 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {labelMap[r]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-            {errorMsg && (
-              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/40 text-xs text-[#F04438] text-center font-bold">
-                {errorMsg}
-              </div>
-            )}
-
-            {/* Login Form */}
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                  {role === 'STUDENT' ? 'Registration No / Roll No' : role === 'FACULTY' ? 'Emp ID / Email' : 'Username / Email'} *
-                </label>
-                <input
-                  type="text"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] text-sm"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                  Password *
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] text-sm"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-black text-sm shadow-lg shadow-[#5B4BFF]/25 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                {loading ? 'Authenticating & Synchronizing...' : `Sign In as ${role === 'ADMIN' ? 'Admin' : role.charAt(0) + role.slice(1).toLowerCase()}`}
-              </button>
-            </form>
+        {/* Error Alert Message */}
+        {errorMsg && (
+          <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold text-center animate-shake">
+            ⚠️ {errorMsg}
           </div>
         )}
 
+        {/* ─── COMPACT LOGIN INPUT FORM ──────────────────────────────────────── */}
+        <form onSubmit={handleLogin} className="space-y-3">
+          
+          {/* User ID / Registration No Input */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-black uppercase tracking-wider text-white/70">
+              {role === 'STUDENT' ? 'Student Registration / Roll No' : role === 'FACULTY' ? 'Faculty Emp ID / Email' : 'Admin Username / Email'}
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-2.5 text-white/50 text-xs">👤</span>
+              <input
+                type="text"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={role === 'STUDENT' ? 'e.g. 2500141790009' : 'e.g. CET-FAC-001'}
+                className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/25 border border-white/20 text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] focus:bg-black/40 transition placeholder-white/40"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Password Input */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-[10px] font-black uppercase tracking-wider text-white/70">
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="text-[10px] text-white/60 hover:text-white font-semibold cursor-pointer"
+              >
+                {showPassword ? 'Hide 👁️' : 'Show 👁️'}
+              </button>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3.5 top-2.5 text-white/50 text-xs">🔒</span>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/25 border border-white/20 text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] focus:bg-black/40 transition placeholder-white/40"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] hover:from-[#4E3FE3] hover:to-[#6857F0] text-white font-black text-xs shadow-lg shadow-indigo-500/25 transition-all transform active:scale-98 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+          >
+            {loading ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Signing In...</span>
+              </>
+            ) : (
+              <>
+                <span>Sign In to {role === 'ADMIN' ? 'Admin Console' : `${role.charAt(0) + role.slice(1).toLowerCase()} Portal`}</span>
+                <span className="font-mono">➔</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* ─── QUICK PRESET CHIPS FOR ZERO-FRICTION TESTING ───────────────────── */}
+        <div className="pt-2 border-t border-white/10 space-y-1.5">
+          <span className="block text-[9px] font-black uppercase text-white/50 tracking-wider text-center">
+            Quick 1-Click Demo Credentials
+          </span>
+          <div className="flex flex-wrap items-center justify-center gap-1.5 text-[10px]">
+            <button
+              type="button"
+              onClick={() => applyRolePreset('STUDENT')}
+              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 border border-white/15 transition cursor-pointer"
+            >
+              🎓 Student: 2500141790009
+            </button>
+            <button
+              type="button"
+              onClick={() => applyRolePreset('FACULTY')}
+              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 border border-white/15 transition cursor-pointer"
+            >
+              👨‍🏫 Faculty: CET-FAC-001
+            </button>
+            <button
+              type="button"
+              onClick={() => applyRolePreset('ADMIN')}
+              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 border border-white/15 transition cursor-pointer"
+            >
+              🏛️ Admin: admin
+            </button>
+          </div>
+        </div>
+
       </div>
 
-      {/* Footer Info */}
-      <div className="mt-8 text-center text-xs text-slate-400 font-medium">
-        © 2026 UniCampus ERP Platform • Schema-per-Tenant Multi-Tenancy Architecture
+      {/* ─── BOTTOM COPYRIGHT ──────────────────────────────────────────────── */}
+      <div className="relative z-10 mt-4 text-center text-[10px] text-white/50 font-medium">
+        © {new Date().getFullYear()} Shri Ram Murti Smarak Institutions • UniCampus MedERP v2.4
       </div>
 
     </div>

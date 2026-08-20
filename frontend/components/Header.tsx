@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useNotices, NoticeItem } from '../hooks/useNotices';
+import CampusAlertsDropdown from './notices/CampusAlertsDropdown';
+import NoticeDetailModal from './notices/NoticeDetailModal';
 
 interface HeaderProps {
   title: string;
@@ -52,7 +55,15 @@ export default function Header({ title }: HeaderProps) {
   // Settings preferences state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
+  // Campus Alerts & Notices State
+  const { notices, loading: noticesLoading, unreadCount, markAsRead, acknowledgeNotice } = useNotices();
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [selectedAlertNotice, setSelectedAlertNotice] = useState<NoticeItem | null>(null);
+  const [isNoticeDetailOpen, setIsNoticeDetailOpen] = useState(false);
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const alertsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -86,11 +97,14 @@ export default function Header({ title }: HeaderProps) {
     fetchUserProfile();
   }, []);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (alertsRef.current && !alertsRef.current.contains(e.target as Node)) {
+        setAlertsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -109,6 +123,7 @@ export default function Header({ title }: HeaderProps) {
   const extractUserInfo = (data: any): UserProfileData => {
     const p = data.profile || {};
     const role = data.role || getStorageItem('role') || 'USER';
+    const isStudentRole = role.toUpperCase() === 'STUDENT';
     const email = data.email || p.email || '';
     const tenantSlug = data.tenantSlug || getStorageItem('tenantSlug') || 'srms';
 
@@ -119,7 +134,7 @@ export default function Header({ title }: HeaderProps) {
       data.faculty_name ||
       (email ? email.split('@')[0] : 'User Profile');
 
-    const empId = p.emp_id || p.empId || data.emp_id || data.empId || '';
+    const empId = isStudentRole ? '' : (p.emp_id || p.empId || data.emp_id || data.empId || '');
 
     const nameStr = String(name || '');
     const photoUrl =
@@ -127,9 +142,9 @@ export default function Header({ title }: HeaderProps) {
       p.photoUrl ||
       data.photo_url ||
       data.photoUrl ||
-      (nameStr.toLowerCase().includes('sanjay') || empId.includes('DR/07/026')
+      (!isStudentRole && (nameStr.toLowerCase().includes('sanjay') || empId.includes('DR/07/026'))
         ? '/avatars/dr_sanjay_singh.png'
-        : nameStr.toLowerCase().includes('sarah') || nameStr.toLowerCase().includes('aparna')
+        : !isStudentRole && (nameStr.toLowerCase().includes('sarah') || nameStr.toLowerCase().includes('aparna'))
           ? '/avatars/dr_sarah_sharma.png'
           : '');
 
@@ -142,8 +157,8 @@ export default function Header({ title }: HeaderProps) {
 
     const rollno = p.rollno || data.rollno || '';
 
-    const designation = p.designation || data.designation || '';
-    const specialization = p.specialization || data.specialization || '';
+    const designation = isStudentRole ? 'Student' : (p.designation || data.designation || '');
+    const specialization = isStudentRole ? '' : (p.specialization || data.specialization || '');
     const departmentName = p.department_name || data.departmentName || '';
     const subjectName = p.primary_subject_name || data.subjectName || '';
     const courseCd = p.course_cd || data.courseCd || '';
@@ -322,13 +337,15 @@ export default function Header({ title }: HeaderProps) {
 
   const userName = user?.name || (mounted ? (getStorageItem('name') || getStorageItem('role') || 'Admin') : 'Admin');
   const userRole = (user?.role || (mounted ? (getStorageItem('role') || 'ADMIN') : 'ADMIN')).toUpperCase();
-  const userDisplayId = user?.registrationNo
-    ? `REG: ${user.registrationNo}`
-    : user?.empId
-      ? `EMP: ${user.empId}`
-      : user?.id
-        ? `ID: ${user.id.slice(0, 8)}...`
-        : 'ID: Active';
+  const userDisplayId = userRole === 'STUDENT'
+    ? (user?.registrationNo ? `REG: ${user.registrationNo}` : user?.rollno ? `ROLL: ${user.rollno}` : 'STUDENT')
+    : user?.registrationNo
+      ? `REG: ${user.registrationNo}`
+      : user?.empId
+        ? `EMP: ${user.empId}`
+        : user?.id
+          ? `ID: ${user.id.slice(0, 8)}...`
+          : 'ID: Active';
 
   const collegeDisplayName = (userRole === 'SUPER_ADMIN')
     ? 'UniCampus Central University Administration'
@@ -373,6 +390,45 @@ export default function Header({ title }: HeaderProps) {
               </svg>
             )}
           </button>
+
+          {/* Campus Alerts Notification Bell */}
+          <div className="relative" ref={alertsRef}>
+            <button
+              type="button"
+              onClick={() => setAlertsOpen(!alertsOpen)}
+              className="relative w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm"
+              title="Campus Alerts & Notifications"
+            >
+              <svg className="w-4 h-4 text-purple-200" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+              {unreadCount.totalUnread > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F36C21] text-white text-[10px] font-black flex items-center justify-center border-2 border-[#2D2575] animate-pulse shadow-md">
+                  {unreadCount.totalUnread > 99 ? '99+' : unreadCount.totalUnread}
+                </span>
+              )}
+            </button>
+
+            {/* Campus Alerts Dropdown */}
+            <CampusAlertsDropdown
+              isOpen={alertsOpen}
+              onClose={() => setAlertsOpen(false)}
+              notices={notices}
+              loading={noticesLoading}
+              onSelectNotice={(notice) => {
+                setSelectedAlertNotice(notice);
+                setIsNoticeDetailOpen(true);
+                if (!notice.is_read) {
+                  markAsRead(notice.id);
+                }
+              }}
+              onMarkAllRead={async () => {
+                for (const n of notices.filter((item) => !item.is_read)) {
+                  await markAsRead(n.id);
+                }
+              }}
+            />
+          </div>
 
           {/* User Profile Avatar Container */}
           <div className="relative" ref={dropdownRef}>
@@ -467,7 +523,13 @@ export default function Header({ title }: HeaderProps) {
                     type="button"
                     onClick={() => {
                       setDropdownOpen(false);
-                      setActiveModal('PROFILE');
+                      if (userRole === 'STUDENT') {
+                        window.location.href = '/dashboard/student/profile';
+                      } else if (userRole === 'FACULTY' || userRole === 'HOD') {
+                        window.location.href = '/dashboard/faculty/profile';
+                      } else {
+                        setActiveModal('PROFILE');
+                      }
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition-all text-xs font-semibold text-left group"
                   >
@@ -534,6 +596,85 @@ export default function Header({ title }: HeaderProps) {
           </div>
         </div>
       </header>
+
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* LIVE ADMIN ANNOUNCEMENT ALERT BANNER */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {(() => {
+        const topAnnouncement = notices.find(
+          (n) => !n.is_read && (n.priority === 'urgent' || n.priority === 'important' || n.category === 'announcement'),
+        );
+        if (!topAnnouncement || dismissedAlertIds.includes(topAnnouncement.id) || !notificationsEnabled) {
+          return null;
+        }
+
+        const isUrgent = topAnnouncement.priority === 'urgent';
+
+        return (
+          <div
+            className={`mt-2 mx-6 p-3.5 rounded-2xl shadow-md border flex items-center justify-between gap-4 text-xs animate-in slide-in-from-top-2 duration-200 ${
+              isUrgent
+                ? 'bg-[#FFF1F2] dark:bg-rose-950/70 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-100'
+                : 'bg-gradient-to-r from-orange-50 to-indigo-50 dark:from-slate-900 dark:to-indigo-950/50 border-orange-200 dark:border-indigo-900/60 text-[#1B1E28] dark:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 ${
+                  isUrgent
+                    ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/30'
+                    : 'bg-[#F36C21] text-white shadow-sm shadow-orange-500/30'
+                }`}
+              >
+                📢
+              </div>
+              <div className="min-w-0 flex items-center gap-2 truncate">
+                <span
+                  className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                    isUrgent
+                      ? 'bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
+                      : 'bg-orange-100 text-[#F36C21] dark:bg-orange-950 dark:text-orange-300'
+                  }`}
+                >
+                  {isUrgent ? 'URGENT CIRCULAR' : 'NEW ANNOUNCEMENT'}
+                </span>
+                <span className="font-extrabold text-[#1B1E28] dark:text-white truncate">
+                  {topAnnouncement.title}
+                </span>
+                <span className="hidden lg:inline text-[#4E5969] dark:text-slate-300 text-[11px] truncate">
+                  — {topAnnouncement.body}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedAlertNotice(topAnnouncement);
+                  setIsNoticeDetailOpen(true);
+                  if (!topAnnouncement.is_read) {
+                    markAsRead(topAnnouncement.id);
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-[#F36C21] hover:bg-[#E25C10] text-white font-black text-xs shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <span>Read Notice</span>
+                <span>➔</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDismissedAlertIds((prev) => [...prev, topAnnouncement.id])}
+                className="w-7 h-7 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-[#4E5969] dark:text-slate-300 flex items-center justify-center font-bold text-xs transition-colors cursor-pointer"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* 1. PROFILE MODAL */}
@@ -868,6 +1009,17 @@ export default function Header({ title }: HeaderProps) {
           </div>
         </div>
       )}
+
+      {/* Notice Detail Reader Modal for Alerts */}
+      <NoticeDetailModal
+        notice={selectedAlertNotice}
+        isOpen={isNoticeDetailOpen}
+        onClose={() => {
+          setIsNoticeDetailOpen(false);
+          setSelectedAlertNotice(null);
+        }}
+        onAcknowledge={acknowledgeNotice}
+      />
     </>
   );
 }

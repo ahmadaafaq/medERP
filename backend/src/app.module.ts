@@ -19,6 +19,9 @@ import { StudentMasterModule } from './student-master/student-master.module';
 import { AdminMasterModule } from './admin-master/admin-master.module';
 import { TimetableModule } from './timetable/timetable.module';
 import { LessonModule } from './lesson/lesson.module';
+import { RepositoryModule } from './repository/repository.module';
+import { PlacementDriveModule } from './placement-drive/placement-drive.module';
+import { NoticesModule } from './notices/notices.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantIsolationGuard } from './common/guards/tenant-isolation.guard';
@@ -50,6 +53,9 @@ import { validationSchema } from './config/joi.validation';
     AdminMasterModule,
     TimetableModule,
     LessonModule,
+    RepositoryModule,
+    PlacementDriveModule,
+    NoticesModule,
   ],
   providers: [
     {

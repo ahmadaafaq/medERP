@@ -99,7 +99,14 @@ interface TimetableSlotItem {
 }
 
 const API_BASE = 'http://localhost:3001/api/v1';
-const TENANT = 'srms-ims';
+
+const getTenantSlug = (): string => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+  }
+  return 'srms-cet-bareilly';
+};
+const TENANT = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
 
 const SESSION_TYPES = [
   { value: 'THEORY', label: 'Theory (Lecture)', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' },

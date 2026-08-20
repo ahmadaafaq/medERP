@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { CollegeMasterService } from './college-master.service';
+import { CollegeMasterService, SRMS_FIRM_LOCATIONS } from './college-master.service';
 import {
   CreateCollegeDto, UpdateCollegeDto,
   CreateCourseDto, UpdateCourseDto,
@@ -109,6 +109,75 @@ export class CollegeMasterController {
   ) {
     const data = await this.collegeMasterService.fetchLiveBatches(colgcd, coursecd);
     return { success: true, data };
+  }
+
+  @Public()
+  @Post('proxy/all-subjects')
+  @ApiOperation({ summary: 'Fetch live subjects from SRMS AdminAttendance GetAllSubjectDetail API' })
+  async proxyGetAllSubjects(
+    @Body('colgcd') colgcd: string,
+    @Body('coursecd') coursecd: string,
+    @Body('branchcd') branchcd: string,
+    @Body('batchcd') batchcd: string,
+    @Body('semcd') semcd: string,
+  ) {
+    const data = await this.collegeMasterService.fetchLiveSubjects(colgcd, coursecd, branchcd, batchcd, semcd);
+    return { success: true, data };
+  }
+
+  @Public()
+  @Post('proxy/subjects')
+  @ApiOperation({ summary: 'Fetch live subjects alias' })
+  async proxyGetSubjectsAlias(
+    @Body('colgcd') colgcd: string,
+    @Body('coursecd') coursecd: string,
+    @Body('branchcd') branchcd: string,
+    @Body('batchcd') batchcd: string,
+    @Body('semcd') semcd: string,
+  ) {
+    const data = await this.collegeMasterService.fetchLiveSubjects(colgcd, coursecd, branchcd, batchcd, semcd);
+    return { success: true, data };
+  }
+
+  @Public()
+  @Get('firm-locations')
+  @ApiOperation({ summary: 'Get list of configured SRMS Firm Locations and mapping' })
+  async getFirmLocations() {
+    return { success: true, data: SRMS_FIRM_LOCATIONS };
+  }
+
+  @Public()
+  @Post('proxy/employees')
+  @ApiOperation({ summary: 'Fetch live employee profiles from SRMS HR GETEMPPROFILEDTL API' })
+  async proxyGetEmployees(@Body('locid') locid: string) {
+    const data = await this.collegeMasterService.fetchLiveEmployees(locid || '7');
+    return { success: true, count: data.length, data };
+  }
+
+  @Public()
+  @Get('proxy/employees')
+  @ApiOperation({ summary: 'Fetch live employee profiles from SRMS HR GETEMPPROFILEDTL API (GET)' })
+  async proxyGetEmployeesGet(@Query('locid') locid: string) {
+    const data = await this.collegeMasterService.fetchLiveEmployees(locid || '7');
+    return { success: true, count: data.length, data };
+  }
+
+  @Public()
+  @Post('employees/sync-external')
+  @ApiOperation({ summary: 'Sync Employees / Faculty from SRMS HR API into database' })
+  async syncExternalEmployeesPost(@Query('locid') locid?: string, @Query('tenant') tenant?: string) {
+    const target = locid || tenant || '7';
+    const data = await this.collegeMasterService.syncExternalEmployees(target);
+    return { success: true, message: `Synced ${data.length} employees from SRMS HR portal API`, data };
+  }
+
+  @Public()
+  @Get('employees/sync-external')
+  @ApiOperation({ summary: 'Sync Employees / Faculty from SRMS HR API into database (GET)' })
+  async syncExternalEmployeesGet(@Query('locid') locid?: string, @Query('tenant') tenant?: string) {
+    const target = locid || tenant || '7';
+    const data = await this.collegeMasterService.syncExternalEmployees(target);
+    return { success: true, message: `Synced ${data.length} employees from SRMS HR portal API`, data };
   }
 
   // ─── 2. COURSES ───────────────────────────────────────────────────────────

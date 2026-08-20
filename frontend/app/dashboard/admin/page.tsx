@@ -6,6 +6,7 @@ import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
 import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
 import AttendanceWidget from '../../../components/AttendanceWidget';
+import NoticeDashboardWidget from '../../../components/notices/NoticeDashboardWidget';
 
 interface CollegeKPIs {
   totalStudents: number;
@@ -337,9 +338,18 @@ export default function AdminDashboard() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Notices & Key Highlights Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1">
+              <NoticeDashboardWidget role="admin" />
+            </div>
+            <div className="lg:col-span-2">
+              <RecentLessonsWidget role="ADMIN" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
             <AttendanceWidget role="ADMIN" />
-            <RecentLessonsWidget role="ADMIN" />
           </div>
 
           {/* 5 & 6. Mid Section: Marks Results & Department Timetable Schedule */}

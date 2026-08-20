@@ -240,12 +240,14 @@ export class AuthService {
         name: user.student_name || user.faculty_name || meProfile?.profile?.name || user.email.split('@')[0],
         registrationNo: user.registration_no || meProfile?.profile?.registration_no || null,
         rollno: user.rollno || meProfile?.profile?.rollno || null,
-        empId: user.emp_id || meProfile?.profile?.emp_id || null,
+        empId: user.role === 'STUDENT' ? null : (user.emp_id || meProfile?.profile?.emp_id || null),
         photoUrl: user.photo_url || meProfile?.profile?.photo_url || null,
-        designation: user.designation || meProfile?.profile?.designation || null,
-        specialization: user.specialization || meProfile?.profile?.specialization || null,
+        designation: user.role === 'STUDENT' ? 'Student' : (user.designation || meProfile?.profile?.designation || null),
+        specialization: user.role === 'STUDENT' ? null : (user.specialization || meProfile?.profile?.specialization || null),
         departmentId: user.department_id || meProfile?.profile?.department_id || null,
         departmentName: meProfile?.profile?.department_name || null,
+        courseCd: meProfile?.profile?.course_cd || null,
+        courseName: meProfile?.profile?.course_name || null,
         subjectId: user.subject_id || meProfile?.profile?.subject_id || null,
         subjectName: meProfile?.profile?.primary_subject_name || null,
         subjects: meProfile?.profile?.subjects || [],
@@ -619,7 +621,19 @@ export class AuthService {
     if (tenantSlug) {
       if (payload.role === UserRole.STUDENT) {
         const pRows = await this.ds.query(
-          `SELECT id, rollno, registration_no, name, photo_url, course_cd, batch_cd FROM "${schema}".students WHERE user_id=$1`,
+          `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url, s.course_cd, s.batch_cd,
+                  s.department_id, s.batch_id, s.admission_year, s.phone, s.address, s.blood_group,
+                  s.emergency_contact, s.is_active,
+                  d.name AS department_name, d.code AS department_code,
+                  c.name AS course_name, c.code AS course_code,
+                  sa.academic_session, sa.residency_type, sa.status AS admission_status,
+                  sp.father_name, sp.mother_name, sp.father_mobile, sp.mother_mobile
+           FROM "${schema}".students s
+           LEFT JOIN "${schema}".departments d ON d.id = s.department_id
+           LEFT JOIN "${schema}".courses c ON c.code = s.course_cd OR c.id::text = s.course_cd
+           LEFT JOIN "${schema}".student_admissions sa ON sa.student_id = s.id
+           LEFT JOIN "${schema}".student_parents sp ON sp.student_id = s.id
+           WHERE s.user_id=$1`,
           [payload.sub],
         );
         profile = pRows[0] ?? null;
@@ -650,15 +664,23 @@ export class AuthService {
       }
     }
 
+    const isStudent = payload.role === UserRole.STUDENT;
+
     return {
       ...rows[0],
       name: profile?.name || rows[0].email?.split('@')[0],
       photo_url: profile?.photo_url || null,
       photoUrl: profile?.photo_url || null,
-      empId: profile?.emp_id || null,
-      designation: profile?.designation || null,
-      specialization: profile?.specialization || null,
+      registrationNo: profile?.registration_no || null,
+      rollno: profile?.rollno || null,
+      courseCd: profile?.course_cd || null,
+      courseName: profile?.course_name || profile?.course_cd || null,
+      departmentId: profile?.department_id || null,
       departmentName: profile?.department_name || null,
+      empId: isStudent ? null : (profile?.emp_id || null),
+      designation: isStudent ? 'Student' : (profile?.designation || null),
+      specialization: isStudent ? null : (profile?.specialization || null),
+      phone: profile?.phone || null,
       profile,
       tenantSlug,
       tenantId: payload.tenantId,

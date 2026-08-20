@@ -69,9 +69,9 @@ const API_BASE = 'http://localhost:3001/api/v1';
 
 const getTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantSlug') || 'srms-ims';
+    return localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
   }
-  return 'srms-ims';
+  return 'srms-cet-bareilly';
 };
 
 const getTenantName = (): string => {

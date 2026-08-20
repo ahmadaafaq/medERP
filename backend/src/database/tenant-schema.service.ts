@@ -17,8 +17,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
   ) {}
 
   public resolveTenantSlug(slug?: string): string {
-    const s = slug ? slug.toLowerCase() : 'srms-ims';
-    return (s === 'srms' || s === 'srms-ims') ? 'srms-ims' : s;
+    if (!slug) return 'srms-cet-bareilly';
+    const s = slug.toLowerCase().trim();
+    if (s === 'srms' || s === 'srms-cet' || s === 'cet' || s === '1') return 'srms-cet-bareilly';
+    if (s === 'srms-ims' || s === 'ims' || s === '2') return 'srms-ims';
+    if (s === 'srms-cetr' || s === 'srms-cetr-bareilly') return 'srms-cetr-bareilly';
+    if (s === 'srms-ibs' || s === 'srms-ibs-lucknow') return 'srms-ibs-lucknow';
+    if (s === 'srms-law' || s === 'srms-college-of-law') return 'srms-college-of-law';
+    return s;
   }
 
   /**
@@ -446,11 +452,33 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Alter attendance_sessions table to add offering_id column
+      // Alter attendance_sessions table to add offering_id column with ON DELETE SET NULL to preserve attendance
       await runner.query(`
         ALTER TABLE "${schema}".attendance_sessions 
-        ADD COLUMN IF NOT EXISTS offering_id UUID REFERENCES "${schema}".subject_offerings(id) ON DELETE CASCADE;
+        ADD COLUMN IF NOT EXISTS offering_id UUID REFERENCES "${schema}".subject_offerings(id) ON DELETE SET NULL;
       `);
+
+      // Ensure existing offering_id constraints use ON DELETE SET NULL to protect attendance records
+      await runner.query(`
+        DO $$
+        DECLARE
+          r RECORD;
+        BEGIN
+          FOR r IN (
+            SELECT tc.constraint_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.referential_constraints rc ON tc.constraint_name = rc.constraint_name
+            JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+            WHERE tc.table_schema = '${schema}' 
+              AND tc.table_name = 'attendance_sessions' 
+              AND kcu.column_name = 'offering_id'
+              AND rc.delete_rule = 'CASCADE'
+          ) LOOP
+            EXECUTE 'ALTER TABLE "${schema}".attendance_sessions DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name);
+            EXECUTE 'ALTER TABLE "${schema}".attendance_sessions ADD CONSTRAINT ' || quote_ident(r.constraint_name) || ' FOREIGN KEY (offering_id) REFERENCES "${schema}".subject_offerings(id) ON DELETE SET NULL';
+          END LOOP;
+        END $$;
+      `).catch(() => {});
 
       // Alter subjects table to add is_longitudinal column
       await runner.query(`
@@ -486,6 +514,158 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           is_active BOOLEAN DEFAULT true,
           created_at TIMESTAMPTZ DEFAULT NOW(),
           CONSTRAINT uq_faculty_subject UNIQUE (faculty_id, subject_id)
+        );
+      `);
+
+      // ── My Repository Tables ────────────────────────────────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".repositories (
+          repo_id                SERIAL PRIMARY KEY,
+          colg_cd                VARCHAR(20) NOT NULL DEFAULT '1',
+          course_cd              VARCHAR(20) NOT NULL,
+          branch_cd              VARCHAR(20) NOT NULL,
+          batch_cd               VARCHAR(20) NOT NULL,
+          sem_cd                 VARCHAR(20) NOT NULL DEFAULT '1',
+          student_reg_no         VARCHAR(50) NOT NULL,
+          student_name           VARCHAR(200),
+          title                  VARCHAR(255) NOT NULL,
+          description            TEXT NOT NULL,
+          repo_link              TEXT NOT NULL,
+          tech_stack             TEXT[] NOT NULL DEFAULT '{}',
+          status                 VARCHAR(50) NOT NULL DEFAULT 'Pending Review',
+          is_placement_eligible  BOOLEAN NOT NULL DEFAULT false,
+          score                  NUMERIC(5,2),
+          grade                  VARCHAR(10),
+          submitted_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".repository_reviews (
+          review_id      SERIAL PRIMARY KEY,
+          repo_id        INT NOT NULL REFERENCES "${schema}".repositories(repo_id) ON DELETE CASCADE,
+          faculty_empid  VARCHAR(50) NOT NULL,
+          faculty_name   VARCHAR(200),
+          remarks        TEXT NOT NULL,
+          score          NUMERIC(5,2) NOT NULL,
+          grade          VARCHAR(10),
+          reviewed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+
+      // ── Placement Drive Tables ──────────────────────────────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".placement_drives (
+          drive_id               SERIAL PRIMARY KEY,
+          colg_cd                VARCHAR(20) NOT NULL DEFAULT '1',
+          company_name           VARCHAR(200) NOT NULL,
+          role                   VARCHAR(200) NOT NULL,
+          package_ctc            VARCHAR(100),
+          description            TEXT NOT NULL,
+          eligibility_course_cd  VARCHAR(20) NOT NULL,
+          eligibility_branch_cd  VARCHAR(20),
+          eligibility_batch_cd   VARCHAR(20) NOT NULL,
+          min_score_required     NUMERIC(5,2) DEFAULT 0.00,
+          drive_date             DATE NOT NULL,
+          deadline_date          TIMESTAMPTZ NOT NULL,
+          status                 VARCHAR(50) NOT NULL DEFAULT 'Open',
+          created_by_empid       VARCHAR(50) NOT NULL,
+          created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".placement_applications (
+          application_id    SERIAL PRIMARY KEY,
+          drive_id          INT NOT NULL REFERENCES "${schema}".placement_drives(drive_id) ON DELETE CASCADE,
+          student_reg_no    VARCHAR(50) NOT NULL,
+          student_name      VARCHAR(200),
+          resume_link       TEXT NOT NULL,
+          cover_note        TEXT,
+          applied_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          status            VARCHAR(50) NOT NULL DEFAULT 'Applied',
+          selected_company  VARCHAR(200),
+          selected_role     VARCHAR(200),
+          remarks           TEXT,
+          updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT uq_student_drive_app UNIQUE (drive_id, student_reg_no)
+        );
+      `);
+
+      // ── Notices & Circulars Tables ──────────────────────────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".notices (
+          id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          college_id               UUID,
+          title                    VARCHAR(255) NOT NULL,
+          body                     TEXT NOT NULL,
+          priority                 VARCHAR(20) DEFAULT 'normal',
+          category                 VARCHAR(50) DEFAULT 'announcement',
+          created_by               UUID,
+          creator_name             VARCHAR(200),
+          creator_role             VARCHAR(100),
+          status                   VARCHAR(20) DEFAULT 'sent',
+          scheduled_at             TIMESTAMPTZ,
+          expires_at               TIMESTAMPTZ,
+          requires_acknowledgement BOOLEAN DEFAULT false,
+          created_at               TIMESTAMPTZ DEFAULT NOW(),
+          updated_at               TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".notice_attachments (
+          id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          notice_id    UUID REFERENCES "${schema}".notices(id) ON DELETE CASCADE,
+          file_name    VARCHAR(255) NOT NULL,
+          file_type    VARCHAR(50),
+          file_url     TEXT NOT NULL,
+          file_size_kb INT DEFAULT 0,
+          created_at   TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".notice_targets (
+          id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          notice_id    UUID REFERENCES "${schema}".notices(id) ON DELETE CASCADE,
+          target_type  VARCHAR(50) NOT NULL,
+          target_value VARCHAR(255) NOT NULL,
+          target_label VARCHAR(255),
+          created_at   TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".notice_recipients (
+          id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          notice_id       UUID REFERENCES "${schema}".notices(id) ON DELETE CASCADE,
+          user_id         UUID REFERENCES "${schema}".users(id) ON DELETE CASCADE,
+          is_read         BOOLEAN DEFAULT false,
+          read_at         TIMESTAMPTZ,
+          acknowledged    BOOLEAN DEFAULT false,
+          acknowledged_at TIMESTAMPTZ,
+          created_at      TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      await runner.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_noticerec 
+        ON "${schema}".notice_recipients (notice_id, user_id);
+      `);
+
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".notice_group_templates (
+          id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name         VARCHAR(200) NOT NULL,
+          description  TEXT,
+          created_by   UUID,
+          target_rules JSONB DEFAULT '[]'::jsonb,
+          is_active    BOOLEAN DEFAULT true,
+          created_at   TIMESTAMPTZ DEFAULT NOW(),
+          updated_at   TIMESTAMPTZ DEFAULT NOW()
         );
       `);
 
@@ -865,7 +1045,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         faculty_id    UUID        REFERENCES "${schema}".faculty(id),
         subject_id    UUID        REFERENCES "${schema}".subjects(id),
         batch_id      UUID        REFERENCES "${schema}".batches(id),
-        offering_id   UUID        REFERENCES "${schema}".subject_offerings(id) ON DELETE CASCADE,
+        offering_id   UUID        REFERENCES "${schema}".subject_offerings(id) ON DELETE SET NULL,
         session_date  DATE         NOT NULL,
         session_time  TIME,
         session_type  VARCHAR(20),
@@ -1454,107 +1634,122 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       ON CONFLICT (email) DO NOTHING;
     `, [defaultPasswordHash]);
 
-    // 4. Faculty (Dr. Sarah Sharma & Dr. Aparna Tyagi)
-    try {
-      // 4a. Dr. Sanjay Singh (Physiology)
-      const facRes1 = await runner.query(`
-        INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-        VALUES ('sanjay.singh@srms.edu', $1, 'FACULTY', true, false)
-        ON CONFLICT (email) DO NOTHING
-        RETURNING id;
-      `, [defaultPasswordHash]);
+    const isMedicalTenant = ['srms-ims', 'unicamp-med', 'aiims-delhi', 'aiims-jodhpur', 'kmc-manipal', 'rajshreemri'].includes(resolvedSlug);
 
-      const facUserId1 = facRes1[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sanjay.singh@srms.edu'`))[0]?.id;
-      if (facUserId1) {
+    if (isMedicalTenant) {
+      // 4. Medical Faculty (Dr. Sanjay Singh & Dr. Aparna Tyagi)
+      try {
+        const facRes1 = await runner.query(`
+          INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
+          VALUES ('sanjay.singh@srms.edu', $1, 'FACULTY', true, false)
+          ON CONFLICT (email) DO NOTHING
+          RETURNING id;
+        `, [defaultPasswordHash]);
+
+        const facUserId1 = facRes1[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sanjay.singh@srms.edu'`))[0]?.id;
+        if (facUserId1) {
+          await runner.query(`
+            INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
+            VALUES ($1, 'EMP1001', 'Dr. Sanjay Singh', 'Professor & HOD', 'Physiology & Biophysics', '/avatars/dr_sanjay_singh.png')
+            ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
+          `, [facUserId1]);
+        }
+
+        const facRes2 = await runner.query(`
+          INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
+          VALUES ('aparna.tyagi@srms.edu', $1, 'FACULTY', true, false)
+          ON CONFLICT (email) DO NOTHING
+          RETURNING id;
+        `, [defaultPasswordHash]);
+
+        const facUserId2 = facRes2[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='aparna.tyagi@srms.edu'`))[0]?.id;
+        if (facUserId2) {
+          const existingFac2 = await runner.query(`SELECT id FROM "${schema}".faculty WHERE user_id = $1 OR emp_id = 'EMP1002'`, [facUserId2]);
+          if (existingFac2.length === 0) {
+            await runner.query(`
+              INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
+              VALUES ($1, 'EMP1002', 'Dr. Aparna Tyagi', 'Associate Professor', 'Human Anatomy & Histology', '/avatars/dr_sarah_sharma.png')
+              ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
+            `, [facUserId2]);
+          }
+        }
+      } catch (e) {}
+
+      // 5. Medical Students (Rahul Verma & Kabir Rao Deshmukh)
+      try {
+        const studRes = await runner.query(`
+          INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
+          VALUES ('rahul.verma@srms.edu', $1, 'STUDENT', true, false)
+          ON CONFLICT (email) DO NOTHING
+          RETURNING id;
+        `, [defaultPasswordHash]);
+
+        const studUserId = studRes[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='rahul.verma@srms.edu'`))[0]?.id;
+        if (studUserId) {
+          const existingStudent = await runner.query(`SELECT id FROM "${schema}".students WHERE user_id = $1 OR registration_no = '2023MBBS045' LIMIT 1`, [studUserId]);
+          if (existingStudent.length === 0) {
+            await runner.query(`
+              INSERT INTO "${schema}".students (user_id, rollno, registration_no, name, batch_cd, course_cd)
+              VALUES ($1, 'MBBS2023045', '2023MBBS045', 'Rahul Verma', '2023-MBBS', 'MBBS');
+            `, [studUserId]);
+          }
+        }
+      } catch (e) {}
+    } else {
+      // 4. Engineering Faculty (Dr. Prabhakar Gupta, Dr. Anuj Kumar, Er. Shailesh Saxena)
+      try {
+        // Clean up any rogue MBBS data if it exists in non-medical tenant schemas
         await runner.query(`
-          INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
-          VALUES ($1, 'EMP1001', 'Dr. Sanjay Singh', 'Professor & HOD', 'Physiology & Biophysics', '/avatars/dr_sanjay_singh.png')
-          ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-        `, [facUserId1]);
-      }
+          DELETE FROM "${schema}".students WHERE course_cd = 'MBBS' OR registration_no IN ('2023MBBS045', '20260008') OR name IN ('Rahul Verma', 'Kabir Rao Deshmukh');
+          DELETE FROM "${schema}".batches WHERE code ILIKE '%MBBS%' OR course_cd = 'MBBS';
+          DELETE FROM "${schema}".professional_phases WHERE course_cd = 'MBBS';
+          DELETE FROM "${schema}".notice_group_templates WHERE name ILIKE '%MBBS%';
+        `).catch(() => {});
 
-      // 4b. Dr. Aparna Tyagi (Anatomy)
-      const facRes2 = await runner.query(`
-        INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-        VALUES ('aparna.tyagi@srms.edu', $1, 'FACULTY', true, false)
-        ON CONFLICT (email) DO NOTHING
-        RETURNING id;
-      `, [defaultPasswordHash]);
+        const engFaculty = [
+          { email: 'prabhakar.gupta@srms.ac.in', name: 'Dr. Prabhakar Gupta', emp_id: 'CET-FAC-001', designation: 'Professor & Dean Academics', dept: 'CSE', spec: 'Computer Networks & Distributed Systems', photo: '/avatars/dr_sanjay_singh.png', phone: '9876500001', gender: 'Male', exp: '18 Years Exp.', staff_type: 'Faculty' },
+          { email: 'anuj.kumar@srms.ac.in', name: 'Dr. Anuj Kumar', emp_id: 'CET-FAC-002', designation: 'Professor & HOD', dept: 'CSE', spec: 'Artificial Intelligence & Machine Learning', photo: '/avatars/dr_sarah_sharma.png', phone: '9876500002', gender: 'Male', exp: '14 Years Exp.', staff_type: 'Faculty' },
+          { email: 'sovan.mohanty@srms.ac.in', name: 'Dr. Sovan Mohanty', emp_id: 'CET-FAC-003', designation: 'Associate Professor', dept: 'ECE', spec: 'VLSI Design & Signal Processing', photo: '/avatars/dr_sanjay_singh.png', phone: '9876500003', gender: 'Male', exp: '10 Years Exp.', staff_type: 'Faculty' },
+          { email: 'shailesh.saxena@srms.ac.in', name: 'Er. Shailesh Saxena', emp_id: 'CET-FAC-004', designation: 'Assistant Professor', dept: 'BCA', spec: 'Database Systems & Web Technologies', photo: '/avatars/dr_sarah_sharma.png', phone: '9876500004', gender: 'Male', exp: '8 Years Exp.', staff_type: 'Faculty' },
+          { email: 'shorab.ahmad@srms.ac.in', name: 'Dr. Shorab Ahmad', emp_id: '202516224', designation: 'Assistant Professor', dept: 'BCA', spec: 'Web Technologies, Python & Database Systems', photo: '/avatars/dr_sanjay_singh.png', phone: '8630153458', gender: 'Male', exp: '6 Years Exp.', staff_type: 'Faculty' },
+        ];
 
-      const facUserId2 = facRes2[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='aparna.tyagi@srms.edu'`))[0]?.id;
-      if (facUserId2) {
-        const existingFac2 = await runner.query(`SELECT id FROM "${schema}".faculty WHERE user_id = $1 OR emp_id = 'EMP1002'`, [facUserId2]);
-        if (existingFac2.length === 0) {
-          await runner.query(`
-            INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
-            VALUES ($1, 'EMP1002', 'Dr. Aparna Tyagi', 'Associate Professor', 'Human Anatomy & Histology', '/avatars/dr_sarah_sharma.png')
-            ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-          `, [facUserId2]);
+        for (const f of engFaculty) {
+          let uRes = await runner.query(`SELECT id FROM "${schema}".users WHERE LOWER(email) = $1`, [f.email.toLowerCase()]);
+          let uId = uRes[0]?.id;
+
+          if (!uId) {
+            const createRes = await runner.query(`
+              INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
+              VALUES ($1, $2, 'FACULTY', true, false)
+              ON CONFLICT (email) DO NOTHING
+              RETURNING id;
+            `, [f.email.toLowerCase(), defaultPasswordHash]);
+            uId = createRes[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE LOWER(email) = $1`, [f.email.toLowerCase()]))[0]?.id;
+          }
+
+          const deptRes = await runner.query(`SELECT id FROM "${schema}".departments WHERE code = $1 LIMIT 1`, [f.dept]);
+          const deptId = deptRes[0]?.id || null;
+
+          if (uId) {
+            await runner.query(`
+              INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, department_id, photo_url, phone, gender, experience, staff_type)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              ON CONFLICT (emp_id) DO UPDATE SET 
+                name = EXCLUDED.name, 
+                designation = EXCLUDED.designation, 
+                specialization = EXCLUDED.specialization,
+                department_id = EXCLUDED.department_id,
+                photo_url = EXCLUDED.photo_url,
+                phone = COALESCE(EXCLUDED.phone, "${schema}".faculty.phone),
+                gender = COALESCE(EXCLUDED.gender, "${schema}".faculty.gender),
+                experience = COALESCE(EXCLUDED.experience, "${schema}".faculty.experience),
+                staff_type = COALESCE(EXCLUDED.staff_type, "${schema}".faculty.staff_type);
+            `, [uId, f.emp_id, f.name, f.designation, f.spec, deptId, f.photo, f.phone || null, f.gender || 'Male', f.exp || null, f.staff_type || 'Faculty']);
+          }
         }
-      }
-
-      // 4c. Dr. Sanjay Singh (Physiology)
-      const facRes3 = await runner.query(`
-        INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-        VALUES ('sanjay.singh@srms.edu', $1, 'FACULTY', true, false)
-        ON CONFLICT (email) DO NOTHING
-        RETURNING id;
-      `, [defaultPasswordHash]);
-
-      const facUserId3 = facRes3[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sanjay.singh@srms.edu'`))[0]?.id;
-      if (facUserId3) {
-        const existingFac3 = await runner.query(`SELECT id FROM "${schema}".faculty WHERE user_id = $1 OR emp_id = 'DR/07/026'`, [facUserId3]);
-        if (existingFac3.length === 0) {
-          await runner.query(`
-            INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
-            VALUES ($1, 'DR/07/026', 'Dr. Sanjay Singh', 'Assistant Professor', 'Human Physiology', '/avatars/dr_sanjay_singh.png')
-            ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-          `, [facUserId3]);
-        }
-      }
-    } catch (e) {}
-
-    // 5. Student (2023MBBS045 - Rahul Verma)
-    try {
-      const studRes = await runner.query(`
-        INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-        VALUES ('rahul.verma@srms.edu', $1, 'STUDENT', true, false)
-        ON CONFLICT (email) DO NOTHING
-        RETURNING id;
-      `, [defaultPasswordHash]);
-
-      const studUserId = studRes[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='rahul.verma@srms.edu'`))[0]?.id;
-      if (studUserId) {
-        const existingStudent = await runner.query(`SELECT id FROM "${schema}".students WHERE user_id = $1 OR registration_no = '2023MBBS045' LIMIT 1`, [studUserId]);
-        if (existingStudent.length === 0) {
-          await runner.query(`
-            INSERT INTO "${schema}".students (user_id, rollno, registration_no, name, batch_cd, course_cd)
-            VALUES ($1, 'MBBS2023045', '2023MBBS045', 'Rahul Verma', '2023-MBBS', 'MBBS');
-          `, [studUserId]);
-        }
-      }
-    } catch (e) {}
-
-    // 6. Student (20260008 - Kabir Rao Deshmukh)
-    try {
-      const kabirRes = await runner.query(`
-        INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-        VALUES ('kabir.deshmukh2025@srms.ac.in', $1, 'STUDENT', true, false)
-        ON CONFLICT (email) DO NOTHING
-        RETURNING id;
-      `, [defaultPasswordHash]);
-
-      const kabirUserId = kabirRes[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='kabir.deshmukh2025@srms.ac.in' OR email='20260008@srms.ac.in'`))[0]?.id;
-      if (kabirUserId) {
-        const existingKabir = await runner.query(`SELECT id FROM "${schema}".students WHERE user_id = $1 OR registration_no = '20260008' LIMIT 1`, [kabirUserId]);
-        if (existingKabir.length === 0) {
-          await runner.query(`
-            INSERT INTO "${schema}".students (user_id, rollno, registration_no, name, batch_cd, course_cd)
-            VALUES ($1, '20260008', '20260008', 'Kabir Rao Deshmukh', '2025-MBBS', 'MBBS');
-          `, [kabirUserId]);
-        }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
 
     // 7. Auto-link any remaining unlinked students in students table to users table for authentic login
     try {

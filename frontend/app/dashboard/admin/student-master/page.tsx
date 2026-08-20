@@ -636,7 +636,7 @@ export default function StudentMasterPage() {
       try {
         // Use the selected college's slug for registration number generation
         const formCollege = colleges.find((c) => c.code === formData.collegeId || c.id === formData.collegeId);
-        const tenantSlug = formCollege?.slug || colleges[0]?.slug || 'srms-ims';
+        const tenantSlug = formCollege?.slug || colleges[0]?.slug || 'srms-cet-bareilly';
         const res = await fetch(`${API_BASE}/student-master/next-registration-no?tenant=${tenantSlug}&sessionYear=${year}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
@@ -902,7 +902,7 @@ export default function StudentMasterPage() {
       const token = localStorage.getItem('token') || '';
       // Use the college slug from the form's selected college
       const formCollege = colleges.find((c) => c.id === formData.collegeId);
-      const tenantSlug = formCollege?.slug || colleges[0]?.slug || 'srms-ims';
+      const tenantSlug = formCollege?.slug || colleges[0]?.slug || 'srms-cet-bareilly';
       const url = editModeId
         ? `${API_BASE}/student-master/${editModeId}?tenant=${tenantSlug}`
         : `${API_BASE}/student-master?tenant=${tenantSlug}`;

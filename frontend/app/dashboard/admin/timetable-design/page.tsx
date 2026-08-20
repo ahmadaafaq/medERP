@@ -85,6 +85,8 @@ interface TimetableSlot {
   group_name?: string;
   topic?: string;
   competency_codes?: string;
+  competency_ids?: string[];
+  competencies_detail?: any[];
 }
 
 interface DropdownItem {

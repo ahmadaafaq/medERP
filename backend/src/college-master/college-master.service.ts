@@ -16,6 +16,32 @@ import {
 } from './dto/college-master.dto';
 import { UserRole } from '../common/enums/role.enum';
 
+export const SRMS_FIRM_LOCATIONS = [
+  { locid: '1', name: 'SRMS IMS, BAREILLY', code: '1', slug: 'srms-ims' },
+  { locid: '2', name: 'SRMS FIMC, LUCKNOW', code: '2', slug: 'srms-fimc' },
+  { locid: '3', name: 'SRMS CET, UNNAO', code: '3', slug: 'srms-cet-unnao' },
+  { locid: '4', name: 'SRMS IBS, LUCKNOW', code: '4', slug: 'srms-ibs-lucknow' },
+  { locid: '5', name: 'SRMS LRT, UNNAO', code: '5', slug: 'srms-lrt-unnao' },
+  { locid: '6', name: 'SRMS UNNAO HOSPITAL', code: '6', slug: 'srms-unnao-hospital' },
+  { locid: '7', name: 'SRMS CET, BAREILLY', code: '1', slug: 'srms-cet-bareilly' },
+  { locid: '8', name: 'SRMS CETR, BAREILLY', code: '2', slug: 'srms-cetr-bareilly' },
+  { locid: '9', name: 'SRMS TRUST, BAREILLY', code: '9', slug: 'srms-trust-bareilly' },
+  { locid: '10', name: 'UTOPIAN TECHNOLOGIES LTD.', code: '10', slug: 'utopian-technologies' },
+  { locid: '11', name: 'SRMS STEP2LIFE', code: '11', slug: 'srms-step2life' },
+  { locid: '12', name: 'SRMS COLLEGE OF PHARMACY', code: '12', slug: 'srms-pharmacy' },
+  { locid: '14', name: 'SRMS NURSING UNNAO', code: '14', slug: 'srms-college-of-nursing-paramedical-sciences-unnao' },
+  { locid: '15', name: 'SRMS COLLEGE OF LAW', code: '4', slug: 'srms-college-of-law' },
+  { locid: '16', name: 'SRMS RIDDHIMA', code: '10', slug: 'srms-riddhima-bareilly' },
+  { locid: '17', name: 'SRMS IAHS,BAREILLY', code: '6', slug: 'srms-iahs-bareilly' },
+  { locid: '18', name: 'SRMS NURSING COLG., BLY', code: '9', slug: 'srms-nursing-college' },
+  { locid: '19', name: 'SWF', code: '19', slug: 'swf' },
+  { locid: '20', name: 'SRMS CRICKET ACADEMY', code: '14', slug: 'srms-cricket-academy' },
+  { locid: '21', name: 'SHREE CONSTRUCTIONS', code: '21', slug: 'shree-constructions' },
+  { locid: '22', name: 'SHREE CONSTRUCT-STIPEND', code: '22', slug: 'shree-construct-stipend' },
+  { locid: '99', name: 'OTHERS', code: '99', slug: 'others' },
+  { locid: '9999', name: '--Select--', code: '9999', slug: 'select' },
+];
+
 const FALLBACK_SRMS_COLLEGES = [
   { colg_cd: '1', colg_name: 'SRMS CET,BAREILLY' },
   { colg_cd: '2', colg_name: 'SRMS CETR,BAREILLY' },
@@ -76,18 +102,35 @@ async function srmsFetch(url: string, init: RequestInit = {}): Promise<Response>
 
 function parseDotNetDate(dateStr: any): string | null {
   if (!dateStr) return null;
-  if (typeof dateStr === 'string') {
-    const match = dateStr.match(/\/Date\((\-?\d+)\)\//);
-    if (match) {
-      const timestamp = parseInt(match[1], 10);
-      if (timestamp < 0) return null;
-      const date = new Date(timestamp);
-      return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
-    }
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+  if (typeof dateStr !== 'string') return null;
+  const str = dateStr.trim();
+  if (!str || str === 'null' || str === 'undefined' || str === '01/01/1900') return null;
+
+  // 1. Handle /Date(123456789)/
+  const match = str.match(/\/Date\((\-?\d+)\)\//);
+  if (match) {
+    const timestamp = parseInt(match[1], 10);
+    if (timestamp < 0) return null;
+    const date = new Date(timestamp);
+    return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   }
-  return null;
+
+  // 2. Handle DD/MM/YYYY or DD-MM-YYYY
+  const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (ddmmyyyy) {
+    const day = ddmmyyyy[1].padStart(2, '0');
+    const month = ddmmyyyy[2].padStart(2, '0');
+    const year = ddmmyyyy[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // 3. Handle YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
 }
 
 const DEFAULT_COLLEGE_COURSES: Record<string, Array<{
@@ -358,6 +401,366 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     }
     const data = await res.json();
     return Array.isArray(data) ? data : [];
+  }
+
+  async fetchLiveSubjects(colgcd: string, coursecd: string, branchcd: string, batchcd: string, semcd: string): Promise<any[]> {
+    const payload = {
+      colgcd: String(colgcd || '1').trim(),
+      coursecd: String(coursecd || '13').trim(),
+      branchcd: String(branchcd || '1').trim(),
+      batchcd: String(batchcd || '2').trim(),
+      semcd: String(semcd || '3').trim(),
+    };
+    const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/AdminAttendance/GetAllSubjectDetail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`SRMS Portal API error (${res.status})`);
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  /**
+   * Fetch live employees / staff from SRMS HR API:
+   * URL: https://myportal.srms.ac.in/HR/HR/GETEMPPROFILEDTL
+   * Payload: { locid: "7" } (e.g. locid 7 = SRMS CET, BAREILLY)
+   */
+  async fetchLiveEmployees(locid: string): Promise<any[]> {
+    const payload = { locid: String(locid || '7').trim() };
+    const res = await srmsFetch('https://myportal.srms.ac.in/HR/HR/GETEMPPROFILEDTL', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`SRMS HR Portal API error (${res.status})`);
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  /**
+   * Synchronize employees from SRMS HR API into tenant PostgreSQL database
+   */
+  async syncExternalEmployees(locidOrTenantSlug?: string): Promise<any[]> {
+    this.logger.log(`Starting syncExternalEmployees for ${locidOrTenantSlug || 'all'}...`);
+
+    // Resolve location mapping
+    let targets: Array<{ locid: string; name: string; slug: string; code: string }> = [];
+
+    if (locidOrTenantSlug && locidOrTenantSlug !== 'all') {
+      const locIds = locidOrTenantSlug.split(',').map((s) => s.trim());
+      for (const singleLoc of locIds) {
+        const locMatch = SRMS_FIRM_LOCATIONS.find(
+          (l) => l.locid === singleLoc || l.slug === singleLoc || l.code === singleLoc,
+        );
+        if (locMatch) {
+          targets.push(locMatch);
+        } else if (singleLoc === '7') {
+          targets.push({ locid: '7', name: 'SRMS CET, BAREILLY', slug: 'srms-cet-bareilly', code: '1' });
+        } else if (singleLoc === '8') {
+          targets.push({ locid: '8', name: 'SRMS CETR, BAREILLY', slug: 'srms-cetr-bareilly', code: '2' });
+        } else {
+          targets.push({ locid: singleLoc, name: `Location ${singleLoc}`, slug: singleLoc, code: singleLoc });
+        }
+      }
+    } else {
+      targets = SRMS_FIRM_LOCATIONS.filter((l) => l.locid !== '9999');
+    }
+
+    const allSyncedEmployees: any[] = [];
+
+    for (const target of targets) {
+      const slug = target.slug;
+      const schema = `tenant_${slug}`;
+
+      await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
+      await this.ds.query(`CREATE SCHEMA IF NOT EXISTS "${schema}";`).catch(() => {});
+
+      // Ensure faculty table and all necessary columns exist in tenant schema
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".faculty (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID,
+          emp_id VARCHAR(50) UNIQUE,
+          name VARCHAR(200) NOT NULL,
+          email VARCHAR(200),
+          phone VARCHAR(50),
+          department_id VARCHAR(100),
+          designation VARCHAR(100),
+          qualification VARCHAR(200),
+          date_of_joining DATE,
+          date_of_birth DATE,
+          date_of_leaving DATE,
+          employment_status VARCHAR(50) DEFAULT 'ACTIVE',
+          photo_url TEXT,
+          staff_type VARCHAR(50) DEFAULT 'Faculty',
+          is_active BOOLEAN DEFAULT true,
+          blood_group VARCHAR(20),
+          caste VARCHAR(50),
+          pan_no VARCHAR(50),
+          aadhaar_no VARCHAR(50),
+          uan VARCHAR(50),
+          bank_ac_no VARCHAR(50),
+          current_basic NUMERIC(14,2),
+          device_cd VARCHAR(50),
+          salgrade VARCHAR(50),
+          father_name VARCHAR(200),
+          spouse_name VARCHAR(200),
+          address TEXT,
+          perm_addr TEXT,
+          city VARCHAR(100),
+          state VARCHAR(100),
+          perm_city VARCHAR(100),
+          perm_state VARCHAR(100),
+          homephone VARCHAR(50),
+          permanent_tel_no VARCHAR(50),
+          highest_education VARCHAR(200),
+          category VARCHAR(100),
+          payroll_category VARCHAR(100),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {});
+
+      // Apply migrations for any existing columns
+      const schemaAlterQueries = [
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS email VARCHAR(200);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS name VARCHAR(200);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS designation VARCHAR(100);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS photo_url TEXT;`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS date_of_joining DATE;`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS joining_date DATE;`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS date_of_birth DATE;`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS date_of_leaving DATE;`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS blood_group VARCHAR(20);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS caste VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS pan_no VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS aadhaar_no VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS uan VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS bank_ac_no VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS current_basic NUMERIC(14,2);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS device_cd VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS salgrade VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS father_name VARCHAR(200);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS spouse_name VARCHAR(200);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS address TEXT;`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS perm_addr TEXT;`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS city VARCHAR(100);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS state VARCHAR(100);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS perm_city VARCHAR(100);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS perm_state VARCHAR(100);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS homephone VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS permanent_tel_no VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS highest_education VARCHAR(200);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS category VARCHAR(100);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS payroll_category VARCHAR(100);`,
+      ];
+      for (const q of schemaAlterQueries) {
+        await this.ds.query(q).catch(() => {});
+      }
+
+      let liveEmployees: any[] = [];
+      try {
+        liveEmployees = await this.fetchLiveEmployees(target.locid);
+      } catch (err: any) {
+        this.logger.warn(`Could not fetch live employees for locid ${target.locid} (${target.name}): ${err.message}`);
+      }
+
+      for (const emp of liveEmployees) {
+        const empId = String(emp.EmpID || emp.emp_id || '').trim();
+        const empName = String(emp.EmpName || emp.name || '').trim();
+        if (!empId || !empName) continue;
+
+        const email = emp.email ? String(emp.email).trim().toLowerCase() : `${empId.toLowerCase()}@srms.ac.in`;
+        const phone = emp.homephone || emp.PermanentTelNo || null;
+        const department = emp.Department ? String(emp.Department).trim() : 'General';
+        const designation = emp.Designation ? String(emp.Designation).trim() : 'Staff';
+        const qualification = emp.HIGHEST_EDUCATION ? String(emp.HIGHEST_EDUCATION).trim() : null;
+        const bloodGroup = emp.bloodgroup ? String(emp.bloodgroup).trim() : null;
+        const caste = emp.CASTE ? String(emp.CASTE).trim() : null;
+        const panNo = emp.PANNo ? String(emp.PANNo).trim() : null;
+        const aadhaarNo = emp.aadharno ? String(emp.aadharno).trim() : null;
+        const uan = emp.UAN ? String(emp.UAN).trim() : null;
+        const bankAcNo = emp.BankAcNo ? String(emp.BankAcNo).trim() : null;
+        const basicPay = emp.EmpCurrBasic ? parseFloat(emp.EmpCurrBasic) : null;
+        const deviceCd = emp.DEVICECD ? String(emp.DEVICECD).trim() : null;
+        const salgrade = emp.salgrade ? String(emp.salgrade).trim() : null;
+        const fatherName = emp.FatherNm ? String(emp.FatherNm).trim() : null;
+        const spouseName = emp.SpouseNm ? String(emp.SpouseNm).trim() : null;
+        const address = emp.Addr1 || emp.perm_addr || null;
+        const permAddr = emp.perm_addr || null;
+        const city = emp.city || emp.perm_city || 'BAREILLY';
+        const state = emp.state || emp.perm_state || 'UTTAR PRADESH';
+        const permCity = emp.perm_city || null;
+        const permState = emp.perm_state || null;
+        const homephone = emp.homephone || null;
+        const permanentTelNo = emp.PermanentTelNo || null;
+        const category = emp.category || null;
+        const payrollCategory = emp.payroll_category || null;
+        const staffType = (emp.category || emp.payroll_category || 'TEACHING').toUpperCase().includes('TEACH') ? 'Faculty' : 'Staff';
+        const status = (emp.EmpStsCd || 'ACTIVE').toUpperCase();
+        
+        // Profile Photo: https://myportal.srms.ac.in/HR/HR/{reg_no}/{reg_no}.jpg
+        const photoUrl = `https://myportal.srms.ac.in/HR/HR/${empId}/${empId}.jpg`;
+
+        const dob = parseDotNetDate(emp.dob);
+        const doj = parseDotNetDate(emp.DOJ);
+        const dol = parseDotNetDate(emp.dol);
+
+        // 1. Resolve / Create Department
+        let deptId: string | null = null;
+        const deptRows = await this.ds.query(
+          `SELECT id FROM "${schema}".departments WHERE name ILIKE $1 OR code ILIKE $1 LIMIT 1`,
+          [department],
+        ).catch(() => []);
+        if (deptRows.length > 0) {
+          deptId = deptRows[0].id;
+        } else {
+          const deptCode = department.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase() || 'GEN';
+          const newDept = await this.ds.query(
+            `INSERT INTO "${schema}".departments (code, name, type, colg_cd, is_active)
+             VALUES ($1, $2, 'Academic', $3, true)
+             RETURNING id`,
+            [deptCode, department, target.code],
+          ).catch(() => []);
+          if (newDept && newDept.length > 0) deptId = newDept[0].id;
+        }
+
+        // 2. Resolve / Create User Account in tenant schema
+        let userId: string | null = null;
+        const userRows = await this.ds.query(
+          `SELECT id FROM "${schema}".users WHERE email = $1 LIMIT 1`,
+          [email],
+        ).catch(() => []);
+        if (userRows.length > 0) {
+          userId = userRows[0].id;
+          await this.ds.query(
+            `UPDATE "${schema}".users SET is_active = $1 WHERE id = $2`,
+            [status === 'ACTIVE', userId],
+          ).catch(() => {});
+        } else {
+          const defaultHash = '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekd59S/y4r8gR.t6i';
+          const newUser = await this.ds.query(
+            `INSERT INTO "${schema}".users (email, password_hash, role, is_active)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id`,
+            [email, defaultHash, staffType === 'Faculty' ? 'FACULTY' : 'CLERK', status === 'ACTIVE'],
+          ).catch(() => []);
+          if (newUser && newUser.length > 0) userId = newUser[0].id;
+        }
+
+        // 3. Upsert in faculty table
+        const existingFaculty = await this.ds.query(
+          `SELECT id FROM "${schema}".faculty WHERE emp_id = $1 LIMIT 1`,
+          [empId],
+        ).catch(() => []);
+
+        let facultyId: string;
+        if (existingFaculty.length > 0) {
+          facultyId = existingFaculty[0].id;
+          await this.ds.query(
+            `UPDATE "${schema}".faculty
+             SET name = $1,
+                 email = COALESCE($2, email),
+                 phone = COALESCE($3, phone),
+                 department_id = COALESCE($4, department_id),
+                 designation = $5,
+                 qualification = COALESCE($6, qualification),
+                 blood_group = COALESCE($7, blood_group),
+                 caste = COALESCE($8, caste),
+                 pan_no = COALESCE($9, pan_no),
+                 aadhaar_no = COALESCE($10, aadhaar_no),
+                 uan = COALESCE($11, uan),
+                 bank_ac_no = COALESCE($12, bank_ac_no),
+                 current_basic = COALESCE($13, current_basic),
+                 device_cd = COALESCE($14, device_cd),
+                 salgrade = COALESCE($15, salgrade),
+                 father_name = COALESCE($16, father_name),
+                 spouse_name = COALESCE($17, spouse_name),
+                 address = COALESCE($18, address),
+                 city = COALESCE($19, city),
+                 state = COALESCE($20, state),
+                 perm_addr = COALESCE($21, perm_addr),
+                 perm_city = COALESCE($22, perm_city),
+                 perm_state = COALESCE($23, perm_state),
+                 homephone = COALESCE($24, homephone),
+                 permanent_tel_no = COALESCE($25, permanent_tel_no),
+                 highest_education = COALESCE($26, highest_education),
+                 category = COALESCE($27, category),
+                 payroll_category = COALESCE($28, payroll_category),
+                 date_of_birth = COALESCE($29, date_of_birth),
+                 date_of_joining = COALESCE($30, date_of_joining),
+                 date_of_leaving = COALESCE($31, date_of_leaving),
+                 photo_url = $32,
+                 staff_type = $33,
+                 employment_status = $34,
+                 is_active = $35,
+                 user_id = COALESCE($36, user_id),
+                 updated_at = NOW()
+             WHERE id = $37`,
+            [
+              empName, email, phone, deptId || department, designation, qualification,
+              bloodGroup, caste, panNo, aadhaarNo, uan, bankAcNo, basicPay, deviceCd,
+              salgrade, fatherName, spouseName, address, city, state, permAddr,
+              permCity, permState, homephone, permanentTelNo, qualification, category,
+              payrollCategory, dob, doj, dol, photoUrl, staffType, status,
+              status === 'ACTIVE', userId, facultyId,
+            ],
+          );
+        } else {
+          const inserted = await this.ds.query(
+            `INSERT INTO "${schema}".faculty (
+               emp_id, name, email, phone, department_id, designation, qualification,
+               blood_group, caste, pan_no, aadhaar_no, uan, bank_ac_no, current_basic,
+               device_cd, salgrade, father_name, spouse_name, address, city, state,
+               perm_addr, perm_city, perm_state, homephone, permanent_tel_no,
+               highest_education, category, payroll_category, date_of_birth,
+               date_of_joining, date_of_leaving, photo_url, staff_type, employment_status,
+               is_active, user_id
+             ) VALUES (
+               $1, $2, $3, $4, $5, $6, $7,
+               $8, $9, $10, $11, $12, $13, $14,
+               $15, $16, $17, $18, $19, $20, $21,
+               $22, $23, $24, $25, $26,
+               $27, $28, $29, $30,
+               $31, $32, $33, $34, $35,
+               $36, $37
+             ) RETURNING id`,
+            [
+              empId, empName, email, phone, deptId || department, designation, qualification,
+              bloodGroup, caste, panNo, aadhaarNo, uan, bankAcNo, basicPay,
+              deviceCd, salgrade, fatherName, spouseName, address, city, state,
+              permAddr, permCity, permState, homephone, permanentTelNo,
+              qualification, category, payrollCategory, dob,
+              doj, dol, photoUrl, staffType, status,
+              status === 'ACTIVE', userId,
+            ],
+          );
+          facultyId = inserted[0]?.id;
+        }
+
+        allSyncedEmployees.push({
+          facultyId,
+          empId,
+          empName,
+          designation,
+          department,
+          staffType,
+          photoUrl,
+          locid: target.locid,
+          collegeName: target.name,
+          tenantSlug: slug,
+        });
+      }
+    }
+
+    this.logger.log(`syncExternalEmployees complete. Synced ${allSyncedEmployees.length} employees/faculty across targets.`);
+    return allSyncedEmployees;
   }
 
   async listColleges(user?: any): Promise<any[]> {

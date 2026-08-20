@@ -236,8 +236,14 @@ export class UsersService {
         const s = `tenant_${col.slug}`;
         try {
           const rows = await this.ds.query(
-            `SELECT f.id, f.emp_id, f.name, f.designation, f.photo_url,
+            `SELECT f.id, f.emp_id, f.name, f.designation,
+                    COALESCE(f.photo_url, CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
                     f.phone, f.department_id, f.subject_id, f.gender, f.experience, f.staff_type, f.is_active,
+                    f.qualification, f.date_of_joining, f.date_of_birth, f.date_of_leaving, f.blood_group,
+                    f.caste, f.pan_no, f.aadhaar_no, f.uan, f.bank_ac_no, f.current_basic, f.device_cd,
+                    f.salgrade, f.father_name, f.spouse_name, f.address, f.city, f.state, f.perm_addr,
+                    f.perm_city, f.perm_state, f.homephone, f.permanent_tel_no, f.highest_education,
+                    f.category, f.payroll_category, f.employment_status,
                     u.email, u.role, u.is_active as user_active,
                     d.name AS department_name, d.code AS department_code,
                     s.name AS subject_name, s.code AS subject_code
@@ -297,8 +303,14 @@ export class UsersService {
 
     const [rows, countRows] = await Promise.all([
       this.ds.query(
-        `SELECT DISTINCT ON (f.id) f.id, f.emp_id, f.name, f.designation, f.photo_url,
+        `SELECT DISTINCT ON (f.id) f.id, f.emp_id, f.name, f.designation,
+                COALESCE(f.photo_url, CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
                 f.phone, f.department_id, f.subject_id, f.gender, f.experience, f.staff_type, f.is_active,
+                f.qualification, f.date_of_joining, f.date_of_birth, f.date_of_leaving, f.blood_group,
+                f.caste, f.pan_no, f.aadhaar_no, f.uan, f.bank_ac_no, f.current_basic, f.device_cd,
+                f.salgrade, f.father_name, f.spouse_name, f.address, f.city, f.state, f.perm_addr,
+                f.perm_city, f.perm_state, f.homephone, f.permanent_tel_no, f.highest_education,
+                f.category, f.payroll_category, f.employment_status,
                 u.email, u.role, u.is_active as user_active,
                 d.name AS department_name, d.code AS department_code,
                 s.name AS subject_name, s.code AS subject_code
@@ -336,11 +348,13 @@ export class UsersService {
     const resolvedSlug = await this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${resolvedSlug}`;
     const rows = await this.ds.query(
-      `SELECT f.*, u.email, u.role, u.is_active as user_active, u.last_login_at,
+      `SELECT f.*,
+              COALESCE(f.photo_url, CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
+              u.email, u.role, u.is_active as user_active, u.last_login_at,
               d.name AS department_name, d.code AS department_code,
               s.name AS subject_name, s.code AS subject_code
        FROM "${schema}".faculty f
-       JOIN "${schema}".users u ON u.id = f.user_id
+       LEFT JOIN "${schema}".users u ON u.id = f.user_id
        LEFT JOIN "${schema}".departments d ON (d.id = f.department_id OR d.code = f.department_id::text)
        LEFT JOIN "${schema}".subjects s ON (s.id = f.subject_id OR s.code = f.subject_id::text)
        WHERE f.id = $1`,

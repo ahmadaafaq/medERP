@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import { filterCompetenciesForSlot, filterCompetencyCodesString, matchSlotDay } from '../../../utils/competencyFilter';
@@ -118,13 +118,14 @@ export default function StudentTimetablePage() {
   const filteredSlots = weeklySlots.filter(s => matchSlotDay(s.day_of_week, selectedDay));
 
   const getSubjectBadgeColor = (typeStr?: string, codeStr?: string) => {
+    if (codeStr?.includes('KCS') || codeStr?.includes('BCA') || codeStr?.includes('CS') || codeStr?.includes('IT')) return 'border-[#5B4BFF]/30 bg-[#5B4BFF]/10 text-[#5B4BFF] dark:text-indigo-400';
+    if (codeStr?.includes('ECE') || codeStr?.includes('EE')) return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400';
+    if (codeStr?.includes('ME')) return 'border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400';
     if (codeStr?.includes('PHY') || codeStr === 'PY') return 'border-[#5B4BFF]/30 bg-[#5B4BFF]/10 text-[#5B4BFF] dark:text-indigo-400';
     if (codeStr?.includes('ANA') || codeStr === 'AN') return 'border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400';
     if (codeStr?.includes('BCH') || codeStr === 'BC') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
-    if (codeStr?.includes('PATH')) return 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400';
-    if (codeStr?.includes('SURG')) return 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400';
     if (typeStr === 'PRACTICAL') return 'border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400';
-    if (typeStr === 'CLINICAL') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+    if (typeStr === 'LAB') return 'border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400';
     return 'border-[#5B4BFF]/30 bg-[#5B4BFF]/10 text-[#5B4BFF] dark:text-indigo-400';
   };
 
@@ -162,7 +163,7 @@ export default function StudentTimetablePage() {
                 <div className="md:col-span-2 space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="px-2.5 py-0.5 rounded-md text-[10px] font-mono font-extrabold uppercase bg-white/20 text-white border border-white/30">
-                      {currentLecture.subject_code || 'MBBS'}
+                      {currentLecture.subject_code || 'BCA-301'}
                     </span>
                     <span className="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-[#F36C21] text-white shadow-sm">
                       {currentLecture.slot_type || 'LECTURE'}
@@ -176,7 +177,7 @@ export default function StudentTimetablePage() {
                   </p>
                   {currentLecture.competency_codes && (
                     <p className="text-xs text-white/90 !text-white/90">
-                      🎯 NMC Competency: <span className="font-mono text-white font-black bg-white/10 px-2 py-0.5 rounded border border-white/20">{currentLecture.competency_codes}</span>
+                      🎯 Learning Unit: <span className="font-mono text-white font-black bg-white/10 px-2 py-0.5 rounded border border-white/20">{currentLecture.competency_codes}</span>
                     </p>
                   )}
                 </div>

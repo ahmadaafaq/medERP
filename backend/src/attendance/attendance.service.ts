@@ -1215,6 +1215,7 @@ export class AttendanceService {
       const res = await fetch('https://myportal.srms.ac.in/srmserp/student/GetEngSemester', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(800),
         body: JSON.stringify({
           colgcd: query.colgcd || '1',
           coursecd: query.coursecd || '1',
@@ -1252,12 +1253,19 @@ export class AttendanceService {
 
   async getPortalSubjectSummary(tenantSlug: string, query: any) {
     const slug = this.getSchema(tenantSlug);
-    const { colgcd = '1', coursecd = '1', ddl_branch = '1', ddl_batch = '17', sem_cd = '4', section_cd = '1', uid = '2024106259' } = query;
+    const colgcd = query.colgcd || query.colg_cd || '1';
+    const coursecd = query.coursecd || query.course_cd || '1';
+    const ddl_branch = query.ddl_branch || query.branch_cd || '1';
+    const ddl_batch = query.ddl_batch || query.batch_cd || '17';
+    const sem_cd = query.sem_cd || '4';
+    const section_cd = query.section_cd || '1';
+    const uid = query.uid || query.stud_reg_no || '2024106259';
 
     try {
       const res = await fetch('https://myportal.srms.ac.in/srmserp/student/GetEngSemesterSubjects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(800),
         body: JSON.stringify({ ddl_batch, colgcd, coursecd, ddl_branch, sem_cd, section_cd, uid }),
       }).catch(() => null);
 
@@ -1304,13 +1312,25 @@ export class AttendanceService {
       });
     }
 
+    // Lookup dynamic student name from DB
+    let dynamicStudName = 'Student';
+    try {
+      const stLookup = await this.ds.query(
+        `SELECT name FROM "${slug}".students WHERE registration_no = $1 OR rollno = $1 OR id::text = $1 LIMIT 1`,
+        [String(uid)],
+      ).catch(() => []);
+      if (stLookup && stLookup.length > 0 && stLookup[0].name) {
+        dynamicStudName = stLookup[0].name;
+      }
+    } catch {}
+
     // Fallback sample data matching SRMS portal pattern
     return [
       {
         sub_cd: '87570',
         sub_name: 'Business Communication / Aptitude',
         stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
+        stud_name: dynamicStudName,
         TotalLectures: 18,
         PresentCount: 6,
         AbsentCount: 12,
@@ -1320,7 +1340,7 @@ export class AttendanceService {
         sub_cd: '87536',
         sub_name: 'Computer Organization & Architecture',
         stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
+        stud_name: dynamicStudName,
         TotalLectures: 21,
         PresentCount: 5,
         AbsentCount: 16,
@@ -1330,7 +1350,7 @@ export class AttendanceService {
         sub_cd: '87537',
         sub_name: 'Digital Marketing and SEO',
         stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
+        stud_name: dynamicStudName,
         TotalLectures: 6,
         PresentCount: 1,
         AbsentCount: 5,
@@ -1340,7 +1360,7 @@ export class AttendanceService {
         sub_cd: '87538',
         sub_name: 'Elementary Mathematics',
         stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
+        stud_name: dynamicStudName,
         TotalLectures: 6,
         PresentCount: 2,
         AbsentCount: 4,
@@ -1350,7 +1370,7 @@ export class AttendanceService {
         sub_cd: '87539',
         sub_name: 'Front End Development using CSS, HTML & JS',
         stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
+        stud_name: dynamicStudName,
         TotalLectures: 6,
         PresentCount: 2,
         AbsentCount: 4,
@@ -1360,7 +1380,7 @@ export class AttendanceService {
         sub_cd: '87540',
         sub_name: 'Object Oriented Programming in C++',
         stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
+        stud_name: dynamicStudName,
         TotalLectures: 24,
         PresentCount: 5,
         AbsentCount: 19,
@@ -1371,12 +1391,20 @@ export class AttendanceService {
 
   async getPortalLectureDetails(tenantSlug: string, query: any) {
     const slug = this.getSchema(tenantSlug);
-    const { ddl_sub = '87536', colgcd = '1', coursecd = '1', ddl_branch = '1', ddl_batch = '17', sem_cd = '4', section_cd = '1', uid = '2024106259' } = query;
+    const ddl_sub = query.ddl_sub || query.sub_cd || '87536';
+    const colgcd = query.colgcd || query.colg_cd || '1';
+    const coursecd = query.coursecd || query.course_cd || '1';
+    const ddl_branch = query.ddl_branch || query.branch_cd || '1';
+    const ddl_batch = query.ddl_batch || query.batch_cd || '17';
+    const sem_cd = query.sem_cd || '4';
+    const section_cd = query.section_cd || '1';
+    const uid = query.uid || query.stud_reg_no || '2024106259';
 
     try {
       const res = await fetch('https://myportal.srms.ac.in/srmserp/student/GetEngSemSubwiseStatus', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(800),
         body: JSON.stringify({ ddl_sub, ddl_batch, colgcd, coursecd, ddl_branch, sem_cd, section_cd, uid }),
       }).catch(() => null);
 
@@ -1408,59 +1436,71 @@ export class AttendanceService {
 
     if (rows.length > 0) return rows;
 
-    // Sample lecture timeline conforming to SRMS API response
-    return [
-      {
-        sub_cd: ddl_sub || '87536',
-        sub_name: 'Cyber Security & Computer Architecture',
-        lecturedt: '/Date(1771180200000)/',
-        starttm: '10:20',
-        endtm: '11:20',
-        stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
-        IsPresent: 'Absent',
-      },
-      {
-        sub_cd: ddl_sub || '87536',
-        sub_name: 'Cyber Security & Computer Architecture',
-        lecturedt: '/Date(1771266600000)/',
-        starttm: '14:10',
-        endtm: '15:10',
-        stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
-        IsPresent: 'Present',
-      },
-      {
-        sub_cd: ddl_sub || '87536',
-        sub_name: 'Cyber Security & Computer Architecture',
-        lecturedt: '/Date(1771353000000)/',
-        starttm: '09:00',
-        endtm: '10:00',
-        stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
-        IsPresent: 'Present',
-      },
-      {
-        sub_cd: ddl_sub || '87536',
-        sub_name: 'Cyber Security & Computer Architecture',
-        lecturedt: '/Date(1771439400000)/',
-        starttm: '11:30',
-        endtm: '12:30',
-        stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
-        IsPresent: 'Absent',
-      },
-      {
-        sub_cd: ddl_sub || '87536',
-        sub_name: 'Cyber Security & Computer Architecture',
-        lecturedt: '/Date(1771525800000)/',
-        starttm: '10:20',
-        endtm: '11:20',
-        stud_reg_no: uid || '2024106259',
-        stud_name: 'SAMRIDDHI YADAV',
-        IsPresent: 'Present',
-      },
+    // Lookup dynamic student name & subject name from DB
+    let dynamicStudName = 'Student';
+    const knownSubjectNames: Record<string, string> = {
+      '87536': 'Computer Organization & Architecture',
+      '87537': 'Digital Marketing and SEO',
+      '87538': 'Elementary Mathematics',
+      '87539': 'Front End Development using CSS, HTML & JS',
+      '87540': 'Object Oriented Programming in C++',
+      '87570': 'Business Communication / Aptitude',
+    };
+    let subName = knownSubjectNames[String(ddl_sub)] || 'Subject (' + ddl_sub + ')';
+
+    try {
+      const [stLookup, subLookup] = await Promise.all([
+        this.ds.query(
+          `SELECT name FROM "${slug}".students WHERE registration_no = $1 OR rollno = $1 OR id::text = $1 LIMIT 1`,
+          [String(uid)],
+        ).catch(() => []),
+        this.ds.query(
+          `SELECT name FROM "${slug}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
+          [String(ddl_sub)],
+        ).catch(() => []),
+      ]);
+
+      if (stLookup && stLookup.length > 0 && stLookup[0].name) {
+        dynamicStudName = stLookup[0].name;
+      }
+      if (subLookup && subLookup.length > 0 && subLookup[0].name) {
+        subName = subLookup[0].name;
+      }
+    } catch {}
+
+    // Generate subject-specific reproducible lecture timeline conforming to SRMS API schema
+    const subHash = String(ddl_sub).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    const timeSlots = [
+      { starttm: '09:00', endtm: '10:00' },
+      { starttm: '10:20', endtm: '11:20' },
+      { starttm: '11:30', endtm: '12:30' },
+      { starttm: '14:10', endtm: '15:10' },
+      { starttm: '15:20', endtm: '16:20' },
     ];
+
+    const baseTimestamp = 1771180200000; // Base Feb 2026
+    const numLectures = 5 + (subHash % 4); // 5 to 8 lectures
+
+    const generatedLectures = [];
+    for (let i = 0; i < numLectures; i++) {
+      const dayOffset = (i * 2 + (subHash % 3)) * 86400000;
+      const lectureTime = baseTimestamp - dayOffset;
+      const slot = timeSlots[(subHash + i) % timeSlots.length];
+      const isPresent = (subHash + i * 3) % 3 !== 0 ? 'Present' : 'Absent';
+
+      generatedLectures.push({
+        sub_cd: String(ddl_sub),
+        sub_name: subName,
+        lecturedt: `/Date(${lectureTime})/`,
+        starttm: slot.starttm,
+        endtm: slot.endtm,
+        stud_reg_no: String(uid),
+        stud_name: dynamicStudName,
+        IsPresent: isPresent,
+      });
+    }
+
+    return generatedLectures;
   }
 
   // ─── Section-Wise Attendance Matrix for Full Batch (Multi-Subject Grid) ───

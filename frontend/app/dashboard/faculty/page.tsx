@@ -5,6 +5,7 @@ import Header from '../../../components/Header';
 import AttendanceMarkerGrid from '../../../components/AttendanceMarkerGrid';
 import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
 import AttendanceWidget from '../../../components/AttendanceWidget';
+import NoticeDashboardWidget from '../../../components/notices/NoticeDashboardWidget';
 
 export default function FacultyDashboard() {
   return (
@@ -31,24 +32,33 @@ export default function FacultyDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Notices & Key Highlights Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1">
+              <NoticeDashboardWidget role="faculty" />
+            </div>
+            <div className="lg:col-span-2">
+              <RecentLessonsWidget role="FACULTY" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
             <AttendanceWidget role="FACULTY" />
-            <RecentLessonsWidget role="FACULTY" />
           </div>
 
           <AttendanceMarkerGrid />
 
           <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
-            <h3 className="text-xs font-black text-[#1B1E28] dark:text-white tracking-tight uppercase">Logbook Verification Queue</h3>
+            <h3 className="text-xs font-black text-[#1B1E28] dark:text-white tracking-tight uppercase">Coursework & Assignment Verification Queue</h3>
             <div className="space-y-3">
               <div className="p-4 rounded-2xl bg-[#F8FAFC] dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-700 flex justify-between items-center text-xs shadow-sm">
                 <div>
-                  <p className="font-black text-[#1B1E28] dark:text-white">Rahul Verma (Roll: MBBS2023045)</p>
-                  <p className="text-[#4E5969] dark:text-slate-400 font-medium">Activity: Pathology Clinical Procedure | Date: 2026-07-26</p>
+                  <p className="font-black text-[#1B1E28] dark:text-white">Tanish Pandey (Roll: 2500141790053)</p>
+                  <p className="text-[#4E5969] dark:text-slate-400 font-medium">Assignment: DBMS Lab #3 — SQL Complex Subqueries | Date: 2026-08-18</p>
                 </div>
                 <div className="flex gap-2">
-                  <button className="px-3.5 py-1.5 rounded-xl bg-[#00C48C] hover:bg-[#00B37E] text-white font-extrabold shadow-sm transition-all">Verify</button>
-                  <button className="px-3.5 py-1.5 rounded-xl bg-[#F04438] hover:bg-[#D9382E] text-white font-extrabold shadow-sm transition-all">Reject</button>
+                  <button className="px-3.5 py-1.5 rounded-xl bg-[#00C48C] hover:bg-[#00B37E] text-white font-extrabold shadow-sm transition-all cursor-pointer">Verify</button>
+                  <button className="px-3.5 py-1.5 rounded-xl bg-[#F04438] hover:bg-[#D9382E] text-white font-extrabold shadow-sm transition-all cursor-pointer">Reject</button>
                 </div>
               </div>
             </div>

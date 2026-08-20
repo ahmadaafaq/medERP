@@ -31,9 +31,9 @@ const API_BASE = 'http://localhost:3001/api/v1';
 
 const getTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantSlug') || 'srms-ims';
+    return localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
   }
-  return 'srms-ims';
+  return 'srms-cet-bareilly';
 };
 
 export default function StudentAssessmentPage() {
@@ -87,63 +87,135 @@ export default function StudentAssessmentPage() {
     }
   };
 
-  const getFallbackPapers = (): ExamPaper[] => [
-    {
-      id: 'paper-1',
-      code: 'PHY_IA1_2026',
-      name: 'Physiology 1st Internal Assessment Theory & MCQs',
-      subject_name: 'Physiology',
-      max_marks: 100,
-      passing_marks: 50,
-      exam_date: '2026-08-15',
-      type: 'THEORY_MCQ',
-    },
-    {
-      id: 'paper-2',
-      code: 'ANA_PART1_2026',
-      name: 'Anatomy Histology & Gross Anatomy Assessment',
-      subject_name: 'Anatomy',
-      max_marks: 100,
-      passing_marks: 50,
-      exam_date: '2026-08-20',
-      type: 'THEORY',
-    },
-    {
-      id: 'paper-3',
-      code: 'BIC_BIOCHEM_2026',
-      name: 'Biochemistry Metabolic Pathways Quiz',
-      subject_name: 'Biochemistry',
-      max_marks: 50,
-      passing_marks: 25,
-      exam_date: '2026-08-25',
-      type: 'MCQ',
-    },
-  ];
+  const getFallbackPapers = (): ExamPaper[] => {
+    const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
+    const isEng = slug.includes('cet') || slug.includes('eng');
 
-  const getFallbackResults = (): StudentResult[] => [
-    {
-      id: 'res-1',
-      paper_name: 'Physiology Formative Assessment Test 1',
-      paper_code: 'PHY_FA1',
-      subject_name: 'Physiology',
-      marks_obtained: 82,
-      max_marks: 100,
-      passing_marks: 50,
-      is_pass: true,
-      created_at: '2026-07-28',
-    },
-    {
-      id: 'res-2',
-      paper_name: 'Anatomy Osteology & Surface Anatomy Viva',
-      paper_code: 'ANA_VIVA1',
-      subject_name: 'Anatomy',
-      marks_obtained: 74,
-      max_marks: 100,
-      passing_marks: 50,
-      is_pass: true,
-      created_at: '2026-07-20',
-    },
-  ];
+    if (isEng) {
+      return [
+        {
+          id: 'paper-1',
+          code: 'CSE_CN_2026',
+          name: 'Computer Networks & Protocols Mid-Term',
+          subject_name: 'Computer Networks',
+          max_marks: 100,
+          passing_marks: 40,
+          exam_date: '2026-08-15',
+          type: 'THEORY_MCQ',
+        },
+        {
+          id: 'paper-2',
+          code: 'CSE_DSA_2026',
+          name: 'Data Structures & Algorithms Theory Test',
+          subject_name: 'Data Structures',
+          max_marks: 100,
+          passing_marks: 40,
+          exam_date: '2026-08-20',
+          type: 'THEORY',
+        },
+        {
+          id: 'paper-3',
+          code: 'CSE_DBMS_2026',
+          name: 'Database Management Systems Quiz',
+          subject_name: 'DBMS',
+          max_marks: 50,
+          passing_marks: 20,
+          exam_date: '2026-08-25',
+          type: 'MCQ',
+        },
+      ];
+    }
+
+    return [
+      {
+        id: 'paper-1',
+        code: 'PHY_IA1_2026',
+        name: 'Physiology 1st Internal Assessment Theory & MCQs',
+        subject_name: 'Physiology',
+        max_marks: 100,
+        passing_marks: 50,
+        exam_date: '2026-08-15',
+        type: 'THEORY_MCQ',
+      },
+      {
+        id: 'paper-2',
+        code: 'ANA_PART1_2026',
+        name: 'Anatomy Histology & Gross Anatomy Assessment',
+        subject_name: 'Anatomy',
+        max_marks: 100,
+        passing_marks: 50,
+        exam_date: '2026-08-20',
+        type: 'THEORY',
+      },
+      {
+        id: 'paper-3',
+        code: 'BIC_BIOCHEM_2026',
+        name: 'Biochemistry Metabolic Pathways Quiz',
+        subject_name: 'Biochemistry',
+        max_marks: 50,
+        passing_marks: 25,
+        exam_date: '2026-08-25',
+        type: 'MCQ',
+      },
+    ];
+  };
+
+  const getFallbackResults = (): StudentResult[] => {
+    const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
+    const isEng = slug.includes('cet') || slug.includes('eng');
+
+    if (isEng) {
+      return [
+        {
+          id: 'res-1',
+          paper_name: 'Computer Networks Formative Assessment 1',
+          paper_code: 'CN_FA1',
+          subject_name: 'Computer Networks',
+          marks_obtained: 88,
+          max_marks: 100,
+          passing_marks: 40,
+          is_pass: true,
+          created_at: '2026-07-28',
+        },
+        {
+          id: 'res-2',
+          paper_name: 'Data Structures Practical & Viva',
+          paper_code: 'DSA_VIVA1',
+          subject_name: 'Data Structures',
+          marks_obtained: 79,
+          max_marks: 100,
+          passing_marks: 40,
+          is_pass: true,
+          created_at: '2026-07-20',
+        },
+      ];
+    }
+
+    return [
+      {
+        id: 'res-1',
+        paper_name: 'Physiology Formative Assessment Test 1',
+        paper_code: 'PHY_FA1',
+        subject_name: 'Physiology',
+        marks_obtained: 82,
+        max_marks: 100,
+        passing_marks: 50,
+        is_pass: true,
+        created_at: '2026-07-28',
+      },
+      {
+        id: 'res-2',
+        paper_name: 'Anatomy Osteology & Surface Anatomy Viva',
+        paper_code: 'ANA_VIVA1',
+        subject_name: 'Anatomy',
+        marks_obtained: 74,
+        max_marks: 100,
+        passing_marks: 50,
+        is_pass: true,
+        created_at: '2026-07-20',
+      },
+    ];
+  };
 
   const handleSimulateAttempt = (paper: ExamPaper) => {
     setAttemptPaper(paper);

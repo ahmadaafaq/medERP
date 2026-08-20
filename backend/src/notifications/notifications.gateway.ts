@@ -28,10 +28,10 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   sendNotificationToUser(userId: string, notification: any) {
-    this.server.emit(`notification:${userId}`, notification);
+    this.server?.emit(`notification:${userId}`, notification);
   }
 
   broadcastNotification(notification: any) {
-    this.server.emit('notification:broadcast', notification);
+    this.server?.emit('notification:broadcast', notification);
   }
 }

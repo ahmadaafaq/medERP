@@ -23,7 +23,7 @@ export default function FacultyLogbookPage() {
   }, []);
 
   const fetchDepartmentContext = async () => {
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-ims' : 'srms';
+    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
     try {

@@ -153,7 +153,7 @@ export default function StudentLessonsPage() {
                           <span className="opacity-70 font-semibold">({formatBytes(item.file_size)})</span>
                         </span>
                         <span className="text-[10px] font-mono font-bold text-[#7B8794]">
-                          Semester: {item.sem_cd.replace('S', '')}
+                          Semester: {item.sem_cd ? String(item.sem_cd).replace('S', '') : '1'}
                         </span>
                       </div>
 
@@ -175,19 +175,20 @@ export default function StudentLessonsPage() {
                     )}
                   </div>
 
-                  <div className="pt-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between text-xs">
-                    <div>
-                      <p className="font-bold text-[#1B1E28] dark:text-slate-200">👨‍🏫 {item.faculty_name || item.empid}</p>
-                      <p className="text-[10px] text-[#7B8794]">{new Date(item.created_at).toLocaleDateString()}</p>
-                    </div>
+                    <div className="pt-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-bold text-[#1B1E28] dark:text-slate-200">👨‍🏫 {item.faculty_name || item.empid}</p>
+                        <p className="text-[10px] text-[#7B8794]">{item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Recent'}</p>
+                      </div>
 
-                    <button
-                      type="button"
-                      onClick={() => window.open(`${API_BASE}/lessons/${item.id}/download?tenant=${localStorage.getItem('tenantSlug') || 'srms-cet-bareilly'}`, '_blank')}
-                      className="px-3.5 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4a3cf5] text-white font-extrabold text-xs shadow-md shadow-indigo-500/20 transition-all flex items-center gap-1 cursor-pointer shrink-0"
-                    >
-                      <span>📥 Download</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => window.open(`${API_BASE}/lessons/${item.id}/download?tenant=${localStorage.getItem('tenantSlug') || 'srms-cet-bareilly'}`, '_blank')}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4a3cf5] text-white font-extrabold text-xs shadow-md shadow-indigo-500/20 transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <span>📥 Download</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}

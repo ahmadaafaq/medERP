@@ -74,9 +74,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   const [loadingMatrix, setLoadingMatrix] = useState(false);
 
   // Student Resolution (dynamic list for selector)
-  const [selectedStudentUid, setSelectedStudentUid] = useState('2024106259');
-  const [selectedStudentName, setSelectedStudentName] = useState('SAMRIDDHI YADAV');
-  const [selectedStudentRoll, setSelectedStudentRoll] = useState('2500141790001');
+  const [selectedStudentUid, setSelectedStudentUid] = useState('');
+  const [selectedStudentName, setSelectedStudentName] = useState('');
+  const [selectedStudentRoll, setSelectedStudentRoll] = useState('');
 
   // Individual Student Attendance Data
   const [summaryData, setSummaryData] = useState<SubjectSummary[]>([]);
@@ -92,14 +92,69 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   const [lectureDetails, setLectureDetails] = useState<LectureDetail[]>([]);
   const [loadingLectures, setLoadingLectures] = useState(false);
 
-  // Initial Metadata
+  // Initial Metadata & Logged-in Student Auto-Resolution
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedColg = localStorage.getItem('colg_cd');
       if (storedColg) setSelectedCollege(storedColg);
     }
     fetchAcademicMetadata();
-  }, []);
+
+    if (role === 'STUDENT' || role?.toUpperCase() === 'STUDENT') {
+      setViewMode('STUDENT');
+      try {
+        const cachedUserStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        if (cachedUserStr) {
+          const cached = JSON.parse(cachedUserStr);
+          const p = cached?.profile || cached || {};
+          const reg = p.registration_no || cached?.registrationNo || p.rollno || cached?.rollno;
+          if (reg) setSelectedStudentUid(reg);
+          if (cached?.name || p.name) setSelectedStudentName(cached?.name || p.name);
+          if (p.rollno || cached?.rollno) setSelectedStudentRoll(p.rollno || cached?.rollno);
+        }
+      } catch {}
+      fetchLoggedInStudentProfile();
+    }
+  }, [role]);
+
+  const fetchLoggedInStudentProfile = async () => {
+    try {
+      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-slug': slug,
+        },
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const meData = json.data || json;
+        const p = meData.profile || meData;
+        const reg = p.registration_no || meData.registrationNo || p.rollno || meData.rollno;
+        const name = meData.name || p.name;
+        const roll = p.rollno || meData.rollno;
+        const batch = p.batch_cd || meData.batch_cd || p.batch_id || meData.batch_id || p.batch || meData.batch;
+        const course = p.course_cd || meData.course_cd || p.course;
+        const branch = p.branch_code || meData.branch_code || p.branch_cd || meData.branch_cd || p.branch;
+        const sem = p.sem_cd || meData.sem_cd || p.semester || meData.semester;
+        const colg = p.colg_cd || meData.colg_cd || p.college_id;
+
+        if (reg) setSelectedStudentUid(reg);
+        if (name) setSelectedStudentName(name);
+        if (roll) setSelectedStudentRoll(roll);
+        if (batch) setSelectedBatch(String(batch));
+        if (course) setSelectedCourse(String(course));
+        if (branch) setSelectedBranch(String(branch));
+        if (sem) setSelectedSem(String(sem));
+        if (colg) setSelectedCollege(String(colg));
+      }
+    } catch (err) {
+      console.warn('Failed to fetch logged in student profile:', err);
+    }
+  };
 
   useEffect(() => {
     if (selectedCollege && selectedCourse) {
@@ -111,9 +166,11 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     fetchPortalSemesters();
   }, [selectedCollege, selectedCourse, selectedBranch, selectedBatch]);
 
-  // When Section / Semester / Batch changes, load the Section Matrix & Student Summary
+  // When Section / Semester / Batch changes, load data
   useEffect(() => {
-    fetchSectionAttendanceMatrix();
+    if (role !== 'STUDENT') {
+      fetchSectionAttendanceMatrix();
+    }
     if (viewMode === 'STUDENT' || role === 'STUDENT') {
       fetchSubjectSummary();
     }
@@ -212,15 +269,17 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         }));
         if (mapped.length > 0) {
           setBatchesList(mapped);
-          if (!mapped.some((b: any) => b.code === selectedBatch)) {
+          if (role !== 'STUDENT' && !mapped.some((b: any) => b.code === selectedBatch)) {
             setSelectedBatch(mapped[0].code);
           }
         }
       } else {
         setBatchesList([
-          { id: '2', code: '2', name: '2025' },
+          { id: '2025', code: '2025', name: '2025 (Batch 2025)' },
+          { id: '2024', code: '2024', name: '2024 (Batch 2024)' },
           { id: '18', code: '18', name: '2024-2025 (Batch 18)' },
           { id: '17', code: '17', name: '2023-2024 (Batch 17)' },
+          { id: '2', code: '2', name: '2025 (Batch 2)' },
         ]);
       }
     } catch (err) {
@@ -355,6 +414,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         student_name: studName,
         student_reg: studReg,
       });
+      setLectureDetails([]);
       setLoadingLectures(true);
       const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
       const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
@@ -377,11 +437,13 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
       if (res.ok) {
         const json = await res.json();
-        const list = Array.isArray(json) ? json : json.data || [];
+        const rawData = json.data?.data || json.data || json;
+        const list = Array.isArray(rawData) ? rawData : [];
         setLectureDetails(list);
       }
     } catch (err) {
       console.warn('Failed to fetch lecture details:', err);
+      setLectureDetails([]);
     } finally {
       setLoadingLectures(false);
     }
@@ -594,33 +656,35 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         {/* View Mode Toggle Buttons */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-[#E7EAF3] dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setViewMode('MATRIX')}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-                viewMode === 'MATRIX'
-                  ? 'bg-[#2D2575] text-white shadow-md'
-                  : 'bg-[#F6F8FC] dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              <span>📊</span>
-              <span>Section Attendance Matrix (Grid)</span>
-            </button>
+            {role !== 'STUDENT' && (
+              <button
+                type="button"
+                onClick={() => setViewMode('MATRIX')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                  viewMode === 'MATRIX'
+                    ? 'bg-[#2D2575] text-white shadow-md'
+                    : 'bg-[#F6F8FC] dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 border border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <span>📊</span>
+                <span>Section Attendance Matrix (Grid)</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setViewMode('STUDENT')}
               className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-                viewMode === 'STUDENT'
+                viewMode === 'STUDENT' || role === 'STUDENT'
                   ? 'bg-[#5B4BFF] text-white shadow-md'
                   : 'bg-[#F6F8FC] dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 border border-slate-200 dark:border-slate-700'
               }`}
             >
               <span>👤</span>
-              <span>Individual Student Breakdown</span>
+              <span>My Attendance Ledger &amp; Breakdown</span>
             </button>
           </div>
 
-          {viewMode === 'MATRIX' && (
+          {viewMode === 'MATRIX' && role !== 'STUDENT' && (
             <div className="relative w-full sm:w-72">
               <input
                 type="text"
@@ -636,7 +700,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       </div>
 
       {/* ─── 2. SECTION ATTENDANCE MATRIX (Exact Layout as Reference Screenshot) ───────── */}
-      {viewMode === 'MATRIX' && (
+      {viewMode === 'MATRIX' && role !== 'STUDENT' && (
         <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
             <div>

@@ -49,7 +49,7 @@ export default function FacultyStudentsPage() {
   const [totalCount, setTotalCount] = useState<number>(0);
 
   // Faculty Context
-  const [facultyDept, setFacultyDept] = useState<string>('Department of Physiology');
+  const [facultyDept, setFacultyDept] = useState<string>('Computer Science and Engineering');
 
   // Modal State & Tabs
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -82,7 +82,7 @@ export default function FacultyStudentsPage() {
   };
 
   const fetchFacultyContext = async () => {
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-ims' : 'srms';
+    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     if (!token) return;
 
@@ -98,7 +98,7 @@ export default function FacultyStudentsPage() {
         const json = await res.json();
         const meData = json.data || json;
         const p = meData.profile || meData;
-        const dName = p.department_name || meData.departmentName || 'Department of Physiology';
+        const dName = p.department_name || meData.departmentName || 'Computer Science and Engineering';
         setFacultyDept(dName);
       }
     } catch (err) {
@@ -107,7 +107,7 @@ export default function FacultyStudentsPage() {
   };
 
   const fetchBatches = async () => {
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-ims' : 'srms';
+    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
     try {
@@ -132,15 +132,15 @@ export default function FacultyStudentsPage() {
 
     setBatches([
       { id: 'b1', code: '2025-MBBS', name: 'Batch 2025-MBBS (Phase I)' },
-      { id: 'b2', code: '2023-MBBS', name: 'Batch 2023-MBBS (Phase I)' },
-      { id: 'b3', code: '2022-MBBS', name: 'Batch 2022-MBBS (Phase II)' },
+      { id: 'b2', code: '2025-BCA', name: 'Batch 2025 (BCA)' },
+      { id: 'b3', code: '2024-BTECH', name: 'Batch 2024 (B.Tech CSE)' },
     ]);
   };
 
   const fetchStudents = async () => {
     setLoading(true);
     setError('');
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-ims' : 'srms';
+    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
     try {
@@ -198,38 +198,11 @@ export default function FacultyStudentsPage() {
           formattedList = formattedList.filter(s => (s.batch_cd || '').includes(selectedBatch));
         }
 
-        if (formattedList.length === 0 && !search.trim()) {
-          formattedList = [
-            { id: '1', name: 'Rahul Verma', rollno: 'MBBS2023045', registration_no: '2023MBBS045', batch_cd: '2023-MBBS', course_cd: 'MBBS', email: 'rahul.verma@srms.edu', phone: '+91 98765 12345', gender: 'Male', admission_year: 2023, is_active: true, department_name: facultyDept, guardian_name: 'Mr. Suresh Verma', guardian_phone: '+91 98765 99999', address: 'SRMS Hostel Block A, Room 201', blood_group: 'O+', attendance_pct: 88, logbook_pct: 92 },
-            { id: '2', name: 'Ananya Roy', rollno: 'MBBS2023012', registration_no: '2023MBBS012', batch_cd: '2023-MBBS', course_cd: 'MBBS', email: 'ananya.roy@srms.edu', phone: '+91 98765 23456', gender: 'Female', admission_year: 2023, is_active: true, department_name: facultyDept, guardian_name: 'Mr. Ramesh Roy', guardian_phone: '+91 98765 88888', address: 'SRMS Girls Hostel Block B, Room 104', blood_group: 'B+', attendance_pct: 94, logbook_pct: 96 },
-            { id: '3', name: 'Kabir Rao Deshmukh', rollno: '20260008', registration_no: '20260008', batch_cd: '2025-MBBS', course_cd: 'MBBS', email: 'kabir.deshmukh2025@srms.ac.in', phone: '+91 98765 34567', gender: 'Male', admission_year: 2025, is_active: true, department_name: facultyDept, guardian_name: 'Mr. Vikram Deshmukh', guardian_phone: '+91 98765 77777', address: 'SRMS Hostel Block C, Room 402', blood_group: 'A+', attendance_pct: 86, logbook_pct: 90 },
-          ];
-        }
-
         setStudents(formattedList);
         setTotalCount(meta.totalItems || meta.total || formattedList.length);
       } else {
-        const fallbackStudents: Student[] = [
-          { id: '1', name: 'Rahul Verma', rollno: 'MBBS2023045', registration_no: '2023MBBS045', batch_cd: '2023-MBBS', course_cd: 'MBBS', email: 'rahul.verma@srms.edu', phone: '+91 98765 12345', gender: 'Male', admission_year: 2023, is_active: true, department_name: facultyDept, guardian_name: 'Mr. Suresh Verma', guardian_phone: '+91 98765 99999', address: 'SRMS Hostel Block A, Room 201', blood_group: 'O+', attendance_pct: 88, logbook_pct: 92 },
-          { id: '2', name: 'Ananya Roy', rollno: 'MBBS2023012', registration_no: '2023MBBS012', batch_cd: '2023-MBBS', course_cd: 'MBBS', email: 'ananya.roy@srms.edu', phone: '+91 98765 23456', gender: 'Female', admission_year: 2023, is_active: true, department_name: facultyDept, guardian_name: 'Mr. Ramesh Roy', guardian_phone: '+91 98765 88888', address: 'SRMS Girls Hostel Block B, Room 104', blood_group: 'B+', attendance_pct: 94, logbook_pct: 96 },
-          { id: '3', name: 'Kabir Rao Deshmukh', rollno: '20260008', registration_no: '20260008', batch_cd: '2025-MBBS', course_cd: 'MBBS', email: 'kabir.deshmukh2025@srms.ac.in', phone: '+91 98765 34567', gender: 'Male', admission_year: 2025, is_active: true, department_name: facultyDept, guardian_name: 'Mr. Vikram Deshmukh', guardian_phone: '+91 98765 77777', address: 'SRMS Hostel Block C, Room 402', blood_group: 'A+', attendance_pct: 86, logbook_pct: 90 },
-        ];
-
-        let filtered = fallbackStudents;
-        if (search.trim()) {
-          const q = search.toLowerCase();
-          filtered = filtered.filter(s =>
-            s.name.toLowerCase().includes(q) ||
-            (s.rollno || '').toLowerCase().includes(q) ||
-            (s.registration_no || '').toLowerCase().includes(q)
-          );
-        }
-        if (selectedBatch && selectedBatch !== 'ALL') {
-          filtered = filtered.filter(s => (s.batch_cd || '').includes(selectedBatch));
-        }
-
-        setStudents(filtered);
-        setTotalCount(filtered.length);
+        setStudents([]);
+        setTotalCount(0);
       }
     } catch (err: any) {
       console.error('Failed to fetch student directory:', err);

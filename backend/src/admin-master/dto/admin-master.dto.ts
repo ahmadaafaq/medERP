@@ -193,6 +193,31 @@ export class CreateSubjectMasterDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  batch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sem_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  semester?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sub_addinfo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  mst_sub_name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsBoolean()
   is_active?: boolean;
 }

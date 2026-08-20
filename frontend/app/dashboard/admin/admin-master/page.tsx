@@ -213,6 +213,8 @@ export default function AdminMasterPage() {
   const [selectedCollegeFilter, setSelectedCollegeFilter] = useState<string>('all');
   const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>('all');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('all');
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('all');
+  const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('all');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all');
   const [selectedUnitFilter, setSelectedUnitFilter] = useState<string>('all');
   const [selectedTopicFilter, setSelectedTopicFilter] = useState<string>('all');
@@ -234,6 +236,10 @@ export default function AdminMasterPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
+
+  // SRMS Live Subjects Integration State
+  const [srmsLiveSubjects, setSrmsLiveSubjects] = useState<any[]>([]);
+  const [loadingSrmsSubjects, setLoadingSrmsSubjects] = useState(false);
 
   // Sub-Topic / Competency temporary queue state
   const [tempCompetencies, setTempCompetencies] = useState<TempCompetencyItem[]>([]);
@@ -257,7 +263,7 @@ export default function AdminMasterPage() {
     const target = collegeIdOrSlug || formData.college_id || formData.college_slug;
     return colleges.find((c) => c.id === target || c.slug === target || c.code === target)?.slug
       || colleges[0]?.slug
-      || 'srms-ims';
+      || 'srms-cet-bareilly';
   };
 
   const fetchColleges = async () => {
@@ -391,6 +397,152 @@ export default function AdminMasterPage() {
     }
   };
 
+  const fetchSrmsLiveSubjects = async (colgcd?: string, coursecd?: string, branchcd?: string, batchcd?: string, semcd?: string) => {
+    setLoadingSrmsSubjects(true);
+    const payload = {
+      colgcd: String(colgcd || '1'),
+      coursecd: String(coursecd || '13'),
+      branchcd: String(branchcd || '1'),
+      batchcd: String(batchcd || '2'),
+      semcd: String(semcd || '3'),
+      tenant: getActiveTenantSlug(),
+    };
+
+    // 1. Try Backend NestJS Proxy endpoint
+    try {
+      const res = await fetch(`${COLLEGE_API_BASE}/proxy/all-subjects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const data = json.data || json;
+        if (Array.isArray(data) && data.length > 0) {
+          setSrmsLiveSubjects(data);
+          setLoadingSrmsSubjects(false);
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn('[AdminMaster] Backend proxy/all-subjects fetch error:', err);
+    }
+
+    // 2. Fallback to Next.js API route
+    try {
+      const res = await fetch('/api/srms/all-subjects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setSrmsLiveSubjects(data);
+          setLoadingSrmsSubjects(false);
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn('[AdminMaster] Frontend /api/srms/all-subjects fetch error:', e);
+    } finally {
+      setLoadingSrmsSubjects(false);
+    }
+    return [];
+  };
+
+  const handleBulkSyncSrmsSubjects = async (subList?: any[]) => {
+    const listToSync = subList && subList.length > 0 ? subList : srmsLiveSubjects;
+    if (!listToSync || listToSync.length === 0) {
+      alert('No SRMS live subjects available to sync. Please ensure College, Course, Branch, Batch and Semester are selected.');
+      return;
+    }
+    setSyncing(true);
+    setSyncMessage('');
+    const targetSlug = getFormCollegeSlug(formData.college_id || formData.college_slug || selectedCollegeFilter);
+    let successCount = 0;
+    try {
+      for (const item of listToSync) {
+        const payload = {
+          code: String(item.sub_cd || item.sub_addinfo || '').trim(),
+          name: String(item.sub_name || item.mst_sub_name || '').trim(),
+          mst_sub_name: item.mst_sub_name || null,
+          sub_addinfo: item.sub_addinfo || null,
+          department_id: formData.department_id || String(item.branch_cd || '1'),
+          course_cd: String(item.course_cd || formData.course_cd || '13'),
+          course_name: item.course_name || formData.course_name || 'BCA',
+          branch_cd: String(item.branch_cd || formData.branch_cd || '1'),
+          batch_cd: String(item.batch_cd || formData.batch_cd || '2'),
+          sem_cd: String(item.sem_cd || formData.sem_cd || '3'),
+          semester: item.semester_name || String(item.sem_cd || formData.sem_cd || '3'),
+          credits: 4,
+          type: item.SubTyp || 'THEORY',
+          is_longitudinal: false,
+          is_active: item.active_flg !== undefined ? Boolean(item.active_flg) : true,
+        };
+        const res = await fetch(`${API_BASE}/subjects?tenant=${targetSlug}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) successCount++;
+      }
+      setSyncMessage(`Successfully synced ${successCount} of ${listToSync.length} subjects from SRMS ERP! 🎉`);
+      await fetchCategoryData('subjects', selectedCollegeFilter);
+      setTimeout(() => setSyncMessage(''), 6000);
+    } catch (err: any) {
+      console.error('Bulk sync subjects error:', err);
+      setSyncMessage('Error syncing some subjects from SRMS ERP.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleSyncSubjectsAndOfferings = async () => {
+    setSyncing(true);
+    setSyncMessage('⚡ Intelligently syncing subjects and offerings from SRMS ERP (Preserving attendance)...');
+    try {
+      const colCourses = getCoursesForCollege(selectedCollegeFilter);
+      const targetCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '');
+      const availableDepts = departments.filter(d => (d.college_id === selectedCollegeFilter || d.college_slug === selectedCollegeFilter || String(d.colg_cd) === String(selectedCollegeFilter)) && (d.course_cd === targetCourseCd || d.course_code === targetCourseCd));
+      const targetBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '');
+      const targetBatchCd = selectedBatchFilter !== 'all' ? selectedBatchFilter : '';
+      const targetSemCd = selectedSemesterFilter !== 'all' ? selectedSemesterFilter : '';
+
+      const queryParams = new URLSearchParams();
+      const slug = getActiveTenantSlug();
+      if (slug && slug !== 'all') queryParams.append('tenant', slug);
+      if (targetCourseCd) queryParams.append('coursecd', targetCourseCd);
+      if (targetBranchCd) queryParams.append('branchcd', targetBranchCd);
+      if (targetBatchCd) queryParams.append('batchcd', targetBatchCd);
+      if (targetSemCd) queryParams.append('semcd', targetSemCd);
+
+      const res = await fetch(`${API_BASE}/subject-offerings/sync-external?${queryParams.toString()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const list = json.data || [];
+        setOfferings(list);
+        await Promise.all([
+          fetchCategoryData('subjects', selectedCollegeFilter),
+          fetchCategoryData('subject-offerings', selectedCollegeFilter),
+        ]);
+        setSyncMessage(`⚡ Successfully synced ${list.length} Subject Offerings & linked existing attendance records ✅`);
+        setTimeout(() => setSyncMessage(''), 6000);
+      } else {
+        setSyncMessage('⚠️ Could not sync from external SRMS API. Please verify server connection.');
+      }
+    } catch (err: any) {
+      console.error('Sync error:', err);
+      setSyncMessage(`❌ Sync failed: ${err.message || 'Network error'}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   useEffect(() => {
     const loadAll = async () => {
       let initialCollegeCode = '1';
@@ -441,6 +593,8 @@ export default function AdminMasterPage() {
     setSelectedCollegeFilter(newColgFilter);
     setSelectedCourseFilter('all');
     setSelectedBranchFilter('all');
+    setSelectedBatchFilter('all');
+    setSelectedSemesterFilter('all');
     setSelectedSubjectFilter('all');
     setSelectedUnitFilter('all');
     setSelectedTopicFilter('all');
@@ -450,6 +604,9 @@ export default function AdminMasterPage() {
       fetchCategoryData(activeTab, newColgFilter),
       fetchCategoryData('departments', newColgFilter),
       fetchCategoryData('subjects', newColgFilter),
+      fetchCategoryData('delivery-types', newColgFilter),
+      fetchCategoryData('subject-offerings', newColgFilter),
+      fetchCategoryData('professional-linkers', newColgFilter),
       fetchCategoryData('units', newColgFilter),
       fetchCategoryData('topics', newColgFilter),
       fetchCategoryData('competencies', newColgFilter),
@@ -463,6 +620,7 @@ export default function AdminMasterPage() {
   }, [activeTab, searchTerm]);
 
   const isMatchCollege = (item: any) => {
+    if (activeTab === 'delivery-types') return true;
     if (selectedCollegeFilter === 'all') return true;
     const targetCol = colleges.find(c => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetId = targetCol?.id;
@@ -474,7 +632,8 @@ export default function AdminMasterPage() {
       (targetCode && String(item.colg_cd) === String(targetCode)) ||
       (targetCode && String(item.college_code) === String(targetCode)) ||
       (targetSlug && item.college_slug === targetSlug) ||
-      item.college_slug === selectedCollegeFilter
+      item.college_slug === selectedCollegeFilter ||
+      item.college_id === selectedCollegeFilter
     );
   };
 
@@ -502,22 +661,29 @@ export default function AdminMasterPage() {
       });
     } else if (activeTab === 'subjects') {
       const colCourses = getCoursesForCollege(defaultCollegeId || defaultCollegeSlug);
-      const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '1';
+      const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '13';
       const availableDepts = departments.filter(d =>
         (d.college_id === defaultCollegeId || d.college_slug === defaultCollegeSlug || String(d.colg_cd) === String(defaultCollegeId)) &&
         (!firstCourseCd || d.course_cd === firstCourseCd || d.course_code === firstCourseCd)
       );
+      const firstBranchCd = availableDepts[0]?.branch_cd || availableDepts[0]?.code || availableDepts[0]?.id || '1';
+      const targetColCd = colleges.find(c => c.id === defaultCollegeId || c.slug === defaultCollegeSlug || c.code === defaultCollegeId)?.code || defaultCollegeId || '1';
+
       setFormData({
-        college_id: defaultCollegeId,
+        college_id: targetColCd,
         college_slug: defaultCollegeSlug,
         course_cd: firstCourseCd,
-        department_id: availableDepts[0]?.branch_cd || availableDepts[0]?.code || availableDepts[0]?.id || '',
+        department_id: firstBranchCd,
+        branch_cd: firstBranchCd,
+        batch_cd: '2',
+        sem_cd: '3',
         code: '',
         name: '',
         credits: 4,
-        type: 'Combined',
+        type: 'THEORY',
         is_longitudinal: false,
       });
+      fetchSrmsLiveSubjects(targetColCd, firstCourseCd, firstBranchCd, '2', '3');
     } else if (activeTab === 'professional-linkers') {
       setFormData({
         college_id: defaultCollegeId,
@@ -932,10 +1098,14 @@ export default function AdminMasterPage() {
     if (!confirm('Are you sure you want to delete this record?')) return;
     const targetSlug = getFormCollegeSlug(itemCollegeSlug || selectedCollegeFilter);
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
     try {
       const res = await fetch(`${API_BASE}/${activeTab}/${id}?tenant=${targetSlug}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers,
       });
       if (res.ok) {
         await Promise.all([
@@ -1124,13 +1294,14 @@ export default function AdminMasterPage() {
     }
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
     try {
       const res = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify(payload),
       });
       if (res.ok) {
@@ -1139,6 +1310,8 @@ export default function AdminMasterPage() {
           fetchCategoryData(activeTab, selectedCollegeFilter),
           fetchCategoryData('departments', selectedCollegeFilter),
           fetchCategoryData('subjects', selectedCollegeFilter),
+          fetchCategoryData('delivery-types', selectedCollegeFilter),
+          fetchCategoryData('subject-offerings', selectedCollegeFilter),
           fetchCategoryData('units', selectedCollegeFilter),
           fetchCategoryData('topics', selectedCollegeFilter),
           fetchCategoryData('competencies', selectedCollegeFilter),
@@ -1197,6 +1370,26 @@ export default function AdminMasterPage() {
     });
   }, [selectedCollegeFilter, selectedCourseFilter, departments, colleges]);
 
+  const availableFilterBatches = useMemo(() => {
+    const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
+    const targetColCd = targetCol?.code || targetCol?.id;
+    const colBatches = batches.filter(b => {
+      const matchCol = selectedCollegeFilter === 'all' ||
+        b.college_id === targetCol?.id ||
+        b.college_slug === targetCol?.slug ||
+        String(b.colg_cd) === String(targetColCd);
+      if (!matchCol) return false;
+      if (selectedCourseFilter !== 'all' && b.course_cd && String(b.course_cd) !== String(selectedCourseFilter)) return false;
+      return true;
+    });
+    if (colBatches.length > 0) return colBatches;
+    return [
+      { id: '1', batch_cd: '1', code: '1', name: 'Batch 2024' },
+      { id: '2', batch_cd: '2', code: '2', name: 'Batch 2025' },
+      { id: '3', batch_cd: '3', code: '3', name: 'Batch 2026' },
+    ];
+  }, [selectedCollegeFilter, selectedCourseFilter, batches, colleges]);
+
   const availableFilterSubjects = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetColCd = targetCol?.code || targetCol?.id;
@@ -1208,9 +1401,11 @@ export default function AdminMasterPage() {
       if (!matchCol) return false;
       if (selectedCourseFilter !== 'all' && s.course_cd !== selectedCourseFilter) return false;
       if (selectedBranchFilter !== 'all' && s.branch_cd !== selectedBranchFilter && s.department_id !== selectedBranchFilter) return false;
+      if (selectedBatchFilter !== 'all' && s.batch_cd && String(s.batch_cd) !== String(selectedBatchFilter)) return false;
+      if (selectedSemesterFilter !== 'all' && s.sem_cd && String(s.sem_cd) !== String(selectedSemesterFilter)) return false;
       return true;
     });
-  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, subjects, colleges]);
+  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedBatchFilter, selectedSemesterFilter, subjects, colleges]);
 
   const availableFilterUnits = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
@@ -1246,6 +1441,12 @@ export default function AdminMasterPage() {
   }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedSubjectFilter, selectedUnitFilter, topics, colleges]);
 
   const filteredList = getFilteredItemsList().filter((item: any) => {
+    if (activeTab === 'delivery-types') {
+      if (!searchTerm) return true;
+      const term = searchTerm.toLowerCase();
+      return (item.name && item.name.toLowerCase().includes(term)) || (item.code && item.code.toLowerCase().includes(term));
+    }
+
     if (!isMatchCollege(item)) return false;
 
     // Filter by Course
@@ -1258,6 +1459,18 @@ export default function AdminMasterPage() {
     if (selectedBranchFilter !== 'all') {
       const itemBranch = item.branch_cd || item.department_id || (activeTab === 'departments' ? (item.branch_cd || item.code) : null);
       if (!itemBranch || String(itemBranch) !== String(selectedBranchFilter)) return false;
+    }
+
+    // Filter by Batch
+    if (selectedBatchFilter !== 'all') {
+      const itemBatch = item.batch_cd || item.batch_code || item.batch_id;
+      if (itemBatch && String(itemBatch) !== String(selectedBatchFilter)) return false;
+    }
+
+    // Filter by Semester
+    if (selectedSemesterFilter !== 'all') {
+      const itemSem = item.sem_cd || item.semester;
+      if (itemSem && String(itemSem) !== String(selectedSemesterFilter)) return false;
     }
 
     // Filter by Subject
@@ -1402,7 +1615,43 @@ export default function AdminMasterPage() {
                 </select>
               </div>
 
-              {/* 4. Subject Selector */}
+              {/* 4. Batch Selector */}
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>📅</span> Batch:</span>
+                <select
+                  value={selectedBatchFilter}
+                  onChange={(e) => {
+                    setSelectedBatchFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[150px] truncate"
+                >
+                  <option value="all">All Batches ({availableFilterBatches.length})</option>
+                  {availableFilterBatches.map((b: any) => (
+                    <option key={b.id || b.batch_cd || b.code} value={b.batch_cd || b.code || b.id}>[#{b.batch_cd || b.code}] {b.name || b.year}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 5. Semester Selector */}
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>🔢</span> Sem:</span>
+                <select
+                  value={selectedSemesterFilter}
+                  onChange={(e) => {
+                    setSelectedSemesterFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
+                >
+                  <option value="all">All Semesters</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                    <option key={s} value={String(s)}>Sem #{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 6. Subject Selector */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
                 <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>📚</span> Subject:</span>
                 <select
@@ -1421,7 +1670,7 @@ export default function AdminMasterPage() {
                 </select>
               </div>
 
-              {/* 5. Unit Selector */}
+              {/* 7. Unit Selector */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
                 <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>📑</span> Unit:</span>
                 <select
@@ -1440,7 +1689,7 @@ export default function AdminMasterPage() {
                 </select>
               </div>
 
-              {/* 6. Topic Selector */}
+              {/* 8. Topic Selector */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
                 <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>📌</span> Topic:</span>
                 <select
@@ -1476,6 +1725,17 @@ export default function AdminMasterPage() {
                   <button onClick={syncDepartmentsFromPortal} disabled={syncing} className="px-3 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95">
                     <span className={syncing ? 'animate-spin' : ''}>🌐</span>
                     <span>{syncing ? 'Syncing...' : 'Sync SRMS'}</span>
+                  </button>
+                )}
+                {(activeTab === 'subjects' || activeTab === 'subject-offerings') && (
+                  <button
+                    onClick={handleSyncSubjectsAndOfferings}
+                    disabled={syncing || loadingSrmsSubjects}
+                    className="px-3 py-2 text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95"
+                    title="Pull all subjects & offerings from SRMS ERP API and link attendance without losing data"
+                  >
+                    <span className={syncing || loadingSrmsSubjects ? 'animate-spin' : ''}>⚡</span>
+                    <span>{syncing ? 'Syncing...' : loadingSrmsSubjects ? 'Fetching...' : activeTab === 'subject-offerings' ? 'Sync SRMS Offerings' : 'Sync SRMS Subjects'}</span>
                   </button>
                 )}
                 <button onClick={handleAddNew} className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-indigo-600 text-white font-bold text-xs shadow-md shadow-indigo-500/20 transition-all flex items-center gap-1.5 active:scale-95">
@@ -1596,20 +1856,21 @@ export default function AdminMasterPage() {
                     <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">
                       <tr>
                         <th className="p-4 pl-5">Subject Code</th>
-                        <th className="p-4">Subject Name</th>
-                        <th className="p-4">Mapped College</th>
-                        <th className="p-4">Department</th>
+                        <th className="p-4">Subject Name & Details</th>
+                        <th className="p-4">Type</th>
+                        <th className="p-4">Batch & Semester</th>
+                        <th className="p-4">Mapped College & Dept</th>
                         <th className="p-4">Longitudinal?</th>
-                        <th className="p-4">Credits / Units</th>
+                        <th className="p-4">Credits</th>
                         <th className="p-4">Status</th>
-                        <th className="p-4 pr-5 text-right min-w-[120px]">Actions</th>
+                        <th className="p-4 pr-5 text-right min-w-[100px]">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium">
                       {paginatedList.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="p-10 text-center text-slate-500 font-semibold">
-                            No academic subjects found for the selected college filter. Click &apos;Add New Subject&apos; to create one on behalf of a department.
+                          <td colSpan={9} className="p-10 text-center text-slate-500 font-semibold">
+                            No academic subjects found for the selected filter. Click &apos;Sync SRMS Subjects&apos; to pull all subjects from portal or &apos;Add New&apos; to create.
                           </td>
                         </tr>
                       ) : (
@@ -1621,32 +1882,47 @@ export default function AdminMasterPage() {
                           return (
                             <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                               <td className="p-4 pl-5 font-extrabold text-[#5B4BFF] dark:text-indigo-400 font-mono whitespace-nowrap">
-                                <span className="px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
+                                <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
                                   {s.code}
                                 </span>
                               </td>
-                              <td className="p-4 font-bold text-slate-900 dark:text-white">
-                                {s.name}
+                              <td className="p-4">
+                                <div className="font-bold text-slate-900 dark:text-white text-xs">{s.name}</div>
+                                {(s.mst_sub_name || s.sub_addinfo) && (
+                                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 font-medium">
+                                    {s.sub_addinfo && <span className="px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 rounded font-mono text-[10px] text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700">{s.sub_addinfo}</span>}
+                                    {s.mst_sub_name && <span>{s.mst_sub_name}</span>}
+                                  </div>
+                                )}
                               </td>
                               <td className="p-4 whitespace-nowrap">
-                                <div className="flex items-center gap-1.5">
-                                  <span>🏛️</span>
-                                  {colCode && (
-                                    <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-bold text-[10px] border border-indigo-500/20">
-                                      #{colCode}
-                                    </span>
-                                  )}
-                                  <span className="font-semibold text-slate-800 dark:text-slate-200">{colName}</span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                                  s.type === 'PRACTICAL'
+                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                    : s.type === 'VALUE ADDITION'
+                                    ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+                                    : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                                }`}>
+                                  {s.type || 'THEORY'}
+                                </span>
+                              </td>
+                              <td className="p-4 whitespace-nowrap">
+                                <div className="flex flex-col gap-0.5 text-[11px] font-semibold">
+                                  <span className="text-slate-800 dark:text-slate-200">📅 Batch #{s.batch_cd || s.batch_code || '—'}</span>
+                                  <span className="text-slate-500 dark:text-slate-400">🔢 Sem #{s.sem_cd || s.semester || '—'}</span>
                                 </div>
                               </td>
-                              <td className="p-4 font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                                {s.department_name ? (
-                                  <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px]">
-                                    🏢 {s.department_name} {s.branch_cd || s.department_code ? `(#${s.branch_cd || s.department_code})` : ''} {s.course_name ? `— 🎓 {s.course_name}` : ''}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400 italic">General Department</span>
-                                )}
+                              <td className="p-4 whitespace-nowrap">
+                                <div className="flex flex-col gap-0.5 text-[11px]">
+                                  <div className="flex items-center gap-1">
+                                    <span>🏛️</span>
+                                    <span className="font-semibold text-slate-800 dark:text-slate-200">{colName}</span>
+                                    {colCode && <span className="text-[10px] font-mono text-indigo-500">#{colCode}</span>}
+                                  </div>
+                                  <div className="text-slate-500 text-[10px]">
+                                    🏢 {s.department_name || 'General'} {s.course_name ? `(${s.course_name})` : ''}
+                                  </div>
+                                </div>
                               </td>
                               <td className="p-4 whitespace-nowrap">
                                 {s.is_longitudinal || s.code === 'CM' ? (
@@ -1747,12 +2023,13 @@ export default function AdminMasterPage() {
                         <th className="p-4">Delivery Type</th>
                         <th className="p-4">Batch Year</th>
                         <th className="p-4">Hours Allotted</th>
+                        <th className="p-4">Attendance Status</th>
                         <th className="p-4 pr-5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={8} className="p-8 text-center text-slate-500 font-medium">No subject offerings configured. Click &apos;Add New&apos; to create.</td></tr>
+                        <tr><td colSpan={9} className="p-8 text-center text-slate-500 font-medium">No subject offerings configured. Click &apos;Add New&apos; or &apos;Sync SRMS Offerings&apos; to create.</td></tr>
                       ) : (
                         paginatedList.map((o: any) => {
                           const col = colleges.find(c => c.id === o.college_id || c.slug === o.college_slug || c.code === o.college_code);
@@ -1800,6 +2077,17 @@ export default function AdminMasterPage() {
                               </td>
                               <td className="p-4 font-mono text-amber-600 dark:text-amber-400 font-bold">
                                 {o.hours_allotted} hrs
+                              </td>
+                              <td className="p-4">
+                                {Number(o.attendance_sessions_count) > 0 ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold border border-emerald-500/20 whitespace-nowrap">
+                                    <span>🟢</span> {o.attendance_sessions_count} Sessions Marked
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-medium border border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                                    <span>⚪</span> 0 Sessions
+                                  </span>
+                                )}
                               </td>
                               <td className="p-4 pr-5 text-right whitespace-nowrap">
                                 <ActionButtons onEdit={() => handleEdit(o)} onDelete={() => handleDelete(o.id, o.college_slug)} />
@@ -2228,12 +2516,15 @@ export default function AdminMasterPage() {
                     );
                   })()}
 
-                  {/* Form fields for Subjects (With College & Cascading Course -> Branch/Department Selection) */}
+                  {/* Form fields for Subjects (With College, Course, Branch, Batch, Semester & Live SRMS ERP Dynamic Feed) */}
                   {activeTab === 'subjects' && (() => {
-                    const colCourses = getCoursesForCollege(formData.college_id || formData.college_slug);
-                    const selectedCourseCd = formData.course_cd || colCourses[0]?.course_cd || colCourses[0]?.code || '';
+                    const currentCol = colleges.find(c => c.code === formData.college_id || c.id === formData.college_id || c.slug === formData.college_slug) || colleges[0];
+                    const targetColCd = currentCol?.code || currentCol?.id || '1';
+                    const targetColSlug = currentCol?.slug || 'srms-cet-bareilly';
+                    const colCourses = getCoursesForCollege(currentCol?.id || currentCol?.slug);
+                    const selectedCourseCd = formData.course_cd || colCourses[0]?.course_cd || colCourses[0]?.code || '13';
                     const colDepts = departments.filter(d => {
-                      const matchCol = isMatchCollege(d) || d.college_id === formData.college_id || d.college_slug === formData.college_slug || String(d.colg_cd) === String(formData.college_id);
+                      const matchCol = !currentCol || d.college_id === currentCol.id || d.college_slug === currentCol.slug || String(d.colg_cd) === String(targetColCd);
                       if (!matchCol) return false;
                       if (!selectedCourseCd) return true;
                       return (
@@ -2242,105 +2533,261 @@ export default function AdminMasterPage() {
                         (d.course_name && colCourses.find(c => c.course_cd === selectedCourseCd || c.code === selectedCourseCd)?.name?.toLowerCase() === d.course_name?.toLowerCase())
                       );
                     });
+                    const selectedBranchCd = formData.branch_cd || formData.department_id || colDepts[0]?.branch_cd || colDepts[0]?.code || '1';
+                    const selectedBatchCd = formData.batch_cd || '2';
+                    const selectedSemCd = formData.sem_cd || '3';
+
+                    const colBatches = batches.filter(b => {
+                      const matchCol = !currentCol || b.college_id === currentCol.id || b.college_slug === currentCol.slug || String(b.colg_cd) === String(targetColCd);
+                      const matchCourse = !selectedCourseCd || b.course_cd === selectedCourseCd;
+                      return matchCol && matchCourse;
+                    });
 
                     return (
                       <>
+                        {/* Step 1: Select College */}
                         <div className="space-y-1 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
                           <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
                             <span>Step 1: Select College *</span>
                             <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">
-                              colg_cd: #{colleges.find(c => c.id === formData.college_id || c.code === formData.college_id || c.slug === formData.college_slug)?.code || '1'}
+                              colgcd: #{targetColCd}
                             </span>
                           </label>
                           <select
                             required
-                            value={
-                              colleges.find(c => c.id === formData.college_id || c.code === formData.college_id || c.slug === formData.college_slug)?.code ||
-                              formData.college_id ||
-                              colleges[0]?.code ||
-                              colleges[0]?.id
-                            }
+                            value={targetColCd}
                             onChange={(e) => {
                               const newColCd = e.target.value;
                               const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
-                              const newCourses = getCoursesForCollege(newColCd);
-                              const firstCourseCd = newCourses[0]?.course_cd || newCourses[0]?.code || '';
-                              const newDepts = departments.filter(d => (d.college_id === newColCd || d.college_slug === newCol?.slug) && (!firstCourseCd || d.course_cd === firstCourseCd));
+                              const newCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
+                              const firstCourseCd = newCourses[0]?.course_cd || newCourses[0]?.code || '13';
+                              const newDepts = departments.filter(d => (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newColCd)) && (!firstCourseCd || d.course_cd === firstCourseCd));
+                              const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
                               setFormData({
                                 ...formData,
-                                college_id: newCol?.code || newCol?.id || newColCd,
+                                college_id: newColCd,
                                 college_slug: newCol?.slug || '',
                                 course_cd: firstCourseCd,
-                                department_id: newDepts[0]?.branch_cd || newDepts[0]?.code || newDepts[0]?.id || '',
+                                branch_cd: firstBranchCd,
+                                department_id: firstBranchCd,
                               });
+                              fetchSrmsLiveSubjects(newColCd, firstCourseCd, firstBranchCd, selectedBatchCd, selectedSemCd);
                             }}
                             className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                           >
                             {colleges.map(c => (
                               <option key={c.id} value={c.code || c.id}>
-                                🏛️ {c.name} ({c.slug})
+                                🏛️ {c.name} ({c.slug}) — [#{c.code || '1'}]
                               </option>
                             ))}
                           </select>
                         </div>
 
-                        <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                          <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
-                            <span>Step 2: Map to Course *</span>
-                            <span className="text-[10px] text-slate-500 font-normal">
-                              course_cd: #{selectedCourseCd || '1'}
-                            </span>
-                          </label>
-                          <select
-                            required
-                            value={selectedCourseCd}
-                            onChange={(e) => {
-                              const newCrsCd = e.target.value;
-                              const newDepts = departments.filter(d => (d.college_id === formData.college_id || d.college_slug === formData.college_slug) && (d.course_cd === newCrsCd || d.course_code === newCrsCd));
-                              setFormData({
-                                ...formData,
-                                course_cd: newCrsCd,
-                                department_id: newDepts[0]?.branch_cd || newDepts[0]?.code || newDepts[0]?.id || '',
-                              });
-                            }}
-                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                          >
-                            {colCourses.length === 0 ? (
-                              <option value="">-- No Courses Found for this College --</option>
-                            ) : (
-                              colCourses.map((crs: any) => (
-                                <option key={crs.id} value={crs.course_cd || crs.code || crs.id}>
-                                  🎓 {crs.name} (Code: #{crs.course_cd || crs.code})
+                        {/* Step 2 & 3: Course & Department / Branch */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                            <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
+                              <span>Step 2: Map Course *</span>
+                              <span className="text-[10px] text-slate-500 font-normal">
+                                coursecd: #{selectedCourseCd}
+                              </span>
+                            </label>
+                            <select
+                              required
+                              value={selectedCourseCd}
+                              onChange={(e) => {
+                                const newCrsCd = e.target.value;
+                                const newDepts = departments.filter(d => (d.college_id === currentCol?.id || d.college_slug === currentCol?.slug || String(d.colg_cd) === String(targetColCd)) && (d.course_cd === newCrsCd || d.course_code === newCrsCd));
+                                const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
+                                setFormData({
+                                  ...formData,
+                                  course_cd: newCrsCd,
+                                  branch_cd: firstBranchCd,
+                                  department_id: firstBranchCd,
+                                });
+                                fetchSrmsLiveSubjects(targetColCd, newCrsCd, firstBranchCd, selectedBatchCd, selectedSemCd);
+                              }}
+                              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              {colCourses.length === 0 ? (
+                                <option value="13">BCA (Code: #13)</option>
+                              ) : (
+                                colCourses.map((crs: any) => (
+                                  <option key={crs.id} value={crs.course_cd || crs.code || crs.id}>
+                                    🎓 {crs.name} (Code: #{crs.course_cd || crs.code})
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                            <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
+                              <span>Step 3: Branch / Dept *</span>
+                              <span className="text-[10px] text-slate-500 font-normal">
+                                branchcd: #{selectedBranchCd}
+                              </span>
+                            </label>
+                            <select
+                              required
+                              value={selectedBranchCd}
+                              onChange={e => {
+                                const newBranchCd = e.target.value;
+                                setFormData({ ...formData, branch_cd: newBranchCd, department_id: newBranchCd });
+                                fetchSrmsLiveSubjects(targetColCd, selectedCourseCd, newBranchCd, selectedBatchCd, selectedSemCd);
+                              }}
+                              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              {colDepts.length === 0 ? (
+                                <option value="1">🏢 BCA General / Dept #1</option>
+                              ) : (
+                                colDepts.map(d => (
+                                  <option key={d.id} value={d.branch_cd || d.code || d.id}>
+                                    🏢 {d.name && d.name !== '-' ? d.name : `Dept ${d.branch_cd || d.code}`} (#{d.branch_cd || d.code})
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Step 4: Batch & Semester Selectors */}
+                        <div className="grid grid-cols-2 gap-3 bg-emerald-50/50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                          <div>
+                            <label className="text-emerald-900 dark:text-emerald-300 font-extrabold text-xs block mb-1 flex items-center justify-between">
+                              <span>📅 Batch *</span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">batchcd: #{selectedBatchCd}</span>
+                            </label>
+                            <select
+                              value={selectedBatchCd}
+                              onChange={(e) => {
+                                const newBatCd = e.target.value;
+                                setFormData({ ...formData, batch_cd: newBatCd, batch_id: newBatCd });
+                                fetchSrmsLiveSubjects(targetColCd, selectedCourseCd, selectedBranchCd, newBatCd, selectedSemCd);
+                              }}
+                              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              {colBatches.length > 0 ? (
+                                colBatches.map((b: any) => (
+                                  <option key={b.id || b.batch_cd} value={b.batch_cd || b.code || b.year}>
+                                    Batch {b.batch_name || b.name || b.year} (Code: #{b.batch_cd || b.code})
+                                  </option>
+                                ))
+                              ) : (
+                                <>
+                                  <option value="2">Batch 2025 (Code: #2)</option>
+                                  <option value="1">Batch 2024 (Code: #1)</option>
+                                  <option value="3">Batch 2026 (Code: #3)</option>
+                                  <option value="4">Batch 2027 (Code: #4)</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-emerald-900 dark:text-emerald-300 font-extrabold text-xs block mb-1 flex items-center justify-between">
+                              <span>📖 Semester *</span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">semcd: #{selectedSemCd}</span>
+                            </label>
+                            <select
+                              value={selectedSemCd}
+                              onChange={(e) => {
+                                const newSemCd = e.target.value;
+                                setFormData({ ...formData, sem_cd: newSemCd });
+                                fetchSrmsLiveSubjects(targetColCd, selectedCourseCd, selectedBranchCd, selectedBatchCd, newSemCd);
+                              }}
+                              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="1">Semester 1 (Code: #1)</option>
+                              <option value="2">Semester 2 (Code: #2)</option>
+                              <option value="3">Semester 3 (Code: #3)</option>
+                              <option value="4">Semester 4 (Code: #4)</option>
+                              <option value="5">Semester 5 (Code: #5)</option>
+                              <option value="6">Semester 6 (Code: #6)</option>
+                              <option value="7">Semester 7 (Code: #7)</option>
+                              <option value="8">Semester 8 (Code: #8)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Step 5: Live SRMS ERP API Integration & Live Subject Pull */}
+                        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950/40 dark:to-indigo-950/40 p-3.5 rounded-xl border border-purple-200 dark:border-purple-800 space-y-2.5 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-purple-600 dark:text-purple-400 text-sm">⚡</span>
+                              <span className="text-xs font-extrabold text-purple-900 dark:text-purple-200">
+                                SRMS ERP Live API Feed
+                              </span>
+                              <span className="text-[10px] bg-purple-200 dark:bg-purple-900/80 text-purple-800 dark:text-purple-300 px-2 py-0.5 rounded-full font-bold">
+                                {loadingSrmsSubjects ? 'Fetching...' : `${srmsLiveSubjects.length} subjects found`}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => fetchSrmsLiveSubjects(targetColCd, selectedCourseCd, selectedBranchCd, selectedBatchCd, selectedSemCd)}
+                                disabled={loadingSrmsSubjects}
+                                className="text-[11px] text-purple-700 dark:text-purple-300 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline disabled:opacity-50"
+                              >
+                                <span className={loadingSrmsSubjects ? 'animate-spin' : ''}>🔄</span>
+                                <span>Refresh</span>
+                              </button>
+                              {srmsLiveSubjects.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleBulkSyncSrmsSubjects()}
+                                  disabled={syncing}
+                                  className="px-2.5 py-1 text-[11px] font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow-sm flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+                                >
+                                  <span>📥</span>
+                                  <span>Sync All ({srmsLiveSubjects.length})</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-purple-900 dark:text-purple-300 mb-1">
+                              Select from SRMS Live Subjects (Auto-fills Code, Name & Classification):
+                            </label>
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                const chosenSubCd = e.target.value;
+                                if (!chosenSubCd) return;
+                                const subItem = srmsLiveSubjects.find(s => String(s.sub_cd) === String(chosenSubCd) || s.sub_addinfo === chosenSubCd);
+                                if (subItem) {
+                                  setFormData({
+                                    ...formData,
+                                    code: subItem.sub_cd || subItem.sub_addinfo || '',
+                                    name: subItem.sub_name || subItem.mst_sub_name || '',
+                                    type: subItem.SubTyp || 'THEORY',
+                                    credits: 4,
+                                    is_longitudinal: false,
+                                  });
+                                }
+                              }}
+                              disabled={loadingSrmsSubjects || srmsLiveSubjects.length === 0}
+                              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">
+                                {loadingSrmsSubjects
+                                  ? '⏳ Loading live subjects from SRMS ERP...'
+                                  : srmsLiveSubjects.length === 0
+                                  ? '-- No subjects returned for selected parameters --'
+                                  : `-- Pick a Subject to Auto-Fill Form (${srmsLiveSubjects.length} available) --`}
+                              </option>
+                              {srmsLiveSubjects.map((s, idx) => (
+                                <option key={`${s.sub_cd}-${idx}`} value={s.sub_cd}>
+                                  [#{s.sub_cd}] {s.sub_name} ({s.SubTyp || 'THEORY'}{s.sub_addinfo ? ` • ${s.sub_addinfo}` : ''})
                                 </option>
-                              ))
-                            )}
-                          </select>
+                              ))}
+                            </select>
+                          </div>
                         </div>
 
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Step 3: Select Department / Branch *
-                          </label>
-                          <select
-                            required
-                            value={formData.department_id || ''}
-                            onChange={e => setFormData({ ...formData, department_id: e.target.value })}
-                            className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                          >
-                            <option value="">-- Choose Department / Branch for Subject --</option>
-                            {colDepts.map(d => (
-                              <option key={d.id} value={d.branch_cd || d.code || d.id}>
-                                🏢 {d.name} (Code: #{d.branch_cd || d.code}){d.course_name ? ` — ${d.course_name}` : ''}
-                              </option>
-                            ))}
-                          </select>
-                          {colDepts.length === 0 && (
-                            <p className="text-[11px] text-amber-600 mt-1">
-                              ⚠️ No department/branch mapped to this course yet.
-                            </p>
-                          )}
-                        </div>
-
+                        {/* Step 6: Subject Code & Credits */}
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Subject Code *</label>
@@ -2349,7 +2796,7 @@ export default function AdminMasterPage() {
                               required
                               value={formData.code || ''}
                               onChange={e => setFormData({ ...formData, code: e.target.value })}
-                              placeholder="e.g. CS101"
+                              placeholder="e.g. 88534 or CS101"
                               className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
                             />
                           </div>
@@ -2366,18 +2813,36 @@ export default function AdminMasterPage() {
                           </div>
                         </div>
 
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Subject Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={formData.name || ''}
-                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            placeholder="e.g. Data Structures and Algorithms"
-                            className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                          />
+                        {/* Step 7: Subject Name & Type */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="col-span-2">
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Subject Name *</label>
+                            <input
+                              type="text"
+                              required
+                              value={formData.name || ''}
+                              onChange={e => setFormData({ ...formData, name: e.target.value })}
+                              placeholder="e.g. Web Technology"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Type / SubTyp</label>
+                            <select
+                              value={formData.type || 'THEORY'}
+                              onChange={e => setFormData({ ...formData, type: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="THEORY">THEORY</option>
+                              <option value="PRACTICAL">PRACTICAL</option>
+                              <option value="VALUE ADDITION">VALUE ADDITION</option>
+                              <option value="TUTORIAL">TUTORIAL</option>
+                              <option value="COMBINED">COMBINED</option>
+                            </select>
+                          </div>
                         </div>
 
+                        {/* Step 8 (LAST FIELD): Is Longitudinal Subject? */}
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Is Longitudinal Subject? *</label>
                           <select
