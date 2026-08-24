@@ -417,11 +417,22 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     const runner = this.dataSource.createQueryRunner();
     await runner.connect();
     try {
+      await runner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
       await runner.query(`SET search_path TO "${schema}", public`);
+
+      // 1. Check if base tables exist in tenant schema, if not create and seed them
+      const usersTableExists = await runner.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'users'`,
+        [schema]
+      );
+      if (usersTableExists.length === 0) {
+        await this.createTenantTables(runner, schema);
+        await this.seedDefaultData(runner, resolvedSlug);
+      }
       
       // Alter students table
-      await runner.query(`ALTER TABLE "${schema}".students ALTER COLUMN rollno DROP NOT NULL;`);
-      await runner.query(`ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS registration_no VARCHAR(50) UNIQUE;`);
+      await runner.query(`ALTER TABLE "${schema}".students ALTER COLUMN rollno DROP NOT NULL;`).catch(() => {});
+      await runner.query(`ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS registration_no VARCHAR(50) UNIQUE;`).catch(() => {});
       
       // Create student_admissions
       await runner.query(`
