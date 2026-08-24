@@ -514,7 +514,7 @@ export default function AdminDashboard() {
 
         <main className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 flex-1 max-w-[1600px] w-full mx-auto overflow-x-hidden">
           {/* Top College Banner Header */}
-          <div className="bg-gradient-to-r from-[#2D2575] to-[#4034A6] rounded-[22px] p-6 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="bg-gradient-to-r from-[#11141A] via-[#1E2638] to-[#11141A] border border-slate-800 rounded-[22px] p-6 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="space-y-1.5 z-10">
               <div className="flex items-center gap-2">
                 <span className="bg-[#F36C21] text-white text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full tracking-wider shadow-sm">
@@ -922,7 +922,7 @@ export default function AdminDashboard() {
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-black uppercase text-[#2D2575] dark:text-slate-300 tracking-wider">
+                  <span className="text-[11px] font-black uppercase text-[#11141A] dark:text-slate-300 tracking-wider">
                     ADMIN ATTENDANCE & PUNCH
                   </span>
                   <span className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm shadow-xs">

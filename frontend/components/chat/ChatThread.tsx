@@ -87,7 +87,7 @@ export default function ChatThread({
       {/* Thread Header */}
       <div className="h-16 px-6 bg-white dark:bg-slate-900 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between shrink-0 shadow-xs z-10">
         <div className="flex items-center gap-3.5 min-w-0">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#2D2575] via-[#5B4BFF] to-[#7867FF] text-white flex items-center justify-center font-black text-sm shadow-md shadow-indigo-500/20 shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#F36C21] to-amber-500 text-white flex items-center justify-center font-black text-sm shadow-md shadow-orange-500/20 shrink-0">
             {group.batch_year ? group.batch_year.slice(-2) : '25'}
           </div>
           <div className="min-w-0">
@@ -110,10 +110,10 @@ export default function ChatThread({
           <button
             type="button"
             onClick={onOpenMembers}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-850 hover:bg-[#5B4BFF]/10 text-[#2D2575] dark:text-indigo-300 border border-[#E7EAF3] dark:border-slate-700 text-xs font-bold transition-all hover:scale-105 shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 hover:bg-[#F36C21]/10 text-slate-800 dark:text-slate-200 border border-[#E7EAF3] dark:border-slate-700 text-xs font-bold transition-all hover:scale-105 shadow-xs cursor-pointer"
             title="View Group Roster"
           >
-            <Users className="w-3.5 h-3.5 text-[#5B4BFF]" />
+            <Users className="w-3.5 h-3.5 text-[#F36C21]" />
             <span>{group.member_count || 0} Members</span>
           </button>
         </div>

@@ -206,7 +206,7 @@ export default function AdminRepositoryPage() {
 
         <main className="p-6 max-w-7xl w-full mx-auto space-y-6">
           {/* Header Banner */}
-          <div className="bg-gradient-to-r from-[#2D2575] via-[#4838DF] to-[#5B4BFF] rounded-[22px] p-6 text-white shadow-xl relative overflow-hidden">
+          <div className="bg-gradient-to-r from-[#11141A] via-[#1E2638] to-[#11141A] border border-slate-800 rounded-[22px] p-6 text-white shadow-xl relative overflow-hidden">
             <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-1.5">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-white text-xs font-bold backdrop-blur-md">
@@ -419,7 +419,7 @@ export default function AdminRepositoryPage() {
                 onClick={() => setActiveFilter('ALL')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                   activeFilter === 'ALL'
-                    ? 'bg-[#2D2575] text-white shadow-sm'
+                    ? 'bg-[#F36C21] text-white shadow-sm'
                     : 'bg-slate-100 text-[#4E5969] hover:bg-slate-200'
                 }`}
               >
@@ -517,7 +517,7 @@ export default function AdminRepositoryPage() {
                 const screenshots = Array.isArray(repo.screenshots) ? repo.screenshots : (repo.screenshots ? [repo.screenshots] : []);
 
                 // Profile photo fallback
-                const studentAvatar = repo.student_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(repo.student_name || 'Student')}&background=2D2575&color=fff&bold=true`;
+                const studentAvatar = repo.student_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(repo.student_name || 'Student')}&background=F36C21&color=fff&bold=true`;
                 const facultyAvatar = repo.faculty_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(repo.faculty_name || 'Faculty Evaluator')}&background=5B4BFF&color=fff&bold=true`;
 
                 // Skill match check
@@ -552,7 +552,7 @@ export default function AdminRepositoryPage() {
                             alt={repo.student_name}
                             className="w-12 h-12 rounded-2xl object-cover border-2 border-[#5B4BFF]/20 shadow-sm"
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(repo.student_name)}&background=2D2575&color=fff&bold=true`;
+                              (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(repo.student_name)}&background=F36C21&color=fff&bold=true`;
                             }}
                           />
                           <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center">

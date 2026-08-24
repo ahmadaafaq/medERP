@@ -1767,7 +1767,7 @@ export default function CollegeMasterPage() {
     { key: 'professionals', label: '3. Academic Year', icon: '📅', count: professionals.filter((p) => isMatchCollege(p.college_id, p.college_code, p.college_slug)).length },
     { key: 'batches', label: '4. Batch', icon: '📅', count: batches.filter((b) => isMatchCollege(b.college_id, b.college_code, b.college_slug)).length },
     { key: 'branches', label: '5. Departments & Specialties', icon: '🩺', count: branches.filter((br) => isMatchCollege(br.college_id, br.college_code, br.college_slug)).length },
-    { key: 'groups', label: '6. Group Master', icon: '👥', count: groups.filter((g) => isMatchCollege(g.college_id, (g as any).college_code, (g as any).college_slug)).length },
+    { key: 'groups', label: '6. Section Groups', icon: '👥', count: groups.filter((g) => isMatchCollege(g.college_id, (g as any).college_code, (g as any).college_slug)).length },
     { key: 'sessions', label: '7. Session', icon: '⏱️', count: sessions.filter((s) => isMatchCollege(s.college_id, (s as any).college_code, (s as any).college_slug)).length },
     { key: 'residencies', label: '8. Residency Category', icon: '🏥', count: residencies.filter((r) => isMatchCollege(r.college_id, (r as any).college_code, (r as any).college_slug)).length },
   ];
@@ -1781,25 +1781,25 @@ export default function CollegeMasterPage() {
       <Sidebar role="admin" />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="CollegeMaster — College-Wise Residency & Student Types" />
+        <Header title="Campus Setup & Academic Hierarchy" />
 
         <main className="p-6 space-y-6 flex-1">
           {/* 7 Category Tabs — Clean Grid Layout (No Horizontal Scrollbar) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 border-b border-slate-200 dark:border-slate-300 dark:border-slate-800 pb-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-3">
             {categories.map((cat) => (
               <button
                 key={cat.key}
                 onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
-                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-between gap-1.5 text-center sm:text-left ${activeTab === cat.key
-                  ? 'bg-indigo-600 text-slate-900 dark:text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/50'
-                  : 'bg-white dark:bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-200 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-300 dark:border-slate-800 shadow-sm'
+                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-between gap-1.5 text-center sm:text-left cursor-pointer ${activeTab === cat.key
+                  ? 'bg-[#F36C21] text-white shadow-md shadow-orange-500/25 ring-2 ring-orange-400/40'
+                  : 'bg-white dark:bg-[#111827] text-slate-700 dark:text-slate-200 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 shadow-sm'
                   }`}
               >
                 <div className="flex items-center gap-2 truncate">
                   <span className="text-sm shrink-0">{cat.icon}</span>
-                  <span className="truncate text-[11px] font-bold">{cat.label}</span>
+                  <span className={`truncate text-[11px] font-bold ${activeTab === cat.key ? 'text-white' : 'text-slate-800 dark:text-slate-200'}`}>{cat.label}</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${activeTab === cat.key ? 'bg-white/20 text-slate-900 dark:text-white' : 'bg-slate-100 dark:bg-slate-200 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${activeTab === cat.key ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-[#F36C21] dark:text-[#F36C21] border border-[#F36C21]/20'
                   }`}>
                   {cat.count}
                 </span>
@@ -1859,7 +1859,7 @@ export default function CollegeMasterPage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-1">
               {/* College Filter Selector */}
-              <div className="flex items-center gap-2 bg-white dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs shadow-sm shrink-0">
+              <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs shadow-sm shrink-0">
                 <span className="text-slate-500 dark:text-slate-600 dark:text-slate-400 font-semibold flex items-center gap-1">
                   <span>🏛️</span> College:
                 </span>
@@ -1890,7 +1890,7 @@ export default function CollegeMasterPage() {
                   placeholder={`Search in ${categories.find((c) => c.key === activeTab)?.label}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-4 py-2 text-xs bg-white dark:bg-white dark:bg-slate-900/80 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 shadow-sm"
+                  className="w-full px-4 py-2 text-xs bg-white dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-orange-500 shadow-sm"
                 />
                 <svg className="w-4 h-4 absolute right-3 top-2.5 text-slate-600 dark:text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1914,7 +1914,7 @@ export default function CollegeMasterPage() {
                 <button
                   onClick={syncFromExternalApi}
                   disabled={syncing}
-                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 rounded-lg shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 rounded-lg shadow-md shadow-orange-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
                   title="Fetch & Sync latest 14 colleges from SRMS Portal API"
                 >
                   <span className={syncing ? 'animate-spin' : ''}>🌐</span>
@@ -1933,7 +1933,7 @@ export default function CollegeMasterPage() {
                     }
                   }}
                   disabled={syncing}
-                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-lg shadow-md shadow-purple-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 rounded-lg shadow-md shadow-orange-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
                   title="Sequentially fetch & sync courses for selected or all colleges from SRMS GetCourse API"
                 >
                   <span className={syncing ? 'animate-spin' : ''}>⚡</span>
@@ -1958,7 +1958,7 @@ export default function CollegeMasterPage() {
                     }
                   }}
                   disabled={syncing}
-                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 rounded-lg shadow-md shadow-sky-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 rounded-lg shadow-md shadow-orange-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shrink-0"
                   title="Sequentially fetch & sync batches for selected or all colleges from SRMS OnlineAttend GetBatch API to PostgreSQL"
                 >
                   <span className={syncing ? 'animate-spin' : ''}>📅</span>
@@ -2695,7 +2695,7 @@ export default function CollegeMasterPage() {
       {/* Dynamic Add / Edit Modal Form */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="glass-card w-full max-w-lg p-6 space-y-6 shadow-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-900 dark:text-white">
+          <div className="glass-card w-full max-w-lg p-6 space-y-6 shadow-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-300 dark:border-slate-800 pb-3">
               <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-900 dark:text-white">
                 {editingItem ? 'Edit' : 'Add New'} {categories.find((c) => c.key === activeTab)?.label.split('. ')[1]}
@@ -3304,15 +3304,15 @@ export default function CollegeMasterPage() {
               {/* RESIDENCY / HOSTELLER / DAY SCHOLAR FORM */}
               {activeTab === 'residencies' && (
                 <>
-                  <div className="space-y-1 bg-indigo-50/60 dark:bg-indigo-950/40 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
-                    <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
+                  <div className="space-y-1 bg-orange-50/60 dark:bg-orange-950/20 p-3 rounded-lg border border-orange-200 dark:border-orange-900/40">
+                    <label className="text-orange-900 dark:text-orange-300 font-extrabold flex items-center justify-between">
                       <span>Residency Category Type *</span>
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">Select Student Occupancy Category</span>
+                      <span className="text-[10px] text-orange-600 dark:text-orange-400 font-normal">Select Student Occupancy Category</span>
                     </label>
                     <select
                       value={formData.residencyType || 'Hosteller'}
                       onChange={(e) => setFormData({ ...formData, residencyType: e.target.value })}
-                      className="w-full px-3 py-2 bg-white dark:bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 rounded text-slate-900 dark:text-white font-bold"
                     >
                       <option value="Resident">🩺 Resident (PG Resident Doctor / Intern)</option>
                       <option value="Hosteller">🏠 Hosteller (Hostel Inmate / Boarder)</option>
@@ -3321,56 +3321,56 @@ export default function CollegeMasterPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Category / Block Title *</label>
+                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Category / Block Title *</label>
                     <input
                       type="text"
                       required
                       value={formData.categoryName || ''}
                       onChange={(e) => setFormData({ ...formData, categoryName: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
                       placeholder="e.g. PG Engineer Residency Block A / UG BTECH Boys Hostel"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Block / Wing / Route Info</label>
+                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Block / Wing / Route Info</label>
                     <input
                       type="text"
                       value={formData.blockWing || ''}
                       onChange={(e) => setFormData({ ...formData, blockWing: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white"
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
                       placeholder="e.g. Block A - Single Room / City Bus Route 1"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Total Capacity</label>
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Total Capacity</label>
                       <input
                         type="number"
                         value={formData.totalCapacity ?? 100}
                         onChange={(e) => setFormData({ ...formData, totalCapacity: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Allocated Count</label>
+                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Allocated Count</label>
                       <input
                         type="number"
                         value={formData.allocatedCount ?? 0}
                         onChange={(e) => setFormData({ ...formData, allocatedCount: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-semibold">Monthly Fee (₹) / Allowance</label>
+                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Monthly Fee (₹) / Allowance</label>
                     <input
                       type="number"
                       value={formData.monthlyFee ?? 10000}
                       onChange={(e) => setFormData({ ...formData, monthlyFee: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-900 dark:text-white font-bold"
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
                     />
                   </div>
                 </>

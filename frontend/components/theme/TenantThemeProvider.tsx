@@ -40,27 +40,27 @@ export interface TenantThemeData {
 }
 
 export const DEFAULT_PLATFORM_THEME_CONFIG: TenantThemeConfig = {
-  primary_color: '#5B4BFF',
-  secondary_color: '#7867FF',
+  primary_color: '#F36C21',
+  secondary_color: '#E05B10',
   accent_color: '#F36C21',
-  danger_color: '#F04438',
-  success_color: '#00C48C',
-  warning_color: '#FFB020',
-  page_bg: '#F6F8FC',
-  sidebar_bg: '#2D2575',
-  sidebar_text_color: '#FFFFFF',
-  header_bg: '#2D2575',
+  danger_color: '#E02424',
+  success_color: '#0E9F6E',
+  warning_color: '#D97706',
+  page_bg: '#F7F8FA',
+  sidebar_bg: '#FFFFFF',
+  sidebar_text_color: '#11141A',
+  header_bg: '#FFFFFF',
   card_bg: '#FFFFFF',
   font_family: 'Inter',
   base_font_size: '14px',
-  card_radius: '22px',
+  card_radius: '20px',
   border_radius_scale: 'rounded',
   login_bg_type: 'gradient',
   login_bg_url: '',
-  table_header_bg: '#F8FAFC',
+  table_header_bg: '#F9FAFB',
   table_zebra: true,
   theme_mode: 'LIGHT',
-  version: 1,
+  version: 3,
 };
 
 interface TenantThemeContextType {
@@ -101,7 +101,7 @@ export default function TenantThemeProvider({ children }: { children: React.Reac
     title: 'SRMS College of Engineering & Technology, Bareilly',
     logo_url: null,
     favicon_url: null,
-    theme_color: '#5B4BFF',
+    theme_color: '#F36C21',
     theme_config: DEFAULT_PLATFORM_THEME_CONFIG,
   });
 
@@ -111,21 +111,33 @@ export default function TenantThemeProvider({ children }: { children: React.Reac
     const root = document.documentElement;
     const cfg = data.theme_config || DEFAULT_PLATFORM_THEME_CONFIG;
 
-    const primary = cfg.primary_color || data.theme_color || '#5B4BFF';
-    const secondary = cfg.secondary_color || '#7867FF';
-    const accent = cfg.accent_color || '#F36C21';
-    const danger = cfg.danger_color || '#F04438';
-    const success = cfg.success_color || '#00C48C';
-    const warning = cfg.warning_color || '#FFB020';
-    const pageBg = cfg.page_bg || '#F6F8FC';
-    const sidebarBg = cfg.sidebar_bg || '#2D2575';
-    const sidebarTextColor = cfg.sidebar_text_color || '#FFFFFF';
-    const headerBg = cfg.header_bg || cfg.sidebar_bg || '#2D2575';
-    const cardBg = cfg.card_bg || '#FFFFFF';
-    const cardRadius = cfg.card_radius || '22px';
-    const tableHeaderBg = cfg.table_header_bg || '#F8FAFC';
-    const fontFamily = cfg.font_family || 'Inter';
-    const baseFontSize = cfg.base_font_size || '14px';
+    // ── Sanitize stale purple/indigo/charcoal values from DB or old cache ──
+    const sanitizeColor = (val: string | undefined, fallback: string) => {
+      if (!val) return fallback;
+      const oldPurples = ['#2D2575', '#5B4BFF', '#7867FF', '#4F46E5', '#6366F1'];
+      return oldPurples.some(p => val.toUpperCase() === p.toUpperCase()) ? fallback : val;
+    };
+
+    const primary   = sanitizeColor(cfg.primary_color || data.theme_color, '#F36C21');
+    const secondary = sanitizeColor(cfg.secondary_color, '#E05B10');
+    const accent    = sanitizeColor(cfg.accent_color, '#F36C21');
+    const danger    = cfg.danger_color  || '#E02424';
+    const success   = cfg.success_color || '#0E9F6E';
+    const warning   = cfg.warning_color || '#D97706';
+    const pageBg    = cfg.page_bg       || '#F7F8FA';
+    const sidebarBg = sanitizeColor(cfg.sidebar_bg, '#FFFFFF');
+    const sidebarTextColor = cfg.sidebar_text_color || '#11141A';
+    const headerBg  = sanitizeColor(cfg.header_bg || cfg.sidebar_bg, '#FFFFFF');
+    const cardBg         = cfg.card_bg          || '#FFFFFF';
+    const cardRadius      = cfg.card_radius      || '20px';
+    const tableHeaderBg   = cfg.table_header_bg  || '#F9FAFB';
+    const fontFamily      = cfg.font_family       || 'Inter';
+    const baseFontSize    = cfg.base_font_size    || '14px';
+
+    const isDark = (typeof document !== 'undefined' && document.documentElement.classList.contains('dark')) || (typeof window !== 'undefined' && localStorage.getItem('mederp_theme') === 'dark');
+    const effectiveSidebarBg = isDark ? '#0B1120' : sidebarBg;
+    const effectiveHeaderBg  = isDark ? '#0B1120' : headerBg;
+    const effectivePageBg    = isDark ? '#0A0D14' : pageBg;
 
     // CSS Custom Properties Injection on :root
     root.style.setProperty('--color-brand-primary', primary);
@@ -134,15 +146,15 @@ export default function TenantThemeProvider({ children }: { children: React.Reac
     root.style.setProperty('--color-danger', danger);
     root.style.setProperty('--color-success', success);
     root.style.setProperty('--color-warning', warning);
-    root.style.setProperty('--bg-main', pageBg);
-    root.style.setProperty('--color-bg-canvas', pageBg);
-    root.style.setProperty('--sidebar-bg', sidebarBg);
-    root.style.setProperty('--sidebar-text-color', sidebarTextColor);
-    root.style.setProperty('--header-bg', headerBg);
-    root.style.setProperty('--card-bg', cardBg);
+    root.style.setProperty('--bg-main', effectivePageBg);
+    root.style.setProperty('--color-bg-canvas', effectivePageBg);
+    root.style.setProperty('--sidebar-bg', effectiveSidebarBg);
+    root.style.setProperty('--sidebar-text-color', isDark ? '#F8FAFC' : sidebarTextColor);
+    root.style.setProperty('--header-bg', effectiveHeaderBg);
+    root.style.setProperty('--card-bg', isDark ? '#111827' : cardBg);
     root.style.setProperty('--card-radius', cardRadius);
     root.style.setProperty('--radius-lg', cardRadius);
-    root.style.setProperty('--table-header-bg', tableHeaderBg);
+    root.style.setProperty('--table-header-bg', isDark ? '#0F172A' : tableHeaderBg);
     root.style.setProperty('--font-family', fontFamily);
     root.style.setProperty('--base-font-size', baseFontSize);
 
@@ -196,7 +208,7 @@ export default function TenantThemeProvider({ children }: { children: React.Reac
         title: 'Platform Default',
         logo_url: null,
         favicon_url: null,
-        theme_color: '#5B4BFF',
+        theme_color: '#F36C21',
         theme_config: DEFAULT_PLATFORM_THEME_CONFIG,
       };
       setTheme(defaultPlatformData);
@@ -236,6 +248,27 @@ export default function TenantThemeProvider({ children }: { children: React.Reac
   };
 
   useEffect(() => {
+    // ── One-time stale purple cache purge ──────────────────────────────────
+    // If the browser has old purple values cached, nuke them so the new
+    // orange+anthracite defaults paint immediately on first load.
+    if (typeof window !== 'undefined') {
+      const oldPurples = ['#2D2575', '#5B4BFF', '#7867FF', '#4F46E5'];
+      try {
+        const cachedPrimary = localStorage.getItem('tenant_primary_color') || '';
+        const cachedSidebar = localStorage.getItem('tenant_sidebar_bg') || '';
+        if (
+          oldPurples.some(p => cachedPrimary.toUpperCase() === p.toUpperCase()) ||
+          oldPurples.some(p => cachedSidebar.toUpperCase() === p.toUpperCase())
+        ) {
+          // Purge ALL tenant theme cache keys
+          Object.keys(localStorage)
+            .filter(k => k.startsWith('mederp_theme_') || k === 'tenant_primary_color' || k === 'tenant_sidebar_bg' || k === 'tenant_card_radius')
+            .forEach(k => localStorage.removeItem(k));
+        }
+      } catch {}
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     reloadTheme();
 
     const handleThemeUpdate = (e: any) => {

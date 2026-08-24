@@ -316,8 +316,8 @@ export default function IncubationCellPage() {
         <Header title="Incubation Cell & Venture Accelerator — MedERP" />
         <main className="p-5 sm:p-7 space-y-6 flex-1 w-full max-w-full">
 
-          {/* Banner Header */}
-          <div className="bg-gradient-to-r from-[#2D2575] via-[#5B4FE9] to-[#7867FF] rounded-[22px] p-6 text-white shadow-soft flex flex-col sm:flex-row items-center justify-between gap-4">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-[#11141A] via-[#1E2638] to-[#11141A] border border-slate-800 rounded-[22px] p-6 text-white shadow-soft flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="space-y-1.5 text-center sm:text-left">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-black uppercase tracking-wider text-orange-300">
                 <Rocket className="w-3.5 h-3.5 text-[#F0742C]" />
@@ -605,7 +605,7 @@ export default function IncubationCellPage() {
                                       </span>
                                     </div>
                                     <div className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5 truncate">
-                                      <span className="font-bold text-[#2D2575]">{proj.courseName}</span>
+                                      <span className="font-bold text-[#F36C21]">{proj.courseName}</span>
                                       <span>•</span>
                                       <span className="text-slate-400">{proj.batchName}</span>
                                     </div>

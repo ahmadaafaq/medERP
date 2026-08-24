@@ -51,10 +51,10 @@ export default function ChatSidebar({
   return (
     <div className="w-full sm:w-80 md:w-96 bg-white dark:bg-slate-900 border-r border-[#E7EAF3] dark:border-slate-800 flex flex-col h-full shrink-0">
       {/* Sidebar Header */}
-      <div className="p-4 border-b border-[#E7EAF3] dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-850/60 flex items-center justify-between gap-2">
+      <div className="p-4 border-b border-[#E7EAF3] dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-900 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-sm font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-[#5B4BFF] shrink-0" />
+            <MessageSquare className="w-4 h-4 text-[#F36C21] shrink-0" />
             <span className="truncate">Batch Chat Groups</span>
           </h2>
           <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium truncate">
@@ -67,7 +67,7 @@ export default function ChatSidebar({
             <button
               type="button"
               onClick={onOpenAddBatch}
-              className="px-2.5 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3FE3] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
               title="Add a course/department batch discussion"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -79,7 +79,7 @@ export default function ChatSidebar({
             <button
               type="button"
               onClick={onSync}
-              className="p-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-[#5B4BFF]/10 text-[#5B4BFF] border border-[#E7EAF3] dark:border-slate-700 transition-all shadow-xs cursor-pointer"
+              className="p-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-[#F36C21]/10 text-[#F36C21] border border-[#E7EAF3] dark:border-slate-700 transition-all shadow-xs cursor-pointer"
               title="Sync & provision latest batch groups"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -97,7 +97,7 @@ export default function ChatSidebar({
             placeholder="Search department or batch..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
           />
         </div>
 
@@ -107,9 +107,9 @@ export default function ChatSidebar({
             <button
               type="button"
               onClick={() => onYearFilterChange('ALL')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
                 selectedYearFilter === 'ALL'
-                  ? 'bg-[#2D2575] text-white shadow-xs'
+                  ? 'bg-[#F36C21] text-white shadow-xs'
                   : 'bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 border border-[#E7EAF3] dark:border-slate-700'
               }`}
             >
@@ -120,7 +120,7 @@ export default function ChatSidebar({
                 key={year}
                 type="button"
                 onClick={() => onYearFilterChange(year)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
                   selectedYearFilter === year
                     ? 'bg-[#F36C21] text-white shadow-xs'
                     : 'bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 border border-[#E7EAF3] dark:border-slate-700'
@@ -144,7 +144,7 @@ export default function ChatSidebar({
           ))
         ) : groups.length === 0 ? (
           <div className="p-6 text-center text-[#4E5969] dark:text-slate-400 space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-[#5B4BFF] flex items-center justify-center mx-auto text-xl shadow-inner">
+            <div className="w-12 h-12 rounded-2xl bg-orange-50 dark:bg-orange-950/40 text-[#F36C21] flex items-center justify-center mx-auto text-xl shadow-inner">
               💬
             </div>
             <div>
@@ -159,7 +159,7 @@ export default function ChatSidebar({
               <button
                 type="button"
                 onClick={onOpenAddBatch}
-                className="w-full py-2.5 px-3 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3FE3] text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full py-2.5 px-3 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Select & Add Batch Discussion</span>
@@ -177,13 +177,13 @@ export default function ChatSidebar({
                 onClick={() => onSelectGroup(group)}
                 className={`p-3 rounded-2xl cursor-pointer transition-all border text-left relative group ${
                   isSelected
-                    ? 'bg-[#2D2575] text-white border-[#2D2575] shadow-lg shadow-purple-950/20'
-                    : 'bg-white dark:bg-slate-850/50 border-[#E7EAF3] dark:border-slate-800/80 hover:bg-[#F6F8FC] dark:hover:bg-slate-800 hover:border-[#5B4BFF]/30'
+                    ? 'bg-[#F36C21] text-white border-[#F36C21] shadow-lg shadow-orange-500/20'
+                    : 'bg-white dark:bg-slate-800/80 border-[#E7EAF3] dark:border-slate-800 hover:bg-[#F6F8FC] dark:hover:bg-slate-700/80 hover:border-[#F36C21]/40'
                 }`}
               >
-                {/* Active Orange Indicator Bar */}
+                {/* Active Indicator Bar */}
                 {isSelected && (
-                  <span className="absolute left-0 top-3 bottom-3 w-1.5 rounded-r-md bg-[#F36C21]"></span>
+                  <span className="absolute left-0 top-3 bottom-3 w-1.5 rounded-r-md bg-white"></span>
                 )}
 
                 <div className="flex items-start justify-between gap-2">
@@ -191,7 +191,7 @@ export default function ChatSidebar({
                     <span
                       className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0 ${
                         isSelected
-                          ? 'bg-white/20 text-orange-200'
+                          ? 'bg-white/20 text-white'
                           : 'bg-orange-50 dark:bg-orange-950/60 text-[#F36C21] border border-[#F36C21]/20'
                       }`}
                     >
@@ -209,7 +209,7 @@ export default function ChatSidebar({
                   {group.last_message?.created_at && (
                     <span
                       className={`text-[10px] font-semibold shrink-0 ${
-                        isSelected ? 'text-purple-200' : 'text-[#4E5969] dark:text-slate-400'
+                        isSelected ? 'text-white/80' : 'text-[#4E5969] dark:text-slate-400'
                       }`}
                     >
                       {formatMessageTime(group.last_message.created_at)}
@@ -222,7 +222,7 @@ export default function ChatSidebar({
                   <p
                     className={`text-[11px] truncate flex-1 font-medium ${
                       isSelected
-                        ? 'text-purple-100/90'
+                        ? 'text-white/90'
                         : hasUnread
                         ? 'text-[#1B1E28] dark:text-slate-100 font-bold'
                         : 'text-[#4E5969] dark:text-slate-400'
@@ -253,9 +253,9 @@ export default function ChatSidebar({
       </div>
 
       {/* Sidebar Footer Info */}
-      <div className="p-3 bg-[#F6F8FC] dark:bg-slate-850/80 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">
+      <div className="p-3 bg-[#F6F8FC] dark:bg-slate-900 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">
         <span>{groups.length} active groups</span>
-        <span className="font-bold text-[#5B4BFF] uppercase tracking-wider text-[10px]">
+        <span className="font-bold text-[#F36C21] uppercase tracking-wider text-[10px]">
           {role} VIEW
         </span>
       </div>

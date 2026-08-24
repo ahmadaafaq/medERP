@@ -766,6 +766,9 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS highest_education VARCHAR(200);`,
         `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS category VARCHAR(100);`,
         `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS payroll_category VARCHAR(100);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS employment_status VARCHAR(50) DEFAULT 'ACTIVE';`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS staff_type VARCHAR(50) DEFAULT 'Faculty';`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;`,
       ];
       for (const q of schemaAlterQueries) {
         await this.ds.query(q).catch(() => {});

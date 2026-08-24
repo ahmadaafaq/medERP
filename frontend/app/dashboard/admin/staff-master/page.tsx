@@ -944,7 +944,7 @@ export default function StaffMasterPage() {
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#1B1E28] dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar role="admin" />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="Staff Master Administration" />
+        <Header title="Faculty & Staff Directory" />
         <main className="p-6 space-y-6 flex-1 bg-[#F6F8FC] dark:bg-[#0F172A]">
 
           {/* Flash Alert */}
@@ -1398,7 +1398,7 @@ export default function StaffMasterPage() {
           <div className="relative w-full max-w-2xl overflow-hidden shadow-2xl rounded-3xl bg-white dark:bg-[#1B1E28] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 flex flex-col">
             
             {/* Modal Header Ribbon */}
-            <div className="bg-[#2D2575] text-white px-6 py-4.5 flex items-center justify-between shadow-md">
+            <div className="bg-[#11141A] dark:bg-slate-900 text-white px-6 py-4.5 flex items-center justify-between border-b border-slate-800 shadow-md">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl border border-white/20">
                   ⚡
@@ -1548,8 +1548,8 @@ export default function StaffMasterPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="relative w-full max-w-3xl overflow-hidden shadow-2xl rounded-3xl bg-white dark:bg-[#1B1E28] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 flex flex-col max-h-[92vh]">
             
-            {/* Header Ribbon adhering to Theme.md */}
-            <div className="bg-[#2D2575] text-white px-7 py-5 flex items-center justify-between shadow-md shrink-0">
+            {/* Modal Header Ribbon */}
+            <div className="bg-[#11141A] dark:bg-slate-900 text-white px-7 py-5 flex items-center justify-between border-b border-slate-800 shadow-md shrink-0">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-white/10 p-1 border border-white/20 shadow-md flex items-center justify-center overflow-hidden shrink-0">
                   {detailFaculty.photo_url ? (
@@ -1807,8 +1807,8 @@ export default function StaffMasterPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="relative w-full max-w-5xl overflow-hidden shadow-2xl rounded-3xl bg-white dark:bg-[#1B1E28] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 flex flex-col max-h-[92vh]">
 
-            {/* Header Ribbon adhering to Theme.md (#2D2575) */}
-            <div className="bg-[#2D2575] text-white px-6 py-4.5 flex items-center justify-between shadow-md shrink-0">
+            {/* Header Ribbon */}
+            <div className="bg-[#11141A] dark:bg-slate-900 text-white px-6 py-4.5 flex items-center justify-between border-b border-slate-800 shadow-md shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl border border-white/20">
                   {editingItem ? '✏️' : '➕'}

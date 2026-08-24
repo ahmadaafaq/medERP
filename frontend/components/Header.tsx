@@ -357,7 +357,7 @@ export default function Header({ title }: HeaderProps) {
         return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
       case 'FACULTY':
       case 'HOD':
-        return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
+        return 'bg-[#F36C21]/10 text-[#F36C21] border-[#F36C21]/20';
       case 'ADMIN':
       case 'COLLEGE_ADMIN':
       case 'SUPER_ADMIN':
@@ -365,7 +365,7 @@ export default function Header({ title }: HeaderProps) {
       case 'CLERK':
         return 'bg-rose-500/10 text-rose-400 border-rose-500/20';
       case 'WARDEN':
-        return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+        return 'bg-teal-500/10 text-teal-400 border-teal-500/20';
       default:
         return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
     }
@@ -441,23 +441,22 @@ export default function Header({ title }: HeaderProps) {
   return (
     <>
       <header 
-        className="h-16 md:h-20 text-white px-3.5 sm:px-6 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xl shadow-purple-950/20 rounded-b-[18px] md:rounded-b-[22px] border-b border-white/10"
-        style={{ backgroundColor: 'var(--sidebar-bg, #2D2575)' }}
+        className="h-16 md:h-20 bg-white dark:bg-[#0B1120] text-[#11141A] dark:text-white px-3.5 sm:px-6 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xs rounded-b-[18px] md:rounded-b-[22px] border-b border-[#E5E8ED] dark:border-slate-800"
       >
         <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1 mr-2">
           {/* Mobile Hamburger Drawer Trigger */}
           <button
             type="button"
             onClick={toggleMobileSidebar}
-            className="md:hidden p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white min-h-[44px] min-w-[44px] flex items-center justify-center transition-all active:scale-95 shadow-xs cursor-pointer shrink-0"
+            className="md:hidden p-2 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-white min-h-[44px] min-w-[44px] flex items-center justify-center transition-all active:scale-95 shadow-xs cursor-pointer shrink-0"
             aria-label={isMobileSidebarOpen ? 'Close navigation drawer' : 'Open navigation drawer'}
           >
             {isMobileSidebarOpen ? (
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             ) : (
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             )}
@@ -465,10 +464,10 @@ export default function Header({ title }: HeaderProps) {
 
           <span className="w-1.5 h-6 rounded-full bg-[#F36C21] shadow-[0_0_12px_rgba(243,108,33,0.6)] shrink-0 hidden xs:block"></span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-xs sm:text-sm font-black text-white tracking-wider uppercase font-sans truncate">
+            <h2 className="text-xs sm:text-sm font-black text-[#11141A] dark:text-white tracking-wider uppercase font-sans truncate">
               {title}
             </h2>
-            <p className="text-[9px] sm:text-[10px] text-purple-200/90 font-bold truncate max-w-[170px] xs:max-w-[240px] sm:max-w-[320px] md:max-w-[420px]" title={collegeDisplayName}>
+            <p className="text-[9px] sm:text-[10px] text-[#6F7887] dark:text-gray-400 font-bold truncate max-w-[170px] xs:max-w-[240px] sm:max-w-[320px] md:max-w-[420px]" title={collegeDisplayName}>
               {collegeDisplayName}
             </p>
           </div>
@@ -476,7 +475,7 @@ export default function Header({ title }: HeaderProps) {
 
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Live Badge */}
-          <span className="text-[10px] px-3 py-1 rounded-full bg-white/10 text-emerald-300 border border-white/15 font-extrabold uppercase tracking-wider hidden lg:flex items-center gap-1.5 shadow-sm">
+          <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-extrabold uppercase tracking-wider hidden lg:flex items-center gap-1.5 shadow-xs">
             <span className="w-2 h-2 rounded-full bg-[#00C48C] animate-pulse"></span>
             System Live
           </span>
@@ -485,7 +484,7 @@ export default function Header({ title }: HeaderProps) {
           <button
             type="button"
             onClick={toggleTheme}
-            className="w-9 h-9 sm:w-9 sm:h-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+            className="w-9 h-9 sm:w-9 sm:h-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/15 text-slate-700 dark:text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-xs cursor-pointer"
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
           >
             {theme === 'dark' ? (
@@ -493,7 +492,7 @@ export default function Header({ title }: HeaderProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
               </svg>
             ) : (
-              <svg className="w-4 h-4 text-indigo-200" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
               </svg>
             )}
@@ -508,14 +507,14 @@ export default function Header({ title }: HeaderProps) {
                 ? '/dashboard/student/chat'
                 : '/dashboard/faculty/chat'
             }
-            className="relative w-9 h-9 sm:w-9 sm:h-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm"
+            className="relative w-9 h-9 sm:w-9 sm:h-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/15 text-slate-700 dark:text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-xs"
             title="Batch & Department Discussions"
           >
-            <svg className="w-4 h-4 text-emerald-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
             {chatUnreadCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#00C48C] text-white text-[10px] font-black flex items-center justify-center border-2 border-[#2D2575] animate-pulse shadow-md">
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#0E9F6E] text-white text-[10px] font-black flex items-center justify-center border-2 border-white dark:border-[#1e293b] animate-pulse shadow-md">
                 {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
               </span>
             )}
@@ -526,20 +525,20 @@ export default function Header({ title }: HeaderProps) {
             <button
               type="button"
               onClick={() => setAlertsOpen(!alertsOpen)}
-              className="relative w-9 h-9 sm:w-9 sm:h-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+              className="relative w-9 h-9 sm:w-9 sm:h-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/15 text-slate-700 dark:text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-xs cursor-pointer"
               title="Campus Alerts & Notifications"
             >
-              <svg className="w-4 h-4 text-purple-200" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-slate-600 dark:text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
               </svg>
               {unreadCount.totalUnread > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F36C21] text-white text-[10px] font-black flex items-center justify-center border-2 border-[#2D2575] animate-pulse shadow-md">
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F36C21] text-white text-[10px] font-black flex items-center justify-center border-2 border-white dark:border-[#14171F] animate-pulse shadow-md">
                   {unreadCount.totalUnread > 99 ? '99+' : unreadCount.totalUnread}
                 </span>
               )}
             </button>
 
-            {/* Campus Alerts Dropdown */}
+            {/* Render Dropdown Content */}
             <CampusAlertsDropdown
               isOpen={alertsOpen}
               onClose={() => setAlertsOpen(false)}
@@ -560,34 +559,34 @@ export default function Header({ title }: HeaderProps) {
             />
           </div>
 
-          {/* User Profile Avatar Container */}
+          {/* User Profile Avatar Dropdown Trigger */}
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="group flex items-center gap-3 focus:outline-none"
-              title="Click to view profile menu"
+              className="flex items-center gap-2 sm:gap-3 p-1 sm:px-2.5 sm:py-1.5 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/15 transition-all text-slate-800 dark:text-white cursor-pointer shadow-xs min-h-[44px] min-w-[44px]"
+              aria-label="User profile and account settings"
             >
-              <div className="relative">
+              <div className="relative shrink-0">
                 {user?.photoUrl && !imgError ? (
                   <img
                     src={user.photoUrl}
                     alt={userName}
+                    className="w-8 h-8 rounded-xl object-cover border border-[#F36C21]/40"
                     onError={() => setImgError(true)}
-                    className="w-10 h-10 rounded-xl object-cover border-2 border-[#F36C21] shadow-lg shadow-orange-500/30 group-hover:scale-105 transition-all"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-xl bg-[#F36C21] text-white font-black flex items-center justify-center text-sm shadow-lg shadow-orange-500/30 group-hover:scale-105 transition-all border border-white/30" suppressHydrationWarning>
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#F36C21] to-[#E05B10] text-white font-black flex items-center justify-center text-xs shadow-sm border border-[#F36C21]/30" suppressHydrationWarning>
                     {getUserInitials(userName)}
                   </div>
                 )}
                 {/* Active Indicator Ring */}
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#00C48C] border-2 border-[#2D2575] rounded-full"></span>
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#00C48C] border-2 border-white dark:border-[#14171F] rounded-full"></span>
               </div>
 
               <div className="hidden sm:block text-left" suppressHydrationWarning>
-                <span className="block text-xs font-black text-white truncate max-w-[130px]" suppressHydrationWarning>{userName}</span>
-                <span className="block text-[10px] text-purple-200/80 font-bold uppercase" suppressHydrationWarning>{userRole}</span>
+                <span className="block text-xs font-bold text-[#11141A] dark:text-white truncate max-w-[120px]" suppressHydrationWarning>{userName}</span>
+                <span className="block text-[10px] text-[#6F7887] dark:text-gray-400 font-bold uppercase" suppressHydrationWarning>{userRole}</span>
               </div>
             </button>
 
@@ -600,10 +599,10 @@ export default function Header({ title }: HeaderProps) {
                     <img
                       src={user.photoUrl}
                       alt={userName}
-                      className="w-12 h-12 rounded-xl object-cover border border-indigo-500/40 shadow-lg shadow-indigo-500/10"
+                      className="w-12 h-12 rounded-xl object-cover border border-[#F36C21]/40 shadow-lg shadow-orange-500/10"
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 text-white font-black flex items-center justify-center text-base shadow-lg shadow-indigo-600/25 border border-indigo-400/30" suppressHydrationWarning>
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#F36C21] to-[#E05B10] text-white font-black flex items-center justify-center text-base shadow-lg shadow-orange-600/25 border border-[#F36C21]/30" suppressHydrationWarning>
                       {getUserInitials(userName)}
                     </div>
                   )}
@@ -663,7 +662,7 @@ export default function Header({ title }: HeaderProps) {
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition-all text-xs font-semibold text-left group"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center transition-all">
+                    <div className="w-7 h-7 rounded-lg bg-[#F36C21]/10 text-[#F36C21] group-hover:bg-[#F36C21] group-hover:text-white flex items-center justify-center transition-all">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
@@ -679,7 +678,7 @@ export default function Header({ title }: HeaderProps) {
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition-all text-xs font-semibold text-left group"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-purple-500/10 text-purple-400 group-hover:bg-purple-600 group-hover:text-white flex items-center justify-center transition-all">
+                    <div className="w-7 h-7 rounded-lg bg-slate-700/50 text-slate-300 group-hover:bg-slate-600 group-hover:text-white flex items-center justify-center transition-all">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -745,7 +744,7 @@ export default function Header({ title }: HeaderProps) {
             className={`mt-2 mx-6 p-3.5 rounded-2xl shadow-md border flex items-center justify-between gap-4 text-xs animate-in slide-in-from-top-2 duration-200 ${
               isUrgent
                 ? 'bg-[#FFF1F2] dark:bg-rose-950/70 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-100'
-                : 'bg-gradient-to-r from-orange-50 to-indigo-50 dark:from-slate-900 dark:to-indigo-950/50 border-orange-200 dark:border-indigo-900/60 text-[#1B1E28] dark:text-white'
+                : 'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-slate-900 dark:to-amber-950/30 border-orange-200 dark:border-amber-900/60 text-[#11141A] dark:text-white'
             }`}
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -814,7 +813,7 @@ export default function Header({ title }: HeaderProps) {
           <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl text-slate-100 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[#F36C21]/15 border border-[#F36C21]/30 text-[#F36C21] flex items-center justify-center">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
@@ -843,14 +842,14 @@ export default function Header({ title }: HeaderProps) {
                   className="w-20 h-20 rounded-2xl object-cover border border-indigo-500/40 shadow-md shadow-indigo-600/20"
                 />
               ) : (
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 text-white font-black flex items-center justify-center text-2xl shadow-md border border-indigo-400/30 shrink-0">
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#F36C21] to-[#E05B10] text-white font-black flex items-center justify-center text-2xl shadow-md border border-[#F36C21]/30 shrink-0">
                   {getUserInitials(userName)}
                 </div>
               )}
 
               <div className="space-y-1">
                 <h3 className="text-lg font-extrabold text-white">{userName}</h3>
-                <p className="text-xs text-indigo-400 font-mono">{user?.email || 'N/A'}</p>
+                <p className="text-xs text-[#F36C21] font-mono">{user?.email || 'N/A'}</p>
                 <div className="flex items-center gap-2 pt-1">
                   <span className={`text-[10px] px-2.5 py-0.5 rounded-md border font-extrabold uppercase tracking-wider ${getRoleBadgeStyle(userRole)}`}>
                     {userRole}
@@ -871,7 +870,7 @@ export default function Header({ title }: HeaderProps) {
 
               <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
                 <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Registration / Emp ID</p>
-                <p className="text-indigo-400 font-mono font-semibold">{user?.registrationNo || user?.empId || user?.id || 'N/A'}</p>
+                <p className="text-[#F36C21] font-mono font-semibold">{user?.registrationNo || user?.empId || user?.id || 'N/A'}</p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
@@ -881,7 +880,7 @@ export default function Header({ title }: HeaderProps) {
 
               <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
                 <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">College Tenant</p>
-                <p className="text-indigo-400 font-mono font-semibold uppercase">{user?.tenantSlug || 'srms'}</p>
+                <p className="text-[#F36C21] font-mono font-semibold uppercase">{user?.tenantSlug || 'srms'}</p>
               </div>
 
               {user?.departmentName && (

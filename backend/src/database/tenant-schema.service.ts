@@ -430,6 +430,63 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         await this.seedDefaultData(runner, resolvedSlug);
       }
       
+      // Alter users table to add username, name, phone, emp_id, usr_id, devicecd, loc_cd, department if missing
+      await runner.query(`
+        ALTER TABLE "${schema}".users 
+          ADD COLUMN IF NOT EXISTS username VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS name VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS phone VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS emp_id VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS usr_id VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS devicecd BIGINT,
+          ADD COLUMN IF NOT EXISTS loc_cd INT,
+          ADD COLUMN IF NOT EXISTS department VARCHAR(100);
+      `).catch(() => {});
+
+      // Alter faculty table to add usr_id, devicecd, loc_cd, employment_status and all HR sync columns if missing
+      await runner.query(`
+        ALTER TABLE "${schema}".faculty 
+          ADD COLUMN IF NOT EXISTS usr_id VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS devicecd BIGINT,
+          ADD COLUMN IF NOT EXISTS loc_cd INT,
+          ADD COLUMN IF NOT EXISTS email VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS phone VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS designation VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS qualification VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS specialization VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS experience VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS gender VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS photo_url TEXT,
+          ADD COLUMN IF NOT EXISTS date_of_joining DATE,
+          ADD COLUMN IF NOT EXISTS joining_date DATE,
+          ADD COLUMN IF NOT EXISTS date_of_birth DATE,
+          ADD COLUMN IF NOT EXISTS date_of_leaving DATE,
+          ADD COLUMN IF NOT EXISTS employment_status VARCHAR(50) DEFAULT 'ACTIVE',
+          ADD COLUMN IF NOT EXISTS staff_type VARCHAR(50) DEFAULT 'Faculty',
+          ADD COLUMN IF NOT EXISTS blood_group VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS caste VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS pan_no VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS aadhaar_no VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS uan VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS bank_ac_no VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS current_basic NUMERIC(14,2),
+          ADD COLUMN IF NOT EXISTS device_cd VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS salgrade VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS father_name VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS spouse_name VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS address TEXT,
+          ADD COLUMN IF NOT EXISTS perm_addr TEXT,
+          ADD COLUMN IF NOT EXISTS city VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS state VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS perm_city VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS perm_state VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS homephone VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS permanent_tel_no VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS highest_education VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS category VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS payroll_category VARCHAR(100);
+      `).catch(() => {});
+      
       // Alter students table
       await runner.query(`ALTER TABLE "${schema}".students ALTER COLUMN rollno DROP NOT NULL;`).catch(() => {});
       await runner.query(`ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS registration_no VARCHAR(50) UNIQUE;`).catch(() => {});
@@ -1111,8 +1168,16 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       CREATE TABLE IF NOT EXISTS "${schema}".users (
         id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
         email               VARCHAR(200) UNIQUE NOT NULL,
+        username            VARCHAR(100),
         password_hash       VARCHAR(200) NOT NULL,
+        name                VARCHAR(255),
+        phone               VARCHAR(20),
         role                VARCHAR(50)  NOT NULL,
+        emp_id              VARCHAR(50),
+        usr_id              VARCHAR(50),
+        devicecd            BIGINT,
+        loc_cd              INT,
+        department          VARCHAR(100),
         is_active           BOOLEAN      DEFAULT true,
         onboarding_completed BOOLEAN     DEFAULT false,
         onboarding_step     INT          DEFAULT 0,
@@ -1146,6 +1211,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id         UUID        UNIQUE REFERENCES "${schema}".users(id) ON DELETE CASCADE,
         emp_id          VARCHAR(50)  UNIQUE NOT NULL,
+        usr_id          VARCHAR(50),
+        devicecd        BIGINT,
+        loc_cd          INT,
         name            VARCHAR(200) NOT NULL,
         department_id   UUID        REFERENCES "${schema}".departments(id),
         subject_id      UUID,
@@ -1158,6 +1226,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         gender          VARCHAR(20),
         experience      VARCHAR(100),
         staff_type      VARCHAR(50)  DEFAULT 'Faculty',
+        employment_status VARCHAR(50) DEFAULT 'ACTIVE',
         is_active       BOOLEAN      DEFAULT true,
         created_at      TIMESTAMPTZ  DEFAULT NOW(),
         updated_at      TIMESTAMPTZ  DEFAULT NOW()

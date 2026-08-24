@@ -863,27 +863,27 @@ export default function AdminAssessmentMarksPage() {
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0B1120] text-[#1B1E28] dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar role="admin" />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="Assessment & Marks Evaluation Portal" />
+        <Header title="Gradebook & Assessment Scores" />
         <main className="p-6 space-y-6 flex-1 bg-[#F6F8FC] dark:bg-[#0B1120]">
 
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          {/* HEADER BANNER & COLLEGE SWITCHER (Theme.md Compliant & Rule 1: colg_cd) */}
+          {/* HEADER BANNER & COLLEGE SWITCHER */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          <div className="bg-gradient-to-r from-[#2D2575] via-[#3B3299] to-[#2D2575] text-white p-6 rounded-[22px] shadow-[0_8px_30px_rgba(45,37,117,0.2)] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="bg-gradient-to-r from-[#11141A] via-[#1E232F] to-[#11141A] border border-white/10 text-white p-6 rounded-[22px] shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-black uppercase tracking-wider bg-[#F36C21] text-white px-3 py-1 rounded-full shadow-sm">
                   ⚡ Assessment &amp; Marks Control
                 </span>
                 <span className="text-white/40">•</span>
-                <span className="text-xs text-indigo-200 font-semibold">
+                <span className="text-xs text-orange-200 font-semibold">
                   Course: {courses.find(c => String(c.course_cd) === selectedCourseCd)?.name || 'BCA (13)'}
                 </span>
               </div>
               <h2 className="text-2xl font-black text-white mt-2">
                 Assessment Marks Evaluation &amp; Question Scoring
               </h2>
-              <p className="text-xs text-indigo-100/80 mt-1">
+              <p className="text-xs text-slate-300 mt-1">
                 Evaluate student answer sheets question-by-question with auto-clamping, Enter-key keyboard navigation, and instant ledger sync.
               </p>
             </div>
@@ -891,7 +891,7 @@ export default function AdminAssessmentMarksPage() {
             <div className="flex items-center gap-3">
               {/* College Switcher */}
               <div className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/20">
-                <label className="block text-[10px] font-bold text-indigo-200 uppercase tracking-wider mb-0.5">
+                <label className="block text-[10px] font-bold text-orange-200 uppercase tracking-wider mb-0.5">
                   1. College (colg_cd)
                 </label>
                 <select
@@ -923,7 +923,7 @@ export default function AdminAssessmentMarksPage() {
                 type="button"
                 onClick={handleSaveStudentEvaluation}
                 disabled={saving || !selectedStudent}
-                className="px-6 py-3 bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-black rounded-xl text-xs shadow-lg shadow-[#5B4BFF]/30 transition flex items-center gap-2"
+                className="px-6 py-3 bg-[#F36C21] hover:bg-[#E05B10] text-white font-black rounded-xl text-xs shadow-lg shadow-orange-500/25 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {saving ? (
                   <>
@@ -951,8 +951,8 @@ export default function AdminAssessmentMarksPage() {
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
             <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-              <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">1</span>
+              <h3 className="text-xs font-black text-[#11141A] dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-[#F36C21] text-white flex items-center justify-center text-[10px] font-bold">1</span>
                 STEP 1: SELECT HIERARCHY (1. COLLEGE → 2. COURSE → 3. BRANCH → 4. BATCH → 5. SEMESTER → 6. DEPARTMENT → 7. SUBJECT)
               </h3>
               <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-[#F36C21]/10 text-[#F36C21] border border-[#F36C21]/20">
@@ -1102,8 +1102,8 @@ export default function AdminAssessmentMarksPage() {
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-              <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">2</span>
+              <h3 className="text-xs font-black text-[#11141A] dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-[#F36C21] text-white flex items-center justify-center text-[10px] font-bold">2</span>
                 STEP 2: ACTIVE EXAMINATION PAPERS ({filteredPapers.length} Papers)
               </h3>
 
@@ -1127,12 +1127,12 @@ export default function AdminAssessmentMarksPage() {
                       onClick={() => setSelectedPaperCode(paper.code)}
                       className={`p-4 rounded-[18px] cursor-pointer transition-all duration-200 border relative ${
                         isActive
-                          ? 'bg-[#5B4BFF]/5 dark:bg-[#5B4BFF]/15 border-[#5B4BFF] ring-2 ring-[#5B4BFF]/30 shadow-md'
+                          ? 'bg-[#F36C21]/5 dark:bg-[#F36C21]/15 border-[#F36C21] ring-2 ring-[#F36C21]/30 shadow-md'
                           : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-slate-400'
                       }`}
                     >
                       <div className="flex items-start justify-between">
-                        <span className="text-[10px] font-mono text-[#5B4BFF] font-black">[{paper.code}]</span>
+                        <span className="text-[10px] font-mono text-[#F36C21] font-black">[{paper.code}]</span>
                         {isActive ? (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00C48C] text-white shadow-sm">
                             ✓ Active Paper

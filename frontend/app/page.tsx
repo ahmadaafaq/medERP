@@ -139,13 +139,13 @@ export default function HomePage() {
       </div>
 
       {/* ─── MAIN NAVIGATION HEADER ─────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 bg-[#2D2575]/95 backdrop-blur-md border-b border-white/10 shadow-lg text-white">
+      <header className="sticky top-0 z-50 bg-[#11141A]/95 backdrop-blur-md border-b border-white/10 shadow-lg text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
           
           {/* Logo & Branding */}
           <Link href="/" className="flex items-center gap-3.5 group">
             <div className="w-12 h-12 rounded-2xl bg-white p-1.5 shadow-md flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200">
-              <span className="text-2xl font-black bg-gradient-to-tr from-[#2D2575] to-[#5B4BFF] bg-clip-text text-transparent">
+              <span className="text-2xl font-black bg-gradient-to-tr from-[#F36C21] to-[#E05B10] bg-clip-text text-transparent">
                 SRMS
               </span>
             </div>
@@ -187,7 +187,7 @@ export default function HomePage() {
       </header>
 
       {/* ─── HERO SECTION WITH CAMPUS PHOTO & SMRITI DIWAS BANNER ───────────── */}
-      <section className="relative overflow-hidden bg-[#18123B] text-white pt-10 pb-20">
+      <section className="relative overflow-hidden bg-[#11141A] text-white pt-10 pb-20">
         
         {/* Background Campus Photo with Deep Atmospheric Overlay */}
         <div className="absolute inset-0 z-0">
@@ -198,7 +198,7 @@ export default function HomePage() {
             priority
             className="object-cover object-center opacity-35 filter blur-[0.5px] scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#1C1646]/90 via-[#18123B]/80 to-[#18123B]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#11141A]/90 via-[#11141A]/80 to-[#11141A]" />
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
@@ -226,7 +226,7 @@ export default function HomePage() {
             <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
               <Link
                 href="/login"
-                className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] hover:from-[#4E3FE3] hover:to-[#6857F0] text-white font-black text-sm shadow-xl hover:shadow-indigo-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2 cursor-pointer"
+                className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#F36C21] to-[#E05B10] hover:from-[#E05B10] hover:to-[#C04A08] text-white font-black text-sm shadow-xl hover:shadow-orange-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2 cursor-pointer"
               >
                 <span>🔑 Login to ERP Portal</span>
                 <span className="font-mono text-base">➔</span>
@@ -405,8 +405,8 @@ export default function HomePage() {
                 onClick={() => setActiveTab('all')}
                 className={`px-4 py-2 rounded-xl transition-all ${
                   activeTab === 'all'
-                    ? 'bg-[#2D2575] text-white shadow-sm'
-                    : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] dark:hover:text-white'
+                    ? 'bg-[#F36C21] text-white shadow-sm'
+                    : 'text-[#4E5969] dark:text-slate-400 hover:text-[#11141A] dark:hover:text-white'
                 }`}
               >
                 All Institutions
@@ -415,8 +415,8 @@ export default function HomePage() {
                 onClick={() => setActiveTab('eng')}
                 className={`px-4 py-2 rounded-xl transition-all ${
                   activeTab === 'eng'
-                    ? 'bg-[#2D2575] text-white shadow-sm'
-                    : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] dark:hover:text-white'
+                    ? 'bg-[#F36C21] text-white shadow-sm'
+                    : 'text-[#4E5969] dark:text-slate-400 hover:text-[#11141A] dark:hover:text-white'
                 }`}
               >
                 Engineering
@@ -425,8 +425,8 @@ export default function HomePage() {
                 onClick={() => setActiveTab('med')}
                 className={`px-4 py-2 rounded-xl transition-all ${
                   activeTab === 'med'
-                    ? 'bg-[#2D2575] text-white shadow-sm'
-                    : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] dark:hover:text-white'
+                    ? 'bg-[#F36C21] text-white shadow-sm'
+                    : 'text-[#4E5969] dark:text-slate-400 hover:text-[#11141A] dark:hover:text-white'
                 }`}
               >
                 Medical & Nursing
@@ -435,8 +435,8 @@ export default function HomePage() {
                 onClick={() => setActiveTab('mgmt')}
                 className={`px-4 py-2 rounded-xl transition-all ${
                   activeTab === 'mgmt'
-                    ? 'bg-[#2D2575] text-white shadow-sm'
-                    : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] dark:hover:text-white'
+                    ? 'bg-[#F36C21] text-white shadow-sm'
+                    : 'text-[#4E5969] dark:text-slate-400 hover:text-[#11141A] dark:hover:text-white'
                 }`}
               >
                 Management & Law
@@ -456,7 +456,7 @@ export default function HomePage() {
                     <span className="p-3 rounded-2xl bg-white dark:bg-slate-800 text-2xl shadow-sm">
                       {inst.icon}
                     </span>
-                    <span className="px-2.5 py-1 rounded-full bg-[#5B4BFF]/10 text-[#5B4BFF] font-mono text-[10px] font-black">
+                    <span className="px-2.5 py-1 rounded-full bg-[#F36C21]/10 text-[#F36C21] font-mono text-[10px] font-black">
                       Estd. {inst.established}
                     </span>
                   </div>
@@ -465,7 +465,7 @@ export default function HomePage() {
                     <span className="text-[11px] font-bold text-[#F36C21] uppercase tracking-wider">
                       {inst.type}
                     </span>
-                    <h3 className="text-lg font-black text-[#1B1E28] dark:text-white tracking-tight group-hover:text-[#5B4BFF] transition-colors">
+                    <h3 className="text-lg font-black text-[#1B1E28] dark:text-white tracking-tight group-hover:text-[#F36C21] transition-colors">
                       {inst.name}
                     </h3>
                     <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-1">
@@ -489,7 +489,7 @@ export default function HomePage() {
                 <div className="pt-4 border-t border-[#E7EAF3] dark:border-slate-800">
                   <Link
                     href={`/login?college=${inst.slug}`}
-                    className="w-full py-2.5 rounded-xl bg-[#2D2575] hover:bg-[#5B4BFF] text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-2.5 rounded-xl bg-[#11141A] hover:bg-[#F36C21] text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>Enter {inst.shortName} ERP</span>
                     <span className="font-mono">➔</span>
@@ -504,7 +504,8 @@ export default function HomePage() {
 
       {/* ─── FOUNDER LEGACY TRIBUTE SECTION ─────────────────────────────────── */}
       <section id="legacy" className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="p-8 sm:p-12 rounded-[28px] bg-gradient-to-r from-[#2D2575] via-[#3A2E99] to-[#2D2575] text-white shadow-xl relative overflow-hidden">
+        {/* ─── RESEARCH & INNOVATION BANNER ─────────────────────────────────── */}
+        <div className="p-8 sm:p-12 rounded-[28px] bg-gradient-to-r from-[#11141A] via-[#1E232F] to-[#11141A] text-white shadow-xl relative overflow-hidden border border-white/10">
           
           <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             

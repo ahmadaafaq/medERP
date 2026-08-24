@@ -1527,7 +1527,7 @@ export default function AdminMasterPage() {
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#1B1E28] dark:text-slate-100 font-sans transition-colors">
       <Sidebar role="admin" />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="AdminMaster — Academic Structure & Subject Mapping" />
+        <Header title="Curriculum & Subject Configuration" />
         <main className="p-6 space-y-6 flex-1">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-3">
             {categories.map((cat) => (
@@ -1535,7 +1535,7 @@ export default function AdminMasterPage() {
                 key={cat.key}
                 onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
                 className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 text-left border ${activeTab === cat.key
-                  ? 'bg-[#2D2575] text-white shadow-md border-[#2D2575] relative after:absolute after:left-3 after:bottom-1 after:w-5 after:h-[2px] after:bg-[#F36C21]'
+                  ? 'bg-[#F36C21] text-white shadow-md border-[#F36C21] relative after:absolute after:left-3 after:bottom-1 after:w-5 after:h-[2px] after:bg-white'
                   : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 border-slate-200 dark:border-slate-800'
                   }`}
               >
@@ -1724,7 +1724,7 @@ export default function AdminMasterPage() {
               {/* Actions */}
               <div className="flex items-center gap-2 ml-auto">
                 {activeTab === 'departments' && (
-                  <button onClick={syncDepartmentsFromPortal} disabled={syncing} className="px-3 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95">
+                  <button onClick={syncDepartmentsFromPortal} disabled={syncing} className="px-3 py-2 text-xs font-bold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95">
                     <span className={syncing ? 'animate-spin' : ''}>🌐</span>
                     <span>{syncing ? 'Syncing...' : 'Sync SRMS'}</span>
                   </button>
@@ -1733,14 +1733,14 @@ export default function AdminMasterPage() {
                   <button
                     onClick={handleSyncSubjectsAndOfferings}
                     disabled={syncing || loadingSrmsSubjects}
-                    className="px-3 py-2 text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95"
+                    className="px-3 py-2 text-xs font-bold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95"
                     title="Pull all subjects & offerings from SRMS ERP API and link attendance without losing data"
                   >
                     <span className={syncing || loadingSrmsSubjects ? 'animate-spin' : ''}>⚡</span>
                     <span>{syncing ? 'Syncing...' : loadingSrmsSubjects ? 'Fetching...' : activeTab === 'subject-offerings' ? 'Sync SRMS Offerings' : 'Sync SRMS Subjects'}</span>
                   </button>
                 )}
-                <button onClick={handleAddNew} className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-indigo-600 text-white font-bold text-xs shadow-md shadow-indigo-500/20 transition-all flex items-center gap-1.5 active:scale-95">
+                <button onClick={handleAddNew} className="px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5 active:scale-95">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" /></svg>
                   <span>Add New</span>
                 </button>

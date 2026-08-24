@@ -4,115 +4,163 @@
 
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800;900&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&display=swap');
 
+/* ══════════════════════════════════════════════════════════════════
+   UNICAMPUS ERP — DESIGN SYSTEM TOKENS
+   Brand: Orange (#F36C21) | Canvas: Alabaster (#F7F8FA)
+   Sidebar: Anthracite Carbon (#14171F)
+   ══════════════════════════════════════════════════════════════════ */
 :root {
   --font-inter: 'Inter', -apple-system, sans-serif;
 
-  /* Theme.md Brand Design System (Default Light Mode Active) */
-  --bg-main: #F6F8FC;
-  --card-bg: #FFFFFF;
-  --card-border: #E7EAF3;
+  /* Canvas & Surface */
+  --bg-main:           #F7F8FA;
+  --card-bg:           #FFFFFF;
+  --card-border:       #E5E8ED;
 
-  --color-bg-canvas: #F6F8FC;
-  --color-bg-surface: #FFFFFF;
-  --color-bg-sunken: #F1F4F9;
+  --color-bg-canvas:   #F7F8FA;
+  --color-bg-surface:  #FFFFFF;
+  --color-bg-sunken:   #F1F4F9;
 
-  --color-brand-purple: #2D2575;
-  --color-brand-primary: #5B4BFF;
-  --color-brand-secondary: #7867FF;
-  --color-brand-accent: #F36C21;
+  /* Brand Accent — UniCampus Orange */
+  --color-brand-accent:       #F36C21;
+  --color-brand-accent-hover: #E05B10;
+  --color-brand-accent-soft:  #FFF2EA;
+  --color-brand-accent-glow:  rgba(243, 108, 33, 0.25);
 
-  --color-ink-900: #1B1E28;
-  --color-ink-700: #4E5969;
-  --color-ink-500: #7B8794;
-  --color-ink-300: #CBD5E1;
-  --color-border: #E7EAF3;
-  --color-border-strong: #D1D5DB;
+  /* Sidebar */
+  --sidebar-bg-default: #14171F;
 
-  --color-primary-900: #2D2575;
-  --color-primary-700: #5B4BFF;
-  --color-primary-500: #7867FF;
-  --color-primary-100: #EEF0FF;
+  /* Ink / Typography */
+  --color-ink-900: #11141A;
+  --color-ink-700: #394150;
+  --color-ink-500: #6F7887;
+  --color-ink-300: #CBD2DE;
+  --color-border:       #E5E8ED;
+  --color-border-strong:#CBD2DE;
 
-  --color-success: #00C48C;
-  --color-success-tint: #E6F9F3;
-  --color-warning: #FFB020;
-  --color-warning-tint: #FFF8E6;
-  --color-danger: #F04438;
-  --color-danger-tint: #FEECEB;
-  --color-info: #5B4BFF;
-  --color-info-tint: #EEF0FF;
+  /* Status */
+  --color-success:      #0E9F6E;
+  --color-success-tint: #E8F8F0;
+  --color-warning:      #D97706;
+  --color-warning-tint: #FEF3C7;
+  --color-danger:       #E02424;
+  --color-danger-tint:  #FDE8E8;
+  --color-info:         #F36C21;
+  --color-info-tint:    #FFF2EA;
 
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 22px;
+  /* Radii */
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   20px;
   --radius-full: 9999px;
 
-  --shadow-card: 0 4px 20px -2px rgba(45, 37, 117, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
-  --shadow-modal: 0 12px 32px rgba(45, 37, 117, 0.16), 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-focus: 0 0 0 3px rgba(91, 75, 255, 0.25);
+  /* Shadows — neutral carbon (NO purple tint) */
+  --shadow-card:  0 2px 12px -2px rgba(17, 20, 26, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  --shadow-hover: 0 8px 24px -4px rgba(17, 20, 26, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+  --shadow-modal: 0 12px 32px rgba(17, 20, 26, 0.14), 0 4px 12px rgba(0, 0, 0, 0.07);
+  --shadow-focus: 0 0 0 3px rgba(243, 108, 33, 0.22);
+
+  /* CSS variable aliases for ShadCN/Radix components */
+  --background:        #F7F8FA;
+  --foreground:        #11141A;
+  --card:              #FFFFFF;
+  --card-foreground:   #11141A;
+  --primary:           #F36C21;
+  --primary-foreground:#FFFFFF;
+  --border:            #E5E8ED;
+  --input:             #E5E8ED;
+  --radius:            20px;
 }
 
-.dark {
-  /* Premium Clinical Dark Theme Variables */
-  --bg-main: #0B1E24;
-  --text-main: #E2ECEE;
-  --card-bg: #0E2A32;
-  --card-border: #234850;
+/* ══════════════════════════════════════════════════════════════════
+   DARK MODE TOKENS & OVERRIDES
+   ══════════════════════════════════════════════════════════════════ */
+.dark,
+html.dark {
+  --bg-main:   #0A0D14;
+  --text-main: #F8FAFC;
+  --card-bg:   #111827;
+  --card-border:#1F2937;
 
-  --color-bg-canvas: #0B1E24;
-  --color-bg-surface: #0E2A32;
-  --color-bg-sunken: #09191E;
-  --color-ink-900: #E2ECEE;
-  --color-ink-700: #B2C4C7;
-  --color-ink-500: #7C9498;
-  --color-ink-300: #4B6266;
-  --color-border: #234850;
-  --color-border-strong: #335F69;
+  --color-bg-canvas:  #0A0D14;
+  --color-bg-surface: #111827;
+  --color-bg-sunken:  #070A0F;
+  --color-ink-900:    #F8FAFC;
+  --color-ink-700:    #CBD5E1;
+  --color-ink-500:    #94A3B8;
+  --color-ink-300:    #64748B;
+  --color-border:     #1E293B;
+  --color-border-strong:#334155;
 
-  --color-primary-900: #082126;
-  --color-primary-700: #175F6B;
-  --color-primary-500: #228292;
-  --color-primary-100: #123C44;
+  --sidebar-bg:       #0B1120;
+  --header-bg:        #0B1120;
 
-  --color-accent-brass: #D4A35B;
-  --color-accent-brass-light: #4A3E26;
+  --shadow-card:  0 4px 20px -2px rgba(0, 0, 0, 0.4), 0 2px 6px -1px rgba(0, 0, 0, 0.2);
+  --shadow-focus: 0 0 0 3px rgba(243, 108, 33, 0.35);
 
-  --color-success: #3ab779;
+  --color-success:      #0E9F6E;
   --color-success-tint: #143d2c;
-  --color-warning: #e49f3e;
+  --color-warning:      #D97706;
   --color-warning-tint: #40321a;
-  --color-danger: #e65c58;
-  --color-danger-tint: #461f1e;
-  --color-info: #4da5e6;
-  --color-info-tint: #1b3447;
+  --color-danger:       #E02424;
+  --color-danger-tint:  #461f1e;
+  --color-info:         #F36C21;
+  --color-info-tint:    #3d1600;
+
+  /* Aliases for Radix/Tailwind components */
+  --background:        #0A0D14;
+  --foreground:        #F8FAFC;
+  --card:              #111827;
+  --card-foreground:   #F8FAFC;
+  --border:            #1E293B;
+  --input:             #1E293B;
 }
 
+html.dark body {
+  background-color: #0A0D14 !important;
+  color: #CBD5E1 !important;
+}
+
+html.dark aside,
+.dark aside {
+  background-color: #0B1120 !important;
+  color: #F8FAFC !important;
+  border-color: #1E293B !important;
+}
+
+html.dark header,
+.dark header {
+  background-color: #0B1120 !important;
+  color: #F8FAFC !important;
+  border-color: #1E293B !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BASE BODY
+   ══════════════════════════════════════════════════════════════════ */
 body {
   font-family: var(--font-inter);
   background-color: var(--color-bg-canvas);
-  color: var(--color-ink-900);
+  color: var(--color-ink-700);
+  -webkit-font-smoothing: antialiased;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Scrollbar customization for clean UI */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: var(--color-bg-canvas);
-}
+/* ══════════════════════════════════════════════════════════════════
+   SLIM SCROLLBAR
+   ══════════════════════════════════════════════════════════════════ */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-ink-300);
-  border-radius: var(--radius-full);
+  background: #CBD2DE;
+  border-radius: 9999px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-ink-500);
-}
+::-webkit-scrollbar-thumb:hover { background: #9FAABA; }
 
-/* Premium Clinical UI Component Styles */
+/* ══════════════════════════════════════════════════════════════════
+   CARD & SURFACE COMPONENTS
+   ══════════════════════════════════════════════════════════════════ */
 .premium-title-display {
-  font-family: var(--font-display);
   font-weight: 700;
   color: var(--color-ink-900);
 }
@@ -126,37 +174,39 @@ body {
 }
 
 .glass-card-hover:hover {
-  border-color: var(--color-primary-500);
-  box-shadow: 0 4px 20px rgba(18, 74, 84, 0.08);
+  border-color: var(--color-brand-accent);
+  box-shadow: var(--shadow-hover);
 }
 
-/* Forms and Labels */
+/* ══════════════════════════════════════════════════════════════════
+   FORMS & LABELS
+   ══════════════════════════════════════════════════════════════════ */
 .premium-label {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-ink-700);
+  color: var(--color-ink-500);
   margin-bottom: 6px;
   display: block;
 }
 
 .premium-input {
-  height: 40px;
-  background-color: var(--color-bg-sunken);
+  height: 44px;
+  background-color: #FFFFFF;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 8px 12px;
+  padding: 8px 14px;
   font-size: 14px;
   color: var(--color-ink-900);
   width: 100%;
   transition: all 0.15s ease-in-out;
+  outline: none;
 }
 
 .premium-input:focus {
-  outline: none;
-  background-color: var(--color-bg-surface);
-  border-color: var(--color-primary-700);
+  background-color: #FFFFFF;
+  border-color: var(--color-brand-accent);
   box-shadow: var(--shadow-focus);
 }
 
@@ -164,96 +214,146 @@ body {
   color: var(--color-ink-500);
 }
 
-/* Datatable & Premium Table Styling — White Tbody Theme */
+/* ══════════════════════════════════════════════════════════════════
+   DATA TABLES — Adaptive Light & Dark Surfaces
+   ══════════════════════════════════════════════════════════════════ */
 .premium-table-wrapper, .datatable-wrapper {
   overflow-x: auto;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  background-color: #ffffff;
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  background-color: var(--card-bg, #FFFFFF);
 }
 
 .premium-table, .datatable {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  background-color: #ffffff;
+  background-color: var(--card-bg, #FFFFFF);
 }
 
 .premium-table thead, .datatable thead {
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-  border-bottom: 2px solid #cbd5e1;
+  background: var(--table-header-bg, #F9FAFB);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .premium-table th, .datatable th {
-  background-color: #f1f5f9;
-  color: #334155;
+  background-color: var(--table-header-bg, #F9FAFB);
+  color: var(--color-ink-500, #6F7887);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 14px 16px;
-  border-bottom: 2px solid #cbd5e1;
+  border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
 .premium-table tbody, .datatable tbody {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
+  background-color: var(--card-bg, #FFFFFF);
+  color: var(--color-ink-700, #394150);
 }
 
 .premium-table td, .datatable td {
-  padding: 12px 16px;
+  padding: 13px 16px;
   font-size: 13px;
-  color: #0f172a;
-  border-bottom: 1px solid #f1f5f9;
+  color: var(--color-ink-700, #394150);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .premium-table tbody tr, .datatable tbody tr {
-  background-color: #ffffff !important;
+  background-color: var(--card-bg, #FFFFFF);
   transition: background-color 0.15s ease-in-out;
 }
 
 .premium-table tbody tr:nth-child(even), .datatable tbody tr:nth-child(even) {
-  background-color: #f8fafc !important;
+  background-color: var(--color-bg-sunken, #FAFBFC);
 }
 
 .premium-table tbody tr:hover, .datatable tbody tr:hover {
-  background-color: #f1f5f9 !important;
+  background-color: rgba(243, 108, 33, 0.05);
 }
 
-/* Buttons */
+/* ── Explicit Dark Mode Overrides for Data Tables ── */
+html.dark .premium-table-wrapper,
+html.dark .datatable-wrapper {
+  background-color: #111827 !important;
+  border-color: #1E293B !important;
+}
+
+html.dark .premium-table,
+html.dark .datatable {
+  background-color: #111827 !important;
+}
+
+html.dark .premium-table thead,
+html.dark .datatable thead,
+html.dark .premium-table th,
+html.dark .datatable th {
+  background-color: #0F172A !important;
+  color: #94A3B8 !important;
+  border-color: #1E293B !important;
+}
+
+html.dark .premium-table tbody,
+html.dark .datatable tbody {
+  background-color: #111827 !important;
+  color: #CBD5E1 !important;
+}
+
+html.dark .premium-table td,
+html.dark .datatable td {
+  color: #CBD5E1 !important;
+  border-color: #1E293B !important;
+}
+
+html.dark .premium-table tbody tr,
+html.dark .datatable tbody tr {
+  background-color: #111827 !important;
+}
+
+html.dark .premium-table tbody tr:nth-child(even),
+html.dark .datatable tbody tr:nth-child(even) {
+  background-color: #0B1120 !important;
+}
+
+html.dark .premium-table tbody tr:hover,
+html.dark .datatable tbody tr:hover {
+  background-color: #1E293B !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BUTTONS — UniCampus Orange Primary & Adaptive Secondary
+   ══════════════════════════════════════════════════════════════════ */
 .premium-btn-primary {
-  height: 40px;
-  padding: 0 16px;
-  background-color: var(--color-primary-700);
+  height: 44px;
+  padding: 0 20px;
+  background-color: var(--color-brand-accent);
   color: #FFFFFF;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 13px;
-  border-radius: var(--radius-sm);
-  transition: background-color 0.15s ease;
+  border-radius: var(--radius-full);
+  box-shadow: 0 4px 14px 0 rgba(243, 108, 33, 0.30);
+  transition: background-color 0.15s ease, transform 0.1s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
 }
 .premium-btn-primary:hover {
-  background-color: var(--color-primary-900);
-}
-.premium-btn-primary:focus {
-  outline: none;
-  box-shadow: var(--shadow-focus);
+  background-color: var(--color-brand-accent-hover);
+  transform: translateY(-1px);
 }
 
 .premium-btn-secondary {
-  height: 40px;
-  padding: 0 16px;
-  background-color: transparent;
-  border: 1px solid var(--color-primary-700);
-  color: var(--color-primary-700);
-  font-weight: 600;
+  height: 44px;
+  padding: 0 18px;
+  background-color: var(--card-bg, #FFFFFF);
+  color: var(--color-ink-700, #394150);
+  font-weight: 700;
   font-size: 13px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border, #E5E8ED);
   transition: all 0.15s ease;
   display: inline-flex;
   align-items: center;
@@ -261,35 +361,55 @@ body {
   gap: 8px;
 }
 .premium-btn-secondary:hover {
-  background-color: var(--color-primary-100);
+  border-color: var(--color-brand-accent);
+  color: var(--color-brand-accent);
+  background-color: var(--color-brand-accent-soft);
+}
+
+html.dark .premium-btn-secondary {
+  background-color: #1E293B !important;
+  color: #F8FAFC !important;
+  border-color: #334155 !important;
+}
+html.dark .premium-btn-secondary:hover {
+  background-color: #334155 !important;
+  color: #F36C21 !important;
+  border-color: #F36C21 !important;
+}
+.premium-btn-primary:active {
+  transform: scale(0.98);
+}
+.premium-btn-primary:focus {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .premium-btn-accent {
-  height: 40px;
-  padding: 0 16px;
-  background-color: var(--color-accent-brass);
+  height: 44px;
+  padding: 0 20px;
+  background-color: var(--color-brand-accent);
   color: #FFFFFF;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 13px;
-  border-radius: var(--radius-sm);
-  transition: opacity 0.15s ease;
+  border-radius: var(--radius-full);
+  transition: background-color 0.15s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
 }
 .premium-btn-accent:hover {
-  opacity: 0.9;
+  background-color: var(--color-brand-accent-hover);
 }
 
 .premium-btn-danger {
-  height: 40px;
-  padding: 0 16px;
+  height: 44px;
+  padding: 0 20px;
   background-color: var(--color-danger);
   color: #FFFFFF;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 13px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   transition: opacity 0.15s ease;
   display: inline-flex;
   align-items: center;
@@ -300,7 +420,9 @@ body {
   opacity: 0.9;
 }
 
-/* Badges */
+/* ══════════════════════════════════════════════════════════════════
+   BADGES
+   ══════════════════════════════════════════════════════════════════ */
 .premium-badge {
   display: inline-flex;
   align-items: center;
@@ -312,128 +434,165 @@ body {
   text-transform: uppercase;
 }
 
-/* Premium Non-Fading High-Contrast Buttons */
+/* ══════════════════════════════════════════════════════════════════
+   GLOBAL BUTTON RESETS
+   ══════════════════════════════════════════════════════════════════ */
 button {
   opacity: 1 !important;
   font-weight: 700;
 }
 
 button:disabled {
-  opacity: 0.65 !important;
+  opacity: 0.55 !important;
   cursor: not-allowed;
 }
 
-/* Global Theme Colors for Smooth Day & Night Modes */
+/* ══════════════════════════════════════════════════════════════════
+   LIGHT / DARK MODE BODY OVERRIDES
+   ══════════════════════════════════════════════════════════════════ */
 html.dark {
   color-scheme: dark;
 }
 
 html.dark body {
-  background-color: #0F172A;
-  color: #F8FAFC;
+  background-color: #0B1E24;
+  color: #E2ECEE;
 }
 
 html:not(.dark) body {
-  background-color: #F8FAFC;
-  color: #0F172A;
+  background-color: #F7F8FA;
+  color: #394150;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   GLOBAL THEME ADAPTATION FOR FORM INPUTS, DROPDOWNS, CALENDARS & BUTTONS
-   ───────────────────────────────────────────────────────────────────────────── */
-
-/* Day Mode Input & Select Defaults */
+/* ══════════════════════════════════════════════════════════════════
+   FORM INPUTS — DAY & NIGHT MODE
+   ══════════════════════════════════════════════════════════════════ */
 input, select, textarea, .theme-input, .theme-select {
   background-color: #FFFFFF !important;
-  color: #0F172A !important;
-  border-color: #CBD5E1 !important;
+  color: #11141A !important;
+  border-color: #E5E8ED !important;
 }
 
-/* Day Mode Calendar Picker */
 input[type="date"], input[type="time"], input[type="datetime-local"] {
   color-scheme: light;
 }
 
-/* Day Mode Dropdown Options */
 select option {
   background-color: #FFFFFF !important;
-  color: #0F172A !important;
+  color: #11141A !important;
 }
 
-/* Night Mode Input & Select Defaults */
-html.dark input, 
-html.dark select, 
+html.dark input,
+html.dark select,
 html.dark textarea,
-html.dark .theme-input, 
+html.dark .theme-input,
 html.dark .theme-select {
   background-color: #090D16 !important;
-  color: #F8FAFC !important;
-  border-color: #334155 !important;
+  color: #E2ECEE !important;
+  border-color: #234850 !important;
 }
 
-/* Night Mode Calendar Picker */
-html.dark input[type="date"], 
-html.dark input[type="time"], 
+html.dark input[type="date"],
+html.dark input[type="time"],
 html.dark input[type="datetime-local"] {
   color-scheme: dark;
 }
 
-/* Night Mode Dropdown Options */
 html.dark select option {
-  background-color: #0F172A !important;
+  background-color: #0B1E24 !important;
+  color: #E2ECEE !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #6F7887 !important;
+}
+html.dark input::placeholder, html.dark textarea::placeholder {
+  color: #7C9498 !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   UNICAMPUS THEME OVERRIDES FOR LEGACY HARDCODED UTILITY CLASSES
+   Translates all legacy purple/indigo banners, buttons, borders & text
+   to modern high-contrast UniCampus Orange & Alabaster/Anthracite cards.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Hero Banner Gradients -> High Contrast Modern Charcoal Banner */
+[class*="from-[#2D2575]"],
+[class*="from-[#1E1B4B]"],
+[class*="from-[#3B3299]"],
+[class*="from-[#3A2E99]"],
+.bg-\[\#2D2575\],
+.bg-\[\#1E1B4B\],
+.bg-\[\#3B3299\],
+.bg-\[\#3A2E99\] {
+  background: #11141A !important;
+  background-image: linear-gradient(135deg, #11141A 0%, #1E232F 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Primary Action Buttons & Pills (Legacy Indigo/Purple -> UniCampus Orange) */
+.bg-\[\#5B4BFF\],
+.bg-\[\#7867FF\],
+.bg-\[\#4938DF\],
+.bg-\[\#4E3FE3\],
+.bg-\[\#6366F1\],
+[class*="from-[#5B4BFF]"] {
+  background-color: #F36C21 !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  color: #FFFFFF !important;
+}
+.bg-\[\#5B4BFF\]:hover,
+.bg-\[\#7867FF\]:hover,
+.bg-\[\#4938DF\]:hover,
+.bg-\[\#4E3FE3\]:hover,
+.bg-\[\#6366F1\]:hover,
+[class*="from-[#5B4BFF]"]:hover {
+  background-color: #E05B10 !important;
+  color: #FFFFFF !important;
+}
+
+/* Soft Indicator Pills */
+.bg-\[\#5B4BFF\]\/10,
+.bg-\[\#5B4BFF\]\/15,
+.bg-\[\#5B4BFF\]\/20 {
+  background-color: rgba(243, 108, 33, 0.10) !important;
+  color: #F36C21 !important;
+}
+
+/* Text Colors */
+.text-\[\#5B4BFF\],
+.text-\[\#7867FF\],
+.text-\[\#4F46E5\],
+.text-\[\#6366F1\] {
+  color: #F36C21 !important;
+}
+
+.text-\[\#2D2575\],
+.text-\[\#1E1B4B\] {
+  color: #11141A !important;
+}
+html.dark .text-\[\#2D2575\],
+html.dark .text-\[\#1E1B4B\] {
   color: #F8FAFC !important;
 }
 
-/* Ensure placeholder text contrast */
-input::placeholder, textarea::placeholder {
-  color: #94A3B8 !important;
-}
-html.dark input::placeholder, html.dark textarea::placeholder {
-  color: #64748B !important;
+/* Borders, Rings, Shadows */
+.border-\[\#5B4BFF\],
+.border-\[\#7867FF\] {
+  border-color: #F36C21 !important;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   DAY MODE OVERRIDE FOR HARDCODED DARK BACKGROUNDS (bg-[#1E293B], bg-[#0F172A])
-   ───────────────────────────────────────────────────────────────────────────── */
-
-/* Apply bg-[#1E293B] ONLY in Dark Mode. In Day Mode, use white bg and black text! */
-/* Ensure purple headers (#2D2575) and dark banners ALWAYS retain high-contrast white text */
-.bg-brand-purple,
-[class*="bg-[#2D2575]"],
-[class*="from-[#2D2575]"],
-.force-text-white,
-[data-dark-banner="true"] {
-  color: #FFFFFF !important;
+.ring-\[\#5B4BFF\],
+.ring-\[\#5B4BFF\]\/20,
+.ring-\[\#5B4BFF\]\/30,
+.ring-\[\#5B4BFF\]\/40 {
+  --tw-ring-color: rgba(243, 108, 33, 0.25) !important;
 }
 
-.bg-brand-purple h1, .bg-brand-purple h2, .bg-brand-purple h3, .bg-brand-purple h4,
-[class*="bg-[#2D2575]"] h1, [class*="bg-[#2D2575]"] h2, [class*="bg-[#2D2575]"] h3, [class*="bg-[#2D2575]"] h4,
-[class*="from-[#2D2575]"] h1, [class*="from-[#2D2575]"] h2, [class*="from-[#2D2575]"] h3, [class*="from-[#2D2575]"] h4,
-.force-text-white h1, .force-text-white h2, .force-text-white h3, .force-text-white h4,
-.force-text-white p, .force-text-white span, .force-text-white div {
-  color: #FFFFFF !important;
+[class*="shadow-\[\#5B4BFF\]"],
+[class*="shadow-\[\#2D2575\]"] {
+  box-shadow: 0 4px 14px rgba(243, 108, 33, 0.25) !important;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   SPECIFIC CLASS OVERRIDE FOR .bg-indigo-950\/40 (rgb(95 100 219))
-   ───────────────────────────────────────────────────────────────────────────── */
-
-.bg-indigo-950\/40, 
-[class*="bg-indigo-950"] {
-  background-color: rgb(95, 100, 219) !important;
-  color: #FFFFFF !important;
-}
-
-.bg-indigo-950\/40 th,
-[class*="bg-indigo-950"] th {
-  color: #FFFFFF !important;
-  font-weight: 800 !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   SPECIFIC CLASS OVERRIDE FOR .text-[#1B1E28] (rgb(247 130 17))
-   ───────────────────────────────────────────────────────────────────────────── */
-.text-\[\#1B1E28\],
-[class*="text-[#1B1E28]"] {
-  color: rgb(247, 130, 17) !important;
-}

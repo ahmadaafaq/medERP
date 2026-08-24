@@ -1421,7 +1421,7 @@ export default function StudentMasterPage() {
     <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar role="admin" />
       <main className="flex-1 overflow-y-auto pb-10">
-        <Header title="Student Master" />
+        <Header title="Student Directory & Enrolled Records" />
 
         <div className="w-full px-4 sm:px-6 lg:px-8 mt-6">
           {/* Filtering Console */}
@@ -1632,15 +1632,15 @@ export default function StudentMasterPage() {
                     setLinkedOnly(next);
                     fetchStudents({ linkedOnly: next });
                   }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-[11px] transition-all ${linkedOnly
-                    ? 'bg-[var(--color-primary-700)] text-white border-[var(--color-primary-700)] shadow-sm'
-                    : 'bg-[var(--color-bg-surface)] text-[var(--color-ink-700)] border-[var(--color-border)] hover:border-[var(--color-primary-700)] hover:text-[var(--color-primary-700)]'
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-[11px] transition-all cursor-pointer ${linkedOnly
+                    ? 'bg-[#F36C21] text-white border-[#F36C21] shadow-sm'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:border-[#F36C21] hover:text-[#F36C21]'
                     }`}
                 >
-                  <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all ${linkedOnly ? 'bg-white border-white' : 'border-[var(--color-ink-500)]'
+                  <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all ${linkedOnly ? 'bg-white border-white' : 'border-slate-400 dark:border-slate-500'
                     }`}>
                     {linkedOnly && (
-                      <svg className="w-2.5 h-2.5 text-[var(--color-primary-700)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-2.5 h-2.5 text-[#F36C21]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
                       </svg>
                     )}
@@ -1651,13 +1651,13 @@ export default function StudentMasterPage() {
                   )}
                 </button>
 
-                <div className="bg-[var(--color-bg-sunken)] p-1 rounded-xl flex items-center border border-[var(--color-border)] gap-1">
+                <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center border border-slate-200 dark:border-slate-700 gap-1">
                   <button
                     type="button"
                     onClick={() => setViewMode('roster')}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${viewMode === 'roster'
-                      ? 'bg-[var(--color-primary-700)] text-white shadow-sm border-[var(--color-primary-700)]'
-                      : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-[var(--color-primary-100)]'
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${viewMode === 'roster'
+                      ? 'bg-[#F36C21] text-white shadow-sm'
+                      : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
                   >
                     📋 Roster View
@@ -1665,9 +1665,9 @@ export default function StudentMasterPage() {
                   <button
                     type="button"
                     onClick={() => { setViewMode('linker'); setLinkerMode('phase'); }}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${viewMode === 'linker' && linkerMode === 'phase'
-                      ? 'bg-[var(--color-primary-700)] text-white shadow-sm border-[var(--color-primary-700)]'
-                      : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-[var(--color-primary-100)]'
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${viewMode === 'linker' && linkerMode === 'phase'
+                      ? 'bg-[#F36C21] text-white shadow-sm'
+                      : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
                   >
                     🎓 Batch Phase Linker
@@ -1675,9 +1675,9 @@ export default function StudentMasterPage() {
                   <button
                     type="button"
                     onClick={() => { setViewMode('linker'); setLinkerMode('group'); }}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${viewMode === 'linker' && linkerMode === 'group'
-                      ? 'bg-purple-700 text-white shadow-sm border-purple-700'
-                      : 'text-[var(--color-ink-700)] hover:text-[var(--color-ink-900)] hover:bg-purple-100 dark:hover:bg-purple-900/40'
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${viewMode === 'linker' && linkerMode === 'group'
+                      ? 'bg-[#F36C21] text-white shadow-sm'
+                      : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
                   >
                     👥 Batch Group Linker
@@ -1688,8 +1688,8 @@ export default function StudentMasterPage() {
               {/* Right: Reset / Apply / Register */}
               <div className="flex items-center gap-2">
                 {metadataLoading && (
-                  <span className="flex items-center gap-1.5 text-[10px] text-[var(--color-primary-700)] font-semibold mr-2">
-                    <span className="w-3 h-3 border-2 border-[var(--color-primary-700)] border-t-transparent rounded-full animate-spin inline-block" />
+                  <span className="flex items-center gap-1.5 text-[10px] text-[#F36C21] font-semibold mr-2">
+                    <span className="w-3 h-3 border-2 border-[#F36C21] border-t-transparent rounded-full animate-spin inline-block" />
                     Loading tenant...
                   </span>
                 )}
@@ -1723,14 +1723,14 @@ export default function StudentMasterPage() {
                       search: '',
                     });
                   }}
-                  className="premium-btn-secondary py-1.5 px-3 rounded-lg font-bold text-[11px] border border-[var(--color-border)] text-[var(--color-ink-700)] hover:border-[var(--color-primary-700)] hover:text-[var(--color-primary-700)] bg-[var(--color-bg-surface)] hover:bg-[var(--color-primary-50)] transition-all"
+                  className="py-1.5 px-3 rounded-lg font-bold text-[11px] border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-[#F36C21] hover:text-[#F36C21] bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all cursor-pointer shadow-xs"
                 >
                   Reset Filters
                 </button>
                 <button
                   type="button"
                   onClick={() => fetchStudents()}
-                  className="premium-btn-primary py-1.5 px-3 rounded-lg font-bold text-[11px] bg-[var(--color-primary-700)] hover:bg-[var(--color-primary-900)] text-white border-[var(--color-primary-700)] shadow-sm transition-all"
+                  className="py-1.5 px-3 rounded-lg font-bold text-[11px] bg-[#F36C21] hover:bg-[#E05B10] text-white border border-[#F36C21] shadow-sm transition-all cursor-pointer"
                 >
                   Apply Filters
                 </button>
@@ -1752,7 +1752,7 @@ export default function StudentMasterPage() {
                     setCurrentStep(1);
                     setIsModalOpen(true);
                   }}
-                  className="premium-btn-primary py-1.5 px-3 rounded-lg font-bold text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-sm flex items-center gap-1 shrink-0 transition-all"
+                  className="py-1.5 px-3 rounded-lg font-bold text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-sm flex items-center gap-1 shrink-0 transition-all cursor-pointer"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />

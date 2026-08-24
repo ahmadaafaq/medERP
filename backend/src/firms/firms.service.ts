@@ -427,6 +427,14 @@ export class FirmsService {
       )
     `);
 
+    // Ensure columns exist if table was created previously without them
+    await this.dataSource.query(`
+      ALTER TABLE "${schema}".users 
+        ADD COLUMN IF NOT EXISTS username VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS name VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
+    `);
+
     const bcrypt = await import('bcrypt');
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const cleanEmail = dto.email.trim().toLowerCase();
@@ -478,6 +486,13 @@ export class FirmsService {
     const schema = `tenant_${firm.slug.toLowerCase().trim()}`;
 
     try {
+      await this.dataSource.query(`
+        ALTER TABLE "${schema}".users 
+          ADD COLUMN IF NOT EXISTS username VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS name VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
+      `).catch(() => {});
+
       const admins = await this.dataSource.query(
         `SELECT id, email, username, name, phone, role, is_active, last_login_at, created_at, updated_at
          FROM "${schema}".users
@@ -575,27 +590,27 @@ export class FirmsService {
    */
   async getTenantTheme(idOrSlug: string) {
     const defaultTheme = {
-      primary_color: '#5B4BFF',
-      secondary_color: '#7867FF',
+      primary_color: '#F36C21',
+      secondary_color: '#E05B10',
       accent_color: '#F36C21',
-      danger_color: '#F04438',
-      success_color: '#00C48C',
-      warning_color: '#FFB020',
-      page_bg: '#F6F8FC',
-      sidebar_bg: '#2D2575',
-      sidebar_text_color: '#FFFFFF',
-      header_bg: '#2D2575',
+      danger_color: '#E02424',
+      success_color: '#0E9F6E',
+      warning_color: '#D97706',
+      page_bg: '#F7F8FA',
+      sidebar_bg: '#FFFFFF',
+      sidebar_text_color: '#11141A',
+      header_bg: '#FFFFFF',
       card_bg: '#FFFFFF',
       font_family: 'Inter',
       base_font_size: '14px',
-      card_radius: '22px',
+      card_radius: '20px',
       border_radius_scale: 'rounded',
       login_bg_type: 'gradient',
       login_bg_url: '',
-      table_header_bg: '#F8FAFC',
+      table_header_bg: '#F9FAFB',
       table_zebra: true,
       theme_mode: 'LIGHT',
-      version: 1,
+      version: 3,
     };
 
     if (!idOrSlug) {
@@ -678,16 +693,16 @@ export class FirmsService {
     const newConfig = {
       ...prevConfig,
       ...(dto.theme_config || {}),
-      primary_color: dto.primary_color || dto.theme_config?.primary_color || prevConfig.primary_color || firm.theme_color || '#5B4BFF',
-      secondary_color: dto.secondary_color || dto.theme_config?.secondary_color || prevConfig.secondary_color || '#7867FF',
+      primary_color: dto.primary_color || dto.theme_config?.primary_color || prevConfig.primary_color || firm.theme_color || '#F36C21',
+      secondary_color: dto.secondary_color || dto.theme_config?.secondary_color || prevConfig.secondary_color || '#E05B10',
       accent_color: dto.accent_color || dto.theme_config?.accent_color || prevConfig.accent_color || '#F36C21',
-      danger_color: dto.danger_color || dto.theme_config?.danger_color || prevConfig.danger_color || '#F04438',
-      success_color: dto.success_color || dto.theme_config?.success_color || prevConfig.success_color || '#00C48C',
-      warning_color: dto.warning_color || dto.theme_config?.warning_color || prevConfig.warning_color || '#FFB020',
-      page_bg: dto.page_bg || dto.theme_config?.page_bg || prevConfig.page_bg || '#F6F8FC',
-      sidebar_bg: dto.sidebar_bg || dto.theme_config?.sidebar_bg || prevConfig.sidebar_bg || '#2D2575',
+      danger_color: dto.danger_color || dto.theme_config?.danger_color || prevConfig.danger_color || '#E02424',
+      success_color: dto.success_color || dto.theme_config?.success_color || prevConfig.success_color || '#0E9F6E',
+      warning_color: dto.warning_color || dto.theme_config?.warning_color || prevConfig.warning_color || '#D97706',
+      page_bg: dto.page_bg || dto.theme_config?.page_bg || prevConfig.page_bg || '#F7F8FA',
+      sidebar_bg: dto.sidebar_bg || dto.theme_config?.sidebar_bg || prevConfig.sidebar_bg || '#14171F',
       sidebar_text_color: dto.sidebar_text_color || dto.theme_config?.sidebar_text_color || prevConfig.sidebar_text_color || '#FFFFFF',
-      header_bg: dto.header_bg || dto.theme_config?.header_bg || prevConfig.header_bg || '#2D2575',
+      header_bg: dto.header_bg || dto.theme_config?.header_bg || prevConfig.header_bg || '#14171F',
       card_bg: dto.card_bg || dto.theme_config?.card_bg || prevConfig.card_bg || '#FFFFFF',
       font_family: dto.font_family || dto.theme_config?.font_family || prevConfig.font_family || 'Inter',
       base_font_size: dto.base_font_size || dto.theme_config?.base_font_size || prevConfig.base_font_size || '14px',
