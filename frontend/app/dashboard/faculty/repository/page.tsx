@@ -65,11 +65,14 @@ export default function FacultyRepositoryPage() {
       const queryParams = new URLSearchParams();
       if (statusFilter) queryParams.append('status', statusFilter);
       if (search) queryParams.append('search', search);
+      queryParams.append('tenant', slug);
 
-      const res = await fetch(`http://localhost:3001/api/v1/repository/list?${queryParams.toString()}`, {
+      const res = await fetch(`/api/repository/list?${queryParams.toString()}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': token ? `Bearer ${token}` : '',
           'x-tenant-slug': slug,
+          'x-tenant': slug,
+          'x-tenant-id': `tenant_${slug}`,
         },
       });
 
@@ -94,6 +97,14 @@ export default function FacultyRepositoryPage() {
     setReviewMsg('');
   };
 
+  const calculateGrade = (val: number) => {
+    if (val >= 90) return { grade: 'A+', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' };
+    if (val >= 80) return { grade: 'A', color: 'text-indigo-600 bg-indigo-50 border-indigo-200' };
+    if (val >= 70) return { grade: 'B', color: 'text-amber-600 bg-amber-50 border-amber-200' };
+    if (val >= 60) return { grade: 'C', color: 'text-orange-600 bg-orange-50 border-orange-200' };
+    return { grade: 'D', color: 'text-rose-600 bg-rose-50 border-rose-200' };
+  };
+
   const handleSaveReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRepo) return;
@@ -108,17 +119,20 @@ export default function FacultyRepositoryPage() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/repository/${selectedRepo.repo_id}/review`, {
+      const res = await fetch(`/api/repository/${selectedRepo.repo_id}/review`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': token ? `Bearer ${token}` : '',
           'x-tenant-slug': slug,
+          'x-tenant': slug,
+          'x-tenant-id': `tenant_${slug}`,
         },
         body: JSON.stringify({
           score: Number(score),
           remarks,
           is_placement_eligible: isPlacementEligible,
+          tenant: slug,
         }),
       });
 
@@ -136,6 +150,14 @@ export default function FacultyRepositoryPage() {
     }
   };
 
+  const quickRemarks = [
+    'Outstanding full-stack architecture and clean documentation.',
+    'Well-structured codebase with robust API design & security.',
+    'Good project execution; recommend adding automated test coverage.',
+    'Excellent UI/UX, responsive layouts, and performance.',
+    'Innovative capstone concept with strong real-world application.',
+  ];
+
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans">
       <Sidebar role="faculty" />
@@ -148,10 +170,10 @@ export default function FacultyRepositoryPage() {
             <div className="space-y-1 text-center sm:text-left">
               <h2 className="text-2xl font-black tracking-tight flex items-center justify-center sm:justify-start gap-2.5">
                 <FolderGit2 className="w-7 h-7 text-[#F36C21]" />
-                <span>Student Project Evaluation</span>
+                <span>Student Project Repository & Scores</span>
               </h2>
               <p className="text-xs text-indigo-100 font-medium max-w-2xl">
-                Evaluate student repository submissions, assign scores and remarks, and nominate high-quality projects to appear in Placement Drives!
+                Evaluate student repository submissions, assign project scores & grades, and nominate high-quality projects to appear in Placement Drives!
               </p>
             </div>
           </div>
@@ -172,7 +194,7 @@ export default function FacultyRepositoryPage() {
               </div>
               <button
                 onClick={fetchRepositories}
-                className="bg-[#5B4BFF] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md shrink-0"
+                className="bg-[#5B4BFF] hover:bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md shrink-0 cursor-pointer"
               >
                 Search
               </button>
@@ -203,7 +225,7 @@ export default function FacultyRepositoryPage() {
             <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-12 text-center space-y-2 shadow-soft">
               <FolderGit2 className="w-10 h-10 text-slate-300 mx-auto" />
               <h3 className="text-base font-bold text-[#1B1E28] dark:text-white">No Repositories Found</h3>
-              <p className="text-xs text-[#4E5969] dark:text-slate-400">No project submissions match your search criteria.</p>
+              <p className="text-xs text-[#4E5969] dark:text-slate-400">No student project submissions match your search criteria.</p>
             </div>
           ) : (
             <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] shadow-soft overflow-hidden">
@@ -223,25 +245,25 @@ export default function FacultyRepositoryPage() {
                     {repositories.map((repo) => (
                       <tr key={repo.repo_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                         <td className="py-3.5 px-4 font-bold text-[#1B1E28] dark:text-white max-w-xs truncate">
-                          <div>{repo.title}</div>
+                          <div className="text-[13px]">{repo.title}</div>
                           <a
                             href={repo.repo_link}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[11px] font-normal text-[#5B4BFF] hover:underline flex items-center gap-1 mt-0.5"
+                            className="text-[11px] font-semibold text-[#5B4BFF] hover:underline flex items-center gap-1 mt-0.5"
                           >
                             <span>Repository Link</span>
                             <ExternalLink className="w-3 h-3" />
                           </a>
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-[#1B1E28] dark:text-slate-200">{repo.student_name}</div>
-                          <div className="text-[10px] font-mono text-slate-400">REG: {repo.student_reg_no}</div>
+                          <div className="font-extrabold text-[#1B1E28] dark:text-slate-200">{repo.student_name}</div>
+                          <div className="text-[10px] font-mono text-slate-500 font-semibold">REG: {repo.student_reg_no}</div>
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="flex flex-wrap gap-1">
                             {repo.tech_stack?.slice(0, 3).map((t, idx) => (
-                              <span key={idx} className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800">
+                              <span key={idx} className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                                 {t}
                               </span>
                             ))}
@@ -264,10 +286,15 @@ export default function FacultyRepositoryPage() {
                         <td className="py-3.5 px-4">
                           {repo.score !== undefined && repo.score !== null ? (
                             <div className="space-y-1">
-                              <div className="font-black text-[#5B4BFF]">{repo.score}% ({repo.grade || 'A'})</div>
+                              <div className="font-black text-[#5B4BFF] text-xs flex items-center gap-1.5">
+                                <span>{repo.score}%</span>
+                                <span className={`px-1.5 py-0.2 rounded text-[10px] font-black border ${calculateGrade(repo.score).color}`}>
+                                  Grade {repo.grade || calculateGrade(repo.score).grade}
+                                </span>
+                              </div>
                               {repo.is_placement_eligible && (
-                                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30 block w-fit">
-                                  Placement Eligible
+                                <span className="px-2 py-0.5 rounded text-[9px] font-black bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30 block w-fit">
+                                  🌟 Placement Eligible
                                 </span>
                               )}
                             </div>
@@ -278,9 +305,9 @@ export default function FacultyRepositoryPage() {
                         <td className="py-3.5 px-4 text-right">
                           <button
                             onClick={() => handleOpenReview(repo)}
-                            className="bg-[#5B4BFF] hover:bg-indigo-600 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-sm transition-all"
+                            className="bg-[#5B4BFF] hover:bg-indigo-600 text-white font-black text-xs px-3.5 py-1.5 rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
                           >
-                            {repo.status === 'Reviewed' ? 'Edit Review' : 'Evaluate'}
+                            {repo.status === 'Reviewed' ? 'Edit Score' : 'Give Score 🎯'}
                           </button>
                         </td>
                       </tr>
@@ -294,91 +321,141 @@ export default function FacultyRepositoryPage() {
           {/* Review Panel Modal */}
           {selectedRepo && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] max-w-lg w-full p-6 shadow-2xl space-y-4">
+              <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[24px] max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
                 <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
                   <div>
-                    <h3 className="text-base font-black text-[#1B1E28] dark:text-white">
-                      Evaluate: {selectedRepo.title}
+                    <h3 className="text-base font-black text-[#1B1E28] dark:text-white flex items-center gap-2">
+                      <Star className="w-5 h-5 text-[#F36C21]" />
+                      <span>Evaluate: {selectedRepo.title}</span>
                     </h3>
-                    <p className="text-xs text-[#5B4BFF] font-bold">
+                    <p className="text-xs text-[#5B4BFF] font-bold mt-0.5">
                       Student: {selectedRepo.student_name} ({selectedRepo.student_reg_no})
                     </p>
                   </div>
                   <button
                     onClick={() => setSelectedRepo(null)}
-                    className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-sm font-bold"
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white text-sm font-bold cursor-pointer"
                   >
                     ✕
                   </button>
                 </div>
 
                 {reviewMsg && (
-                  <div className="bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 text-xs p-3 rounded-xl font-bold">
+                  <div className="bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-300 text-xs p-3 rounded-xl font-bold">
                     {reviewMsg}
                   </div>
                 )}
 
                 <form onSubmit={handleSaveReview} className="space-y-4">
+                  {/* Score input & live grade */}
                   <div>
-                    <label className="block text-xs font-bold text-[#1B1E28] dark:text-slate-200 mb-1">
-                      Project Score (0 – 100%) *
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-[#1B1E28] dark:text-slate-200">
+                        Project Score (0 – 100%) *
+                      </label>
+                      <div className={`px-2 py-0.5 rounded-md text-xs font-black border ${calculateGrade(score).color}`}>
+                        Grade: {calculateGrade(score).grade}
+                      </div>
+                    </div>
                     <input
                       type="number"
                       min="0"
                       max="100"
                       value={score}
                       onChange={(e) => setScore(Number(e.target.value))}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-sm font-black text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
                       required
                     />
+
+                    {/* Quick Score Chips */}
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      <span className="text-[10px] font-bold text-slate-400 mr-1">Quick:</span>
+                      {[100, 95, 90, 85, 80, 75, 70, 60].map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setScore(s)}
+                          className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                            score === s
+                              ? 'bg-[#5B4BFF] text-white shadow-xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                          }`}
+                        >
+                          {s}%
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
+                  {/* Placement nomination toggle */}
+                  <div className="p-3.5 rounded-2xl bg-[#FFF4EC] dark:bg-orange-950/20 border border-[#F36C21]/20 flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-black text-[#1B1E28] dark:text-white flex items-center gap-1.5">
+                        <Award className="w-4 h-4 text-[#F36C21]" />
+                        <span>Nominate for Placement Drives</span>
+                      </div>
+                      <p className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">
+                        Highlight project in corporate recruiters dashboard
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isPlacementEligible}
+                        onChange={(e) => setIsPlacementEligible(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#F36C21]"></div>
+                    </label>
+                  </div>
+
+                  {/* Remarks textarea */}
                   <div>
                     <label className="block text-xs font-bold text-[#1B1E28] dark:text-slate-200 mb-1">
                       Faculty Remarks & Evaluation Notes *
                     </label>
                     <textarea
-                      rows={4}
+                      rows={3}
                       value={remarks}
                       onChange={(e) => setRemarks(e.target.value)}
-                      placeholder="Add detailed feedback on code quality, architecture, design, and suitability for placement..."
+                      placeholder="Add detailed feedback on code quality, architecture, and design..."
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
                       required
                     />
-                  </div>
 
-                  {/* Toggle: Eligible for Placement Drive */}
-                  <div className="bg-[#FFF4EC] dark:bg-orange-950/40 border border-[#F36C21]/30 p-3 rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#F36C21]" />
-                      <div>
-                        <div className="text-xs font-black text-[#F36C21]">Eligible for Placement Drive</div>
-                        <div className="text-[10px] text-slate-500">Nominate this project to show in company placement drive modals.</div>
+                    {/* Quick Remark Presets */}
+                    <div className="space-y-1 mt-2">
+                      <div className="text-[10px] font-bold text-slate-400">Quick Remarks:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {quickRemarks.map((qr, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setRemarks(qr)}
+                            className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 hover:text-[#5B4BFF] transition-all text-left cursor-pointer truncate max-w-full"
+                          >
+                            + {qr}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={isPlacementEligible}
-                      onChange={(e) => setIsPlacementEligible(e.target.checked)}
-                      className="w-5 h-5 accent-[#F36C21] rounded cursor-pointer"
-                    />
                   </div>
 
-                  <div className="flex justify-end gap-3 pt-2">
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E7EAF3] dark:border-slate-800">
                     <button
                       type="button"
                       onClick={() => setSelectedRepo(null)}
-                      className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-[#4E5969] hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={submittingReview}
-                      className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#5B4BFF] hover:bg-indigo-600 text-white shadow-md disabled:opacity-50"
+                      className="px-5 py-2 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-indigo-600 text-white shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-95"
                     >
-                      {submittingReview ? 'Saving Evaluation...' : 'Save Evaluation'}
+                      {submittingReview ? 'Saving...' : 'Save & Publish Score 🎯'}
                     </button>
                   </div>
                 </form>

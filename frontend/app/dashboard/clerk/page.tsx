@@ -6,16 +6,18 @@ import Link from 'next/link';
 import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
 import AttendanceWidget from '../../../components/AttendanceWidget';
 import NoticeDashboardWidget from '../../../components/notices/NoticeDashboardWidget';
+import LibraryDashboardCard from '../../../components/library/LibraryDashboardCard';
+import ChatDashboardWidget from '../../../components/chat/ChatDashboardWidget';
 
 export default function ClerkDashboardPage() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans">
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar role="clerk" />
       
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header title="Clerk Data Entry & Verification Portal" />
 
-        <div className="p-6 space-y-6 max-w-7xl mx-auto w-full">
+        <main className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full flex-1 overflow-x-hidden">
           {/* Welcome Banner */}
           <div className="p-6 rounded-2xl bg-gradient-to-r from-rose-900/40 via-purple-900/20 to-slate-900 border border-rose-500/20 shadow-xl flex items-center justify-between">
             <div className="space-y-1">
@@ -40,9 +42,9 @@ export default function ClerkDashboardPage() {
           </div>
 
           {/* Quick Action Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <Link
-              href="/dashboard/admin/attendance-master"
+              href="/dashboard/clerk/attendance"
               className="p-5 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-indigo-500/50 transition-all group shadow-lg space-y-3"
             >
               <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center transition-all">
@@ -53,6 +55,21 @@ export default function ClerkDashboardPage() {
               <div>
                 <h3 className="font-extrabold text-sm text-white group-hover:text-indigo-400 transition-colors">Attendance Master</h3>
                 <p className="text-xs text-slate-400 mt-1">Batch-wise daily attendance marking & biometric roster imports.</p>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/clerk/assessment"
+              className="p-5 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-sky-500/50 transition-all group shadow-lg space-y-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-400 group-hover:bg-sky-600 group-hover:text-white flex items-center justify-center transition-all">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-white group-hover:text-sky-400 transition-colors">Assessment & Q-Bank</h3>
+                <p className="text-xs text-slate-400 mt-1">Question bank creation, test blueprinting, and paper publishing.</p>
               </div>
             </Link>
 
@@ -88,21 +105,21 @@ export default function ClerkDashboardPage() {
             </Link>
           </div>
 
-          {/* Notices & Key Highlights Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1">
-              <NoticeDashboardWidget role="clerk" />
-            </div>
-            <div className="lg:col-span-2">
-              <RecentLessonsWidget role="CLERK" />
-            </div>
+          {/* Communications, Notices & Recent Materials Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+            <ChatDashboardWidget role="FACULTY" chatUrl="/dashboard/clerk/chat" />
+            <NoticeDashboardWidget role="clerk" />
+            <RecentLessonsWidget role="CLERK" />
           </div>
+
+          {/* Digital Library & Academic Catalog Card */}
+          <LibraryDashboardCard role="clerk" />
 
           <div className="grid grid-cols-1 gap-6">
             <AttendanceWidget role="CLERK" />
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

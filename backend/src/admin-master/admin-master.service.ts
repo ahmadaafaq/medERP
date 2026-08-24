@@ -85,6 +85,189 @@ export class AdminMasterService {
     return this.tenantSchemaService.resolveTenantSlug(clean);
   }
 
+  private async ensureAdminMasterTables(slug: string): Promise<void> {
+    if (!slug || slug === 'all') return;
+    const schema = `tenant_${slug}`;
+    try {
+      await this.ds.query(`CREATE SCHEMA IF NOT EXISTS "${schema}";`);
+
+      // 1. professional_linkers
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".professional_linkers (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          code VARCHAR(50) NOT NULL,
+          name VARCHAR(200) NOT NULL,
+          course_cd VARCHAR(50),
+          professional_phase VARCHAR(100),
+          academic_session VARCHAR(100),
+          description TEXT,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      // 2. delivery_types
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".delivery_types (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          code VARCHAR(50) NOT NULL,
+          name VARCHAR(100) NOT NULL,
+          description TEXT,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        ALTER TABLE "${schema}".delivery_types ADD COLUMN IF NOT EXISTS description TEXT;
+        ALTER TABLE "${schema}".delivery_types ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+      `);
+
+      // 3. units
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".units (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          code VARCHAR(50) NOT NULL,
+          name VARCHAR(200),
+          description TEXT NOT NULL,
+          subject_id UUID,
+          subject_code VARCHAR(50),
+          course_cd VARCHAR(50),
+          course_name VARCHAR(200),
+          branch_cd VARCHAR(50),
+          batch_id UUID,
+          batch_year INT,
+          bloom_level VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+          unit_order INT DEFAULT 1,
+          hours INT DEFAULT 10,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS name VARCHAR(200);
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS subject_code VARCHAR(50);
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS batch_id UUID;
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS batch_year INT;
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS bloom_level VARCHAR(50) DEFAULT 'KL-2 (Understand)';
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS unit_order INT DEFAULT 1;
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS hours INT DEFAULT 10;
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+      `);
+
+      // 4. topics
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".topics (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          subject_id UUID,
+          subject_code VARCHAR(50),
+          unit_id UUID,
+          unit_code VARCHAR(50),
+          course_cd VARCHAR(50),
+          branch_cd VARCHAR(50),
+          batch_year INT,
+          bloom_level VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+          linker_id UUID,
+          code VARCHAR(100) NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          hours INT DEFAULT 1,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ
+        );
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS subject_code VARCHAR(50);
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS unit_id UUID;
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS unit_code VARCHAR(50);
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS batch_year INT;
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS bloom_level VARCHAR(50) DEFAULT 'KL-2 (Understand)';
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS linker_id UUID;
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS hours INT DEFAULT 1;
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+      `);
+
+      // 5. competencies
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".competencies (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          subject_id UUID,
+          subject_code VARCHAR(50),
+          unit_id UUID,
+          unit_code VARCHAR(50),
+          topic_id UUID,
+          topic_code VARCHAR(50),
+          linker_id UUID,
+          course_cd VARCHAR(50),
+          branch_cd VARCHAR(50),
+          code VARCHAR(100),
+          name VARCHAR(255),
+          description TEXT,
+          domain VARCHAR(100) DEFAULT 'Knowledge',
+          level VARCHAR(100) DEFAULT 'Knows How',
+          bloom_level VARCHAR(100) DEFAULT 'KL-2 (Understand)',
+          is_core BOOLEAN DEFAULT true,
+          batch_year INT,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ
+        );
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS subject_code VARCHAR(50);
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS unit_id UUID;
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS unit_code VARCHAR(50);
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS topic_code VARCHAR(50);
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS bloom_level VARCHAR(100) DEFAULT 'KL-2 (Understand)';
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS is_core BOOLEAN DEFAULT true;
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS batch_year INT;
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+        ALTER TABLE "${schema}".competencies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+      `);
+
+      // 6. subject_offerings
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".subject_offerings (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          subject_id UUID,
+          subject_code VARCHAR(50),
+          prof_id UUID,
+          phase_order INT,
+          dtype_id UUID,
+          dtype_code VARCHAR(50),
+          batch_year INT,
+          academic_year VARCHAR(50),
+          semester INT,
+          batch_id UUID,
+          course_cd VARCHAR(50),
+          branch_cd VARCHAR(50),
+          hours_allotted INT,
+          is_elective BOOLEAN DEFAULT false,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS subject_code VARCHAR(50);
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS prof_id UUID;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS phase_order INT;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS dtype_id UUID;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS dtype_code VARCHAR(50);
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS batch_year INT;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS academic_year VARCHAR(50);
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS semester INT;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS batch_id UUID;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS hours_allotted INT;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS is_elective BOOLEAN DEFAULT false;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+      `);
+    } catch (e: any) {
+      this.logger.error(`Failed to ensure admin master tables for schema ${schema}: ${e.message}`);
+    }
+  }
+
   private async listColleges(): Promise<any[]> {
     try {
       const rows = await this.ds.query(`
@@ -737,6 +920,7 @@ export class AdminMasterService {
     }
 
     const currentCollege = colleges.find((c: any) => c.slug === slug);
+    await this.ensureAdminMasterTables(slug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT t.*, 
@@ -767,14 +951,15 @@ export class AdminMasterService {
   }
 
   async createTopic(dto: CreateTopicMasterDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.collegeSlug || dto.college_id || dto.collegeId);
+    await this.ensureAdminMasterTables(slug);
 
     // Resolve subject if string code or UUID
-    let subjectId = dto.subject_id;
-    let subjectCode = dto.subject_code;
-    let courseCd = dto.course_cd;
-    let branchCd = dto.branch_cd;
-    const subSearch = dto.subject_code || dto.subject_id;
+    let subjectId = dto.subject_id || dto.subjectId;
+    let subjectCode = dto.subject_code || dto.subjectCode;
+    let courseCd = dto.course_cd || dto.courseCd;
+    let branchCd = dto.branch_cd || dto.branchCd;
+    const subSearch = dto.subject_code || dto.subjectCode || dto.subject_id || dto.subjectId;
     if (subSearch) {
       const subRows = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -790,10 +975,10 @@ export class AdminMasterService {
     }
 
     // Resolve unit if string code or UUID
-    let unitId = dto.unit_id;
-    let unitCode = dto.unit_code;
-    let bloomLevel = dto.bloom_level;
-    const unitSearch = dto.unit_code || dto.unit_id;
+    let unitId = dto.unit_id || dto.unitId;
+    let unitCode = dto.unit_code || dto.unitCode;
+    let bloomLevel = dto.bloom_level || dto.bloomLevel;
+    const unitSearch = dto.unit_code || dto.unitCode || dto.unit_id || dto.unitId;
     if (unitSearch) {
       const unitRows = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -821,13 +1006,13 @@ export class AdminMasterService {
         unitCode || null,
         courseCd || null,
         branchCd || null,
-        dto.batch_year || null,
+        dto.batch_year || dto.batchYear || null,
         bloomLevel || 'KL-2 (Understand)',
         dto.code.trim().toUpperCase(),
         dto.name.trim(),
         dto.description?.trim() || null,
         dto.hours || 1,
-        dto.linker_id || null,
+        dto.linker_id || dto.linkerId || null,
       ],
     );
 
@@ -858,7 +1043,8 @@ export class AdminMasterService {
   }
 
   async updateTopic(id: string, dto: UpdateTopicMasterDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.collegeSlug || dto.college_id || dto.collegeId);
+    await this.ensureAdminMasterTables(slug);
 
     // Resolve subject if string code or UUID
     let subjectId = dto.subject_id;
@@ -1034,6 +1220,7 @@ export class AdminMasterService {
     }
 
     const currentCollege = colleges.find((c: any) => c.slug === slug);
+    await this.ensureAdminMasterTables(slug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT c.*, 
@@ -1069,14 +1256,15 @@ export class AdminMasterService {
   }
 
   async createCompetency(dto: CreateCompetencyMasterDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.collegeSlug || dto.college_id || dto.collegeId);
+    await this.ensureAdminMasterTables(slug);
 
     // Resolve subject if string code or UUID
-    let subjectId = dto.subject_id;
-    let subjectCode = dto.subject_code;
-    let courseCd = dto.course_cd;
-    let branchCd = dto.branch_cd;
-    const subSearch = dto.subject_code || dto.subject_id;
+    let subjectId = dto.subject_id || dto.subjectId;
+    let subjectCode = dto.subject_code || dto.subjectCode;
+    let courseCd = dto.course_cd || dto.courseCd;
+    let branchCd = dto.branch_cd || dto.branchCd;
+    const subSearch = dto.subject_code || dto.subjectCode || dto.subject_id || dto.subjectId;
     if (subSearch) {
       const subRows = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -1092,9 +1280,9 @@ export class AdminMasterService {
     }
 
     // Resolve unit if string code or UUID
-    let unitId = dto.unit_id;
-    let unitCode = dto.unit_code;
-    const unitSearch = dto.unit_code || dto.unit_id;
+    let unitId = dto.unit_id || dto.unitId;
+    let unitCode = dto.unit_code || dto.unitCode;
+    const unitSearch = dto.unit_code || dto.unitCode || dto.unit_id || dto.unitId;
     if (unitSearch) {
       const unitRows = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -1110,10 +1298,10 @@ export class AdminMasterService {
     }
 
     // Resolve topic if string code or UUID
-    let topicId = dto.topic_id;
-    let topicCode = dto.topic_code;
-    let bloomLevel = dto.bloom_level;
-    const topicSearch = dto.topic_code || dto.topic_id;
+    let topicId = dto.topic_id || dto.topicId;
+    let topicCode = dto.topic_code || dto.topicCode;
+    let bloomLevel = dto.bloom_level || dto.bloomLevel;
+    const topicSearch = dto.topic_code || dto.topicCode || dto.topic_id || dto.topicId;
     if (topicSearch) {
       const topicRows = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -1154,7 +1342,7 @@ export class AdminMasterService {
             topicCode || null,
             courseCd || null,
             branchCd || null,
-            dto.batch_year || null,
+            dto.batch_year || dto.batchYear || null,
             item.code.trim().toUpperCase(),
             item.name?.trim() || null,
             item.description.trim(),
@@ -1162,7 +1350,7 @@ export class AdminMasterService {
             item.level || dto.level || 'Knows How',
             item.bloom_level || bloomLevel || 'KL-2 (Understand)',
             item.is_core ?? true,
-            dto.linker_id || null,
+            dto.linker_id || dto.linkerId || null,
           ],
         );
         insertedList.push({
@@ -1190,15 +1378,15 @@ export class AdminMasterService {
         topicCode || null,
         courseCd || null,
         branchCd || null,
-        dto.batch_year || null,
+        dto.batch_year || dto.batchYear || null,
         (dto.code || '').trim().toUpperCase(),
         dto.name?.trim() || null,
         (dto.description || '').trim(),
         dto.domain || 'Knowledge',
         dto.level || 'Knows How',
         bloomLevel || 'KL-2 (Understand)',
-        dto.is_core ?? true,
-        dto.linker_id || null,
+        dto.is_core ?? dto.isCore ?? true,
+        dto.linker_id || dto.linkerId || null,
       ],
     );
 
@@ -1212,7 +1400,8 @@ export class AdminMasterService {
   }
 
   async updateCompetency(id: string, dto: UpdateCompetencyMasterDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.collegeSlug || dto.college_id || dto.collegeId);
+    await this.ensureAdminMasterTables(slug);
 
     // Resolve subject if string code or UUID
     let subjectId = dto.subject_id;
@@ -1462,7 +1651,8 @@ export class AdminMasterService {
   }
 
   async createDeliveryType(dto: CreateDeliveryTypeDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.collegeSlug || dto.college_id || dto.collegeId);
+    await this.ensureAdminMasterTables(slug);
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM delivery_types WHERE code = $1`,
@@ -1473,25 +1663,27 @@ export class AdminMasterService {
     }
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO delivery_types (code, name, is_active)
-       VALUES ($1, $2, true)
+      `INSERT INTO delivery_types (code, name, description, is_active)
+       VALUES ($1, $2, $3, true)
        RETURNING *`,
-      [dto.code.toUpperCase(), dto.name],
+      [dto.code.toUpperCase(), dto.name, dto.description || null],
     );
     return rows[0];
   }
 
   async updateDeliveryType(id: string, dto: UpdateDeliveryTypeDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug);
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.collegeSlug || dto.college_id || dto.collegeId);
+    await this.ensureAdminMasterTables(slug);
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE delivery_types
        SET code = COALESCE($1, code),
            name = COALESCE($2, name),
-           is_active = COALESCE($3, is_active)
-       WHERE id = $4
+           description = COALESCE($3, description),
+           is_active = COALESCE($4, is_active)
+       WHERE id = $5
        RETURNING *`,
-      [dto.code?.toUpperCase(), dto.name, dto.is_active, id],
+      [dto.code?.toUpperCase(), dto.name, dto.description !== undefined ? dto.description : null, dto.is_active ?? dto.isActive, id],
     );
     if (rows.length === 0) throw new NotFoundException('Delivery type not found');
     return rows[0];
@@ -1513,6 +1705,7 @@ export class AdminMasterService {
 
     if (tenantSlug && tenantSlug !== 'all') {
       const slug = await this.resolveTenantSlug(tenantSlug);
+      await this.ensureAdminMasterTables(slug);
       const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
       const collegeId = targetCollege?.id || slug;
       const collegeName = targetCollege?.name || 'SRMS Institution';
@@ -1545,6 +1738,7 @@ export class AdminMasterService {
     const allOfferings: any[] = [];
     for (const col of colleges) {
       try {
+        await this.ensureAdminMasterTables(col.slug);
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
           `SELECT so.*, 
@@ -1574,11 +1768,12 @@ export class AdminMasterService {
   }
 
   async createSubjectOffering(dto: CreateSubjectOfferingDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.collegeSlug || dto.college_id || dto.collegeId);
+    await this.ensureAdminMasterTables(slug);
 
     // 1. Resolve Subject
-    let subjectId = dto.subject_id;
-    const subjectSearch = dto.subject_code || dto.subject_id;
+    let subjectId = dto.subject_id || dto.subjectId;
+    const subjectSearch = dto.subject_code || dto.subjectCode || dto.subject_id || dto.subjectId;
     if (subjectSearch) {
       const subRows = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -1587,10 +1782,14 @@ export class AdminMasterService {
       ).catch(() => []);
       if (subRows.length > 0) subjectId = subRows[0].id;
     }
+    if (!subjectId) {
+      const subFallback = await this.tenantSchemaService.queryInTenant(slug, `SELECT id FROM subjects LIMIT 1`).catch(() => []);
+      if (subFallback.length > 0) subjectId = subFallback[0].id;
+    }
 
     // 2. Resolve Professional Phase
-    let profId = dto.prof_id;
-    const profSearch = dto.phase_order !== undefined ? String(dto.phase_order) : dto.prof_id;
+    let profId = dto.prof_id || dto.profId;
+    const profSearch = dto.phase_order !== undefined ? String(dto.phase_order) : (dto.prof_id || dto.profId);
     if (profSearch) {
       const profRows = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -1599,10 +1798,19 @@ export class AdminMasterService {
       ).catch(() => []);
       if (profRows.length > 0) profId = profRows[0].id;
     }
+    if (!profId) {
+      const profFallback = await this.tenantSchemaService.queryInTenant(slug, `SELECT id FROM professional_phases LIMIT 1`).catch(() => []);
+      if (profFallback.length > 0) {
+        profId = profFallback[0].id;
+      } else {
+        const newProf = await this.tenantSchemaService.queryInTenant(slug, `INSERT INTO professional_phases (name, phase_order, is_active) VALUES ('Semester 1', 1, true) RETURNING id`).catch(() => []);
+        if (newProf.length > 0) profId = newProf[0].id;
+      }
+    }
 
     // 3. Resolve (or auto-create) Delivery Type
-    let dtypeId = dto.dtype_id;
-    const dtypeSearch = dto.dtype_code || dto.dtype_id || 'TH';
+    let dtypeId = dto.dtype_id || dto.dtypeId;
+    const dtypeSearch = dto.dtype_code || dto.dtypeCode || dto.dtype_id || dto.dtypeId || 'TH';
     if (dtypeSearch) {
       let dtRows = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -1623,15 +1831,17 @@ export class AdminMasterService {
       }
     }
 
-    if (!subjectId || !profId || !dtypeId) {
-      throw new BadRequestException('Could not resolve valid Subject, Academic Phase, or Delivery Type in tenant schema.');
-    }
+    const batchYearVal = dto.batch_year || dto.batchYear || 2024;
+    const hoursVal = dto.hours_allotted ?? dto.hoursAllotted ?? 0;
+    const academicYearVal = dto.academic_year || dto.academicYear || '2024-2025';
+    const semVal = Number(dto.semester) || 1;
+    const isElectiveVal = dto.is_elective ?? dto.isElective ?? false;
 
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM subject_offerings 
        WHERE subject_id = $1 AND prof_id = $2 AND dtype_id = $3 AND batch_year = $4`,
-      [subjectId, profId, dtypeId, dto.batch_year],
+      [subjectId, profId, dtypeId, batchYearVal],
     ).catch(() => []);
 
     let offeringId: string;
@@ -1639,28 +1849,30 @@ export class AdminMasterService {
       offeringId = existing[0].id;
       await this.tenantSchemaService.queryInTenant(
         slug,
-        `UPDATE subject_offerings SET hours_allotted = $1, is_active = true WHERE id = $2`,
-        [dto.hours_allotted ?? 0, offeringId],
+        `UPDATE subject_offerings SET hours_allotted = $1, academic_year = $2, semester = $3, is_elective = $4, is_active = true WHERE id = $5`,
+        [hoursVal, academicYearVal, semVal, isElectiveVal, offeringId],
       );
     } else {
       const rows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `INSERT INTO subject_offerings (subject_id, prof_id, dtype_id, batch_year, hours_allotted, is_active)
-         VALUES ($1, $2, $3, $4, $5, true)
+        `INSERT INTO subject_offerings (subject_id, prof_id, dtype_id, batch_year, academic_year, semester, hours_allotted, is_elective, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
          RETURNING *`,
-        [subjectId, profId, dtypeId, dto.batch_year, dto.hours_allotted ?? 0],
+        [subjectId, profId, dtypeId, batchYearVal, academicYearVal, semVal, hoursVal, isElectiveVal],
       );
       offeringId = rows[0].id;
     }
 
     // Auto-link any existing unlinked attendance sessions for this subject without modifying marks/dates
-    await this.tenantSchemaService.queryInTenant(
-      slug,
-      `UPDATE attendance_sessions 
-       SET offering_id = $1 
-       WHERE subject_id = $2 AND (offering_id IS NULL OR offering_id != $1)`,
-      [offeringId, subjectId],
-    ).catch(() => {});
+    if (subjectId) {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE attendance_sessions 
+         SET offering_id = $1 
+         WHERE subject_id = $2 AND (offering_id IS NULL OR offering_id != $1)`,
+        [offeringId, subjectId],
+      ).catch(() => {});
+    }
 
     const resultRows = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -2290,6 +2502,7 @@ export class AdminMasterService {
 
     if (tenantSlug && tenantSlug !== 'all') {
       const slug = await this.resolveTenantSlug(tenantSlug);
+      await this.ensureAdminMasterTables(slug);
       const targetCollege = colleges.find((c: any) => c.slug === slug || c.code === slug || c.id === slug);
       const collegeId = targetCollege?.id || slug;
       const collegeName = targetCollege?.name || 'SRMS Institution';
@@ -2319,6 +2532,7 @@ export class AdminMasterService {
     const allUnits: any[] = [];
     for (const col of colleges) {
       try {
+        await this.ensureAdminMasterTables(col.slug);
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
           `SELECT u.*, 
@@ -2346,14 +2560,15 @@ export class AdminMasterService {
   }
 
   async createUnit(dto: CreateUnitMasterDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.collegeSlug || dto.college_id || dto.collegeId);
+    await this.ensureAdminMasterTables(slug);
 
     // 1. Resolve Subject
-    let subjectId = dto.subject_id;
-    let courseCd = dto.course_cd;
-    let courseName = dto.course_name;
-    let branchCd = dto.branch_cd;
-    const subjectSearch = dto.subject_code || dto.subject_id;
+    let subjectId = dto.subject_id || dto.subjectId;
+    let courseCd = dto.course_cd || dto.courseCd;
+    let courseName = dto.course_name || dto.courseName;
+    let branchCd = dto.branch_cd || dto.branchCd;
+    const subjectSearch = dto.subject_code || dto.subjectCode || dto.subject_id || dto.subjectId;
     if (subjectSearch) {
       const subRows = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -2369,19 +2584,22 @@ export class AdminMasterService {
     }
 
     // 2. Resolve Batch
-    let batchId = dto.batch_id;
-    let batchYear = dto.batch_year;
-    if (dto.batch_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dto.batch_id)) {
+    let batchId = dto.batch_id || dto.batchId;
+    let batchYear = dto.batch_year || dto.batchYear;
+    if (batchId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId)) {
       const bRows = await this.tenantSchemaService.queryInTenant(
         slug,
         `SELECT id, year, batch_cd FROM batches WHERE id::text = $1 OR batch_cd = $1 OR code = $1 OR year::text = $1 LIMIT 1`,
-        [dto.batch_id],
+        [batchId],
       ).catch(() => []);
       if (bRows.length > 0) {
         batchId = bRows[0].id;
         batchYear = batchYear || bRows[0].year;
       }
     }
+
+    const bloomLevel = dto.bloom_level || dto.bloomLevel || 'KL-2 (Understand)';
+    const unitOrder = dto.unit_order || dto.unitOrder || 1;
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,

@@ -65,10 +65,85 @@ export class CreateTimetableSlotDto {
   @IsString()
   topic?: string;
 
+  @ApiPropertyOptional({ example: 'Unit 1: Neurophysiology' })
+  @IsOptional()
+  @IsString()
+  unitName?: string;
+
+  @ApiPropertyOptional({ example: 'u1' })
+  @IsOptional()
+  @IsString()
+  unitId?: string;
+
+  @ApiPropertyOptional({ example: 'Unit 1' })
+  @IsOptional()
+  @IsString()
+  unit?: string;
+
+  @ApiPropertyOptional({ example: 'Resting membrane potential, Action potential generation' })
+  @IsOptional()
+  @IsString()
+  subTopics?: string;
+
   @ApiPropertyOptional({ example: 'PY1.2, PY1.3' })
   @IsOptional()
   @IsString()
   competencyCodes?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  colgcd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  colgCd?: string;
+
+  @ApiPropertyOptional({ example: '13' })
+  @IsOptional()
+  @IsString()
+  coursecd?: string;
+
+  @ApiPropertyOptional({ example: '13' })
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  branchcd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional({ example: '2' })
+  @IsOptional()
+  @IsString()
+  batchcd?: string;
+
+  @ApiPropertyOptional({ example: '2' })
+  @IsOptional()
+  @IsString()
+  batchCd?: string;
+
+  @ApiPropertyOptional({ example: '3' })
+  @IsOptional()
+  @IsString()
+  semester?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  section?: string;
+
+  @ApiPropertyOptional({ example: 'Web Technology VINAY KUMAR' })
+  @IsOptional()
+  @IsString()
+  description?: string;
 }
 
 export class UpdateTimetableSlotDto extends PartialType(CreateTimetableSlotDto) { }

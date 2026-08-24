@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useNotices, NoticeItem } from '../hooks/useNotices';
 import CampusAlertsDropdown from './notices/CampusAlertsDropdown';
 import NoticeDetailModal from './notices/NoticeDetailModal';
@@ -43,6 +44,21 @@ export default function Header({ title }: HeaderProps) {
 
   // Modals state
   const [activeModal, setActiveModal] = useState<'NONE' | 'PROFILE' | 'SETTINGS' | 'PASSWORD'>('NONE');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const handleSidebarChange = (e: any) => {
+      if (typeof e.detail?.isOpen === 'boolean') {
+        setIsMobileSidebarOpen(e.detail.isOpen);
+      }
+    };
+    window.addEventListener('mobileSidebarStateChange', handleSidebarChange);
+    return () => window.removeEventListener('mobileSidebarStateChange', handleSidebarChange);
+  }, []);
+
+  const toggleMobileSidebar = () => {
+    window.dispatchEvent(new CustomEvent('toggleMobileSidebar'));
+  };
 
   // Change password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -55,6 +71,9 @@ export default function Header({ title }: HeaderProps) {
   // Settings preferences state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
+  // Chat Unread Count State
+  const [chatUnreadCount, setChatUnreadCount] = useState<number>(0);
+
   // Campus Alerts & Notices State
   const { notices, loading: noticesLoading, unreadCount, markAsRead, acknowledgeNotice } = useNotices();
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -65,8 +84,29 @@ export default function Header({ title }: HeaderProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const alertsRef = useRef<HTMLDivElement>(null);
 
+  const fetchChatUnread = async () => {
+    try {
+      const token = getStorageItem('token');
+      const tenantSlug = getStorageItem('tenantSlug') || 'srms-cet-bareilly';
+      if (!token) return;
+
+      const res = await fetch(`http://localhost:3001/api/v1/chat/unread-count?tenant=${tenantSlug}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-tenant-slug': tenantSlug,
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setChatUnreadCount(json.data?.unread_count || 0);
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     setMounted(true);
+    fetchChatUnread();
+    const interval = setInterval(fetchChatUnread, 5000);
 
     // 1. Theme initialization — Light mode active by default
     const savedTheme = localStorage.getItem('mederp_theme') as 'dark' | 'light' | null;
@@ -95,6 +135,8 @@ export default function Header({ title }: HeaderProps) {
 
     // 3. Fetch fresh user profile details from DB via /api/v1/auth/me
     fetchUserProfile();
+
+    return () => clearInterval(interval);
   }, []);
 
   // Close dropdowns on outside click
@@ -240,7 +282,10 @@ export default function Header({ title }: HeaderProps) {
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
       localStorage.removeItem('role');
+      localStorage.removeItem('isOwner');
       localStorage.removeItem('tenantSlug');
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      document.cookie = 'auth_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
       window.location.href = '/login';
     }
   };
@@ -347,28 +392,91 @@ export default function Header({ title }: HeaderProps) {
           ? `ID: ${user.id.slice(0, 8)}...`
           : 'ID: Active';
 
-  const collegeDisplayName = (userRole === 'SUPER_ADMIN')
-    ? 'UniCampus Central University Administration'
-    : (user?.collegeName || user?.tenantName || (mounted ? (getStorageItem('collegeName') || getStorageItem('tenantName')) : '') || 'SRMS College of Engineering & Technology, Bareilly');
+  const rawSlug = (user?.tenantSlug || (mounted ? (getStorageItem('tenantSlug') || getStorageItem('selectedTenant')) : '') || 'srms-cet-bareilly').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
+  const activeColgCd = user?.colgCd || (mounted ? getStorageItem('colg_cd') : '1');
+
+  const getResolvedCollegeName = () => {
+    if (userRole === 'SUPER_ADMIN') {
+      return 'UniCampus Central University Administration';
+    }
+    if (rawSlug === 'srms-cet-bareilly' || rawSlug.includes('cet-bareilly') || activeColgCd === '1') {
+      return 'SRMS College of Engineering & Technology, Bareilly';
+    }
+    if (rawSlug === 'srms-cetr-bareilly' || rawSlug.includes('cetr-bareilly') || activeColgCd === '2') {
+      return 'SRMS College of Engineering, Technology & Research, Bareilly';
+    }
+    if (rawSlug === 'srms-ims' || rawSlug.includes('ims') || activeColgCd === '11') {
+      return 'SRMS Institute of Medical Sciences, Bareilly';
+    }
+    if (rawSlug === 'rmribar' || rawSlug.includes('rajshree')) {
+      return 'Rajshree Medical Research Institute & Hospital Bareilly';
+    }
+    if (rawSlug === 'rmch-bareilly') {
+      return 'Rohilkhand Medical College & Hospital';
+    }
+    if (rawSlug === 'apex-tech') {
+      return 'Apex Institute of Technology & Management';
+    }
+    if (rawSlug === 'srms-ibs-lucknow') return 'SRMS IBS, Lucknow';
+    if (rawSlug === 'srms-iahs-bareilly') return 'SRMS IAHS, Bareilly';
+    if (rawSlug === 'srms-trust-bareilly') return 'SRMS Trust, Bareilly';
+    if (rawSlug === 'srms-nursing-school') return 'SRMS Nursing School';
+    if (rawSlug === 'srms-nursing-college') return 'SRMS Nursing College';
+    if (rawSlug === 'srms-riddhima-bareilly') return 'SRMS Riddhima, Bareilly';
+    if (rawSlug === 'srms-college-of-nursing-paramedical-sciences-unnao') return 'SRMS College of Nursing & Paramedical Sciences, Unnao';
+    if (rawSlug === 'srms-quiz-panel') return 'SRMS Quiz Panel';
+    if (rawSlug === 'srms-cricket-academy') return 'SRMS Cricket Academy';
+    if (rawSlug === 'srms-cet-unnao') return 'SRMS CET, Unnao';
+    if (rawSlug === 'srms-college-of-law') return 'SRMS College of Law';
+
+    const fallbackStored = mounted ? (getStorageItem('collegeName') || getStorageItem('tenantName') || getStorageItem('colg_name')) : '';
+    if (fallbackStored && !fallbackStored.toLowerCase().includes('rajshree')) {
+      return fallbackStored;
+    }
+    return user?.collegeName || user?.tenantName || 'SRMS College of Engineering & Technology, Bareilly';
+  };
+
+  const collegeDisplayName = getResolvedCollegeName();
 
   return (
     <>
-      <header className="h-20 bg-[#2D2575] text-white px-6 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xl shadow-purple-950/20 rounded-b-[22px] border-b border-white/10">
-        <div className="flex items-center gap-3.5">
-          <span className="w-1.5 h-6 rounded-full bg-[#F36C21] shadow-[0_0_12px_rgba(243,108,33,0.6)]"></span>
-          <div>
-            <h2 className="text-sm font-black text-white tracking-wider uppercase font-sans">
+      <header 
+        className="h-16 md:h-20 text-white px-3.5 sm:px-6 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xl shadow-purple-950/20 rounded-b-[18px] md:rounded-b-[22px] border-b border-white/10"
+        style={{ backgroundColor: 'var(--sidebar-bg, #2D2575)' }}
+      >
+        <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1 mr-2">
+          {/* Mobile Hamburger Drawer Trigger */}
+          <button
+            type="button"
+            onClick={toggleMobileSidebar}
+            className="md:hidden p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white min-h-[44px] min-w-[44px] flex items-center justify-center transition-all active:scale-95 shadow-xs cursor-pointer shrink-0"
+            aria-label={isMobileSidebarOpen ? 'Close navigation drawer' : 'Open navigation drawer'}
+          >
+            {isMobileSidebarOpen ? (
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+
+          <span className="w-1.5 h-6 rounded-full bg-[#F36C21] shadow-[0_0_12px_rgba(243,108,33,0.6)] shrink-0 hidden xs:block"></span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xs sm:text-sm font-black text-white tracking-wider uppercase font-sans truncate">
               {title}
             </h2>
-            <p className="text-[10px] text-purple-200/90 font-bold truncate max-w-[420px]" title={collegeDisplayName}>
+            <p className="text-[9px] sm:text-[10px] text-purple-200/90 font-bold truncate max-w-[170px] xs:max-w-[240px] sm:max-w-[320px] md:max-w-[420px]" title={collegeDisplayName}>
               {collegeDisplayName}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Live Badge */}
-          <span className="text-[10px] px-3 py-1 rounded-full bg-white/10 text-emerald-300 border border-white/15 font-extrabold uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+          <span className="text-[10px] px-3 py-1 rounded-full bg-white/10 text-emerald-300 border border-white/15 font-extrabold uppercase tracking-wider hidden lg:flex items-center gap-1.5 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-[#00C48C] animate-pulse"></span>
             System Live
           </span>
@@ -377,7 +485,7 @@ export default function Header({ title }: HeaderProps) {
           <button
             type="button"
             onClick={toggleTheme}
-            className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm"
+            className="w-9 h-9 sm:w-9 sm:h-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
           >
             {theme === 'dark' ? (
@@ -391,12 +499,34 @@ export default function Header({ title }: HeaderProps) {
             )}
           </button>
 
+          {/* Batch & Dept Chat Header Button */}
+          <Link
+            href={
+              userRole === 'ADMIN' || userRole === 'SUPER_ADMIN' || userRole === 'COLLEGE_ADMIN'
+                ? '/dashboard/admin/chat'
+                : userRole === 'STUDENT'
+                ? '/dashboard/student/chat'
+                : '/dashboard/faculty/chat'
+            }
+            className="relative w-9 h-9 sm:w-9 sm:h-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm"
+            title="Batch & Department Discussions"
+          >
+            <svg className="w-4 h-4 text-emerald-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            {chatUnreadCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#00C48C] text-white text-[10px] font-black flex items-center justify-center border-2 border-[#2D2575] animate-pulse shadow-md">
+                {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+              </span>
+            )}
+          </Link>
+
           {/* Campus Alerts Notification Bell */}
           <div className="relative" ref={alertsRef}>
             <button
               type="button"
               onClick={() => setAlertsOpen(!alertsOpen)}
-              className="relative w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm"
+              className="relative w-9 h-9 sm:w-9 sm:h-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
               title="Campus Alerts & Notifications"
             >
               <svg className="w-4 h-4 text-purple-200" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

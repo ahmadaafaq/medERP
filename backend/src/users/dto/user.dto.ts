@@ -159,6 +159,135 @@ export class CreateFacultyDto {
   @IsOptional()
   @IsString()
   college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bloodGroup?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fatherName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  spouseName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  panNo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  aadhaarNo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  salgrade?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  currentBasic?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dateOfBirth?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dateOfJoining?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  caste?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  permAddr?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  permCity?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  permState?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  homephone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  permanentTelNo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  highestEducation?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  payrollCategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  employmentStatus?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bankAcNo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  uan?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  deviceCd?: string;
 }
 
 export class BulkCreateStudentsDto {

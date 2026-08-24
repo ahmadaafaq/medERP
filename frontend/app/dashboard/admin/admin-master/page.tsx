@@ -121,6 +121,8 @@ interface Subject {
   branch_cd?: string;
   batch_id?: string;
   batch_code?: string;
+  batch_cd?: string;
+  sem_cd?: string;
   college_id?: string;
   colg_cd?: string;
   college_name?: string;

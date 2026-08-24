@@ -34,7 +34,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         if (errors) message = 'Validation failed';
       }
     } else if (exception instanceof Error) {
-      // Log stack trace for unexpected errors (but never send to client)
+      console.error('Unhandled Exception in request:', exception);
       this.logger.error(`Unhandled exception: ${exception.message}`, {
         stack: exception.stack,
         path: request.url,
@@ -42,6 +42,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         tenantId: (request as any).tenant?.id,
         userId: (request as any).user?.id,
       });
+      if (process.env.NODE_ENV === 'development') {
+        message = `${exception.name}: ${exception.message}`;
+      }
     }
 
     // Log all errors >= 500

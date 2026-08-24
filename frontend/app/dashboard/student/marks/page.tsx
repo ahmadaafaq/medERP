@@ -195,12 +195,20 @@ export default function StudentMarksPage() {
                 SubTopic-wise performance breakdown across all exam papers and competencies.
               </p>
             </div>
-            <button
-              onClick={fetchMarks}
-              className="px-4 py-2.5 bg-[#5B4BFF] hover:bg-[#4E3FE3] text-white rounded-xl font-bold text-xs transition shadow-md flex items-center gap-2 cursor-pointer shrink-0"
-            >
-              🔄 Refresh Results
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard/student/reports/theory-result"
+                className="px-4 py-2.5 bg-[#2D2575] hover:bg-[#3D3399] text-white rounded-xl font-bold text-xs transition shadow-md flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                📝 Theory Exam Results
+              </Link>
+              <button
+                onClick={fetchMarks}
+                className="px-4 py-2.5 bg-[#5B4BFF] hover:bg-[#4E3FE3] text-white rounded-xl font-bold text-xs transition shadow-md flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                🔄 Refresh Results
+              </button>
+            </div>
           </div>
 
           {loading ? (

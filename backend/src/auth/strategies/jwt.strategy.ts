@@ -12,6 +12,11 @@ export interface JwtPayload {
   tenantSlug: string | null;
   colgCd?: string | null;
   collegeName?: string | null;
+  usr_id?: string | null;
+  devicecd?: number | string | null;
+  emp_id?: string | null;
+  loc_cd?: number | null;
+  department?: string | null;
   iat?: number;
   exp?: number;
 }

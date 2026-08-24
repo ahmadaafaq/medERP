@@ -134,17 +134,38 @@ export class UpdateCourseDto extends PartialType(CreateCourseDto) {
 export class CreateBatchDto {
   @ApiProperty({ example: 'MB2024' })
   @IsString()
-  @MaxLength(20)
+  @MaxLength(50)
   code: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
 
   @ApiProperty({ example: 2024 })
   @IsNumber()
   year: number;
 
-  @ApiProperty({ example: 'MBBS' })
+  @ApiPropertyOptional({ example: 2024 })
+  @IsOptional()
+  @IsNumber()
+  admissionYear?: number;
+
+  @ApiPropertyOptional({ example: 'MBBS' })
+  @IsOptional()
   @IsString()
-  @MaxLength(20)
-  courseCd: string;
+  @MaxLength(50)
+  courseCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -165,6 +186,21 @@ export class CreateBatchDto {
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
 }
 
 export class UpdateBatchDto extends PartialType(CreateBatchDto) {
@@ -245,6 +281,11 @@ export class CreateSessionDto {
   @ApiPropertyOptional({ example: '14' })
   @IsOptional()
   @IsString()
+  sessionCd?: string;
+
+  @ApiPropertyOptional({ example: '14' })
+  @IsOptional()
+  @IsString()
   code?: string;
 
   @ApiPropertyOptional({ example: '1' })
@@ -274,6 +315,11 @@ export class CreateSessionDto {
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
 }
 
 export class UpdateSessionDto extends PartialType(CreateSessionDto) {
@@ -285,10 +331,17 @@ export class UpdateSessionDto extends PartialType(CreateSessionDto) {
 
 // ─── 6. PROFESSIONAL PHASES / ACADEMIC YEAR ─────────────────────────────────
 export class CreateProfessionalDto {
-  @ApiProperty({ example: '1st Professional MBBS (Phase I)' })
+  @ApiPropertyOptional({ example: '1st Professional MBBS (Phase I)' })
+  @IsOptional()
   @IsString()
   @MaxLength(200)
-  name: string;
+  name?: string;
+
+  @ApiPropertyOptional({ example: '1st Professional MBBS (Phase I)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  phaseName?: string;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
@@ -299,6 +352,16 @@ export class CreateProfessionalDto {
   @IsOptional()
   @IsString()
   courseCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseId?: string;
 
   @ApiPropertyOptional({ example: 'CS' })
   @IsOptional()
@@ -320,6 +383,11 @@ export class CreateProfessionalDto {
   @IsNumber()
   academicYear?: number;
 
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsNumber()
+  durationYears?: number;
+
   @ApiPropertyOptional({ example: 'professional' })
   @IsOptional()
   @IsString()
@@ -329,6 +397,11 @@ export class CreateProfessionalDto {
   @IsOptional()
   @IsString()
   collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -382,6 +455,56 @@ export class CreateGroupDto {
 }
 
 export class UpdateGroupDto extends PartialType(CreateGroupDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+// ─── 9. RESIDENCY CATEGORY / RESIDENT ────────────────────────────────────────
+export class CreateResidencyDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseId?: string;
+
+  @ApiPropertyOptional({ example: 'Hosteller' })
+  @IsOptional()
+  @IsString()
+  residencyType?: string;
+
+  @ApiProperty({ example: 'AC Single Deluxe' })
+  @IsString()
+  @MaxLength(200)
+  categoryName: string;
+
+  @ApiPropertyOptional({ example: 'Wing B' })
+  @IsOptional()
+  @IsString()
+  blockWing?: string;
+
+  @ApiPropertyOptional({ example: 100 })
+  @IsOptional()
+  @IsNumber()
+  totalCapacity?: number;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @IsNumber()
+  allocatedCount?: number;
+
+  @ApiPropertyOptional({ example: 10000 })
+  @IsOptional()
+  @IsNumber()
+  monthlyFee?: number;
+}
+
+export class UpdateResidencyDto extends PartialType(CreateResidencyDto) {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()

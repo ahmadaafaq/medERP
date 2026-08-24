@@ -22,17 +22,32 @@ export class CreateProfessionalLinkerDto {
   @MaxLength(50)
   course_cd?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
+
   @ApiPropertyOptional({ example: '1st Professional (Phase I)' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   professional_phase?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  professionalPhase?: string;
+
   @ApiPropertyOptional({ example: '2024-2025' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   academic_session?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  academicSession?: string;
 
   @ApiPropertyOptional({ example: 'Linking Foundation Course, Anatomy, Physiology, Biochemistry to Phase I' })
   @IsOptional()
@@ -47,7 +62,17 @@ export class CreateProfessionalLinkerDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -58,6 +83,11 @@ export class CreateProfessionalLinkerDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateProfessionalLinkerDto extends PartialType(CreateProfessionalLinkerDto) {
@@ -65,6 +95,11 @@ export class UpdateProfessionalLinkerDto extends PartialType(CreateProfessionalL
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 // ─── 2. DEPARTMENT MASTER ────────────────────────────────────────────────────
@@ -93,7 +128,17 @@ export class CreateDepartmentMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   course_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -103,7 +148,17 @@ export class CreateDepartmentMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  courseName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   colg_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  colgCd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -112,13 +167,48 @@ export class CreateDepartmentMasterDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  department_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID()
   hod_user_id?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsUUID()
+  hodUserId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateDepartmentMasterDto extends PartialType(CreateDepartmentMasterDto) {
@@ -126,6 +216,11 @@ export class UpdateDepartmentMasterDto extends PartialType(CreateDepartmentMaste
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 // ─── 3. SUBJECT MASTER ───────────────────────────────────────────────────────
@@ -148,7 +243,17 @@ export class CreateSubjectMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  departmentId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   course_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -158,7 +263,17 @@ export class CreateSubjectMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  courseName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   branch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -168,12 +283,37 @@ export class CreateSubjectMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   colg_cd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  colgCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   batch_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batchId?: string;
 
   @ApiPropertyOptional({ example: 4 })
   @IsOptional()
@@ -183,7 +323,7 @@ export class CreateSubjectMasterDto {
   @ApiPropertyOptional({ example: 'Combined' })
   @IsOptional()
   @IsString()
-  @MaxLength(20)
+  @MaxLength(50)
   type?: string;
 
   @ApiPropertyOptional({ example: false })
@@ -193,8 +333,18 @@ export class CreateSubjectMasterDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsBoolean()
+  isLongitudinal?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   batch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batchCd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -204,7 +354,12 @@ export class CreateSubjectMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  semester?: string;
+  semCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  semester?: string | number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -214,12 +369,27 @@ export class CreateSubjectMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  subAddinfo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   mst_sub_name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  mstSubName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateSubjectMasterDto extends PartialType(CreateSubjectMasterDto) {
@@ -227,6 +397,11 @@ export class UpdateSubjectMasterDto extends PartialType(CreateSubjectMasterDto) 
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 // ─── 4. TOPIC MASTER ─────────────────────────────────────────────────────────
@@ -239,7 +414,17 @@ export class CreateTopicMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -249,7 +434,17 @@ export class CreateTopicMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  courseCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   branch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -259,7 +454,17 @@ export class CreateTopicMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  subjectId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   subject_code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subjectCode?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -269,7 +474,17 @@ export class CreateTopicMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  unitId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   unit_code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  unitCode?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -278,8 +493,18 @@ export class CreateTopicMasterDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  bloomLevel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   linker_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkerId?: string;
 
   @ApiProperty({ example: 'ANAT-TOPIC-1' })
   @IsString()
@@ -308,8 +533,18 @@ export class CreateTopicMasterDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsNumber()
+  batchYear?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateTopicMasterDto extends PartialType(CreateTopicMasterDto) {
@@ -317,6 +552,11 @@ export class UpdateTopicMasterDto extends PartialType(CreateTopicMasterDto) {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 // ─── 5. COMPETENCY / SUB-TOPIC MASTER ──────────────────────────────────────────
@@ -329,7 +569,17 @@ export class CreateCompetencyMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -339,7 +589,17 @@ export class CreateCompetencyMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  courseCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   branch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -349,7 +609,17 @@ export class CreateCompetencyMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  subjectId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   subject_code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subjectCode?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -359,7 +629,17 @@ export class CreateCompetencyMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  unitId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   unit_code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  unitCode?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -369,12 +649,27 @@ export class CreateCompetencyMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  topicId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   topic_code?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  topicCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   linker_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkerId?: string;
 
   @ApiPropertyOptional({ example: 'AN1.1' })
   @IsOptional()
@@ -411,15 +706,40 @@ export class CreateCompetencyMasterDto {
   @MaxLength(100)
   bloom_level?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bloomLevel?: string;
+
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
   is_core?: boolean;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isCore?: boolean;
+
   @ApiPropertyOptional({ example: 2025 })
   @IsOptional()
   @IsNumber()
   batch_year?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  batchYear?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -440,19 +760,59 @@ export class UpdateCompetencyMasterDto extends PartialType(CreateCompetencyMaste
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 // ─── 6. DELIVERY TYPE MASTER ─────────────────────────────────────────────────
 export class CreateDeliveryTypeDto {
   @ApiProperty({ example: 'TH' })
   @IsString()
-  @MaxLength(10)
+  @MaxLength(50)
   code: string;
 
   @ApiProperty({ example: 'Theory' })
   @IsString()
-  @MaxLength(50)
+  @MaxLength(100)
   name: string;
+
+  @ApiPropertyOptional({ example: 'Classroom interactive lecture' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateDeliveryTypeDto extends PartialType(CreateDeliveryTypeDto) {
@@ -460,6 +820,11 @@ export class UpdateDeliveryTypeDto extends PartialType(CreateDeliveryTypeDto) {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 // ─── 7. SUBJECT OFFERINGS JUNCTION ───────────────────────────────────────────
@@ -472,12 +837,27 @@ export class CreateSubjectOfferingDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  subjectId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   subject_code?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  subjectCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   prof_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  profId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -491,16 +871,56 @@ export class CreateSubjectOfferingDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  dtypeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   dtype_code?: string;
 
-  @ApiProperty({ example: 2024 })
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dtypeCode?: string;
+
+  @ApiPropertyOptional({ example: 2024 })
+  @IsOptional()
   @IsNumber()
-  batch_year: number;
+  batch_year?: number;
+
+  @ApiPropertyOptional({ example: 2024 })
+  @IsOptional()
+  @IsNumber()
+  batchYear?: number;
+
+  @ApiPropertyOptional({ example: '2024-2025' })
+  @IsOptional()
+  @IsString()
+  academic_year?: string;
+
+  @ApiPropertyOptional({ example: '2024-2025' })
+  @IsOptional()
+  @IsString()
+  academicYear?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batch?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  semester?: string | number;
 
   @ApiPropertyOptional({ example: 120 })
   @IsOptional()
   @IsNumber()
   hours_allotted?: number;
+
+  @ApiPropertyOptional({ example: 120 })
+  @IsOptional()
+  @IsNumber()
+  hoursAllotted?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -510,7 +930,17 @@ export class CreateSubjectOfferingDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  batchId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   course_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -520,7 +950,17 @@ export class CreateSubjectOfferingDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -530,12 +970,37 @@ export class CreateSubjectOfferingDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  collegeSlug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   colg_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  colgCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_elective?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isElective?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateSubjectOfferingDto extends PartialType(CreateSubjectOfferingDto) {
@@ -543,6 +1008,11 @@ export class UpdateSubjectOfferingDto extends PartialType(CreateSubjectOfferingD
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 // ─── 8. FACULTY SUBJECT LINKER ───────────────────────────────────────────────
@@ -554,6 +1024,21 @@ export class LinkFacultySubjectDto {
   @ApiProperty({ description: 'Subject UUID or Subject Numeric Code' })
   @IsString()
   subjectId: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
 }
 
 // ─── 9. UNIT MASTER ─────────────────────────────────────────────────────────
@@ -579,7 +1064,27 @@ export class CreateUnitMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  subjectId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   subject_code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subjectCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  unit_code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  unitCode?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -589,7 +1094,17 @@ export class CreateUnitMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  courseCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   course_name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -599,22 +1114,47 @@ export class CreateUnitMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   batch_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batchId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
   batch_year?: number;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  batchYear?: number;
+
   @ApiPropertyOptional({ example: 'KL-2 (Understand)' })
   @IsOptional()
   @IsString()
   bloom_level?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bloomLevel?: string;
+
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
   @IsNumber()
   unit_order?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  unitOrder?: number;
 
   @ApiPropertyOptional({ example: 10 })
   @IsOptional()
@@ -629,7 +1169,17 @@ export class CreateUnitMasterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -638,8 +1188,18 @@ export class CreateUnitMasterDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  colgCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateUnitMasterDto extends PartialType(CreateUnitMasterDto) {
@@ -647,5 +1207,10 @@ export class UpdateUnitMasterDto extends PartialType(CreateUnitMasterDto) {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 

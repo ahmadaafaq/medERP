@@ -51,6 +51,12 @@ export class ExaminationController {
   }
 
   @Public()
+  @Get('student/:rollno')
+  async getStudentMarksByStudentId(@Tenant() tenantSlug: string, @Param('rollno') rollno: string) {
+    return this.examinationService.getStudentMarks(tenantSlug, rollno);
+  }
+
+  @Public()
   @Post('question-bank')
   async createQuestion(@Tenant() tenantSlug: string, @Body() dto: CreateQuestionDto) {
     return this.examinationService.createQuestion(tenantSlug, dto);

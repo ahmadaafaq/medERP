@@ -22,6 +22,7 @@ import * as fs from 'fs';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/role.enum';
 import { Tenant } from '../common/decorators/tenant.decorator';
 import { NoticesService } from './notices.service';
@@ -275,6 +276,44 @@ export class NoticesController {
   // ──────────────────────────────────────────────────────────────────────────
   // RECIPIENT NOTICES (Role-Scoped for Current Logged-In User)
   // ──────────────────────────────────────────────────────────────────────────
+  private extractRecipientUser(req: any): { userId?: string; userRole: string } {
+    if (req.user && req.user.role) {
+      return {
+        userId: req.user.sub || req.user.id || req.user.userId,
+        userRole: (req.user.role || '').toUpperCase(),
+      };
+    }
+
+    const authHeader = req.headers?.authorization || req.headers?.Authorization;
+    let tokenUser: any = null;
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const payloadBase64 = token.split('.')[1];
+        if (payloadBase64) {
+          tokenUser = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf8'));
+        }
+      } catch {}
+    }
+
+    const userId =
+      req.headers?.['x-user-id'] ||
+      req.headers?.['x-user-reg-no'] ||
+      tokenUser?.id ||
+      tokenUser?.sub ||
+      tokenUser?.registration_no;
+
+    const userRole = (
+      req.headers?.['x-user-role'] ||
+      req.query?.role ||
+      tokenUser?.role ||
+      'STUDENT'
+    ).toUpperCase();
+
+    return { userId, userRole };
+  }
+
+  @Public()
   @Get('notices')
   @ApiOperation({ summary: 'Get notices targeted to the logged-in user' })
   async getMyNotices(
@@ -284,12 +323,12 @@ export class NoticesController {
     @Query('tenant') queryTenant?: string,
   ) {
     const slug = queryTenant || tenantSlug;
-    const userId = req.user?.sub || req.user?.id || req.user?.userId;
-    const userRole = req.user?.role || req.user?.user_role || '';
+    const { userId, userRole } = this.extractRecipientUser(req);
     const data = await this.noticesService.getRoleScopedNotices(userId, userRole, filter, slug);
     return { success: true, data };
   }
 
+  @Public()
   @Get('notices/unread-count')
   @ApiOperation({ summary: 'Get unread notice badge counts for logged-in user' })
   async getUnreadCount(
@@ -298,12 +337,12 @@ export class NoticesController {
     @Query('tenant') queryTenant?: string,
   ) {
     const slug = queryTenant || tenantSlug;
-    const userId = req.user?.sub || req.user?.id || req.user?.userId;
-    const userRole = req.user?.role || req.user?.user_role || '';
+    const { userId, userRole } = this.extractRecipientUser(req);
     const data = await this.noticesService.getUnreadCount(userId, userRole, slug);
     return { success: true, data };
   }
 
+  @Public()
   @Get('notices/:id')
   @ApiOperation({ summary: 'Get full notice detail and mark as read' })
   async getNoticeDetail(
@@ -313,11 +352,12 @@ export class NoticesController {
     @Query('tenant') queryTenant?: string,
   ) {
     const slug = queryTenant || tenantSlug;
-    const userId = req.user?.sub || req.user?.id;
+    const { userId } = this.extractRecipientUser(req);
     const data = await this.noticesService.getNoticeById(id, userId, slug);
     return { success: true, data };
   }
 
+  @Public()
   @Patch('notices/:id/read')
   @ApiOperation({ summary: 'Mark notice as read for current user' })
   async markRead(
@@ -327,10 +367,11 @@ export class NoticesController {
     @Query('tenant') queryTenant?: string,
   ) {
     const slug = queryTenant || tenantSlug;
-    const userId = req.user?.sub || req.user?.id;
-    return this.noticesService.markAsRead(id, userId, slug);
+    const { userId } = this.extractRecipientUser(req);
+    return this.noticesService.markAsRead(id, userId || '', slug);
   }
 
+  @Public()
   @Patch('notices/:id/acknowledge')
   @ApiOperation({ summary: 'Acknowledge circular receipt' })
   async acknowledge(
@@ -340,7 +381,7 @@ export class NoticesController {
     @Query('tenant') queryTenant?: string,
   ) {
     const slug = queryTenant || tenantSlug;
-    const userId = req.user?.sub || req.user?.id;
-    return this.noticesService.acknowledgeNotice(id, userId, slug);
+    const { userId } = this.extractRecipientUser(req);
+    return this.noticesService.acknowledgeNotice(id, userId || '', slug);
   }
 }

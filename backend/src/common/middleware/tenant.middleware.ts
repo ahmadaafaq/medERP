@@ -61,7 +61,7 @@ export class TenantMiddleware implements NestMiddleware {
     }
 
     // Super-admin routes or multi-tenant aggregated routes ('all') don't require a single tenant context
-    if (!slug || slug === 'all') {
+    if (!slug || slug === 'all' || slug === 'superadmin' || slug === 'public' || slug === 'owner') {
       next();
       return;
     }
@@ -73,7 +73,7 @@ export class TenantMiddleware implements NestMiddleware {
     }
 
     // Look up tenant in the public schema by slug, code, or id
-    const result = await this.dataSource.query(
+    let result = await this.dataSource.query(
       `SELECT id, slug, name, is_active FROM public.tenants
        WHERE LOWER(slug) = $1 OR LOWER(code) = $1 OR id::text = $1
        LIMIT 1`,
@@ -81,12 +81,67 @@ export class TenantMiddleware implements NestMiddleware {
     );
 
     if (!result.length) {
-      throw new UnauthorizedException(`Tenant '${slug}' not found`);
+      // Fallback: check in public.firms (registered SaaS tenants)
+      const firmResult = await this.dataSource.query(
+        `SELECT id, slug, title as name, (status != 'SUSPENDED') as is_active FROM public.firms
+         WHERE LOWER(slug) = $1 OR id::text = $1
+         LIMIT 1`,
+        [slug],
+      );
+
+      if (firmResult.length > 0) {
+        result = firmResult;
+        // Auto-sync into public.tenants
+        try {
+          await this.dataSource.query(
+            `INSERT INTO public.tenants (id, name, slug, code, is_active, schema_provisioned, created_at, updated_at)
+             VALUES ($1, $2, $3, $3, true, true, NOW(), NOW())
+             ON CONFLICT (slug) DO NOTHING`,
+            [firmResult[0].id, firmResult[0].name, firmResult[0].slug],
+          );
+        } catch {}
+      } else {
+        throw new UnauthorizedException(`Tenant '${slug}' not found`);
+      }
     }
 
     const tenant = result[0];
     if (!tenant.is_active) {
       throw new UnauthorizedException(`Tenant '${slug}' is suspended`);
+    }
+
+    // Strict Firm Status & License Expiry Check
+    const firmStatusCheck = await this.dataSource.query(
+      `SELECT id, title, status, trial_ends_at FROM public.firms WHERE LOWER(slug) = $1 LIMIT 1`,
+      [slug],
+    );
+
+    if (firmStatusCheck.length > 0) {
+      const f = firmStatusCheck[0];
+      if (f.status === 'SUSPENDED') {
+        throw new UnauthorizedException(`Access Denied: "${f.title}" is suspended by the platform owner.`);
+      }
+
+      const now = new Date();
+      const activeKeys = await this.dataSource.query(
+        `SELECT id, expires_at FROM public.license_keys 
+         WHERE firm_id = $1 AND status = 'ACTIVE' AND expires_at > NOW() 
+         ORDER BY expires_at DESC LIMIT 1`,
+        [f.id],
+      );
+
+      const hasActiveLicense = activeKeys.length > 0;
+      const isTrialActive = f.trial_ends_at && new Date(f.trial_ends_at) > now;
+
+      if (f.status === 'EXPIRED' || (!hasActiveLicense && !isTrialActive)) {
+        if (f.status !== 'EXPIRED') {
+          await this.dataSource.query(
+            `UPDATE public.firms SET status = 'EXPIRED', updated_at = NOW() WHERE id = $1`,
+            [f.id],
+          );
+        }
+        throw new UnauthorizedException(`Licence Key is expired Renewal Now (Institution "${f.title}" license has expired).`);
+      }
     }
 
     req.tenant = {

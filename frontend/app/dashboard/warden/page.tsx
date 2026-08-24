@@ -1,75 +1,176 @@
 'use client';
 
+import React, { useState } from 'react';
 import Header from '../../../components/Header';
 import Sidebar from '../../../components/Sidebar';
 import Link from 'next/link';
+import HostelMessMenuWidget from '../../../components/warden/HostelMessMenuWidget';
+import NoticeDashboardWidget from '../../../components/notices/NoticeDashboardWidget';
+import ChatDashboardWidget from '../../../components/chat/ChatDashboardWidget';
+import {
+  Building2,
+  Users,
+  Utensils,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
+  FileText,
+  ShieldCheck,
+} from 'lucide-react';
 
 export default function WardenDashboardPage() {
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans">
-      <Sidebar role="warden" />
-      
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <Header title="Hostel Warden Administration & Allotment Console" />
+  const [wardenKpis] = useState({
+    totalRooms: 240,
+    occupiedRooms: 226,
+    occupancyRate: '94.2%',
+    totalResidents: 452,
+    eveningPunchedIn: 441,
+    pendingCurfewPunch: 11,
+    sickDietActive: 3,
+    todayMealCount: 904,
+  });
 
-        <div className="p-6 space-y-6 max-w-7xl mx-auto w-full">
+  return (
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
+      <Sidebar role="warden" />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <Header title="Hostel Warden Administration & Residential Dining Console" />
+
+        <main className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 flex-1 max-w-[1600px] w-full mx-auto overflow-x-hidden">
           {/* Welcome Banner */}
-          <div className="p-6 rounded-2xl bg-gradient-to-r from-purple-900/40 via-indigo-900/20 to-slate-900 border border-purple-500/20 shadow-xl flex items-center justify-between">
-            <div className="space-y-1">
+          <div className="bg-gradient-to-r from-[#2D2575] via-[#3B2F99] to-[#5B4BFF] rounded-[22px] p-6 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1.5 z-10">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300 font-mono font-bold uppercase tracking-wider">
-                  WARDEN PORTAL
+                <span className="bg-[#F36C21] text-white text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full tracking-wider shadow-sm">
+                  HOSTEL RESIDENCE CONTROL
                 </span>
-                <span className="text-xs text-slate-400">Hostel Residence Space</span>
+                <span className="text-white/70 text-xs font-mono">
+                  Blocks A, B & Gargi Girls Wing
+                </span>
               </div>
-              <h1 className="text-2xl font-black text-white">Hostel Warden Portal</h1>
-              <p className="text-xs text-slate-300">
-                Manage hostel blocks, room allotments, resident occupancy, and student attendance registers.
+              <h1 className="text-2xl font-black tracking-tight flex items-center gap-2.5">
+                <span>🏢</span>
+                <span>Hostel Warden Console & Mess Operations</span>
+              </h1>
+              <p className="text-white/80 text-xs font-medium">
+                Live resident occupancy, 4-course daily mess dining menu, evening attendance audit, and sick meal requests.
               </p>
             </div>
 
-            <div className="hidden sm:flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-center">
-                <p className="text-[10px] text-slate-400 font-bold uppercase">Total Resident Rooms</p>
-                <p className="text-lg font-black text-purple-400">240 Rooms</p>
+            <div className="flex items-center gap-3 z-10">
+              <div className="p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-center shrink-0">
+                <p className="text-[10px] text-white/80 font-extrabold uppercase">Total Residents</p>
+                <p className="text-xl font-black text-white">{wardenKpis.totalResidents} Students</p>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[#F36C21]/90 backdrop-blur-md border border-white/20 text-center shrink-0">
+                <p className="text-[10px] text-white/80 font-extrabold uppercase">Daily Meals</p>
+                <p className="text-xl font-black text-white">{wardenKpis.todayMealCount} Servings</p>
+              </div>
+            </div>
+
+            {/* Subtle decorative circles */}
+            <div className="absolute right-0 top-0 w-80 h-80 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+          </div>
+
+          {/* Quick KPI Overview Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {/* KPI 1: Occupancy */}
+            <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-5 shadow-soft hover:shadow-md transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                  Room Occupancy
+                </span>
+                <span className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center text-base shadow-sm">
+                  🏢
+                </span>
+              </div>
+              <div className="mt-3">
+                <p className="text-3xl font-black text-[#1B1E28] dark:text-white tracking-tight">
+                  {wardenKpis.occupancyRate}
+                </p>
+                <div className="mt-2 flex items-center justify-between text-xs text-[#4E5969] dark:text-slate-400 font-bold">
+                  <span>{wardenKpis.occupiedRooms} / {wardenKpis.totalRooms} Rooms Filled</span>
+                  <span className="text-[#00C48C]">14 Vacant</span>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI 2: Evening Curfew Punches */}
+            <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-5 shadow-soft hover:shadow-md transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                  Curfew Attendance
+                </span>
+                <span className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#00C48C] flex items-center justify-center text-base shadow-sm">
+                  ⏱️
+                </span>
+              </div>
+              <div className="mt-3">
+                <p className="text-3xl font-black text-[#00C48C] tracking-tight">
+                  {wardenKpis.eveningPunchedIn}
+                </p>
+                <div className="mt-2 flex items-center justify-between text-xs font-bold">
+                  <span className="text-slate-500">Punched Inside Block</span>
+                  <span className="text-[#F04438]">{wardenKpis.pendingCurfewPunch} Pending Log</span>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI 3: Daily Mess Meals */}
+            <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-5 shadow-soft hover:shadow-md transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                  Mess Daily Meal Intake
+                </span>
+                <span className="w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-950/60 text-[#F36C21] flex items-center justify-center text-base shadow-sm">
+                  🍽️
+                </span>
+              </div>
+              <div className="mt-3">
+                <p className="text-3xl font-black text-[#F36C21] tracking-tight">
+                  4 Courses
+                </p>
+                <div className="mt-2 flex items-center justify-between text-xs text-[#4E5969] dark:text-slate-400 font-bold">
+                  <span>Morning • Lunch • Snacks • Dinner</span>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI 4: Sick Diet Requisitions */}
+            <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-5 shadow-soft hover:shadow-md transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                  Special / Sick Diets
+                </span>
+                <span className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center text-base shadow-sm">
+                  🏥
+                </span>
+              </div>
+              <div className="mt-3">
+                <p className="text-3xl font-black text-rose-500 tracking-tight">
+                  {wardenKpis.sickDietActive} Active
+                </p>
+                <div className="mt-2 flex items-center justify-between text-xs text-[#4E5969] dark:text-slate-400 font-bold">
+                  <span>Khichdi & Boiled Diet Prep</span>
+                  <span className="text-[#5B4BFF] hover:underline cursor-pointer">View ➔</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Quick Action Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <Link
-              href="/dashboard/admin/student-master"
-              className="p-5 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-purple-500/50 transition-all group shadow-lg space-y-3"
-            >
-              <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 group-hover:bg-purple-600 group-hover:text-white flex items-center justify-center transition-all">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="font-extrabold text-sm text-white group-hover:text-purple-400 transition-colors">Resident Allotments & Roster</h3>
-                <p className="text-xs text-slate-400 mt-1">Review hostel block allocations, room numbers, and resident directory.</p>
-              </div>
-            </Link>
-
-            <Link
-              href="/dashboard/admin/attendance-master"
-              className="p-5 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-indigo-500/50 transition-all group shadow-lg space-y-3"
-            >
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center transition-all">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="font-extrabold text-sm text-white group-hover:text-indigo-400 transition-colors">Hostel Attendance Audit</h3>
-                <p className="text-xs text-slate-400 mt-1">Verify evening hostel curfew attendance and leave logs.</p>
-              </div>
-            </Link>
+          {/* MAIN FOOD MENU COMPONENT (Morning, Lunch, Evening Snacks, Dinner) */}
+          <div className="space-y-6">
+            <HostelMessMenuWidget />
           </div>
-        </div>
-      </main>
+
+          {/* 2-Column Communications & Circulars Hub */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            <ChatDashboardWidget role="ADMIN" chatUrl="/dashboard/warden/chat" />
+            <NoticeDashboardWidget role="warden" />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

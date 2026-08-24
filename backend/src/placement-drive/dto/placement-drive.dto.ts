@@ -102,4 +102,27 @@ export class PlacementReportQueryDto {
   @IsOptional()
   @IsString()
   filter_type?: 'all' | 'zero' | 'multiple'; // 'zero' = 0 placements, 'multiple' = 2+ placements
+
+  @IsOptional()
+  @IsString()
+  tenant?: string;
+}
+
+export class ConfirmImportDriveDto {
+  @IsString()
+  @IsNotEmpty()
+  batch_title: string;
+
+  @IsOptional()
+  @IsString()
+  source_file_name?: string;
+
+  @IsNotEmpty()
+  companies: any[];
+}
+
+export class RespondOfferDto {
+  @IsString()
+  @IsIn(['accept', 'decline'])
+  action: 'accept' | 'decline';
 }

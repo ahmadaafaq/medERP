@@ -1,5 +1,7 @@
 import './globals.css';
 import React from 'react';
+import TenantThemeProvider from '../components/theme/TenantThemeProvider';
+import TenantThemeInjector from '../components/TenantThemeInjector';
 
 export const metadata = {
   title: 'MedERP — Multi-Tenant Medical University ERP',
@@ -11,8 +13,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+        <link rel="preconnect" href="https://gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -29,7 +31,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-screen antialiased">
-        {children}
+        <TenantThemeProvider>
+          <TenantThemeInjector />
+          {children}
+        </TenantThemeProvider>
       </body>
     </html>
   );

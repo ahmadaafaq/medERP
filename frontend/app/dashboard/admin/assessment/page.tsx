@@ -833,63 +833,23 @@ export default function AssessmentMasterPage() {
 
   const handleDepartmentChange = (deptId: string) => {
     setSelectedDept(deptId);
-    setSelectedUnitId('CO1');
-    setSelectedTopicId('T1');
-    setSelectedSubTopicId('WT1.1');
-    setSelectedSubTopicCode('WT1.1');
   };
 
   const handleSubjectChange = (subjectId: string) => {
     setSelectedSubject(subjectId);
-    setSelectedUnitId('CO1');
-    setSelectedTopicId('T1');
-    setSelectedSubTopicId('WT1.1');
-    setSelectedSubTopicCode('WT1.1');
   };
 
   const handleUnitChange = (unitId: string) => {
     setSelectedUnitId(unitId);
-    // Also update the question bank filter to match selected unit
     const unitObj = availableUnits.find(u => u.id === unitId || u.code === unitId);
     setFilterUnit(unitObj?.code || unitId || 'all');
-
-    const matchingTopics = availableTopics.filter(t => t.unit_id === unitId || t.unit_code === unitId ||
-      (unitObj && (t.unit_id === unitObj.id || t.unit_code === unitObj.code)));
-    if (matchingTopics.length > 0) {
-      const firstT = matchingTopics[0];
-      setSelectedTopicId(firstT.id || firstT.code);
-      setSelectedTopicName(firstT.name);
-      setFilterTopic(firstT.name || 'all');
-
-      const matchingSub = availableSubTopics.find(s => s.topic_id === firstT.id || s.topic_code === firstT.code);
-      if (matchingSub) {
-        setSelectedSubTopicId(matchingSub.id || matchingSub.code);
-        setSelectedSubTopicCode(matchingSub.code);
-        setFilterSubTopic(matchingSub.code || 'all');
-      } else {
-        setFilterSubTopic('all');
-      }
-    } else {
-      setFilterTopic('all');
-      setFilterSubTopic('all');
-    }
   };
 
   const handleTopicChange = (topicId: string) => {
     setSelectedTopicId(topicId);
     const found = availableTopics.find(t => t.id === topicId || t.code === topicId);
     setSelectedTopicName(found?.name || '');
-    // Also update the question bank filter
     setFilterTopic(found?.name || topicId || 'all');
-
-    const matchingSub = availableSubTopics.find(s => s.topic_id === topicId || s.topic_code === topicId || (found && (s.topic_id === found.id || s.topic_code === found.code)));
-    if (matchingSub) {
-      setSelectedSubTopicId(matchingSub.id || matchingSub.code);
-      setSelectedSubTopicCode(matchingSub.code);
-      setFilterSubTopic(matchingSub.code || 'all');
-    } else {
-      setFilterSubTopic('all');
-    }
   };
 
   const handleSubTopicChange = (subTopicIdOrCode: string) => {
@@ -905,81 +865,191 @@ export default function AssessmentMasterPage() {
     }
   };
 
-  // Units filtered by selected Subject
+  // 1. Units filtered by selected Subject & Course
   const availableUnits = useMemo(() => {
     const subObj = filteredSubjects.find(s => s.id === selectedSubject || s.code === selectedSubject);
-    const matched = allUnits.filter(u =>
-      u.subject_id === selectedSubject ||
-      u.subject_code === selectedSubject ||
-      (subObj && (u.subject_id === subObj.id || u.subject_code === subObj.code))
-    );
-    return matched.length > 0 ? matched : [
+    const matched = allUnits.filter(u => {
+      if (selectedSubject) {
+        return (
+          u.subject_id === selectedSubject ||
+          u.subject_code === selectedSubject ||
+          (subObj && (u.subject_id === subObj.id || u.subject_code === subObj.code))
+        );
+      }
+      if (selectedCourseCd) {
+        return !u.course_cd || String(u.course_cd) === String(selectedCourseCd);
+      }
+      return true;
+    });
+
+    if (matched.length > 0) return dedupeBy(matched, u => u.id || u.code);
+
+    if (allUnits.length > 0) {
+      const courseMatched = allUnits.filter(u => !selectedCourseCd || !u.course_cd || String(u.course_cd) === String(selectedCourseCd));
+      if (courseMatched.length > 0) return dedupeBy(courseMatched, u => u.id || u.code);
+      return dedupeBy(allUnits, u => u.id || u.code);
+    }
+
+    return [
       { id: 'u1', code: 'CO1', name: 'Unit 1: Fundamentals & Core Architecture' },
       { id: 'u2', code: 'CO2', name: 'Unit 2: Frameworks & Client-Side Execution' },
       { id: 'u3', code: 'CO3', name: 'Unit 3: Full-Stack Web Services & APIs' },
       { id: 'u4', code: 'CO4', name: 'Unit 4: Database Integration & Storage' },
     ];
-  }, [allUnits, selectedSubject, filteredSubjects]);
+  }, [allUnits, selectedSubject, filteredSubjects, selectedCourseCd]);
 
+  // Keep selectedUnitId in sync with availableUnits
   useEffect(() => {
     if (availableUnits.length > 0) {
       const exists = availableUnits.some(u => u.id === selectedUnitId || u.code === selectedUnitId);
       if (!exists) {
         setSelectedUnitId(availableUnits[0].id || availableUnits[0].code);
       }
+    } else {
+      setSelectedUnitId('');
     }
   }, [availableUnits, selectedUnitId]);
 
-  // Topics filtered by selected Unit & Subject
+  // 2. Topics filtered strictly by selected Unit & Subject
   const availableTopics = useMemo(() => {
     const subObj = filteredSubjects.find(s => s.id === selectedSubject || s.code === selectedSubject);
     const unitObj = availableUnits.find(u => u.id === selectedUnitId || u.code === selectedUnitId);
 
     const matched = dbTopics.filter(t => {
-      if (selectedUnitId && !(t.unit_id === selectedUnitId || t.unit_code === selectedUnitId || (unitObj && (t.unit_id === unitObj.id || t.unit_code === unitObj.code)))) {
-        return false;
+      // Must match Unit if selectedUnitId is set
+      if (selectedUnitId) {
+        const matchUnit = (
+          t.unit_id === selectedUnitId ||
+          t.unit_code === selectedUnitId ||
+          (unitObj && (t.unit_id === unitObj.id || t.unit_code === unitObj.code))
+        );
+        if (!matchUnit) return false;
       }
-      if (selectedSubject && !(t.subject_id === selectedSubject || t.subject_code === selectedSubject || (subObj && (t.subject_id === subObj.id || t.subject_code === subObj.code)))) {
-        return false;
+      // Must match Subject if selectedSubject is set
+      if (selectedSubject) {
+        const matchSubj = (
+          t.subject_id === selectedSubject ||
+          t.subject_code === selectedSubject ||
+          (subObj && (t.subject_id === subObj.id || t.subject_code === subObj.code))
+        );
+        if (!matchSubj) return false;
       }
       return true;
     });
-    return matched.length > 0 ? matched : [
-      { id: 't1', code: 'T1', name: 'HTTP Protocol & REST Architecture', unit_code: selectedUnitId || 'CO1' },
-      { id: 't2', code: 'T2', name: 'Next.js 14 App Router & Components', unit_code: selectedUnitId || 'CO2' },
-      { id: 't3', code: 'T3', name: 'Relational Schema & PostgreSQL Storage', unit_code: selectedUnitId || 'CO4' },
-    ];
+
+    if (matched.length > 0) return dedupeBy(matched, t => t.id || t.code);
+
+    // If unit matches in dbTopics regardless of subject code
+    if (selectedUnitId && dbTopics.length > 0) {
+      const unitOnly = dbTopics.filter(t =>
+        t.unit_id === selectedUnitId ||
+        t.unit_code === selectedUnitId ||
+        (unitObj && (t.unit_id === unitObj.id || t.unit_code === unitObj.code))
+      );
+      if (unitOnly.length > 0) return dedupeBy(unitOnly, t => t.id || t.code);
+    }
+
+    // Only return fallback topics if no database topics exist at all
+    if (dbTopics.length === 0) {
+      return [
+        { id: 't1', code: 'T1', name: 'HTTP Protocol & REST Architecture', unit_code: selectedUnitId || 'CO1' },
+        { id: 't2', code: 'T2', name: 'Next.js 14 App Router & Components', unit_code: selectedUnitId || 'CO2' },
+        { id: 't3', code: 'T3', name: 'Relational Schema & PostgreSQL Storage', unit_code: selectedUnitId || 'CO4' },
+      ];
+    }
+
+    return [];
   }, [dbTopics, selectedUnitId, selectedSubject, availableUnits, filteredSubjects]);
 
+  // Keep selectedTopicId in sync with availableTopics
   useEffect(() => {
     if (availableTopics.length > 0) {
       const exists = availableTopics.some(t => t.id === selectedTopicId || t.code === selectedTopicId);
       if (!exists) {
         const firstT = availableTopics[0];
         setSelectedTopicId(firstT.id || firstT.code);
-        setSelectedTopicName(firstT.name);
+        setSelectedTopicName(firstT.name || '');
       }
+    } else {
+      setSelectedTopicId('');
+      setSelectedTopicName('');
     }
   }, [availableTopics, selectedTopicId]);
 
-  // Sub Topics (Competencies) filtered by selected Topic
+  // 3. Sub Topics (Competencies) strictly filtered by selected Topic & Unit
   const availableSubTopics = useMemo(() => {
     const topicObj = availableTopics.find(t => t.id === selectedTopicId || t.code === selectedTopicId);
+    const unitObj = availableUnits.find(u => u.id === selectedUnitId || u.code === selectedUnitId);
+
     const matched = dbSubTopics.filter(s => {
       if (selectedTopicId) {
-        return s.topic_id === selectedTopicId || s.topic_code === selectedTopicId || (topicObj && (s.topic_id === topicObj.id || s.topic_code === topicObj.code));
+        const matchTopic = (
+          s.topic_id === selectedTopicId ||
+          s.topic_code === selectedTopicId ||
+          (topicObj && (
+            s.topic_id === topicObj.id ||
+            s.topic_code === topicObj.code ||
+            (s.topic_name && topicObj.name && s.topic_name.toLowerCase() === topicObj.name.toLowerCase())
+          ))
+        );
+        if (matchTopic) return true;
+        return false;
+      }
+      if (selectedUnitId) {
+        return (
+          s.unit_id === selectedUnitId ||
+          s.unit_code === selectedUnitId ||
+          (unitObj && (s.unit_id === unitObj.id || s.unit_code === unitObj.code))
+        );
       }
       return true;
     });
-    return matched.length > 0 ? matched : [
-      { id: 'st1', code: 'WT1.1', description: 'Core Fundamentals & Client-Server Handshake' },
-      { id: 'st2', code: 'WT1.2', description: 'API Integration & State Management' },
-      { id: 'st3', code: 'WT1.3', description: 'Database Schema & Transactions' },
-      { id: 'st4', code: 'WT1.4', description: 'CSS Flexbox & UI Layouts' },
-      { id: 'st5', code: 'WT1.5', description: 'Transaction ACID Reliability' },
-    ];
-  }, [dbSubTopics, selectedTopicId, availableTopics]);
 
+    if (matched.length > 0) {
+      return dedupeBy(matched, s => s.id || s.code);
+    }
+
+    // If dbSubTopics has records in the database but none match this topic specifically
+    if (dbSubTopics.length > 0) {
+      return [];
+    }
+
+    // Context-aware fallback if dbSubTopics is empty (first initialization / demo seed)
+    const tName = (topicObj?.name || selectedTopicName || '').toLowerCase();
+    const tCode = topicObj?.code || selectedTopicId || 'T1';
+
+    if (tName.includes('python')) {
+      return [
+        { id: `${tCode}-st1`, code: `${tCode}-ST1`, description: 'Python Syntax, Variables & Control Flow Statements' },
+        { id: `${tCode}-st2`, code: `${tCode}-ST2`, description: 'Functions, Scopes & Lambda Expressions' },
+        { id: `${tCode}-st3`, code: `${tCode}-ST3`, description: 'Data Structures: Lists, Tuples, Dictionaries & Sets' },
+        { id: `${tCode}-st4`, code: `${tCode}-ST4`, description: 'Object-Oriented Programming (Classes & Methods)' },
+      ];
+    } else if (tName.includes('dbms') || tName.includes('sql') || tName.includes('database')) {
+      return [
+        { id: `${tCode}-st1`, code: `${tCode}-ST1`, description: 'Relational Model, ER Diagrams & Schema Definition' },
+        { id: `${tCode}-st2`, code: `${tCode}-ST2`, description: 'SQL DDL, DML, Joins & Aggregation Queries' },
+        { id: `${tCode}-st3`, code: `${tCode}-ST3`, description: 'Normalization (1NF-BCNF) & Indexing Optimization' },
+      ];
+    } else if (tName.includes('web') || tName.includes('http') || tName.includes('rest') || tName.includes('next')) {
+      return [
+        { id: `${tCode}-st1`, code: 'WT1.1', description: 'Core Fundamentals & Client-Server Handshake' },
+        { id: `${tCode}-st2`, code: 'WT1.2', description: 'API Integration & State Management' },
+        { id: `${tCode}-st3`, code: 'WT1.3', description: 'Database Schema & Transactions' },
+      ];
+    }
+
+    if (topicObj?.name) {
+      return [
+        { id: `${tCode}-st1`, code: `${tCode}-ST1`, description: `${topicObj.name} — Core Concepts & Fundamentals` },
+        { id: `${tCode}-st2`, code: `${tCode}-ST2`, description: `${topicObj.name} — Advanced Implementation & Applications` },
+      ];
+    }
+
+    return [];
+  }, [dbSubTopics, selectedTopicId, availableTopics, selectedUnitId, availableUnits, selectedTopicName]);
+
+  // Keep selectedSubTopicId in sync with availableSubTopics
   useEffect(() => {
     if (availableSubTopics.length > 0) {
       const exists = availableSubTopics.some(s => s.id === selectedSubTopicId || s.code === selectedSubTopicCode);
@@ -988,10 +1058,13 @@ export default function AssessmentMasterPage() {
         setSelectedSubTopicId(firstSub.id || firstSub.code);
         setSelectedSubTopicCode(firstSub.code);
       }
+    } else {
+      setSelectedSubTopicId('');
+      setSelectedSubTopicCode('');
     }
   }, [availableSubTopics, selectedSubTopicId, selectedSubTopicCode]);
 
-  const canEnterQuestion = !!(selectedSubject && selectedTopicId && selectedSubTopicCode);
+  const canEnterQuestion = Boolean(selectedSubject && selectedUnitId && selectedTopicId && selectedSubTopicCode);
 
   // Batches filtered by selected course for Tab 3 (Publish)
   const availablePublishBatches = useMemo(() => {

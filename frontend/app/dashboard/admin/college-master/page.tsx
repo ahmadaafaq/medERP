@@ -594,8 +594,6 @@ export default function CollegeMasterPage() {
 
   // ─── FETCH TAB DATA ───────────────────────────────────────────────────────────
   const fetchData = async (tab: SubCategory) => {
-    if (tab === 'residencies') return;
-
     if (tab === 'colleges') {
       setLoading(true);
       try {
@@ -678,6 +676,7 @@ export default function CollegeMasterPage() {
         if (tab === 'branches') setBranches(list);
         if (tab === 'groups') setGroups(list);
         if (tab === 'sessions') setSessions(list);
+        if (tab === 'residencies') setResidencies(list);
         if (tab === 'professionals') {
           setProfessionals(list.map((p: any) => ({
             id: p.id,
@@ -1648,6 +1647,20 @@ export default function CollegeMasterPage() {
         departmentId: formData.departmentId || null,
         capacity: Number(formData.capacity) || 50,
       };
+    } else if (activeTab === 'residencies') {
+      bodyPayload = {
+        collegeId: formData.collegeId,
+        courseId: formData.courseId || null,
+        residencyType: formData.residencyType || 'Hosteller',
+        categoryName: formData.categoryName,
+        blockWing: formData.blockWing || null,
+        totalCapacity: Number(formData.totalCapacity) || 100,
+        allocatedCount: Number(formData.allocatedCount) || 0,
+        monthlyFee: Number(formData.monthlyFee) || 0,
+      };
+      if (isEdit) {
+        bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
+      }
     }
 
     try {

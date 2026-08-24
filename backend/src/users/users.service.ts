@@ -488,19 +488,80 @@ export class UsersService {
       if (sRows.length) validSubjectId = sRows[0].id;
     }
 
+    const parseDateOrNull = (val?: string | null) => {
+      if (!val || typeof val !== 'string' || !val.trim()) return null;
+      try {
+        const parsed = new Date(val);
+        return isNaN(parsed.getTime()) ? null : val.trim().split('T')[0];
+      } catch {
+        return null;
+      }
+    };
+
+    const parseNumberOrNull = (val?: any) => {
+      if (val === undefined || val === null || val === '') return null;
+      const n = Number(val);
+      return isNaN(n) ? null : n;
+    };
+
     const map: Record<string, any> = {
       name: dto.name, designation: dto.designation,
+      email: dto.email ? dto.email.toLowerCase().trim() : undefined,
       qualification: dto.qualification, phone: dto.phone,
       departmentId: validDeptId, subjectId: validSubjectId,
       gender: dto.gender, experience: dto.experience,
       staffType: dto.staffType, photoUrl: dto.photoUrl,
+      bloodGroup: dto.bloodGroup, fatherName: dto.fatherName,
+      spouseName: dto.spouseName, address: dto.address,
+      city: dto.city, state: dto.state,
+      caste: dto.caste,
+      specialization: dto.specialization,
+      panNo: dto.panNo, aadhaarNo: dto.aadhaarNo,
+      salgrade: dto.salgrade,
+      highestEducation: dto.highestEducation,
+      category: dto.category,
+      payrollCategory: dto.payrollCategory,
+      employmentStatus: dto.employmentStatus,
+      bankAcNo: dto.bankAcNo,
+      uan: dto.uan,
+      deviceCd: dto.deviceCd,
+      permAddr: dto.permAddr,
+      permCity: dto.permCity,
+      permState: dto.permState,
+      homephone: dto.homephone,
+      permanentTelNo: dto.permanentTelNo,
+      currentBasic: dto.currentBasic !== undefined ? parseNumberOrNull(dto.currentBasic) : undefined,
+      dateOfBirth: dto.dateOfBirth !== undefined ? parseDateOrNull(dto.dateOfBirth) : undefined,
+      dateOfJoining: dto.dateOfJoining !== undefined ? parseDateOrNull(dto.dateOfJoining) : undefined,
     };
     const colMap: Record<string, string> = {
       name: 'name', designation: 'designation',
+      email: 'email',
       qualification: 'qualification', phone: 'phone',
       departmentId: 'department_id', subjectId: 'subject_id',
       gender: 'gender', experience: 'experience',
       staffType: 'staff_type', photoUrl: 'photo_url',
+      bloodGroup: 'blood_group', fatherName: 'father_name',
+      spouseName: 'spouse_name', address: 'address',
+      city: 'city', state: 'state',
+      caste: 'caste',
+      specialization: 'specialization',
+      panNo: 'pan_no', aadhaarNo: 'aadhaar_no',
+      salgrade: 'salgrade',
+      highestEducation: 'highest_education',
+      category: 'category',
+      payrollCategory: 'payroll_category',
+      employmentStatus: 'employment_status',
+      bankAcNo: 'bank_ac_no',
+      uan: 'uan',
+      deviceCd: 'device_cd',
+      permAddr: 'perm_addr',
+      permCity: 'perm_city',
+      permState: 'perm_state',
+      homephone: 'homephone',
+      permanentTelNo: 'permanent_tel_no',
+      currentBasic: 'current_basic',
+      dateOfBirth: 'date_of_birth', dateOfJoining: 'date_of_joining',
     };
 
     for (const [key, val] of Object.entries(map)) {
@@ -769,5 +830,135 @@ export class UsersService {
        data.departmentId ?? null, data.startDate ?? null, data.endDate ?? null],
     );
     return rows[0];
+  }
+
+  /**
+   * Grant Administrator rights to any staff member / faculty
+   */
+  async grantAdminRights(tenantSlug: string, facultyOrUserId: string, adminRole: string = 'COLLEGE_ADMIN') {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+
+    let targetRole = UserRole.COLLEGE_ADMIN;
+    if (adminRole === 'SUPER_ADMIN') targetRole = UserRole.SUPER_ADMIN;
+
+    // Check if facultyOrUserId matches faculty id, user id, or emp_id
+    const facRows = await this.ds.query(
+      `SELECT f.id, f.user_id, f.emp_id, f.name, u.email 
+       FROM "${schema}".faculty f
+       JOIN "${schema}".users u ON u.id = f.user_id
+       WHERE f.id::text = $1 OR f.user_id::text = $1 OR LOWER(COALESCE(f.emp_id, '')) = LOWER($1) OR LOWER(COALESCE(f.usr_id, '')) = LOWER($1)
+       LIMIT 1`,
+      [facultyOrUserId],
+    );
+
+    let userId: string;
+    let userName: string = 'Staff Admin';
+    let userEmail: string = '';
+
+    if (facRows.length > 0) {
+      userId = facRows[0].user_id;
+      userName = facRows[0].name;
+      userEmail = facRows[0].email;
+
+      // Update faculty designation
+      await this.ds.query(
+        `UPDATE "${schema}".faculty 
+         SET designation = CASE 
+           WHEN designation ILIKE '%Admin%' THEN designation 
+           ELSE COALESCE(designation, 'Faculty') || ' (Admin)' 
+         END, 
+         updated_at = NOW() 
+         WHERE id = $1`,
+        [facRows[0].id],
+      );
+    } else {
+      const uRows = await this.ds.query(
+        `SELECT id, email, role FROM "${schema}".users WHERE id::text = $1 OR LOWER(email) = LOWER($1) LIMIT 1`,
+        [facultyOrUserId],
+      );
+      if (uRows.length === 0) throw new NotFoundException('User / Staff not found in this institution');
+      userId = uRows[0].id;
+      userEmail = uRows[0].email;
+    }
+
+    // Elevate user role to COLLEGE_ADMIN
+    await this.ds.query(
+      `UPDATE "${schema}".users SET role = $1, is_active = true, updated_at = NOW() WHERE id = $2`,
+      [targetRole, userId],
+    );
+
+    this.logger.log(`Granted Admin rights [${targetRole}] to user ${userId} (${userName}) in ${slug}`);
+
+    return {
+      success: true,
+      message: `Admin rights (${targetRole}) successfully granted to ${userName || userEmail}`,
+      userId,
+      role: targetRole,
+      tenantSlug: slug,
+    };
+  }
+
+  /**
+   * Revoke Administrator rights and revert staff back to default FACULTY role
+   */
+  async revokeAdminRights(tenantSlug: string, facultyOrUserId: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+
+    const facRows = await this.ds.query(
+      `SELECT f.id, f.user_id, f.emp_id, f.name, f.designation, u.email 
+       FROM "${schema}".faculty f
+       JOIN "${schema}".users u ON u.id = f.user_id
+       WHERE f.id::text = $1 OR f.user_id::text = $1 OR LOWER(COALESCE(f.emp_id, '')) = LOWER($1) OR LOWER(COALESCE(f.usr_id, '')) = LOWER($1)
+       LIMIT 1`,
+      [facultyOrUserId],
+    );
+
+    let userId: string;
+    let userName: string = 'Staff Member';
+    let userEmail: string = '';
+
+    if (facRows.length > 0) {
+      userId = facRows[0].user_id;
+      userName = facRows[0].name;
+      userEmail = facRows[0].email;
+
+      // Clean (Admin) suffix from designation
+      const cleanedDesignation = (facRows[0].designation || 'Faculty')
+        .replace(/\s*\(\s*Admin\s*\)/gi, '')
+        .trim() || 'Faculty';
+
+      await this.ds.query(
+        `UPDATE "${schema}".faculty 
+         SET designation = $1, updated_at = NOW() 
+         WHERE id = $2`,
+        [cleanedDesignation, facRows[0].id],
+      );
+    } else {
+      const uRows = await this.ds.query(
+        `SELECT id, email, role FROM "${schema}".users WHERE id::text = $1 OR LOWER(email) = LOWER($1) LIMIT 1`,
+        [facultyOrUserId],
+      );
+      if (uRows.length === 0) throw new NotFoundException('User / Staff not found in this institution');
+      userId = uRows[0].id;
+      userEmail = uRows[0].email;
+    }
+
+    // Revert user role to default FACULTY
+    await this.ds.query(
+      `UPDATE "${schema}".users SET role = $1, is_active = true, updated_at = NOW() WHERE id = $2`,
+      [UserRole.FACULTY, userId],
+    );
+
+    this.logger.log(`Revoked Admin rights from user ${userId} (${userName}), reverted to FACULTY in ${slug}`);
+
+    return {
+      success: true,
+      message: `Admin rights removed. ${userName || userEmail} reverted to default Faculty role.`,
+      userId,
+      role: UserRole.FACULTY,
+      tenantSlug: slug,
+    };
   }
 }

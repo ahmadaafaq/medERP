@@ -48,45 +48,36 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
     }
   };
 
-  // Find latest urgent unread notice for the top banner
+  // Find latest urgent unread notice for the top banner only if it is actually unread
   const urgentUnread = notices.find((n) => n.priority === 'urgent' && !n.is_read);
 
-  // Sort notices so latest / urgent unread is at the top
+  // Sort notices: unread first, then newest
   const sortedNotices = [...notices].sort((a, b) => {
-    // 1. Unread urgent first
-    const aUrgentUnread = a.priority === 'urgent' && !a.is_read ? 1 : 0;
-    const bUrgentUnread = b.priority === 'urgent' && !b.is_read ? 1 : 0;
-    if (aUrgentUnread !== bUrgentUnread) return bUrgentUnread - aUrgentUnread;
-
-    // 2. Unread important next
-    const aImpUnread = a.priority === 'important' && !a.is_read ? 1 : 0;
-    const bImpUnread = b.priority === 'important' && !b.is_read ? 1 : 0;
-    if (aImpUnread !== bImpUnread) return bImpUnread - aImpUnread;
-
-    // 3. Newest first
+    if (!a.is_read && b.is_read) return -1;
+    if (a.is_read && !b.is_read) return 1;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
   return (
     <>
-      <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4 hover:shadow-md transition-all flex flex-col justify-between">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <div className="h-full flex flex-col justify-between bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md transition-all">
+        {/* Header - Standardized Height & Alignment */}
+        <div className="flex items-center justify-between pb-3.5 border-b border-[#E7EAF3] dark:border-slate-800 shrink-0 min-h-[48px]">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#5B4BFF] to-[#7867FF] flex items-center justify-center text-white text-lg shadow-md shadow-indigo-500/25 shrink-0">
               📢
             </div>
-            <div>
-              <h3 className="text-sm font-black text-[#F36C21] uppercase tracking-wider font-sans">
+            <div className="min-w-0">
+              <h3 className="text-sm font-black text-[#F36C21] uppercase tracking-wide font-sans truncate">
                 NOTICES & CIRCULARS
               </h3>
-              <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-bold">
+              <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-semibold truncate">
                 Official College Bulletins & Updates
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 pl-2">
             {unreadCount.totalUnread > 0 ? (
               <span className="px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-950/80 text-[#F04438] text-[11px] font-black tracking-wider border border-rose-200/80 dark:border-rose-800 animate-pulse">
                 {unreadCount.totalUnread} NEW
@@ -99,11 +90,11 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
           </div>
         </div>
 
-        {/* Top Urgent Notice Alert Banner */}
+        {/* Top Urgent Notice Alert Banner - Only if genuinely unread */}
         {urgentUnread && (
           <div
             onClick={() => handleOpenNotice(urgentUnread)}
-            className="p-3.5 rounded-2xl bg-[#FFF1F2] dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 flex items-center justify-between gap-3 cursor-pointer hover:bg-rose-100/70 dark:hover:bg-rose-950/60 transition-all group shadow-sm"
+            className="mt-3.5 p-3 rounded-2xl bg-[#FFF1F2] dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 flex items-center justify-between gap-3 cursor-pointer hover:bg-rose-100/70 dark:hover:bg-rose-950/60 transition-all group shadow-xs shrink-0"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="w-3.5 h-3.5 rounded-full bg-[#F04438]/20 flex items-center justify-center shrink-0">
@@ -125,50 +116,41 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
           </div>
         )}
 
-        {/* Notice List */}
-        <div className="space-y-3 flex-1 min-h-[160px]">
+        {/* Notice List - Top Aligned without empty gap */}
+        <div className="flex-1 pt-3.5 space-y-2.5 flex flex-col justify-start">
           {loading ? (
             [...Array(3)].map((_, idx) => (
-              <div key={idx} className="animate-pulse p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 space-y-2">
-                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
-                <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/2"></div>
+              <div key={idx} className="animate-pulse p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 space-y-2">
+                <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded w-1/2"></div>
               </div>
             ))
           ) : sortedNotices.length === 0 ? (
-            <div className="p-8 text-center text-[#4E5969] dark:text-slate-400 space-y-1">
+            <div className="py-8 text-center text-[#4E5969] dark:text-slate-400 my-auto">
               <div className="text-2xl mb-1">📭</div>
               <p className="text-xs font-bold text-[#1B1E28] dark:text-white">No active circulars</p>
-              <p className="text-[11px]">All announcements and bulletins from administration will appear here.</p>
+              <p className="text-[11px] mt-0.5">All announcements and bulletins from administration will appear here.</p>
             </div>
           ) : (
-            sortedNotices.slice(0, 3).map((notice, index) => {
-              // Highlight the first card if urgent or index === 0 with gradient background
-              const isFirstHighlighted = index === 0 && (notice.priority === 'urgent' || !notice.is_read);
+            sortedNotices.slice(0, 3).map((notice) => {
+              const isUnread = !notice.is_read;
 
-              if (isFirstHighlighted) {
+              if (isUnread && notice.priority === 'urgent') {
                 return (
                   <div
                     key={notice.id}
                     onClick={() => handleOpenNotice(notice)}
-                    className="p-4 rounded-2xl bg-gradient-to-r from-[#5B4BFF] to-[#6E5CF6] text-white shadow-md shadow-indigo-500/20 cursor-pointer hover:scale-[1.01] hover:shadow-lg transition-all group border border-indigo-400/40 flex items-center justify-between gap-3"
+                    className="p-3 rounded-2xl bg-gradient-to-r from-[#5B4BFF] to-[#6E5CF6] text-white shadow-md shadow-indigo-500/20 cursor-pointer hover:scale-[1.01] hover:shadow-lg transition-all group border border-indigo-400/40 flex items-center justify-between gap-3"
                   >
-                    <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="space-y-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        {notice.priority === 'urgent' ? (
-                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-white text-[#F04438] shadow-sm">
-                            URGENT
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-white/20 text-white backdrop-blur-sm">
-                            {notice.priority.toUpperCase()}
-                          </span>
-                        )}
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-white text-[#F04438] shadow-sm">
+                          URGENT
+                        </span>
                         <span className="text-[10px] font-bold text-white/90 uppercase tracking-wider">
                           {notice.category}
                         </span>
-                        {!notice.is_read && (
-                          <span className="w-2 h-2 rounded-full bg-white animate-pulse" title="Unread" />
-                        )}
+                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" title="Unread" />
                       </div>
                       <p className="text-xs font-black text-amber-300 group-hover:text-amber-200 transition-colors truncate">
                         {notice.title}
@@ -189,15 +171,15 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
                 );
               }
 
-              // Standard Item Card
+              // Standard Clean Card for Read & Normal Bulletins
               return (
                 <div
                   key={notice.id}
                   onClick={() => handleOpenNotice(notice)}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 group ${
-                    !notice.is_read
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 group ${
+                    isUnread
                       ? 'bg-[#FFF8F2] dark:bg-slate-800/90 border-[#F36C21]/40 shadow-xs'
-                      : 'bg-[#F8FAFC] dark:bg-slate-850 border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]'
+                      : 'bg-[#F8FAFC] dark:bg-slate-800/50 border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/40 hover:bg-white dark:hover:bg-slate-800'
                   }`}
                 >
                   <div className="space-y-1 min-w-0 flex-1">
@@ -208,7 +190,7 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
                             ? 'bg-rose-100 text-[#F04438] dark:bg-rose-950'
                             : notice.priority === 'important'
                             ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 font-black'
-                            : 'bg-[#5B4BFF] text-white dark:bg-indigo-600 font-bold'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold'
                         }`}
                       >
                         {notice.priority.toUpperCase()}
@@ -216,21 +198,25 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
                       <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-extrabold uppercase tracking-wide">
                         {notice.category}
                       </span>
-                      {!notice.is_read && (
+                      {isUnread && (
                         <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]" title="Unread" />
                       )}
                     </div>
-                    <p className="text-xs font-bold text-[#F36C21] dark:text-orange-400 group-hover:text-[#5B4BFF] dark:group-hover:text-indigo-400 transition-colors truncate">
+                    <p className={`text-xs font-bold truncate transition-colors ${
+                      isUnread
+                        ? 'text-[#1B1E28] dark:text-white group-hover:text-[#F36C21]'
+                        : 'text-slate-700 dark:text-slate-300 group-hover:text-[#5B4BFF]'
+                    }`}>
                       {notice.title}
                     </p>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400 block">
+                    <span className="text-[11px] font-semibold text-[#4E5969] dark:text-slate-400 block">
                       {formatDate(notice.created_at)}
                     </span>
                     {notice.attachments && notice.attachments.length > 0 && (
-                      <span className="text-[10px] text-[#5B4BFF] font-bold flex items-center gap-0.5 justify-end">
+                      <span className="text-[10px] text-slate-400 font-medium flex items-center gap-0.5 justify-end">
                         📎 file
                       </span>
                     )}
@@ -241,32 +227,28 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
           )}
         </div>
 
-        {/* Footer Link */}
-        <div className="pt-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between">
-          <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold">
-            {notices.length} total circulars
-          </span>
-
+        {/* Footer Link - Standardized Position */}
+        <div className="pt-3 border-t border-[#E7EAF3] dark:border-slate-800 shrink-0 mt-auto flex items-center justify-between text-xs font-bold text-[#4E5969] dark:text-slate-400">
+          <span>{notices.length} total circulars</span>
           <Link
             href={getNoticesLink()}
-            className="text-xs font-black text-[#5B4BFF] dark:text-indigo-400 hover:text-[#4E3FE3] flex items-center gap-1 group"
+            className="text-[#5B4BFF] hover:underline font-extrabold flex items-center gap-1"
           >
             <span>View All Notices</span>
-            <span className="group-hover:translate-x-1 transition-transform">➔</span>
+            <span>➔</span>
           </Link>
         </div>
       </div>
 
-      {/* Detail Reader Modal */}
-      <NoticeDetailModal
-        notice={selectedNotice}
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setSelectedNotice(null);
-        }}
-        onAcknowledge={acknowledgeNotice}
-      />
+      {/* Notice Detail Modal */}
+      {selectedNotice && (
+        <NoticeDetailModal
+          notice={selectedNotice}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onAcknowledge={acknowledgeNotice}
+        />
+      )}
     </>
   );
 }

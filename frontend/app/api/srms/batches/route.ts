@@ -3,14 +3,23 @@ import { srmsPost } from '@/lib/srms-client';
 
 const BACKEND_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
-async function handleGetBatch(colgcd?: string, coursecd?: string, tenantSlug?: string) {
+async function handleGetBatch(colgcd?: string, coursecd?: string, tenantSlug?: string, branchcd?: string) {
   const cd = colgcd || '1';
-  const crs = coursecd || '13';
+  const crs = coursecd && coursecd !== 'all' ? coursecd : '';
   const tenant = tenantSlug || 'srms-cet-bareilly';
+  const br = branchcd && branchcd !== 'all' ? branchcd : '';
+
+  if (!crs) {
+    // Return empty or generic batches when no course is specified
+    return NextResponse.json([]);
+  }
 
   // 1. Live SRMS ERP API: https://myportal.srms.ac.in/SRMSERP/OnlineAttend/GetBatch
   try {
-    const data = await srmsPost('OnlineAttend/GetBatch', { colgcd: cd, coursecd: crs });
+    const postPayload: Record<string, string> = { colgcd: cd, coursecd: crs };
+    if (br) postPayload.branchcd = br;
+
+    const data = await srmsPost('OnlineAttend/GetBatch', postPayload);
     if (Array.isArray(data) && data.length > 0) {
       return NextResponse.json(data);
     }
@@ -52,7 +61,8 @@ export async function POST(req: NextRequest) {
     const colgcd = String(body.colgcd || body.colg_cd || '').trim();
     const coursecd = String(body.coursecd || body.course_cd || '').trim();
     const tenant = String(body.tenant || body.tenantSlug || '').trim();
-    return handleGetBatch(colgcd, coursecd, tenant);
+    const branchcd = String(body.branchcd || body.branch_cd || '').trim();
+    return handleGetBatch(colgcd, coursecd, tenant, branchcd);
   } catch (error: any) {
     console.error('[API /api/srms/batches] Error in POST:', error);
     return NextResponse.json([]);
@@ -65,7 +75,8 @@ export async function GET(req: NextRequest) {
     const colgcd = String(searchParams.get('colgcd') || searchParams.get('colg_cd') || '').trim();
     const coursecd = String(searchParams.get('coursecd') || searchParams.get('course_cd') || '').trim();
     const tenant = String(searchParams.get('tenant') || searchParams.get('tenantSlug') || '').trim();
-    return handleGetBatch(colgcd, coursecd, tenant);
+    const branchcd = String(searchParams.get('branchcd') || searchParams.get('branch_cd') || '').trim();
+    return handleGetBatch(colgcd, coursecd, tenant, branchcd);
   } catch (error: any) {
     console.error('[API /api/srms/batches] Error in GET:', error);
     return NextResponse.json([]);

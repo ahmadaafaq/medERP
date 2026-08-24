@@ -15,7 +15,8 @@ import { TenantSchemaService } from './tenant-schema.service';
         username: config.get<string>('database.user'),
         password: config.get<string>('database.pass'),
         database: config.get<string>('database.name'),
-        // We manage schemas manually — no auto-sync or entity registration here
+        // We manage schemas manually — auto-load entities for registered modules
+        autoLoadEntities: true,
         synchronize: false,
         logging: config.get<string>('app.env') === 'development' ? ['error', 'warn'] : ['error'],
         // Connection pool

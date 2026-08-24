@@ -6,3 +6,8 @@ export * from './faculty.entity';
 export * from './department.entity';
 export * from './batch.entity';
 export * from './subject.entity';
+export * from './firm.entity';
+export * from './license-key.entity';
+export * from './transaction.entity';
+export * from './menu-registry.entity';
+export * from './firm-role-permission.entity';

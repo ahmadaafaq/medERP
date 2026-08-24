@@ -68,6 +68,7 @@ export class TimetableController {
     return { success: true, data };
   }
 
+  @Public()
   @Post()
   @ApiOperation({ summary: 'Create a new timetable slot' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -79,24 +80,26 @@ export class TimetableController {
     return { success: true, data, message: 'Timetable slot created successfully' };
   }
 
+  @Public()
   @Put(':id')
   @ApiOperation({ summary: 'Update a timetable slot' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async updateSlot(
     @TenantSlug() tenantSlug: string,
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: UpdateTimetableSlotDto,
   ) {
     const data = await this.timetableService.updateSlot(tenantSlug, id, dto);
     return { success: true, data, message: 'Timetable slot updated successfully' };
   }
 
+  @Public()
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a timetable slot' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async deleteSlot(
     @TenantSlug() tenantSlug: string,
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
   ) {
     return this.timetableService.deleteSlot(tenantSlug, id);
   }

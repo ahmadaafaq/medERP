@@ -22,9 +22,14 @@ import { LessonModule } from './lesson/lesson.module';
 import { RepositoryModule } from './repository/repository.module';
 import { PlacementDriveModule } from './placement-drive/placement-drive.module';
 import { NoticesModule } from './notices/notices.module';
+import { CommunicationModule } from './communication/communication.module';
+import { FirmsModule } from './firms/firms.module';
+import { InternshipsModule } from './internships/internships.module';
+import { IncubationCellModule } from './incubation-cell/incubation-cell.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantIsolationGuard } from './common/guards/tenant-isolation.guard';
+import { TenantLicenseGuard } from './common/guards/tenant-license.guard';
 import configuration from './config/configuration';
 import { validationSchema } from './config/joi.validation';
 
@@ -56,6 +61,10 @@ import { validationSchema } from './config/joi.validation';
     RepositoryModule,
     PlacementDriveModule,
     NoticesModule,
+    CommunicationModule,
+    FirmsModule,
+    InternshipsModule,
+    IncubationCellModule,
   ],
   providers: [
     {
@@ -65,6 +74,10 @@ import { validationSchema } from './config/joi.validation';
     {
       provide: APP_GUARD,
       useClass: TenantIsolationGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: TenantLicenseGuard,
     },
   ],
 })

@@ -113,6 +113,16 @@ export class StudentMasterController {
     return this.studentMasterService.updateStudent(tenant || 'srms', id, dto);
   }
 
+  @Public()
+  @Post('sync-live')
+  @ApiOperation({ summary: 'Sync live students from SRMS into tenant schema' })
+  async syncLive(
+    @Body('students') students: any[],
+    @Query('tenant') tenant?: string,
+  ) {
+    return this.studentMasterService.syncLiveStudents(tenant || 'srms-cet-bareilly', students || []);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a student profile' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)

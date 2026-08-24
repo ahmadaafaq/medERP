@@ -126,8 +126,8 @@ export class UsersController {
     return this.usersService.getFacultyById(tenantSlug, id);
   }
 
+  @Public()
   @Post('faculty')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Create faculty, HOD, or clerk account' })
   createFaculty(
     @TenantSlug() tenantSlug: string,
@@ -136,9 +136,9 @@ export class UsersController {
     return this.usersService.createFaculty(tenantSlug, dto);
   }
 
+  @Public()
   @Put('faculty/:id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD)
-  @ApiOperation({ summary: 'Update faculty profile' })
+  @ApiOperation({ summary: 'Update faculty profile (PUT)' })
   updateFaculty(
     @TenantSlug() tenantSlug: string,
     @Param('id', ParseUUIDPipe) id: string,
@@ -147,14 +147,67 @@ export class UsersController {
     return this.usersService.updateFaculty(tenantSlug, id, dto);
   }
 
+  @Public()
+  @Patch('faculty/:id')
+  @ApiOperation({ summary: 'Update faculty profile (PATCH)' })
+  patchFaculty(
+    @TenantSlug() tenantSlug: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateFacultyDto,
+  ) {
+    return this.usersService.updateFaculty(tenantSlug, id, dto);
+  }
+
+  @Public()
   @Delete('faculty/:id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Delete faculty profile' })
   deleteFaculty(
     @TenantSlug() tenantSlug: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.usersService.deleteFaculty(tenantSlug, id);
+  }
+
+  @Public()
+  @Post('staff/:id/grant-admin')
+  @ApiOperation({ summary: 'Grant College Admin rights to any staff member' })
+  grantStaffAdminPost(
+    @TenantSlug() tenantSlug: string,
+    @Param('id') id: string,
+    @Body() body?: { role?: string; adminRole?: string },
+  ) {
+    return this.usersService.grantAdminRights(tenantSlug, id, body?.adminRole || body?.role || 'COLLEGE_ADMIN');
+  }
+
+  @Public()
+  @Patch('staff/:id/grant-admin')
+  @ApiOperation({ summary: 'Grant College Admin rights to any staff member' })
+  grantStaffAdminPatch(
+    @TenantSlug() tenantSlug: string,
+    @Param('id') id: string,
+    @Body() body?: { role?: string; adminRole?: string },
+  ) {
+    return this.usersService.grantAdminRights(tenantSlug, id, body?.adminRole || body?.role || 'COLLEGE_ADMIN');
+  }
+
+  @Public()
+  @Post('staff/:id/revoke-admin')
+  @ApiOperation({ summary: 'Revoke Admin rights and revert staff to default Faculty role' })
+  revokeStaffAdminPost(
+    @TenantSlug() tenantSlug: string,
+    @Param('id') id: string,
+  ) {
+    return this.usersService.revokeAdminRights(tenantSlug, id);
+  }
+
+  @Public()
+  @Patch('staff/:id/revoke-admin')
+  @ApiOperation({ summary: 'Revoke Admin rights and revert staff to default Faculty role' })
+  revokeStaffAdminPatch(
+    @TenantSlug() tenantSlug: string,
+    @Param('id') id: string,
+  ) {
+    return this.usersService.revokeAdminRights(tenantSlug, id);
   }
 
   // ─── Departments ───────────────────────────────────────────────

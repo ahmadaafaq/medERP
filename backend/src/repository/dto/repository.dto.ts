@@ -41,6 +41,48 @@ export class CreateRepositoryDto {
   @IsOptional()
   @IsString()
   sem_cd?: string;
+
+  @IsOptional()
+  @IsString()
+  tenant?: string;
+
+  @IsOptional()
+  @IsString()
+  student_name?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  screenshots?: string[];
+}
+
+export class UpdateRepositoryDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^https?:\/\/.+/i, { message: 'repo_link must be a valid http or https URL (e.g. https://github.com/user/project.git)' })
+  repo_link?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tech_stack?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  screenshots?: string[];
+
+  @IsOptional()
+  @IsString()
+  tenant?: string;
 }
 
 export class ReviewRepositoryDto {
@@ -60,6 +102,10 @@ export class ReviewRepositoryDto {
   @IsOptional()
   @IsBoolean()
   is_placement_eligible?: boolean;
+
+  @IsOptional()
+  @IsString()
+  tenant?: string;
 }
 
 export class QueryRepositoryDto {
@@ -86,4 +132,12 @@ export class QueryRepositoryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  tenant?: string;
+
+  @IsOptional()
+  @IsString()
+  student_reg_no?: string;
 }

@@ -32,9 +32,12 @@ export const TenantSlug = createParamDecorator(
     return (
       (request.query?.tenant as string) ||
       (request.headers?.['x-tenant-slug'] as string) ||
+      (request.headers?.['x-tenant-id'] as string)?.replace(/^tenant_/, '').replace(/^tenant-/, '') ||
+      (request.headers?.['x-tenant'] as string) ||
       request.tenant?.slug ||
       user?.tenantSlug ||
-      'all'
+      (request.body?.tenant_slug as string) ||
+      'srms-cet-bareilly'
     );
   },
 );

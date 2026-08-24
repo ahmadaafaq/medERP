@@ -1050,5 +1050,101 @@ export class StudentMasterService {
       await runner.release();
     }
   }
+
+  /**
+   * Sync and upsert live student records from SRMS into tenant schema
+   */
+  async syncLiveStudents(tenantSlug: string, students: any[]): Promise<{ syncedCount: number }> {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    if (!students || !students.length) return { syncedCount: 0 };
+
+    const schema = `tenant_${slug}`;
+    let syncedCount = 0;
+
+    for (const s of students) {
+      try {
+        const regNo = String(s.registration_no || '').trim();
+        const rollNo = String(s.rollno || '').trim();
+        const name = String(s.name || '').trim();
+        const photoUrl = s.photo_url || null;
+        if (!regNo && !rollNo && !name) continue;
+
+        const check = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id FROM "${schema}".students WHERE registration_no = $1 OR rollno = $2 LIMIT 1`,
+          [regNo, rollNo],
+        ).catch(() => []);
+
+        let studentId: string;
+        if (check.length > 0) {
+          studentId = check[0].id;
+          await this.tenantSchemaService.queryInTenant(
+            slug,
+            `UPDATE "${schema}".students 
+             SET name = $1, photo_url = COALESCE($2, photo_url), rollno = $3, registration_no = $4, course_cd = $5, batch_cd = $6, updated_at = NOW() 
+             WHERE id = $7`,
+            [name, photoUrl, rollNo, regNo, s.course_cd || '13', s.batch_name || s.batch_id || '2025', studentId],
+          ).catch(() => null);
+        } else {
+          const ins = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `INSERT INTO "${schema}".students (name, registration_no, rollno, photo_url, course_cd, batch_cd, branch_id, is_active) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, true) RETURNING id`,
+            [name, regNo, rollNo, photoUrl, s.course_cd || '13', s.batch_name || s.batch_id || '2025', s.branch_id || '1'],
+          ).catch(() => []);
+          studentId = ins[0]?.id;
+        }
+
+        if (studentId) {
+          const admCheck = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT id FROM "${schema}".student_admissions WHERE student_id = $1 LIMIT 1`,
+            [studentId],
+          ).catch(() => []);
+
+          if (admCheck.length > 0) {
+            await this.tenantSchemaService.queryInTenant(
+              slug,
+              `UPDATE "${schema}".student_admissions 
+               SET college_name = $1, course_code = $2, academic_session = $3, batch_code = $4, batch_id = $5 
+               WHERE student_id = $6`,
+              [
+                s.college_name || 'SRMS CET, BAREILLY',
+                s.course_code || 'BCA',
+                s.academic_session || '2025-2026',
+                s.batch_code || '2025 Batch',
+                s.batch_id || '2',
+                studentId,
+              ],
+            ).catch(() => null);
+          } else {
+            await this.tenantSchemaService.queryInTenant(
+              slug,
+              `INSERT INTO "${schema}".student_admissions (
+                student_id, college_name, course_code, academic_session, batch_code, batch_id, residency_type, admission_type, branch_id, branch_code
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              [
+                studentId,
+                s.college_name || 'SRMS CET, BAREILLY',
+                s.course_code || 'BCA',
+                s.academic_session || '2025-2026',
+                s.batch_code || '2025 Batch',
+                s.batch_id || '2',
+                s.residency_type || 'Hosteller',
+                s.admission_type || 'Regular Admission',
+                s.branch_id || '1',
+                s.branch_code || '1',
+              ],
+            ).catch(() => null);
+          }
+          syncedCount++;
+        }
+      } catch (err) {
+        this.logger.warn(`Error syncing live student ${s.name}: ${err?.message}`);
+      }
+    }
+
+    return { syncedCount };
+  }
 }
 

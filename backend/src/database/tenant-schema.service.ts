@@ -17,8 +17,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
   ) {}
 
   public resolveTenantSlug(slug?: string): string {
-    if (!slug) return 'srms-cet-bareilly';
-    const s = slug.toLowerCase().trim();
+    if (!slug || slug === 'all') return 'srms-cet-bareilly';
+    const s = slug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
+    if (s === 'all' || s === '') return 'srms-cet-bareilly';
     if (s === 'srms' || s === 'srms-cet' || s === 'cet' || s === '1') return 'srms-cet-bareilly';
     if (s === 'srms-ims' || s === 'ims' || s === '2') return 'srms-ims';
     if (s === 'srms-cetr' || s === 'srms-cetr-bareilly') return 'srms-cetr-bareilly';
@@ -94,18 +95,20 @@ export class TenantSchemaService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap() {
-    this.logger.log('Checking and upgrading tenant schemas if necessary...');
-    try {
-      const tenants = await this.dataSource.query(`SELECT slug FROM public.tenants WHERE schema_provisioned = true OR slug = 'srms-ims'`);
-      for (const tenant of tenants) {
-        await this.ensureLatestSchema(tenant.slug).catch((e) => {
-          this.logger.warn(`Schema upgrade skipped for ${tenant.slug}: ${e.message}`);
-        });
+    this.logger.log('Checking and upgrading tenant schemas in background...');
+    (async () => {
+      try {
+        const tenants = await this.dataSource.query(`SELECT slug FROM public.tenants WHERE schema_provisioned = true OR slug = 'srms-ims'`);
+        for (const tenant of tenants) {
+          await this.ensureLatestSchema(tenant.slug).catch((e) => {
+            this.logger.warn(`Schema upgrade skipped for ${tenant.slug}: ${e.message}`);
+          });
+        }
+        this.logger.log('All provisioned tenant schemas successfully verified/upgraded.');
+      } catch (err) {
+        this.logger.error('Failed to run schema validation/upgrades on startup:', err);
       }
-      this.logger.log('All provisioned tenant schemas successfully verified/upgraded.');
-    } catch (err) {
-      this.logger.error('Failed to run schema validation/upgrades on startup:', err);
-    }
+    })();
   }
 
   async ensureLatestSchema(slug: string): Promise<void> {
@@ -668,6 +671,115 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           updated_at   TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+
+      // ── Batch & Department Chat Communication Tables ──────────────────────
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".chat_groups (
+          id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          college_id      VARCHAR(255),
+          department_id   VARCHAR(255),
+          department_name VARCHAR(255),
+          batch_year      VARCHAR(100) NOT NULL DEFAULT '2025',
+          batch_id        VARCHAR(255),
+          batch_code      VARCHAR(100),
+          name            VARCHAR(255) NOT NULL DEFAULT 'Batch Group',
+          description     TEXT,
+          is_active       BOOLEAN DEFAULT true,
+          created_at      TIMESTAMPTZ DEFAULT NOW(),
+          updated_at      TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS "${schema}".chat_group_members (
+          id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          chat_group_id UUID REFERENCES "${schema}".chat_groups(id) ON DELETE CASCADE,
+          user_id       VARCHAR(255) NOT NULL DEFAULT 'FAC001',
+          role          VARCHAR(50) NOT NULL DEFAULT 'STUDENT',
+          name          VARCHAR(255),
+          avatar_url    TEXT,
+          joined_at     TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(chat_group_id, user_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS "${schema}".chat_messages (
+          id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          chat_group_id UUID REFERENCES "${schema}".chat_groups(id) ON DELETE CASCADE,
+          sender_id     VARCHAR(255),
+          sender_name   VARCHAR(255) NOT NULL DEFAULT 'Faculty Member',
+          sender_role   VARCHAR(50) NOT NULL DEFAULT 'FACULTY',
+          sender_avatar TEXT,
+          body          TEXT,
+          created_at    TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS "${schema}".chat_attachments (
+          id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          message_id   UUID REFERENCES "${schema}".chat_messages(id) ON DELETE CASCADE,
+          file_name    VARCHAR(255) NOT NULL,
+          file_type    VARCHAR(50) DEFAULT 'other',
+          file_url     TEXT NOT NULL,
+          file_size_kb INT DEFAULT 0,
+          created_at   TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS "${schema}".chat_read_state (
+          id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          chat_group_id        UUID REFERENCES "${schema}".chat_groups(id) ON DELETE CASCADE,
+          user_id              VARCHAR(255) NOT NULL,
+          last_read_message_id UUID,
+          updated_at           TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(chat_group_id, user_id)
+        );
+      `);
+
+      // Column migrations for chat tables
+      await runner.query(`
+        DO $$ 
+        BEGIN 
+          BEGIN
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS batch_year VARCHAR(100) DEFAULT '2025';
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS batch_code VARCHAR(100);
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS department_id VARCHAR(255);
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS department_name VARCHAR(255);
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS college_id VARCHAR(255);
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS batch_id VARCHAR(255);
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS name VARCHAR(255) DEFAULT 'Batch Group';
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS description TEXT;
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+            ALTER TABLE "${schema}".chat_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+
+          BEGIN
+            ALTER TABLE "${schema}".chat_groups ALTER COLUMN department_id TYPE VARCHAR(255) USING department_id::text;
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+          BEGIN
+            ALTER TABLE "${schema}".chat_groups ALTER COLUMN batch_id TYPE VARCHAR(255) USING batch_id::text;
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+          BEGIN
+            ALTER TABLE "${schema}".chat_groups ALTER COLUMN college_id TYPE VARCHAR(255) USING college_id::text;
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+          BEGIN
+            ALTER TABLE "${schema}".chat_group_members DROP CONSTRAINT IF EXISTS chat_group_members_chat_group_id_user_id_key;
+            ALTER TABLE "${schema}".chat_group_members ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::text;
+            ALTER TABLE "${schema}".chat_group_members ADD CONSTRAINT chat_group_members_chat_group_id_user_id_key UNIQUE(chat_group_id, user_id);
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+          BEGIN
+            ALTER TABLE "${schema}".chat_messages ALTER COLUMN sender_id TYPE VARCHAR(255) USING sender_id::text;
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+          BEGIN
+            ALTER TABLE "${schema}".chat_read_state DROP CONSTRAINT IF EXISTS chat_read_state_chat_group_id_user_id_key;
+            ALTER TABLE "${schema}".chat_read_state ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::text;
+            ALTER TABLE "${schema}".chat_read_state ADD CONSTRAINT chat_read_state_chat_group_id_user_id_key UNIQUE(chat_group_id, user_id);
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+        END $$;
+      `).catch(() => {});
 
       try {
         await this.seedDefaultData(runner, slug);
@@ -1558,6 +1670,105 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       );
       CREATE INDEX IF NOT EXISTS idx_lessons_academic ON "${schema}".lessons(colg_cd, course_cd, branch_cd, batch_cd, sem_cd);
       CREATE INDEX IF NOT EXISTS idx_lessons_faculty ON "${schema}".lessons(empid);
+
+      -- ── Placement Drives (Batch Import & Tracking) ───────────────────────────
+      CREATE TABLE IF NOT EXISTS "${schema}".placement_drives (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title             VARCHAR(255) NOT NULL,
+        imported_by       VARCHAR(100),
+        source_file_name  VARCHAR(255),
+        imported_at       TIMESTAMPTZ DEFAULT NOW(),
+        status            VARCHAR(50) DEFAULT 'upcoming',
+        created_at        TIMESTAMPTZ DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "${schema}".drive_companies (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        drive_id            UUID REFERENCES "${schema}".placement_drives(id) ON DELETE CASCADE,
+        company_name        VARCHAR(255) NOT NULL,
+        role                VARCHAR(255),
+        package_min         NUMERIC(10,2),
+        package_max         NUMERIC(10,2),
+        package_ctc         VARCHAR(100),
+        eligible_branches   TEXT[] DEFAULT '{}',
+        eligible_batches    TEXT[] DEFAULT '{}',
+        drive_date          DATE,
+        deadline_date       DATE,
+        logo_url            VARCHAR(500),
+        description         TEXT,
+        extra_fields        JSONB DEFAULT '{}'::jsonb,
+        status              VARCHAR(50) DEFAULT 'active',
+        created_at          TIMESTAMPTZ DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "${schema}".drive_applications (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        drive_company_id    UUID REFERENCES "${schema}".drive_companies(id) ON DELETE CASCADE,
+        student_id          VARCHAR(100),
+        student_reg_no      VARCHAR(100),
+        student_name        VARCHAR(255),
+        branch_cd           VARCHAR(100),
+        batch_cd            VARCHAR(100),
+        resume_link         VARCHAR(500),
+        status              VARCHAR(50) DEFAULT 'applied',
+        offer_package       NUMERIC(10,2),
+        applied_at          TIMESTAMPTZ DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_drive_apps_company ON "${schema}".drive_applications(drive_company_id);
+      CREATE INDEX IF NOT EXISTS idx_drive_apps_student ON "${schema}".drive_applications(student_reg_no);
+
+      -- ── Internship Programs, Applications & Digital Certificates ────────────
+      CREATE TABLE IF NOT EXISTS "${schema}".internship_programs (
+        id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title                 VARCHAR(255) NOT NULL,
+        category              VARCHAR(50) NOT NULL,
+        duration              VARCHAR(50) NOT NULL,
+        fee_type              VARCHAR(20) NOT NULL DEFAULT 'FREE',
+        fee_amount            NUMERIC(10,2) DEFAULT 0,
+        description           TEXT,
+        seats_available       INT DEFAULT 50,
+        application_deadline  DATE,
+        published_by          VARCHAR(100),
+        status                VARCHAR(50) DEFAULT 'published',
+        created_at            TIMESTAMPTZ DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "${schema}".internship_applications (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        program_id          UUID REFERENCES "${schema}".internship_programs(id) ON DELETE CASCADE,
+        student_id          VARCHAR(100),
+        student_reg_no      VARCHAR(100),
+        student_name        VARCHAR(255),
+        course_cd           VARCHAR(100),
+        batch_cd            VARCHAR(100),
+        applied_at          TIMESTAMPTZ DEFAULT NOW(),
+        status              VARCHAR(50) DEFAULT 'applied',
+        locked              BOOLEAN DEFAULT false,
+        payment_status      VARCHAR(50) DEFAULT 'not_required',
+        completed_at        TIMESTAMPTZ,
+        remarks             TEXT,
+        created_at          TIMESTAMPTZ DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS "${schema}".certificates (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        application_id      UUID UNIQUE REFERENCES "${schema}".internship_applications(id) ON DELETE CASCADE,
+        certificate_no      VARCHAR(100) UNIQUE NOT NULL,
+        internship_name     VARCHAR(255) NOT NULL,
+        applicant_name      VARCHAR(255) NOT NULL,
+        course              VARCHAR(100),
+        batch               VARCHAR(100),
+        issued_date         DATE DEFAULT CURRENT_DATE,
+        approved_by         VARCHAR(255) DEFAULT 'Prof. (Dr.) Prabhakar Gupta',
+        pdf_url             VARCHAR(500),
+        created_at          TIMESTAMPTZ DEFAULT NOW()
+      );
     `);
 
     this.logger.log(`All tables created in schema: ${schema}`);

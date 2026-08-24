@@ -32,25 +32,33 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('chat:join-group')
   handleJoinGroup(@ConnectedSocket() client: Socket, @MessageBody() data: { groupId: string }) {
-    client.join(`group:${data.groupId}`);
-    this.logger.log(`Client ${client.id} joined group:${data.groupId}`);
-    return { event: 'chat:joined', groupId: data.groupId };
+    if (data?.groupId) {
+      client.join(`group:${data.groupId}`);
+      this.logger.log(`Client ${client.id} joined group:${data.groupId}`);
+      return { event: 'chat:joined', groupId: data.groupId };
+    }
   }
 
-  @SubscribeMessage('chat:send-message')
-  handleSendMessage(
+  @SubscribeMessage('chat:leave-group')
+  handleLeaveGroup(@ConnectedSocket() client: Socket, @MessageBody() data: { groupId: string }) {
+    if (data?.groupId) {
+      client.leave(`group:${data.groupId}`);
+      this.logger.log(`Client ${client.id} left group:${data.groupId}`);
+      return { event: 'chat:left', groupId: data.groupId };
+    }
+  }
+
+  @SubscribeMessage('chat:typing')
+  handleTyping(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { groupId: string; senderId: string; senderName: string; content: string },
+    @MessageBody() data: { groupId: string; userName: string; isTyping: boolean },
   ) {
-    const payload = {
-      id: Date.now().toString(),
-      groupId: data.groupId,
-      senderId: data.senderId,
-      senderName: data.senderName,
-      content: data.content,
-      sentAt: new Date().toISOString(),
-    };
-    this.server.to(`group:${data.groupId}`).emit('chat:receive-message', payload);
-    return payload;
+    if (data?.groupId) {
+      client.to(`group:${data.groupId}`).emit('chat:user-typing', {
+        groupId: data.groupId,
+        userName: data.userName,
+        isTyping: data.isTyping,
+      });
+    }
   }
 }

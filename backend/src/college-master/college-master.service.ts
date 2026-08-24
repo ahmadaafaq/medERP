@@ -4,6 +4,7 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import * as https from 'https';
+import * as bcrypt from 'bcrypt';
 import { TenantSchemaService } from '../database/tenant-schema.service';
 import {
   CreateCollegeDto, UpdateCollegeDto,
@@ -13,6 +14,7 @@ import {
   CreateSessionDto, UpdateSessionDto,
   CreateProfessionalDto, UpdateProfessionalDto,
   CreateGroupDto, UpdateGroupDto,
+  CreateResidencyDto, UpdateResidencyDto,
 } from './dto/college-master.dto';
 import { UserRole } from '../common/enums/role.enum';
 
@@ -443,10 +445,207 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   /**
+   * Helper: Convert raw ALL-CAPS or irregular text to clean Title Case with double-space trimming
+   */
+  private toTitleCase(str?: string | null): string {
+    if (!str) return '';
+    const clean = str.replace(/\s+/g, ' ').trim();
+    if (!clean) return '';
+    const minorWords = new Set(['and', 'or', 'of', 'in', 'at', 'the', 'for', 'to', '&']);
+    return clean
+      .toLowerCase()
+      .split(' ')
+      .map((word, index) => {
+        if (!word) return '';
+        if (/^(dr|prof|mr|ms|mrs|phd|er|adv)\.?$/i.test(word)) {
+          const base = word.replace(/\./g, '');
+          return base.charAt(0).toUpperCase() + base.slice(1).toLowerCase() + '.';
+        }
+        if (index > 0 && minorWords.has(word)) {
+          return word;
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
+      .join(' ');
+  }
+
+  /**
+   * Helper: Normalize legacy free-text designation into standard title
+   */
+  private normalizeDesignation(raw?: string | null): string {
+    if (!raw) return 'Assistant Professor';
+    const clean = raw.replace(/\s+/g, ' ').trim().toUpperCase();
+    if (clean.includes('ASST') || clean.includes('ASSISTANT')) {
+      return 'Assistant Professor';
+    }
+    if (clean.includes('ASSO') || clean.includes('ASSOCIATE')) {
+      return 'Associate Professor';
+    }
+    if (clean.includes('HOD') || clean.includes('HEAD OF')) {
+      return 'Head of Department (HOD)';
+    }
+    if (clean.includes('DEAN') || clean.includes('DIRECTOR') || clean.includes('PRINCIPAL')) {
+      return 'Dean / Director / Principal';
+    }
+    if (clean === 'PROFESSOR' || clean.includes('PROF')) {
+      return 'Professor';
+    }
+    if (clean.includes('LECTURER')) {
+      return 'Lecturer';
+    }
+    if (clean.includes('SR. RESIDENT') || clean.includes('SENIOR RESIDENT')) {
+      return 'Senior Resident';
+    }
+    if (clean.includes('JR. RESIDENT') || clean.includes('JUNIOR RESIDENT')) {
+      return 'Junior Resident';
+    }
+    if (clean.includes('TUTOR') || clean.includes('DEMONSTRATOR')) {
+      return 'Tutor / Demonstrator';
+    }
+    if (clean.includes('LAB') || clean.includes('TECH')) {
+      return 'Lab Instructor / Technician';
+    }
+    if (clean.includes('CLERK') || clean.includes('OFFICE ASST') || clean.includes('OFFICE ASSISTANT')) {
+      return 'Junior Clerk / Office Assistant';
+    }
+    if (clean.includes('ACCOUNTANT')) {
+      return 'Accountant';
+    }
+    if (clean.includes('SYSTEM') || clean.includes('ADMIN') || clean.includes('IT IN-CHARGE')) {
+      return 'System Administrator / IT In-charge';
+    }
+    return this.toTitleCase(raw);
+  }
+
+  /**
+   * Helper: Normalize department name
+   */
+  private normalizeDepartmentName(raw?: string | null): string {
+    if (!raw) return 'General';
+    const clean = raw.replace(/\s+/g, ' ').trim().toUpperCase();
+    if (clean.includes('COMP') || clean.includes('CSE') || clean.includes('CS & ENGG') || clean.includes('COMPUTER SCI')) {
+      return 'Computer Science & Engineering';
+    }
+    if (clean.includes('INFO') || clean.includes('IT')) {
+      return 'Information Technology';
+    }
+    if (clean.includes('MECH') || clean.includes('ME')) {
+      return 'Mechanical Engineering';
+    }
+    if (clean.includes('ELECTR') && (clean.includes('COMM') || clean.includes('EC'))) {
+      return 'Electronics & Communication Engineering';
+    }
+    if (clean.includes('ELECTR') && (clean.includes('EE') || clean.includes('EEE'))) {
+      return 'Electrical & Electronics Engineering';
+    }
+    if (clean.includes('PHARM')) {
+      return 'Pharmacy';
+    }
+    if (clean.includes('MBA') || clean.includes('BUSINESS')) {
+      return 'Master of Business Administration (MBA)';
+    }
+    if (clean.includes('MCA')) {
+      return 'Master of Computer Applications (MCA)';
+    }
+    if (clean.includes('BASIC') || clean.includes('SCIENCE')) {
+      return 'Basic Science & Humanities';
+    }
+    if (clean.includes('CIVIL')) {
+      return 'Civil Engineering';
+    }
+    if (clean.includes('ANAT')) {
+      return 'Anatomy';
+    }
+    if (clean.includes('PHYSIO')) {
+      return 'Physiology';
+    }
+    if (clean.includes('BIOCHEM')) {
+      return 'Biochemistry';
+    }
+    if (clean.includes('PATH')) {
+      return 'Pathology';
+    }
+    if (clean.includes('MICRO')) {
+      return 'Microbiology';
+    }
+    if (clean.includes('PHARMACOL')) {
+      return 'Pharmacology';
+    }
+    if (clean.includes('MEDICINE') || clean.includes('GENERAL MED')) {
+      return 'General Medicine';
+    }
+    if (clean.includes('SURGERY') || clean.includes('GENERAL SURG')) {
+      return 'General Surgery';
+    }
+    if (clean.includes('PEDIA') || clean.includes('PAED')) {
+      return 'Pediatrics';
+    }
+    return this.toTitleCase(raw);
+  }
+
+  /**
+   * Helper: Calculate experience string from Date of Joining
+   */
+  private calculateExperience(dojStr?: string | null): string {
+    if (!dojStr) return '2 Years';
+    const dojDate = new Date(dojStr);
+    if (isNaN(dojDate.getTime())) return '2 Years';
+    const diffMs = Date.now() - dojDate.getTime();
+    if (diffMs < 0) return 'Less than 1 Year';
+    const diffYears = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+    const diffMonths = Math.floor((diffMs % (365.25 * 24 * 60 * 60 * 1000)) / (30.44 * 24 * 60 * 60 * 1000));
+    if (diffYears <= 0) {
+      return diffMonths > 0 ? `${diffMonths} Months` : 'Less than 1 Year';
+    }
+    return `${diffYears} Year${diffYears > 1 ? 's' : ''}${diffMonths > 0 ? ` ${diffMonths} Mo` : ''}`;
+  }
+
+  /**
+   * Helper: Resolve full photo URL from imgpath or EmpID
+   */
+  private resolvePhotoUrl(empId: string, rawImgPath?: string | null): string {
+    if (rawImgPath && typeof rawImgPath === 'string') {
+      const trimmed = rawImgPath.trim();
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+      }
+      if (trimmed.length > 0 && trimmed !== 'null' && trimmed !== 'undefined') {
+        return `https://myportal.srms.ac.in/HR/HR/${trimmed.replace(/^[\\\/]+/, '').replace(/\\/g, '/')}`;
+      }
+    }
+    return `https://myportal.srms.ac.in/HR/HR/${empId}/${empId}.jpg`;
+  }
+
+  /**
+   * Helper: Infer gender from coded fields or employee names
+   */
+  private inferGender(sexCd?: string | number, name?: string): string {
+    if (sexCd === '2' || sexCd === 2 || String(sexCd).toUpperCase() === 'F' || String(sexCd).toUpperCase() === 'FEMALE') return 'Female';
+    if (sexCd === '1' || sexCd === 1 || String(sexCd).toUpperCase() === 'M' || String(sexCd).toUpperCase() === 'MALE') return 'Male';
+    if (name) {
+      const n = name.toUpperCase();
+      if (
+        n.startsWith('MS.') || n.startsWith('MRS.') || n.includes('KUMARI') ||
+        n.includes('DEVI') || n.includes('MEENAKSHI') || n.includes('PRIYA') ||
+        n.includes('PREETI') || n.includes('POOJA') || n.includes('NEHA') ||
+        n.includes('ANITA') || n.includes('SUNITA') || n.includes('SWATI') ||
+        n.includes('SHWETA') || n.includes('RASHMI') || n.includes('DIVYA')
+      ) {
+        return 'Female';
+      }
+    }
+    return 'Male';
+  }
+
+  /**
    * Synchronize employees from SRMS HR API into tenant PostgreSQL database
+   * Sets default password '12345678' for all synced staff accounts.
    */
   async syncExternalEmployees(locidOrTenantSlug?: string): Promise<any[]> {
-    this.logger.log(`Starting syncExternalEmployees for ${locidOrTenantSlug || 'all'}...`);
+    this.logger.log(`Starting syncExternalEmployees for ${locidOrTenantSlug || 'all'} with default password '12345678'...`);
+
+    // Precompute bcrypt hash for default password '12345678'
+    const defaultPasswordHash = await bcrypt.hash('12345678', 10);
 
     // Resolve location mapping
     let targets: Array<{ locid: string; name: string; slug: string; code: string }> = [];
@@ -492,7 +691,11 @@ export class CollegeMasterService implements OnApplicationBootstrap {
           department_id VARCHAR(100),
           designation VARCHAR(100),
           qualification VARCHAR(200),
+          specialization VARCHAR(200),
+          experience VARCHAR(50),
+          gender VARCHAR(20),
           date_of_joining DATE,
+          joining_date DATE,
           date_of_birth DATE,
           date_of_leaving DATE,
           employment_status VARCHAR(50) DEFAULT 'ACTIVE',
@@ -532,6 +735,10 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS name VARCHAR(200);`,
         `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`,
         `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS designation VARCHAR(100);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS qualification VARCHAR(200);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS specialization VARCHAR(200);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS experience VARCHAR(50);`,
+        `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS gender VARCHAR(20);`,
         `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS photo_url TEXT;`,
         `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS date_of_joining DATE;`,
         `ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS joining_date DATE;`,
@@ -573,16 +780,31 @@ export class CollegeMasterService implements OnApplicationBootstrap {
 
       for (const emp of liveEmployees) {
         const empId = String(emp.EmpID || emp.emp_id || '').trim();
-        const empName = String(emp.EmpName || emp.name || '').trim();
-        if (!empId || !empName) continue;
+        const rawEmpName = String(emp.EmpName || emp.name || '').trim();
+        if (!empId || !rawEmpName) continue;
 
-        const email = emp.email ? String(emp.email).trim().toLowerCase() : `${empId.toLowerCase()}@srms.ac.in`;
+        // 1. Transform Name: Double space removal + Title Casing
+        const empName = this.toTitleCase(rawEmpName);
+
+        // 2. Email fallback
+        const email = emp.email && String(emp.email).trim()
+          ? String(emp.email).trim().toLowerCase()
+          : `${empId.toLowerCase()}@srms.ac.in`;
+
+        // 3. Contact & Phone
         const phone = emp.homephone || emp.PermanentTelNo || null;
-        const department = emp.Department ? String(emp.Department).trim() : 'General';
-        const designation = emp.Designation ? String(emp.Designation).trim() : 'Staff';
-        const qualification = emp.HIGHEST_EDUCATION ? String(emp.HIGHEST_EDUCATION).trim() : null;
-        const bloodGroup = emp.bloodgroup ? String(emp.bloodgroup).trim() : null;
-        const caste = emp.CASTE ? String(emp.CASTE).trim() : null;
+
+        // 4. Department & Designation Normalization
+        const departmentRaw = emp.Department ? String(emp.Department).trim() : 'General';
+        const department = this.normalizeDepartmentName(departmentRaw);
+        const designation = this.normalizeDesignation(emp.Designation);
+
+        // 5. Qualifications & Education
+        const qualification = emp.HIGHEST_EDUCATION ? String(emp.HIGHEST_EDUCATION).trim().toUpperCase() : null;
+
+        // 6. Demographics
+        const bloodGroup = emp.bloodgroup ? String(emp.bloodgroup).trim().toUpperCase() : null;
+        const caste = emp.CASTE ? String(emp.CASTE).trim().toUpperCase() : null;
         const panNo = emp.PANNo ? String(emp.PANNo).trim() : null;
         const aadhaarNo = emp.aadharno ? String(emp.aadharno).trim() : null;
         const uan = emp.UAN ? String(emp.UAN).trim() : null;
@@ -590,29 +812,48 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         const basicPay = emp.EmpCurrBasic ? parseFloat(emp.EmpCurrBasic) : null;
         const deviceCd = emp.DEVICECD ? String(emp.DEVICECD).trim() : null;
         const salgrade = emp.salgrade ? String(emp.salgrade).trim() : null;
-        const fatherName = emp.FatherNm ? String(emp.FatherNm).trim() : null;
-        const spouseName = emp.SpouseNm ? String(emp.SpouseNm).trim() : null;
-        const address = emp.Addr1 || emp.perm_addr || null;
-        const permAddr = emp.perm_addr || null;
-        const city = emp.city || emp.perm_city || 'BAREILLY';
-        const state = emp.state || emp.perm_state || 'UTTAR PRADESH';
-        const permCity = emp.perm_city || null;
-        const permState = emp.perm_state || null;
+        const fatherName = emp.FatherNm ? this.toTitleCase(emp.FatherNm) : null;
+        const spouseName = emp.SpouseNm ? this.toTitleCase(emp.SpouseNm) : null;
+        const address = emp.Addr1 ? emp.Addr1.replace(/\s+/g, ' ').trim() : (emp.perm_addr ? emp.perm_addr.replace(/\s+/g, ' ').trim() : null);
+        const permAddr = emp.perm_addr ? emp.perm_addr.replace(/\s+/g, ' ').trim() : null;
+        const city = emp.city ? this.toTitleCase(emp.city) : 'Bareilly';
+        const state = emp.state ? this.toTitleCase(emp.state) : 'Uttar Pradesh';
+        const permCity = emp.perm_city ? this.toTitleCase(emp.perm_city) : null;
+        const permState = emp.perm_state ? this.toTitleCase(emp.perm_state) : null;
         const homephone = emp.homephone || null;
         const permanentTelNo = emp.PermanentTelNo || null;
         const category = emp.category || null;
         const payrollCategory = emp.payroll_category || null;
-        const staffType = (emp.category || emp.payroll_category || 'TEACHING').toUpperCase().includes('TEACH') ? 'Faculty' : 'Staff';
-        const status = (emp.EmpStsCd || 'ACTIVE').toUpperCase();
-        
-        // Profile Photo: https://myportal.srms.ac.in/HR/HR/{reg_no}/{reg_no}.jpg
-        const photoUrl = `https://myportal.srms.ac.in/HR/HR/${empId}/${empId}.jpg`;
 
+        // 7. Staff Type & Status
+        const majCat = (emp.category || emp.payroll_category || emp.maj_cat || 'TEACHING').toUpperCase();
+        let staffType = 'Faculty';
+        let userRole = 'FACULTY';
+        if (majCat.includes('TEACH')) {
+          staffType = 'Faculty';
+          userRole = designation.includes('HOD') ? 'HOD' : 'FACULTY';
+        } else if (majCat.includes('ADMIN')) {
+          staffType = 'Admin';
+          userRole = 'COLLEGE_ADMIN';
+        } else {
+          staffType = 'Staff';
+          userRole = 'CLERK';
+        }
+
+        const status = (emp.EmpStsCd || 'ACTIVE').toUpperCase();
+        const isActive = status === 'ACTIVE';
+
+        // 8. Profile Photo Resolution
+        const photoUrl = this.resolvePhotoUrl(empId, emp.imgpath);
+
+        // 9. Dates & Experience
         const dob = parseDotNetDate(emp.dob);
         const doj = parseDotNetDate(emp.DOJ);
         const dol = parseDotNetDate(emp.dol);
+        const experience = this.calculateExperience(doj);
+        const gender = this.inferGender(emp.SexCd, rawEmpName);
 
-        // 1. Resolve / Create Department
+        // 10. Resolve / Create Department
         let deptId: string | null = null;
         const deptRows = await this.ds.query(
           `SELECT id FROM "${schema}".departments WHERE name ILIKE $1 OR code ILIKE $1 LIMIT 1`,
@@ -631,7 +872,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
           if (newDept && newDept.length > 0) deptId = newDept[0].id;
         }
 
-        // 2. Resolve / Create User Account in tenant schema
+        // 11. Resolve / Create User Account in tenant schema & Set password '12345678'
         let userId: string | null = null;
         const userRows = await this.ds.query(
           `SELECT id FROM "${schema}".users WHERE email = $1 LIMIT 1`,
@@ -639,22 +880,27 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         ).catch(() => []);
         if (userRows.length > 0) {
           userId = userRows[0].id;
+          // Update password to 12345678 and refresh active status
           await this.ds.query(
-            `UPDATE "${schema}".users SET is_active = $1 WHERE id = $2`,
-            [status === 'ACTIVE', userId],
+            `UPDATE "${schema}".users 
+             SET password_hash = $1, is_active = $2, role = COALESCE($3, role), updated_at = NOW() 
+             WHERE id = $4`,
+            [defaultPasswordHash, isActive, userRole, userId],
           ).catch(() => {});
         } else {
-          const defaultHash = '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekd59S/y4r8gR.t6i';
           const newUser = await this.ds.query(
-            `INSERT INTO "${schema}".users (email, password_hash, role, is_active)
-             VALUES ($1, $2, $3, $4)
+            `INSERT INTO "${schema}".users (email, password_hash, role, is_active, must_change_password)
+             VALUES ($1, $2, $3, $4, false)
              RETURNING id`,
-            [email, defaultHash, staffType === 'Faculty' ? 'FACULTY' : 'CLERK', status === 'ACTIVE'],
+            [email, defaultPasswordHash, userRole, isActive],
           ).catch(() => []);
           if (newUser && newUser.length > 0) userId = newUser[0].id;
         }
 
-        // 3. Upsert in faculty table
+        // 12. Upsert into faculty table
+        const validDeptId = this.isUUID(deptId) ? deptId : null;
+        const validUserId = this.isUUID(userId) ? userId : null;
+
         const existingFaculty = await this.ds.query(
           `SELECT id FROM "${schema}".faculty WHERE emp_id = $1 LIMIT 1`,
           [empId],
@@ -695,21 +941,24 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                  payroll_category = COALESCE($28, payroll_category),
                  date_of_birth = COALESCE($29, date_of_birth),
                  date_of_joining = COALESCE($30, date_of_joining),
+                 joining_date = COALESCE($30, joining_date),
                  date_of_leaving = COALESCE($31, date_of_leaving),
                  photo_url = $32,
                  staff_type = $33,
                  employment_status = $34,
-                 is_active = $35,
-                 user_id = COALESCE($36, user_id),
+                 experience = $35,
+                 gender = $36,
+                 is_active = $37,
+                 user_id = COALESCE($38, user_id),
                  updated_at = NOW()
-             WHERE id = $37`,
+             WHERE id = $39`,
             [
-              empName, email, phone, deptId || department, designation, qualification,
+              empName, email, phone, validDeptId, designation, qualification,
               bloodGroup, caste, panNo, aadhaarNo, uan, bankAcNo, basicPay, deviceCd,
               salgrade, fatherName, spouseName, address, city, state, permAddr,
               permCity, permState, homephone, permanentTelNo, qualification, category,
               payrollCategory, dob, doj, dol, photoUrl, staffType, status,
-              status === 'ACTIVE', userId, facultyId,
+              experience, gender, isActive, validUserId, facultyId,
             ],
           );
         } else {
@@ -720,25 +969,25 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                device_cd, salgrade, father_name, spouse_name, address, city, state,
                perm_addr, perm_city, perm_state, homephone, permanent_tel_no,
                highest_education, category, payroll_category, date_of_birth,
-               date_of_joining, date_of_leaving, photo_url, staff_type, employment_status,
-               is_active, user_id
+               date_of_joining, joining_date, date_of_leaving, photo_url, staff_type,
+               employment_status, experience, gender, is_active, user_id
              ) VALUES (
                $1, $2, $3, $4, $5, $6, $7,
                $8, $9, $10, $11, $12, $13, $14,
                $15, $16, $17, $18, $19, $20, $21,
                $22, $23, $24, $25, $26,
                $27, $28, $29, $30,
-               $31, $32, $33, $34, $35,
-               $36, $37
+               $31, $31, $32, $33, $34,
+               $35, $36, $37, $38, $39
              ) RETURNING id`,
             [
-              empId, empName, email, phone, deptId || department, designation, qualification,
+              empId, empName, email, phone, validDeptId, designation, qualification,
               bloodGroup, caste, panNo, aadhaarNo, uan, bankAcNo, basicPay,
               deviceCd, salgrade, fatherName, spouseName, address, city, state,
               permAddr, permCity, permState, homephone, permanentTelNo,
               qualification, category, payrollCategory, dob,
-              doj, dol, photoUrl, staffType, status,
-              status === 'ACTIVE', userId,
+              doj, dol, photoUrl, staffType,
+              status, experience, gender, isActive, validUserId,
             ],
           );
           facultyId = inserted[0]?.id;
@@ -748,10 +997,14 @@ export class CollegeMasterService implements OnApplicationBootstrap {
           facultyId,
           empId,
           empName,
+          email,
           designation,
           department,
           staffType,
           photoUrl,
+          experience,
+          gender,
+          isActive,
           locid: target.locid,
           collegeName: target.name,
           tenantSlug: slug,
@@ -759,7 +1012,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       }
     }
 
-    this.logger.log(`syncExternalEmployees complete. Synced ${allSyncedEmployees.length} employees/faculty across targets.`);
+    this.logger.log(`syncExternalEmployees complete. Synced ${allSyncedEmployees.length} employees/faculty across targets. Password set to '12345678'.`);
     return allSyncedEmployees;
   }
 
@@ -1491,15 +1744,18 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   async createBatch(dto: CreateBatchDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(dto.collegeId || tenantSlug);
+    const slug = await this.resolveTenantSlug(dto.collegeId || dto.college_id || dto.collegeSlug || tenantSlug);
     const batchCdVal = String(dto.code || dto.year || '').trim();
-    const displayName = dto.year ? `Batch ${dto.year}` : `Batch ${batchCdVal}`;
+    const displayName = dto.name || (dto.year ? `Batch ${dto.year}` : `Batch ${batchCdVal}`);
+    const finalCourseCd = dto.courseCd || dto.course_cd || dto.courseId || '1';
+    const validDeptId = this.isUUID(dto.departmentId) ? dto.departmentId : null;
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO batches (code, batch_cd, name, year, course_cd, department_id, start_date, end_date, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
        RETURNING *`,
-      [batchCdVal, batchCdVal, displayName, dto.year, dto.courseCd, dto.departmentId || null, dto.startDate || null, dto.endDate || null],
+      [batchCdVal, batchCdVal, displayName, dto.year || 2026, finalCourseCd, validDeptId, dto.startDate || null, dto.endDate || null],
     );
     return rows[0];
   }
@@ -2105,10 +2361,14 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   async createProfessional(dto: CreateProfessionalDto, tenantSlug?: string) {
-    const slug = await this.resolveTenantSlug(dto.collegeId || tenantSlug);
+    const slug = await this.resolveTenantSlug(dto.collegeId || dto.college_id || tenantSlug);
     await this.tenantSchemaService.ensureLatestSchema(slug);
     const schema = `tenant_${slug}`;
     await this.ensureProperPhasesForSchema(schema, slug);
+
+    const finalName = dto.name || dto.phaseName || `Semester ${dto.phaseOrder || 1}`;
+    const finalCourseCd = dto.courseCd || dto.course_cd || dto.courseId || '1';
+    const validBranchId = this.isUUID(dto.branchId) ? dto.branchId : null;
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -2116,11 +2376,11 @@ export class CollegeMasterService implements OnApplicationBootstrap {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
        RETURNING *`,
       [
-        dto.name,
+        finalName,
         dto.phaseOrder || 1,
-        dto.courseCd || '1',
+        finalCourseCd,
         dto.branchCd || null,
-        dto.branchId || null,
+        validBranchId,
         dto.branchName || null,
         dto.academicYear || 1,
         dto.academicSystem || (slug === 'srms-ims' ? 'professional' : 'semester'),
@@ -2176,7 +2436,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   // ─── 8. GROUPS MASTER (BATCH SUB-GROUPS: A, B, C, D) ─────────────────────
-  private isUUID(str?: string): boolean {
+  private isUUID(str?: string | null): boolean {
     if (!str) return false;
     return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str);
   }
@@ -2258,6 +2518,117 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       [id],
     );
     return { success: true, message: 'Group deleted successfully' };
+  }
+
+  // ─── 9. RESIDENCIES MASTER (HOSTEL / RESIDENCY CATEGORIES) ────────────────
+  private async ensureResidencyTable(slug: string) {
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `CREATE TABLE IF NOT EXISTS residency_categories (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        college_id VARCHAR(100),
+        college_code VARCHAR(50),
+        college_slug VARCHAR(100),
+        course_id VARCHAR(100),
+        course_code VARCHAR(50),
+        course_name VARCHAR(255),
+        residency_type VARCHAR(100) DEFAULT 'Hosteller',
+        category_name VARCHAR(255) NOT NULL,
+        block_wing VARCHAR(100),
+        total_capacity INT DEFAULT 100,
+        allocated_count INT DEFAULT 0,
+        monthly_fee NUMERIC(10, 2) DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );`,
+    );
+  }
+
+  async listResidencies(tenantSlug?: string, user?: any) {
+    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+      tenantSlug = user.tenantSlug;
+    }
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.ensureResidencyTable(slug);
+    const collegeId = await this.getCollegeIdBySlug(slug);
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM residency_categories ORDER BY category_name ASC`,
+    );
+    return rows.map(r => ({
+      ...r,
+      college_id: r.college_id || collegeId,
+      college_slug: slug,
+    }));
+  }
+
+  async createResidency(dto: CreateResidencyDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.ensureResidencyTable(slug);
+    const collegeId = await this.getCollegeIdBySlug(slug);
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `INSERT INTO residency_categories (college_id, college_slug, course_id, residency_type, category_name, block_wing, total_capacity, allocated_count, monthly_fee, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+       RETURNING *`,
+      [
+        dto.collegeId || collegeId,
+        slug,
+        dto.courseId || null,
+        dto.residencyType || 'Hosteller',
+        dto.categoryName,
+        dto.blockWing || null,
+        dto.totalCapacity || 100,
+        dto.allocatedCount || 0,
+        dto.monthlyFee || 0,
+      ],
+    );
+    return rows[0];
+  }
+
+  async updateResidency(id: string, dto: UpdateResidencyDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.ensureResidencyTable(slug);
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE residency_categories
+       SET residency_type = COALESCE($1, residency_type),
+           category_name = COALESCE($2, category_name),
+           block_wing = COALESCE($3, block_wing),
+           total_capacity = COALESCE($4, total_capacity),
+           allocated_count = COALESCE($5, allocated_count),
+           monthly_fee = COALESCE($6, monthly_fee),
+           is_active = COALESCE($7, is_active),
+           updated_at = NOW()
+       WHERE id = $8
+       RETURNING *`,
+      [
+        dto.residencyType,
+        dto.categoryName,
+        dto.blockWing,
+        dto.totalCapacity,
+        dto.allocatedCount,
+        dto.monthlyFee,
+        dto.isActive,
+        id,
+      ],
+    );
+    if (rows.length === 0) throw new NotFoundException('Residency Category not found');
+    return rows[0];
+  }
+
+  async deleteResidency(id: string, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.ensureResidencyTable(slug);
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM residency_categories WHERE id = $1`,
+      [id],
+    );
+    return { success: true, message: 'Residency Category deleted successfully' };
   }
 }
 

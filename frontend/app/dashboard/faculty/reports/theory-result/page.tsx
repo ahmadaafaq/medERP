@@ -226,9 +226,9 @@ export default function TheoryResultReportPage() {
   const [selectedBranchCd, setSelectedBranchCd] = useState<string>('1');
 
   const [batches, setBatches] = useState<BatchItem[]>([]);
-  const [selectedBatchCd, setSelectedBatchCd] = useState<string>('B2026-C13-1');
+  const [selectedBatchCd, setSelectedBatchCd] = useState<string>('2'); // default Batch 2025
 
-  const [selectedSemCd, setSelectedSemCd] = useState<string>('1'); // Sem 1 to 8
+  const [selectedSemCd, setSelectedSemCd] = useState<string>('3'); // default Sem 3
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDeptCd, setSelectedDeptCd] = useState<string>('13'); // BCA Dept

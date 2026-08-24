@@ -1,0 +1,614 @@
+[
+  {
+    "role": "STUDENT",
+    "menu_key": "student.dashboard",
+    "menu_label": "Student Dashboard",
+    "route_path": "/dashboard/student",
+    "parent_menu_key": null,
+    "sort_order": 0,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.assessment",
+    "menu_label": "Assessment",
+    "route_path": "/dashboard/student/assessment",
+    "parent_menu_key": null,
+    "sort_order": 10,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.attendance",
+    "menu_label": "Attendance",
+    "route_path": "/dashboard/student/attendance",
+    "parent_menu_key": null,
+    "sort_order": 20,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.attendance-biometric",
+    "menu_label": "Attendance Biometric",
+    "route_path": "/dashboard/student/attendance-biometric",
+    "parent_menu_key": null,
+    "sort_order": 30,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.chat",
+    "menu_label": "Chat",
+    "route_path": "/dashboard/student/chat",
+    "parent_menu_key": null,
+    "sort_order": 40,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.lessons",
+    "menu_label": "Lessons",
+    "route_path": "/dashboard/student/lessons",
+    "parent_menu_key": null,
+    "sort_order": 50,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.library",
+    "menu_label": "Library",
+    "route_path": "/dashboard/student/library",
+    "parent_menu_key": null,
+    "sort_order": 60,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.logbook",
+    "menu_label": "Logbook",
+    "route_path": "/dashboard/student/logbook",
+    "parent_menu_key": null,
+    "sort_order": 70,
+    "applicable_firm_mode": "MED"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.marks",
+    "menu_label": "Marks",
+    "route_path": "/dashboard/student/marks",
+    "parent_menu_key": null,
+    "sort_order": 80,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.notices",
+    "menu_label": "Notices",
+    "route_path": "/dashboard/student/notices",
+    "parent_menu_key": null,
+    "sort_order": 90,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.placement",
+    "menu_label": "Placement",
+    "route_path": "/dashboard/student/placement",
+    "parent_menu_key": null,
+    "sort_order": 100,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.profile",
+    "menu_label": "Profile",
+    "route_path": "/dashboard/student/profile",
+    "parent_menu_key": null,
+    "sort_order": 110,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.reports.theory-result",
+    "menu_label": "Theory Result",
+    "route_path": "/dashboard/student/reports/theory-result",
+    "parent_menu_key": null,
+    "sort_order": 120,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.repository",
+    "menu_label": "Repository",
+    "route_path": "/dashboard/student/repository",
+    "parent_menu_key": null,
+    "sort_order": 130,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.schedule",
+    "menu_label": "Schedule",
+    "route_path": "/dashboard/student/schedule",
+    "parent_menu_key": null,
+    "sort_order": 140,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "STUDENT",
+    "menu_key": "student.timetable",
+    "menu_label": "Timetable",
+    "route_path": "/dashboard/student/timetable",
+    "parent_menu_key": null,
+    "sort_order": 150,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.dashboard",
+    "menu_label": "Faculty Dashboard",
+    "route_path": "/dashboard/faculty",
+    "parent_menu_key": null,
+    "sort_order": 0,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.assessment",
+    "menu_label": "Assessment",
+    "route_path": "/dashboard/faculty/assessment",
+    "parent_menu_key": null,
+    "sort_order": 10,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.attendance",
+    "menu_label": "Attendance",
+    "route_path": "/dashboard/faculty/attendance",
+    "parent_menu_key": null,
+    "sort_order": 20,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.attendance-biometric",
+    "menu_label": "Attendance Biometric",
+    "route_path": "/dashboard/faculty/attendance-biometric",
+    "parent_menu_key": null,
+    "sort_order": 30,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.chat",
+    "menu_label": "Chat",
+    "route_path": "/dashboard/faculty/chat",
+    "parent_menu_key": null,
+    "sort_order": 40,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.department-faculty",
+    "menu_label": "Department Faculty",
+    "route_path": "/dashboard/faculty/department-faculty",
+    "parent_menu_key": null,
+    "sort_order": 50,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.lessons",
+    "menu_label": "Lessons",
+    "route_path": "/dashboard/faculty/lessons",
+    "parent_menu_key": null,
+    "sort_order": 60,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.library",
+    "menu_label": "Library",
+    "route_path": "/dashboard/faculty/library",
+    "parent_menu_key": null,
+    "sort_order": 70,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.logbook",
+    "menu_label": "Logbook",
+    "route_path": "/dashboard/faculty/logbook",
+    "parent_menu_key": null,
+    "sort_order": 80,
+    "applicable_firm_mode": "MED"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.marks",
+    "menu_label": "Marks",
+    "route_path": "/dashboard/faculty/marks",
+    "parent_menu_key": null,
+    "sort_order": 90,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.notices",
+    "menu_label": "Notices",
+    "route_path": "/dashboard/faculty/notices",
+    "parent_menu_key": null,
+    "sort_order": 100,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.profile",
+    "menu_label": "Profile",
+    "route_path": "/dashboard/faculty/profile",
+    "parent_menu_key": null,
+    "sort_order": 110,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.reports",
+    "menu_label": "Reports",
+    "route_path": "/dashboard/faculty/reports",
+    "parent_menu_key": null,
+    "sort_order": 120,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.reports.attendance",
+    "menu_label": "Attendance",
+    "route_path": "/dashboard/faculty/reports/attendance",
+    "parent_menu_key": "faculty.reports",
+    "sort_order": 130,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.reports.logbook",
+    "menu_label": "Logbook",
+    "route_path": "/dashboard/faculty/reports/logbook",
+    "parent_menu_key": "faculty.reports",
+    "sort_order": 140,
+    "applicable_firm_mode": "MED"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.reports.theory-result",
+    "menu_label": "Theory Result",
+    "route_path": "/dashboard/faculty/reports/theory-result",
+    "parent_menu_key": "faculty.reports",
+    "sort_order": 150,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.repository",
+    "menu_label": "Repository",
+    "route_path": "/dashboard/faculty/repository",
+    "parent_menu_key": null,
+    "sort_order": 160,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.schedule",
+    "menu_label": "Schedule",
+    "route_path": "/dashboard/faculty/schedule",
+    "parent_menu_key": null,
+    "sort_order": 170,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "FACULTY",
+    "menu_key": "faculty.students",
+    "menu_label": "Students",
+    "route_path": "/dashboard/faculty/students",
+    "parent_menu_key": null,
+    "sort_order": 180,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.dashboard",
+    "menu_label": "Admin Dashboard",
+    "route_path": "/dashboard/admin",
+    "parent_menu_key": null,
+    "sort_order": 0,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.admin-master",
+    "menu_label": "Admin Master",
+    "route_path": "/dashboard/admin/admin-master",
+    "parent_menu_key": null,
+    "sort_order": 10,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.assessment",
+    "menu_label": "Assessment",
+    "route_path": "/dashboard/admin/assessment",
+    "parent_menu_key": null,
+    "sort_order": 20,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.assessment-marks",
+    "menu_label": "Assessment Marks",
+    "route_path": "/dashboard/admin/assessment-marks",
+    "parent_menu_key": null,
+    "sort_order": 30,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.attendance",
+    "menu_label": "Attendance",
+    "route_path": "/dashboard/admin/attendance",
+    "parent_menu_key": null,
+    "sort_order": 40,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.attendance-biometric",
+    "menu_label": "Attendance Biometric",
+    "route_path": "/dashboard/admin/attendance-biometric",
+    "parent_menu_key": null,
+    "sort_order": 50,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.attendance-master",
+    "menu_label": "Attendance Master",
+    "route_path": "/dashboard/admin/attendance-master",
+    "parent_menu_key": null,
+    "sort_order": 60,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.attendance-reports",
+    "menu_label": "Attendance Reports",
+    "route_path": "/dashboard/admin/attendance-reports",
+    "parent_menu_key": null,
+    "sort_order": 70,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.chat",
+    "menu_label": "Chat",
+    "route_path": "/dashboard/admin/chat",
+    "parent_menu_key": null,
+    "sort_order": 80,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.college-master",
+    "menu_label": "College Master",
+    "route_path": "/dashboard/admin/college-master",
+    "parent_menu_key": null,
+    "sort_order": 90,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.library",
+    "menu_label": "Library",
+    "route_path": "/dashboard/admin/library",
+    "parent_menu_key": null,
+    "sort_order": 100,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.notices",
+    "menu_label": "Notices",
+    "route_path": "/dashboard/admin/notices",
+    "parent_menu_key": null,
+    "sort_order": 110,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.notices.compose",
+    "menu_label": "Compose",
+    "route_path": "/dashboard/admin/notices/compose",
+    "parent_menu_key": "admin.notices",
+    "sort_order": 120,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.notices.groups",
+    "menu_label": "Groups",
+    "route_path": "/dashboard/admin/notices/groups",
+    "parent_menu_key": "admin.notices",
+    "sort_order": 130,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.notices.reports.[noticeId]",
+    "menu_label": "[NoticeId]",
+    "route_path": "/dashboard/admin/notices/reports/[noticeId]",
+    "parent_menu_key": "admin.notices",
+    "sort_order": 140,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.notices.sent",
+    "menu_label": "Sent",
+    "route_path": "/dashboard/admin/notices/sent",
+    "parent_menu_key": "admin.notices",
+    "sort_order": 150,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.placement",
+    "menu_label": "Placement",
+    "route_path": "/dashboard/admin/placement",
+    "parent_menu_key": null,
+    "sort_order": 160,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.reports",
+    "menu_label": "Reports",
+    "route_path": "/dashboard/admin/reports",
+    "parent_menu_key": null,
+    "sort_order": 170,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.reports.attendance",
+    "menu_label": "Attendance",
+    "route_path": "/dashboard/admin/reports/attendance",
+    "parent_menu_key": "admin.reports",
+    "sort_order": 180,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.reports.logbook",
+    "menu_label": "Logbook",
+    "route_path": "/dashboard/admin/reports/logbook",
+    "parent_menu_key": "admin.reports",
+    "sort_order": 190,
+    "applicable_firm_mode": "MED"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.reports.theory-result",
+    "menu_label": "Theory Result",
+    "route_path": "/dashboard/admin/reports/theory-result",
+    "parent_menu_key": "admin.reports",
+    "sort_order": 200,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.staff-master",
+    "menu_label": "Staff Master",
+    "route_path": "/dashboard/admin/staff-master",
+    "parent_menu_key": null,
+    "sort_order": 210,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.student-master",
+    "menu_label": "Student Master",
+    "route_path": "/dashboard/admin/student-master",
+    "parent_menu_key": null,
+    "sort_order": 220,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.subject-linker",
+    "menu_label": "Subject Linker",
+    "route_path": "/dashboard/admin/subject-linker",
+    "parent_menu_key": null,
+    "sort_order": 230,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "ADMIN",
+    "menu_key": "admin.timetable-design",
+    "menu_label": "Timetable Design",
+    "route_path": "/dashboard/admin/timetable-design",
+    "parent_menu_key": null,
+    "sort_order": 240,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "CLERK",
+    "menu_key": "clerk.dashboard",
+    "menu_label": "Clerk Dashboard",
+    "route_path": "/dashboard/clerk",
+    "parent_menu_key": null,
+    "sort_order": 0,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "CLERK",
+    "menu_key": "clerk.assessment",
+    "menu_label": "Assessment",
+    "route_path": "/dashboard/clerk/assessment",
+    "parent_menu_key": null,
+    "sort_order": 10,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "CLERK",
+    "menu_key": "clerk.attendance",
+    "menu_label": "Attendance",
+    "route_path": "/dashboard/clerk/attendance",
+    "parent_menu_key": null,
+    "sort_order": 20,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "CLERK",
+    "menu_key": "clerk.attendance-biometric",
+    "menu_label": "Attendance Biometric",
+    "route_path": "/dashboard/clerk/attendance-biometric",
+    "parent_menu_key": null,
+    "sort_order": 30,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "CLERK",
+    "menu_key": "clerk.notices",
+    "menu_label": "Notices",
+    "route_path": "/dashboard/clerk/notices",
+    "parent_menu_key": null,
+    "sort_order": 40,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "WARDEN",
+    "menu_key": "warden.dashboard",
+    "menu_label": "Warden Dashboard",
+    "route_path": "/dashboard/warden",
+    "parent_menu_key": null,
+    "sort_order": 0,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "SUPERADMIN",
+    "menu_key": "superadmin.firms",
+    "menu_label": "Firms",
+    "route_path": "/dashboard/superadmin/firms",
+    "parent_menu_key": null,
+    "sort_order": 10,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
+    "role": "SUPERADMIN",
+    "menu_key": "superadmin.firms.register",
+    "menu_label": "Register",
+    "route_path": "/dashboard/superadmin/firms/register",
+    "parent_menu_key": "superadmin.firms",
+    "sort_order": 20,
+    "applicable_firm_mode": "BOTH"
+  }
+]

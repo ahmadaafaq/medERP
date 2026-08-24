@@ -12,7 +12,9 @@ import {
   CreatePlacementDriveDto, 
   ApplyPlacementDriveDto, 
   UpdateApplicantStatusDto, 
-  PlacementReportQueryDto 
+  PlacementReportQueryDto,
+  ConfirmImportDriveDto,
+  RespondOfferDto
 } from './dto/placement-drive.dto';
 
 @Injectable()
@@ -120,6 +122,59 @@ export class PlacementDriveService {
       dto.deadline_date,
       createdByEmpId,
     ]);
+
+    // Automatically publish official Campus Placement Notice into Notices bulletin
+    try {
+      const noticeTitle = `Campus Placement Drive: ${dto.company_name} — ${dto.role}${dto.package_ctc ? ` (${dto.package_ctc})` : ''}`;
+      const noticeBody = `Official Announcement: ${dto.company_name} is organizing a Campus Placement Drive for eligible students.\n\n` +
+        `• Company: ${dto.company_name}\n` +
+        `• Role: ${dto.role}\n` +
+        `• Package (CTC): ${dto.package_ctc || 'Attractive Package'}\n` +
+        `• Eligible Course: Course Code ${dto.eligibility_course_cd}\n` +
+        `• Eligible Batch: ${dto.eligibility_batch_cd}\n` +
+        `• Minimum Project Score Required: ${dto.min_score_required || 0}%\n` +
+        `• Drive Date: ${dto.drive_date}\n` +
+        `• Deadline: ${dto.deadline_date}\n\n` +
+        `Requirements:\n${dto.description}\n\n` +
+        `Submit your resume directly under the Placement Drive tab in your Student Dashboard.`;
+
+      const noticeInsert = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO "${schema}".notices (
+          title, body, priority, category, creator_name, creator_role, status, requires_acknowledgement, created_at, updated_at
+        ) VALUES ($1, $2, 'important', 'career', 'Training & Placement Cell (T&P)', 'Training & Placement Officer', 'sent', false, NOW(), NOW())
+        RETURNING id`,
+        [noticeTitle, noticeBody],
+      );
+
+      if (noticeInsert && noticeInsert.length > 0) {
+        const noticeId = noticeInsert[0].id;
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO "${schema}".notice_targets (notice_id, target_type, target_value, target_label)
+           VALUES ($1, 'role', 'STUDENT', 'All Students'), ($1, 'course', $2, 'Eligible Course')`,
+          [noticeId, dto.eligibility_course_cd],
+        );
+
+        const students = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT u.id as user_id FROM "${schema}".users u WHERE UPPER(u.role) = 'STUDENT' AND u.is_active = true`,
+        );
+
+        for (const s of students) {
+          if (s.user_id) {
+            await this.tenantSchemaService.queryInTenant(
+              slug,
+              `INSERT INTO "${schema}".notice_recipients (notice_id, user_id, is_read)
+               VALUES ($1, $2, false) ON CONFLICT DO NOTHING`,
+              [noticeId, s.user_id],
+            );
+          }
+        }
+      }
+    } catch (noticeErr: any) {
+      this.logger.warn(`Could not automatically create placement notice: ${noticeErr?.message || noticeErr}`);
+    }
 
     return {
       message: 'Placement drive created successfully',
@@ -458,6 +513,332 @@ export class PlacementDriveService {
       studentReports,
       count: studentReports.length,
       filterType,
+    };
+  }
+
+  /**
+   * Excel Import: Preview uploaded spreadsheet with smart column recognition and extra_fields JSONB mapping
+   */
+  async previewExcelImport(tenantSlug: string, fileBuffer: Buffer, fileName: string) {
+    const XLSX = require('xlsx');
+    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      throw new BadRequestException('The uploaded file does not contain any spreadsheet sheets.');
+    }
+
+    const sheet = workbook.Sheets[sheetName];
+    const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (!rawRows || rawRows.length === 0) {
+      throw new BadRequestException('The uploaded spreadsheet is empty or has no readable rows.');
+    }
+
+    const headers = Object.keys(rawRows[0] || {});
+    const recognizedMapping: Record<string, string> = {};
+    const unrecognizedCols: string[] = [];
+
+    const CORE_HEADER_PATTERNS: Record<string, RegExp> = {
+      company_name: /^(company|company[\s_-]*name|organization|employer|firm|corporate)$/i,
+      role: /^(role|job[\s_-]*role|designation|profile|position|job[\s_-]*title)$/i,
+      package_ctc: /^(package|ctc|package[\s_-]*ctc|salary|package[\s_-]*lpa|lpa|stipend)$/i,
+      package_min: /^(min[\s_-]*package|min[\s_-]*ctc|package[\s_-]*min)$/i,
+      package_max: /^(max[\s_-]*package|max[\s_-]*ctc|package[\s_-]*max)$/i,
+      eligible_branches: /^(branch|branches|eligible[\s_-]*branches|department|departments|stream)$/i,
+      eligible_batches: /^(batch|batches|eligible[\s_-]*batches|passing[\s_-]*year|year)$/i,
+      drive_date: /^(drive[\s_-]*date|date|visiting[\s_-]*date|date[\s_-]*of[\s_-]*drive|event[\s_-]*date)$/i,
+      deadline_date: /^(deadline|deadline[\s_-]*date|last[\s_-]*date|registration[\s_-]*deadline)$/i,
+      description: /^(description|job[\s_-]*description|details|requirements|eligibility[\s_-]*criteria)$/i,
+      logo_url: /^(logo|logo[\s_-]*url|icon|image)$/i,
+    };
+
+    for (const h of headers) {
+      const cleanH = h.trim();
+      let matched = false;
+      for (const [coreField, regex] of Object.entries(CORE_HEADER_PATTERNS)) {
+        if (regex.test(cleanH)) {
+          recognizedMapping[h] = coreField;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        unrecognizedCols.push(cleanH);
+      }
+    }
+
+    const previewRows = rawRows.slice(0, 100).map((row) => {
+      const core: any = {
+        company_name: '',
+        role: 'Graduate Trainee / Associate Engineer',
+        package_ctc: '₹4.5 - ₹8.0 LPA',
+        eligible_branches: ['CSE', 'IT', 'ECE'],
+        eligible_batches: ['2025', '2026'],
+        drive_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        deadline_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        description: 'On-campus placement drive with technical assessment and interviews.',
+        extra_fields: {},
+      };
+
+      for (const [col, val] of Object.entries(row)) {
+        const mappedField = recognizedMapping[col];
+        if (mappedField) {
+          if (mappedField === 'eligible_branches' || mappedField === 'eligible_batches') {
+            core[mappedField] = typeof val === 'string' 
+              ? val.split(/[,;\/|]/).map((s: string) => s.trim()).filter(Boolean)
+              : [String(val)];
+          } else {
+            core[mappedField] = String(val).trim();
+          }
+        } else {
+          core.extra_fields[col] = val;
+        }
+      }
+
+      if (!core.company_name) {
+        core.company_name = row['Company'] || row['Company Name'] || Object.values(row)[0] || 'Visiting Company';
+      }
+
+      return core;
+    });
+
+    return {
+      file_name: fileName,
+      total_rows: rawRows.length,
+      recognized_columns: Object.values(recognizedMapping),
+      unrecognized_columns: unrecognizedCols,
+      preview_rows: previewRows,
+    };
+  }
+
+  /**
+   * Excel Import: Confirm and commit bulk placement drive companies
+   */
+  async confirmExcelImport(tenantSlug: string, dto: ConfirmImportDriveDto, user: any) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+
+    if (!dto.companies || !Array.isArray(dto.companies) || dto.companies.length === 0) {
+      throw new BadRequestException('No companies provided for import.');
+    }
+
+    const insertedCompanies: any[] = [];
+
+    for (const comp of dto.companies) {
+      const companyName = comp.company_name || 'Partner Company';
+      const role = comp.role || 'Associate / Engineer';
+      const packageCtc = comp.package_ctc || 'As per industry standard';
+      const description = comp.description || `${dto.batch_title || 'Campus Placement Drive'} for eligible candidates.`;
+      const driveDate = comp.drive_date || new Date().toISOString().split('T')[0];
+      const deadlineDate = comp.deadline_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const branches = Array.isArray(comp.eligible_branches) ? comp.eligible_branches : ['CSE', 'IT', 'ECE'];
+      const batches = Array.isArray(comp.eligible_batches) ? comp.eligible_batches : ['2025', '2026'];
+      const extraFields = comp.extra_fields || {};
+      const logoUrl = comp.logo_url || null;
+
+      const inserted = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO "${schema}".placement_drives (
+          colg_cd, company_name, role, package_ctc, description,
+          eligibility_course_cd, eligibility_branch_cd, eligibility_batch_cd,
+          eligible_branches, eligible_batches, min_score_required,
+          drive_date, deadline_date, logo_url, batch_title, source_file_name,
+          extra_fields, status, created_by_empid, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8,
+          $9, $10, $11,
+          $12, $13, $14, $15, $16,
+          $17, 'Open', $18, NOW(), NOW()
+        ) RETURNING drive_id, company_name, role, package_ctc, drive_date, status, extra_fields`,
+        [
+          '1',
+          companyName,
+          role,
+          packageCtc,
+          description,
+          '13',
+          branches.join(', '),
+          batches.join(', '),
+          branches,
+          batches,
+          60.00,
+          driveDate,
+          deadlineDate,
+          logoUrl,
+          dto.batch_title,
+          dto.source_file_name || 'placement_import.xlsx',
+          JSON.stringify(extraFields),
+          user?.registration_no || user?.emp_id || 'ADMIN',
+        ],
+      );
+
+      if (inserted[0]) {
+        insertedCompanies.push(inserted[0]);
+      }
+    }
+
+    // Auto-create Announcement notice in bulletin
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO "${schema}".notices (
+          title, body, priority, category, author_name, author_role, status, is_pinned, publish_date, created_at
+        ) VALUES ($1, $2, 'important', 'career', 'Corporate Relations & Placement Cell', 'Placement Officer', 'sent', true, NOW(), NOW())`,
+        [
+          `📢 Campus Placement Drive: ${dto.batch_title} (${insertedCompanies.length} Companies Visiting)`,
+          `Dear Students,\n\nWe are pleased to announce that ${insertedCompanies.length} prestigious corporate partners are visiting our campus for placement drives under "${dto.batch_title}".\n\nVisiting Companies:\n` +
+            insertedCompanies.slice(0, 10).map((c, i) => `${i + 1}. ${c.company_name} — ${c.role} (${c.package_ctc})`).join('\n') +
+            `\n\nCheck your Placement Portal to view detailed job descriptions, eligibility criteria, and submit your application.`,
+        ],
+      );
+    } catch (noticeErr) {
+      this.logger.warn(`Could not create placement bulletin notice: ${noticeErr?.message || noticeErr}`);
+    }
+
+    return {
+      success: true,
+      message: `Successfully imported ${insertedCompanies.length} companies into placement board`,
+      batch_title: dto.batch_title,
+      total_imported: insertedCompanies.length,
+      companies: insertedCompanies,
+    };
+  }
+
+  /**
+   * Student Profile: Get all placement offers and calculate "Companies Placed: N"
+   */
+  async getStudentOffers(tenantSlug: string, user: any) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+    const regNo = user?.registration_no || user?.rollno || user?.username;
+
+    const applications = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT pa.application_id, pa.drive_id, pa.student_reg_no, pa.student_name,
+              pa.status, pa.selected_company, pa.selected_role, pa.offer_package,
+              pa.offer_status, pa.applied_at, pa.updated_at,
+              pd.company_name, pd.role, pd.package_ctc, pd.drive_date, pd.logo_url, pd.extra_fields
+       FROM "${schema}".placement_applications pa
+       JOIN "${schema}".placement_drives pd ON pa.drive_id = pd.drive_id
+       WHERE pa.student_reg_no = $1
+       ORDER BY pa.applied_at DESC`,
+      [regNo],
+    );
+
+    const placedCount = applications.filter(
+      (a: any) => a.status === 'Selected' || a.offer_status === 'accepted',
+    ).length;
+
+    const offers = applications.map((a: any) => ({
+      application_id: a.application_id,
+      drive_id: a.drive_id,
+      company_name: a.selected_company || a.company_name,
+      role: a.selected_role || a.role,
+      package_ctc: a.package_ctc || (a.offer_package ? `₹${a.offer_package} LPA` : 'As offered'),
+      offer_package: a.offer_package,
+      status: a.status,
+      offer_status: a.offer_status || (a.status === 'Selected' ? 'pending' : 'none'),
+      applied_at: a.applied_at,
+      updated_at: a.updated_at,
+      extra_fields: a.extra_fields,
+    }));
+
+    return {
+      student_reg_no: regNo,
+      companies_placed_count: placedCount,
+      total_applied_drives: applications.length,
+      offers,
+    };
+  }
+
+  /**
+   * Student: Accept or Decline a specific placement offer
+   */
+  async respondToOffer(tenantSlug: string, appId: number, dto: RespondOfferDto, user: any) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+    const regNo = user?.registration_no || user?.rollno || user?.username;
+
+    const apps = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT pa.*, pd.company_name, pd.role 
+       FROM "${schema}".placement_applications pa
+       JOIN "${schema}".placement_drives pd ON pa.drive_id = pd.drive_id
+       WHERE pa.application_id = $1 AND pa.student_reg_no = $2`,
+      [appId, regNo],
+    );
+
+    if (!apps || apps.length === 0) {
+      throw new NotFoundException(`Application #${appId} for student ${regNo} not found.`);
+    }
+
+    const app = apps[0];
+    const newStatus = dto.action === 'accept' ? 'accepted' : 'declined';
+
+    const updated = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE "${schema}".placement_applications
+       SET offer_status = $1, updated_at = NOW()
+       WHERE application_id = $2
+       RETURNING *`,
+      [newStatus, appId],
+    );
+
+    return {
+      success: true,
+      message: `You have successfully ${newStatus} the offer from ${app.company_name}.`,
+      offer_status: newStatus,
+      application: updated[0],
+    };
+  }
+
+  /**
+   * Export: Generate real query data for Shortlisted / Placed or All Placements
+   */
+  async exportPlacementData(tenantSlug: string, query: { drive_id?: number; status?: string; company_name?: string }) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+
+    let sql = `
+      SELECT pa.application_id,
+             s.name AS student_name,
+             s.registration_no,
+             s.rollno,
+             s.course_cd,
+             s.batch_cd,
+             pd.company_name,
+             pd.role,
+             pd.package_ctc,
+             pa.status,
+             COALESCE(pa.offer_status, 'pending') AS offer_status,
+             pa.applied_at,
+             pa.updated_at
+      FROM "${schema}".placement_applications pa
+      JOIN "${schema}".placement_drives pd ON pa.drive_id = pd.drive_id
+      LEFT JOIN "${schema}".students s ON pa.student_reg_no = s.registration_no
+      WHERE 1=1
+    `;
+
+    const params: any[] = [];
+    if (query.drive_id) {
+      params.push(query.drive_id);
+      sql += ` AND pa.drive_id = $${params.length}`;
+    }
+
+    if (query.status) {
+      params.push(query.status);
+      sql += ` AND pa.status ILIKE $${params.length}`;
+    }
+
+    sql += ` ORDER BY pd.company_name ASC, pa.applied_at DESC`;
+
+    const rows = await this.tenantSchemaService.queryInTenant(slug, sql, params);
+
+    return {
+      total_records: rows.length,
+      filter: query,
+      data: rows,
     };
   }
 

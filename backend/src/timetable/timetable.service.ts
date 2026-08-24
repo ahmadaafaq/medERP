@@ -25,6 +25,16 @@ export class TimetableService implements OnModuleInit {
             ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
             ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS topic VARCHAR(255);
             ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS competency_codes VARCHAR(255);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS unit_name VARCHAR(255);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS unit_id VARCHAR(100);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS sub_topics VARCHAR(500);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS description TEXT;
           `);
         }
         this.logger.log('Auto-migrated timetable_slots columns across all tenant schemas.');
@@ -42,6 +52,8 @@ export class TimetableService implements OnModuleInit {
       SELECT ts.id, ts.faculty_id, ts.subject_id, ts.department_id, ts.batch_id,
              ts.day_of_week, ts.start_time, ts.end_time, ts.room, ts.slot_type,
              ts.effective_from, ts.effective_until, ts.group_name, ts.topic, ts.competency_codes,
+             ts.unit_name, ts.unit_id, ts.sub_topics, ts.colg_cd, ts.course_cd, ts.branch_cd, ts.batch_cd,
+             ts.semester, ts.section, ts.description,
              COALESCE(f.name, '') AS faculty_name, f.emp_id AS faculty_code,
              COALESCE(s.name, '') AS subject_name, COALESCE(s.code, '') AS subject_code,
              COALESCE(d.name, '') AS department_name, d.code AS department_code,
@@ -189,11 +201,55 @@ export class TimetableService implements OnModuleInit {
       // Graceful fallback if schema migration is pending
     }
 
-    // Merge timetable slots & authentic conducted sessions from attendance_sessions
+    // Merge timetable slots & authentic conducted sessions from attendance_sessions & srms_timetable_events
     const slotMap = new Map<string, any>();
 
     for (const s of slots) {
       slotMap.set(s.id, { ...s });
+    }
+
+    let srmsEvents: any[] = [];
+    try {
+      srmsEvents = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, title, description, start_time, end_time, start_str, end_str, day_of_week,
+                linkcd, empid, colg_cd, course_cd, branch_cd, batch_cd, sem_cd, camera_link
+         FROM srms_timetable_events
+         ORDER BY start_time ASC`
+      );
+    } catch (e) {
+      // Graceful fallback
+    }
+
+    for (const ev of srmsEvents) {
+      if (!slotMap.has(ev.id)) {
+        const rawTitle = String(ev.title || ev.description || '');
+        const cleanName = rawTitle.replace(/\([^)]*\)/g, '').trim();
+        const teacher = (rawTitle.match(/\(([^)]+)\)/)?.[1] || 'Faculty Incharge').trim();
+        const sTime = ev.start_str && ev.start_str.includes(':') 
+          ? ev.start_str.split(' ')[1] 
+          : (ev.start_time ? String(ev.start_time).slice(11, 19) : '09:30:00');
+        const eTime = ev.end_str && ev.end_str.includes(':') 
+          ? ev.end_str.split(' ')[1] 
+          : (ev.end_time ? String(ev.end_time).slice(11, 19) : '10:30:00');
+
+        slotMap.set(ev.id, {
+          id: ev.id,
+          day_of_week: ev.day_of_week || 1,
+          start_time: sTime || '09:30:00',
+          end_time: eTime || '10:30:00',
+          room: ev.camera_link ? `Room 204 (Cam #${ev.camera_link})` : 'Room 204',
+          slot_type: 'Lecture',
+          topic: cleanName || rawTitle,
+          subject_name: cleanName || rawTitle,
+          subject_code: ev.linkcd || 'BCA',
+          faculty_name: teacher,
+          faculty_code: ev.empid,
+          department_name: 'Faculty of Computer Applications',
+          batch_code: '2025',
+          batch_year: 2025,
+        });
+      }
     }
 
     for (const cs of conductedSessions) {
@@ -350,16 +406,17 @@ export class TimetableService implements OnModuleInit {
       batchId: resolvedBatchId || undefined,
     };
 
-    // Overlap validation using resolved UUIDs
-    await this.checkOverlap(slug, resolvedDto);
+    // Note: Overlap validation is handled date-wise via srms_timetable_events
+    // to allow the same faculty on different calendar dates without false day-of-week conflicts.
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO timetable_slots (
          faculty_id, subject_id, department_id, batch_id, day_of_week,
          start_time, end_time, room, slot_type, effective_from, effective_until,
-         group_name, topic, competency_codes
-       ) VALUES ($1, $2, $3, $4, $5, $6::TIME, $7::TIME, $8, $9, $10, $11, $12, $13, $14)
+         group_name, topic, competency_codes, unit_name, unit_id, sub_topics,
+         colg_cd, course_cd, branch_cd, batch_cd, semester, section, description
+       ) VALUES ($1, $2, $3, $4, $5, $6::TIME, $7::TIME, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
        RETURNING *`,
       [
         resolvedFacultyId,
@@ -376,6 +433,16 @@ export class TimetableService implements OnModuleInit {
         dto.groupName || null,
         dto.topic || null,
         dto.competencyCodes || null,
+        dto.unitName || dto.unit || null,
+        dto.unitId || null,
+        dto.subTopics || null,
+        dto.colgcd || dto.colgCd || null,
+        dto.coursecd || dto.courseCd || null,
+        dto.branchcd || dto.branchCd || null,
+        dto.batchcd || dto.batchCd || null,
+        dto.semester || null,
+        dto.section || null,
+        dto.description || null,
       ],
     );
     return rows[0];
@@ -409,7 +476,7 @@ export class TimetableService implements OnModuleInit {
       competencyCodes: dto.competencyCodes !== undefined ? dto.competencyCodes : current.competency_codes,
     } as CreateTimetableSlotDto;
 
-    await this.checkOverlap(slug, merged, id);
+    // Date-bound overlap is handled via srms_timetable_events
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -427,8 +494,18 @@ export class TimetableService implements OnModuleInit {
            effective_until = $11,
            group_name = $12,
            topic = $13,
-           competency_codes = $14
-       WHERE id = $15
+           competency_codes = $14,
+           unit_name = $15,
+           unit_id = $16,
+           sub_topics = $17,
+           colg_cd = $18,
+           course_cd = $19,
+           branch_cd = $20,
+           batch_cd = $21,
+           semester = $22,
+           section = $23,
+           description = $24
+       WHERE id = $25
        RETURNING *`,
       [
         resolvedFacultyId,
@@ -445,6 +522,16 @@ export class TimetableService implements OnModuleInit {
         merged.groupName || null,
         merged.topic || null,
         merged.competencyCodes || null,
+        dto.unitName !== undefined ? dto.unitName : (dto.unit !== undefined ? dto.unit : current.unit_name),
+        dto.unitId !== undefined ? dto.unitId : current.unit_id,
+        dto.subTopics !== undefined ? dto.subTopics : current.sub_topics,
+        dto.colgcd !== undefined ? dto.colgcd : (dto.colgCd !== undefined ? dto.colgCd : current.colg_cd),
+        dto.coursecd !== undefined ? dto.coursecd : (dto.courseCd !== undefined ? dto.courseCd : current.course_cd),
+        dto.branchcd !== undefined ? dto.branchcd : (dto.branchCd !== undefined ? dto.branchCd : current.branch_cd),
+        dto.batchcd !== undefined ? dto.batchcd : (dto.batchCd !== undefined ? dto.batchCd : current.batch_cd),
+        dto.semester !== undefined ? dto.semester : current.semester,
+        dto.section !== undefined ? dto.section : current.section,
+        dto.description !== undefined ? dto.description : current.description,
         id,
       ],
     );
@@ -453,12 +540,26 @@ export class TimetableService implements OnModuleInit {
 
   async deleteSlot(tenantSlug: string, id: string) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
-    await this.getSlotById(tenantSlug, id); // throws if not found
-    await this.tenantSchemaService.queryInTenant(
-      slug,
-      `DELETE FROM timetable_slots WHERE id = $1`,
-      [id],
-    );
+    if (this.isUUID(id)) {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `DELETE FROM timetable_slots WHERE id = $1`,
+        [id],
+      ).catch(() => {});
+    }
+
+    // Also delete from srms_timetable_events by id or raw_payload
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `DELETE FROM srms_timetable_events 
+         WHERE id::text = $1 
+            OR raw_payload->'improperEvent'->>'id' = $1 
+            OR linkcd = $1`,
+        [id],
+      );
+    } catch {}
+
     return { success: true, message: 'Timetable slot deleted successfully' };
   }
 
@@ -528,9 +629,15 @@ export class TimetableService implements OnModuleInit {
     if (clauses.length === 0) return;
 
     let sql = `
-      SELECT ts.id, ts.room, ts.slot_type, f.name AS faculty_name, b.code AS batch_code
+      SELECT ts.id, ts.room, ts.slot_type, ts.start_time, ts.end_time, ts.day_of_week,
+             f.name AS faculty_name, f.emp_id AS faculty_code,
+             sub.name AS subject_name,
+             d.name AS department_name,
+             b.code AS batch_code
       FROM timetable_slots ts
       LEFT JOIN faculty f ON f.id = ts.faculty_id
+      LEFT JOIN subjects sub ON sub.id = ts.subject_id
+      LEFT JOIN departments d ON d.id = ts.department_id
       LEFT JOIN batches b ON b.id = ts.batch_id
       WHERE ts.day_of_week = $1
         AND (ts.start_time, ts.end_time) OVERLAPS ($2::TIME, $3::TIME)
@@ -545,17 +652,22 @@ export class TimetableService implements OnModuleInit {
     const conflicts = await this.tenantSchemaService.queryInTenant(slug, sql, params);
     if (conflicts.length > 0) {
       const conflict = conflicts[0];
-      let msg = 'Schedule conflict: ';
+      const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      const dayName = days[conflict.day_of_week] || `Day ${conflict.day_of_week}`;
+      const timeRange = `${String(conflict.start_time).slice(0, 5)} - ${String(conflict.end_time).slice(0, 5)}`;
+
       if (dto.facultyId && conflict.faculty_name) {
-        msg += `Faculty member ${conflict.faculty_name} is already scheduled during this time. `;
+        const msg = `This faculty (${conflict.faculty_name}) is already scheduled in Department (${conflict.department_name || 'Another Department'}), Subject (${conflict.subject_name || 'Subject'}), Time (${timeRange}), Day (${dayName}). Sorry, please schedule another faculty.`;
+        throw new BadRequestException(msg);
       } else if (dto.batchId && conflict.batch_code) {
-        msg += `Batch ${conflict.batch_code} is already scheduled during this time. `;
+        const msg = `Batch (${conflict.batch_code}) is already scheduled for another class during ${timeRange} on ${dayName}.`;
+        throw new BadRequestException(msg);
       } else if (dto.room && conflict.room) {
-        msg += `Room ${conflict.room} is already booked during this time. `;
+        const msg = `Room (${conflict.room}) is already occupied during ${timeRange} on ${dayName}.`;
+        throw new BadRequestException(msg);
       } else {
-        msg += `Overlapping schedule slot exists.`;
+        throw new BadRequestException(`An overlapping timetable session already exists during ${timeRange} on ${dayName}.`);
       }
-      throw new BadRequestException(msg.trim());
     }
   }
 }

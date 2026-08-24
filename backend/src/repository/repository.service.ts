@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { TenantSchemaService } from '../database/tenant-schema.service';
-import { CreateRepositoryDto, ReviewRepositoryDto, QueryRepositoryDto } from './dto/repository.dto';
+import { CreateRepositoryDto, UpdateRepositoryDto, ReviewRepositoryDto, QueryRepositoryDto } from './dto/repository.dto';
 
 @Injectable()
 export class RepositoryService {
@@ -24,8 +24,8 @@ export class RepositoryService {
     const slug = this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${slug}`;
 
-    let regNo = dto.student_reg_no || user?.registration_no || user?.username || user?.rollno || '2025107715';
-    let studentName = user?.name || user?.username || 'Tanish Pandey';
+    let regNo = dto.student_reg_no || user?.registration_no || user?.username || user?.rollno || '2025107990';
+    let studentName = dto.student_name || user?.name || user?.username || 'AAFREEN KHAN';
     let courseCd = dto.course_cd || '13'; // BCA default
     let branchCd = dto.branch_cd || '1301';
     let batchCd = dto.batch_cd || '2025';
@@ -47,7 +47,7 @@ export class RepositoryService {
       if (studentRows && studentRows.length > 0) {
         const s = studentRows[0];
         regNo = dto.student_reg_no || s.registration_no || regNo;
-        studentName = s.name || studentName;
+        studentName = dto.student_name || s.name || studentName;
         courseCd = dto.course_cd || s.course_cd || courseCd;
         batchCd = dto.batch_cd || s.batch_cd || batchCd;
         branchCd = dto.branch_cd || s.branch_code || branchCd;
@@ -61,9 +61,9 @@ export class RepositoryService {
       slug,
       `INSERT INTO "${schema}".repositories (
         colg_cd, course_cd, branch_cd, batch_cd, sem_cd,
-        student_reg_no, student_name, title, description, repo_link, tech_stack,
+        student_reg_no, student_name, title, description, repo_link, tech_stack, screenshots,
         status, is_placement_eligible, submitted_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'Pending Review', false, NOW(), NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Pending Review', false, NOW(), NOW())
       RETURNING *`,
       [
         colgCd,
@@ -77,6 +77,7 @@ export class RepositoryService {
         dto.description,
         dto.repo_link,
         dto.tech_stack || [],
+        dto.screenshots || [],
       ],
     );
 
@@ -96,11 +97,16 @@ export class RepositoryService {
     const params: any[] = [];
     let whereConditions: string[] = ['1=1'];
 
-    // Scope to student's own submissions if user is a student
-    if (user?.role === 'STUDENT') {
-      const regNo = user?.registration_no || user?.username || user?.rollno;
-      params.push(regNo);
+    // Scope to student's own submissions if user is a student or if student_reg_no is explicitly provided
+    if (query.student_reg_no) {
+      params.push(query.student_reg_no);
       whereConditions.push(`r.student_reg_no = $${params.length}`);
+    } else if (user?.role === 'STUDENT') {
+      const regNo = user?.registration_no || user?.username || user?.rollno;
+      if (regNo) {
+        params.push(regNo);
+        whereConditions.push(`r.student_reg_no = $${params.length}`);
+      }
     }
 
     if (query.course_cd) {
@@ -135,8 +141,36 @@ export class RepositoryService {
 
     const sql = `
       SELECT r.*,
-             (SELECT COUNT(*) FROM "${schema}".repository_reviews rev WHERE rev.repo_id = r.repo_id)::int AS review_count
+             COALESCE(s.photo_url, '') AS student_photo,
+             COALESCE(s.rollno, r.student_reg_no) AS rollno,
+             COALESCE(crs.name, r.course_cd, 'B.Tech.') AS course_name,
+             COALESCE(dep.name, r.branch_cd, 'Computer Science & Engineering') AS branch_name,
+             COALESCE(bth.name, r.batch_cd, 'Batch 2022-26') AS batch_name,
+             rev.faculty_name,
+             rev.faculty_empid,
+             rev.faculty_photo,
+             rev.faculty_designation,
+             rev.remarks AS faculty_remarks,
+             rev.reviewed_at AS faculty_reviewed_at,
+             (SELECT COUNT(*) FROM "${schema}".repository_reviews rev2 WHERE rev2.repo_id = r.repo_id)::int AS review_count
       FROM "${schema}".repositories r
+      LEFT JOIN "${schema}".students s ON (r.student_reg_no = s.registration_no OR r.student_reg_no = s.rollno)
+      LEFT JOIN "${schema}".courses crs ON (r.course_cd = crs.code OR r.course_cd = crs.course_cd OR r.course_cd = crs.id::text)
+      LEFT JOIN "${schema}".departments dep ON (r.branch_cd = dep.code OR r.branch_cd = dep.id::text)
+      LEFT JOIN "${schema}".batches bth ON (r.batch_cd = bth.code OR r.batch_cd = bth.id::text)
+      LEFT JOIN LATERAL (
+        SELECT rw.faculty_name, 
+               rw.faculty_empid, 
+               rw.remarks, 
+               rw.reviewed_at,
+               f.photo_url AS faculty_photo,
+               f.designation AS faculty_designation
+        FROM "${schema}".repository_reviews rw
+        LEFT JOIN "${schema}".faculty f ON (rw.faculty_empid = f.emp_id OR rw.faculty_name = f.name)
+        WHERE rw.repo_id = r.repo_id 
+        ORDER BY rw.reviewed_at DESC 
+        LIMIT 1
+      ) rev ON true
       WHERE ${whereConditions.join(' AND ')}
       ORDER BY r.submitted_at DESC
     `;
@@ -171,6 +205,62 @@ export class RepositoryService {
     return {
       repository: repos[0],
       reviews,
+    };
+  }
+
+  /**
+   * Update student repository project (Only allowed while status is 'Pending Review' or 'Pending')
+   */
+  async updateRepository(tenantSlug: string, repoId: number, dto: UpdateRepositoryDto, user: any) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+
+    const existing = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM "${schema}".repositories WHERE repo_id = $1`,
+      [repoId],
+    );
+
+    if (!existing || existing.length === 0) {
+      throw new NotFoundException(`Repository with ID ${repoId} not found`);
+    }
+
+    const repo = existing[0];
+
+    // Rule: Can only edit while status is Pending
+    const isPending = repo.status === 'Pending Review' || repo.status === 'Pending';
+    if (!isPending) {
+      throw new BadRequestException(
+        `Repository cannot be edited because its status is '${repo.status}'. Only pending projects can be modified.`,
+      );
+    }
+
+    // Ensure student only edits their own project
+    if (user?.role === 'STUDENT') {
+      const regNo = user?.registration_no || user?.username || user?.rollno;
+      if (regNo && repo.student_reg_no && repo.student_reg_no !== regNo) {
+        throw new ForbiddenException('You are only authorized to edit your own repository');
+      }
+    }
+
+    const updatedTitle = dto.title !== undefined ? dto.title : repo.title;
+    const updatedDesc = dto.description !== undefined ? dto.description : repo.description;
+    const updatedLink = dto.repo_link !== undefined ? dto.repo_link : repo.repo_link;
+    const updatedTech = dto.tech_stack !== undefined ? dto.tech_stack : repo.tech_stack;
+    const updatedScreenshots = dto.screenshots !== undefined ? dto.screenshots : repo.screenshots;
+
+    const updated = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE "${schema}".repositories 
+       SET title = $1, description = $2, repo_link = $3, tech_stack = $4, screenshots = $5, updated_at = NOW()
+       WHERE repo_id = $6
+       RETURNING *`,
+      [updatedTitle, updatedDesc, updatedLink, updatedTech, updatedScreenshots, repoId],
+    );
+
+    return {
+      message: 'Repository updated successfully',
+      repository: updated[0],
     };
   }
 
