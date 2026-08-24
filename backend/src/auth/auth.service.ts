@@ -111,10 +111,24 @@ export class AuthService {
 
     if (resolvedSlug) {
       // ── Strict Firm License Check ──
-      const firmCheck = await this.ds.query(
-        `SELECT id, title, status, trial_ends_at FROM public.firms WHERE LOWER(slug) = $1 LIMIT 1`,
-        [resolvedSlug.toLowerCase()],
-      );
+      let firmCheck: any[] = [];
+      try {
+        firmCheck = await this.ds.query(
+          `SELECT id, title, status, trial_ends_at FROM public.firms WHERE LOWER(slug) = $1 LIMIT 1`,
+          [resolvedSlug.toLowerCase()],
+        );
+      } catch (tableErr: any) {
+        if (tableErr.message?.includes('does not exist') || tableErr.message?.includes('public.firms')) {
+          this.logger.warn('public.firms table missing on login, provisioning public schema tables...');
+          await this.tenantSchemaService.ensurePublicTables();
+          firmCheck = await this.ds.query(
+            `SELECT id, title, status, trial_ends_at FROM public.firms WHERE LOWER(slug) = $1 LIMIT 1`,
+            [resolvedSlug.toLowerCase()],
+          );
+        } else {
+          throw tableErr;
+        }
+      }
 
       if (firmCheck.length > 0) {
         const firm = firmCheck[0];
