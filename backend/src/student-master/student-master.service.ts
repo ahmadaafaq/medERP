@@ -14,7 +14,10 @@ export class StudentMasterService {
   ) {}
 
   private async resolveTenantSlug(tenantSlugOrCollege?: string): Promise<string> {
-    if (!tenantSlugOrCollege || tenantSlugOrCollege === 'srms') {
+    if (!tenantSlugOrCollege) {
+      return '';
+    }
+    if (tenantSlugOrCollege === 'srms') {
       return 'srms-cet-bareilly';
     }
     if (tenantSlugOrCollege === 'all') {
@@ -181,7 +184,7 @@ export class StudentMasterService {
       }
     }
 
-    slug = slug || 'srms-cet-bareilly';
+    if (!slug) throw new NotFoundException('Student not found (tenant not resolved)');
     const studentRows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT * FROM students WHERE id = $1`,
@@ -344,7 +347,7 @@ export class StudentMasterService {
   async createStudent(tenantSlug: string, dto: CreateStudentDto) {
     const rawSlug = dto.collegeId || tenantSlug;
     let slug = await this.resolveTenantSlug(rawSlug);
-    if (slug === 'all') slug = 'srms-cet-bareilly';
+    if (!slug || slug === 'all') throw new BadRequestException('Valid tenant identifier required for student creation');
 
     await this.tenantSchemaService.ensureLatestSchema(slug);
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
@@ -639,7 +642,7 @@ export class StudentMasterService {
       }
     }
 
-    slug = slug || 'srms-cet-bareilly';
+    if (!slug) throw new NotFoundException('Tenant not resolved for student update');
     await this.tenantSchemaService.ensureLatestSchema(slug);
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
     await runner.startTransaction();
@@ -842,7 +845,7 @@ export class StudentMasterService {
         } catch (e) {}
       }
     }
-    slug = slug || 'srms-cet-bareilly';
+    if (!slug) throw new NotFoundException('Tenant not resolved for student delete');
     const schema = `tenant_${slug}`;
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
     await runner.startTransaction();
@@ -934,7 +937,7 @@ export class StudentMasterService {
 
   async bulkLinkProfessional(tenantSlug: string, dto: BulkLinkProfessionalDto) {
     let slug = await this.resolveTenantSlug(tenantSlug);
-    if (slug === 'all') slug = 'srms-cet-bareilly';
+    if (!slug || slug === 'all') throw new BadRequestException('Valid tenant identifier required for bulk link');
     await this.tenantSchemaService.ensureLatestSchema(slug);
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
     await runner.startTransaction();
@@ -993,7 +996,7 @@ export class StudentMasterService {
 
   async bulkLinkGroup(tenantSlug: string, dto: BulkLinkGroupDto) {
     let slug = await this.resolveTenantSlug(tenantSlug);
-    if (slug === 'all') slug = 'srms-cet-bareilly';
+    if (!slug || slug === 'all') throw new BadRequestException('Valid tenant identifier required for bulk link');
     await this.tenantSchemaService.ensureLatestSchema(slug);
     const runner = await this.tenantSchemaService.getTenantRunner(slug);
     await runner.startTransaction();

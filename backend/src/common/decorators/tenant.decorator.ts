@@ -11,7 +11,7 @@ export const TenantId = createParamDecorator(
     if (user && user.role !== UserRole.SUPER_ADMIN && user.tenantId) {
       return user.tenantId;
     }
-    return request.tenant?.id || user?.tenantId;
+    return request.tenant?.id || user?.tenantId || '';
   },
 );
 
@@ -29,7 +29,8 @@ export const TenantSlug = createParamDecorator(
       return user.tenantSlug;
     }
 
-    return (
+    // For SuperAdmin or public unauthenticated handlers:
+    const resolved =
       (request.query?.tenant as string) ||
       (request.headers?.['x-tenant-slug'] as string) ||
       (request.headers?.['x-tenant-id'] as string)?.replace(/^tenant_/, '').replace(/^tenant-/, '') ||
@@ -37,8 +38,9 @@ export const TenantSlug = createParamDecorator(
       request.tenant?.slug ||
       user?.tenantSlug ||
       (request.body?.tenant_slug as string) ||
-      'srms-cet-bareilly'
-    );
+      '';
+
+    return resolved ? resolved.toLowerCase().trim() : '';
   },
 );
 

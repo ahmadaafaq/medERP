@@ -64,4 +64,9 @@ export class UpdateFirmDto {
 
   @IsOptional()
   theme_config?: Record<string, any>;
+
+  @IsString()
+  @IsOptional()
+  timetable_module_type?: string; // 'ENGINEERING' | 'MEDICAL'
 }
+

@@ -49,7 +49,7 @@ export class AuthController {
       (req.headers['x-tenant-slug'] as string) ||
       (dto as any)?.tenantSlug ||
       (dto as any)?.tenant ||
-      'srms-cet-bareilly';
+      '';
     return this.authService.login(dto, tenantSlug);
   }
 
@@ -123,11 +123,11 @@ export class AuthController {
           if (payloadBase64) {
             const parsed = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf8'));
             activeUser = {
-              sub: parsed.sub || parsed.id || req.headers?.['x-user-id'] || '2025107990',
-              email: parsed.email || 'student@srms.ac.in',
+              sub: parsed.sub || parsed.id || req.headers?.['x-user-id'] || '',
+              email: parsed.email || '',
               role: (parsed.role || req.headers?.['x-user-role'] || 'STUDENT') as UserRole,
               tenantId: parsed.tenantId || '',
-              tenantSlug: parsed.tenantSlug || tenantSlug || 'srms-cet-bareilly',
+              tenantSlug: parsed.tenantSlug || tenantSlug || '',
             };
           }
         } catch {}
@@ -135,11 +135,11 @@ export class AuthController {
     }
     if (!activeUser || !activeUser.sub) {
       activeUser = {
-        sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || '2025107990',
-        email: 'student@srms.ac.in',
+        sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || '',
+        email: '',
         role: (req.headers?.['x-user-role'] || 'STUDENT') as UserRole,
         tenantId: '',
-        tenantSlug: tenantSlug || 'srms-cet-bareilly',
+        tenantSlug: tenantSlug || '',
       };
     }
     return this.authService.getMe(activeUser, tenantSlug);
@@ -153,10 +153,10 @@ export class AuthController {
     @Body() dto: any,
     @Req() req: any,
   ) {
-    const slug = dto?.tenant || tenantSlug || 'srms-cet-bareilly';
+    const slug = tenantSlug || dto?.tenant || '';
     const user = {
-      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || '2025107990',
-      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || '2025107990',
+      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || '',
+      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || '',
       role: req.headers?.['x-user-role'] || 'STUDENT',
     };
     return this.authService.updateStudentSocialProfile(slug, user, dto);
@@ -170,10 +170,10 @@ export class AuthController {
     @Body() dto: any,
     @Req() req: any,
   ) {
-    const slug = dto?.tenant || tenantSlug || 'srms-cet-bareilly';
+    const slug = tenantSlug || dto?.tenant || '';
     const user = {
-      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || '2025107990',
-      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || '2025107990',
+      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || '',
+      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || '',
       role: req.headers?.['x-user-role'] || 'STUDENT',
     };
     return this.authService.updateStudentSocialProfile(slug, user, dto);

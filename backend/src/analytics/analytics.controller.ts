@@ -8,20 +8,20 @@ export class AnalyticsController {
 
   @Get('dashboard/college')
   async getCollegeKpis(
-    @Query('tenant') queryTenant?: string,
     @Tenant() tenantSlug?: string,
+    @Query('tenant') queryTenant?: string,
   ) {
-    const slug = queryTenant || tenantSlug || 'srms-cet-bareilly';
+    const slug = tenantSlug || queryTenant || '';
     return this.analyticsService.getCollegeKpis(slug);
   }
 
   @Post('punch')
   async recordPunch(
     @Body() body: { punchType: 'IN' | 'OUT'; facultyId?: string; time?: string },
-    @Query('tenant') queryTenant?: string,
     @Tenant() tenantSlug?: string,
+    @Query('tenant') queryTenant?: string,
   ) {
-    const slug = queryTenant || tenantSlug || 'srms-cet-bareilly';
+    const slug = tenantSlug || queryTenant || '';
     return this.analyticsService.recordPunch(body, slug);
   }
 }

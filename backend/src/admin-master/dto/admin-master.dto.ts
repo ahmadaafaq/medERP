@@ -521,6 +521,30 @@ export class CreateTopicMasterDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ example: 'Lecture' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  learning_method?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  learningMethod?: string;
+
+  @ApiPropertyOptional({ example: 'Written Assessment' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  assessment_method?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  assessmentMethod?: string;
+
   @ApiPropertyOptional({ example: 2 })
   @IsOptional()
   @IsNumber()
@@ -710,6 +734,30 @@ export class CreateCompetencyMasterDto {
   @IsOptional()
   @IsString()
   bloomLevel?: string;
+
+  @ApiPropertyOptional({ example: 'Lecture' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  learning_method?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  learningMethod?: string;
+
+  @ApiPropertyOptional({ example: 'Written Assessment' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  assessment_method?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  assessmentMethod?: string;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()

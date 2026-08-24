@@ -14,12 +14,15 @@ export default function Sidebar({ role }: SidebarProps) {
   const [collegeDisplayName, setCollegeDisplayName] = useState<string>('SRMS CET, BAREILLY');
   const [enabledKeys, setEnabledKeys] = useState<string[] | null>(null);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
+  const [isMedicalModule, setIsMedicalModule] = useState<boolean>(false);
 
   const loadPermissionsAndBranding = () => {
     if (typeof window === 'undefined') return;
 
     // 1. Check user profile object from localStorage
     let userBrandName = '';
+    let userFirmMode = '';
+    let userTimetableModule = '';
     try {
       const rawUser = localStorage.getItem('user');
       if (rawUser) {
@@ -27,6 +30,8 @@ export default function Sidebar({ role }: SidebarProps) {
         const userName = (u.name || '').toLowerCase();
         const userEmail = (u.email || '').toLowerCase();
         const userFirm = u.firm_name || u.firmName || u.organization || u.company || u.institution;
+        userFirmMode = u.firm_mode || u.firmMode || '';
+        userTimetableModule = u.timetable_module_type || u.timetableModuleType || '';
 
         if (userFirm) {
           userBrandName = userFirm;
@@ -41,6 +46,21 @@ export default function Sidebar({ role }: SidebarProps) {
     const slug = rawSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
     const colgCd = localStorage.getItem('colg_cd');
     const storedName = localStorage.getItem('college_name') || localStorage.getItem('colg_name') || localStorage.getItem('tenantName');
+    const storedModuleType = localStorage.getItem('timetable_module_type') || userTimetableModule;
+    const storedFirmMode = localStorage.getItem('firm_mode') || userFirmMode;
+
+    const isMed =
+      storedModuleType === 'MEDICAL' ||
+      storedFirmMode === 'MED' ||
+      slug.includes('ims') ||
+      slug.includes('med') ||
+      slug.includes('iahs') ||
+      slug.includes('nursing') ||
+      slug.includes('ayush') ||
+      slug === 'rmribar' ||
+      slug === 'rmch-bareilly';
+
+    setIsMedicalModule(isMed);
     
     if (role === 'owner' || role === 'superadmin') {
       if (userBrandName) {
@@ -170,7 +190,7 @@ export default function Sidebar({ role }: SidebarProps) {
   }, [pathname]);
 
   const isAllowed = (menuKey: string, routePath?: string) => {
-    if (role === 'owner' || !enabledKeys) return true;
+    if (role === 'owner' || !enabledKeys || enabledKeys.length === 0) return true;
     
     // Normalize target menuKey
     const norm = menuKey.toLowerCase().trim().replace(/[\/\-\.]+/g, '_');
@@ -451,12 +471,21 @@ export default function Sidebar({ role }: SidebarProps) {
               )}
 
               {isAllowed('admin_timetable_design') && (
-                <Link href="/dashboard/admin/timetable-design" data-active={isLinkActive('/dashboard/admin/timetable-design') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/timetable-design')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <span>Design Timetable</span>
-                </Link>
+                isMedicalModule ? (
+                  <Link href="/dashboard/admin/medical-timetable" data-active={isLinkActive('/dashboard/admin/medical-timetable') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/medical-timetable')}>
+                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Medical Timetable</span>
+                  </Link>
+                ) : (
+                  <Link href="/dashboard/admin/timetable-design" data-active={isLinkActive('/dashboard/admin/timetable-design') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/timetable-design')}>
+                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Design Timetable</span>
+                  </Link>
+                )
               )}
 
               {isAllowed('admin_attendance_master') && (
@@ -523,18 +552,18 @@ export default function Sidebar({ role }: SidebarProps) {
                 </Link>
               )}
 
-              {(isAllowed('admin_repository') || isAllowed('repository')) && (
+              {(isAllowed('admin_repository', '/dashboard/admin/repository') || isAllowed('repository') || isAllowed('admin_academic_repository')) && (
                 <Link href="/dashboard/admin/repository" data-active={isLinkActive('/dashboard/admin/repository') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/repository')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
                   <span>Academic Repository 📂</span>
                 </Link>
               )}
 
-              {(isAllowed('admin_incubation') || isAllowed('incubation_cell') || isAllowed('admin_incubation_cell')) && (
+              {(isAllowed('admin_incubation', '/dashboard/admin/incubation-cell') || isAllowed('incubation_cell') || isAllowed('admin_incubation_cell') || isAllowed('incubation')) && (
                 <Link href="/dashboard/admin/incubation-cell" data-active={isLinkActive('/dashboard/admin/incubation-cell') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/incubation-cell')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-purple-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                   <span>Incubation Cell 🚀</span>
@@ -681,12 +710,21 @@ export default function Sidebar({ role }: SidebarProps) {
               )}
 
               {isAllowed('faculty_schedule') && (
-                <Link href="/dashboard/faculty/schedule" className={getLinkClass('/dashboard/faculty/schedule')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <span>Schedule</span>
-                </Link>
+                isMedicalModule ? (
+                  <Link href="/dashboard/faculty/medical-schedule" className={getLinkClass('/dashboard/faculty/medical-schedule')}>
+                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Medical Schedule</span>
+                  </Link>
+                ) : (
+                  <Link href="/dashboard/faculty/schedule" className={getLinkClass('/dashboard/faculty/schedule')}>
+                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Schedule</span>
+                  </Link>
+                )
               )}
 
               {isAllowed('faculty_attendance') && (
@@ -744,13 +782,22 @@ export default function Sidebar({ role }: SidebarProps) {
                 </Link>
               )}
 
-              {(isAllowed('faculty_repository') || isAllowed('repository')) && (
+              {(isAllowed('faculty_repository', '/dashboard/faculty/repository') || isAllowed('repository')) && (
                 <Link href="/dashboard/faculty/repository" data-active={isLinkActive('/dashboard/faculty/repository') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/repository')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10 13l2 2 4-4" />
                   </svg>
                   <span>Project Score & Repo</span>
+                </Link>
+              )}
+
+              {(isAllowed('faculty_incubation', '/dashboard/faculty/incubation-cell') || isAllowed('incubation_cell') || isAllowed('faculty_incubation_cell') || isAllowed('incubation')) && (
+                <Link href="/dashboard/faculty/incubation-cell" className={getLinkClass('/dashboard/faculty/incubation-cell')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-purple-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span className="font-bold text-purple-200">Incubation Cell 🚀</span>
                 </Link>
               )}
 
@@ -987,12 +1034,21 @@ export default function Sidebar({ role }: SidebarProps) {
               )}
 
               {isAllowed('student_timetable') && (
-                <Link href="/dashboard/student/timetable" data-active={isLinkActive('/dashboard/student/timetable') ? 'true' : undefined} className={getLinkClass('/dashboard/student/timetable')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <span>Schedule</span>
-                </Link>
+                isMedicalModule ? (
+                  <Link href="/dashboard/student/medical-schedule" data-active={isLinkActive('/dashboard/student/medical-schedule') ? 'true' : undefined} className={getLinkClass('/dashboard/student/medical-schedule')}>
+                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Medical Schedule</span>
+                  </Link>
+                ) : (
+                  <Link href="/dashboard/student/timetable" data-active={isLinkActive('/dashboard/student/timetable') ? 'true' : undefined} className={getLinkClass('/dashboard/student/timetable')}>
+                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Schedule</span>
+                  </Link>
+                )
               )}
 
               {isAllowed('student_attendance') && (
@@ -1031,12 +1087,21 @@ export default function Sidebar({ role }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('student_repository') && (
+              {(isAllowed('student_repository', '/dashboard/student/repository') || isAllowed('repository')) && (
                 <Link href="/dashboard/student/repository" data-active={isLinkActive('/dashboard/student/repository') ? 'true' : undefined} className={getLinkClass('/dashboard/student/repository')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
                   <span>My Repository</span>
+                </Link>
+              )}
+
+              {(isAllowed('student_incubation', '/dashboard/student') || isAllowed('incubation_cell') || isAllowed('student_repository')) && (
+                <Link href="/dashboard/student#incubation-cell" className={getLinkClass('/dashboard/student#incubation-cell')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-purple-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span className="font-bold text-purple-200">Incubation Hub 🚀</span>
                 </Link>
               )}
 

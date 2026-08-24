@@ -58,4 +58,9 @@ export class CreateFirmDto {
   @Min(0)
   @IsOptional()
   trial_days?: number;
+
+  @IsString()
+  @IsOptional()
+  timetable_module_type?: string; // 'ENGINEERING' | 'MEDICAL'
 }
+

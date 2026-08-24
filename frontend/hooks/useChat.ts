@@ -73,21 +73,21 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
   activeGroupRef.current = selectedGroup?.id || null;
 
   const getTenantSlug = useCallback(() => {
-    if (typeof window === 'undefined') return 'srms-cet-bareilly';
+    if (typeof window === 'undefined') return '';
     return (
-      localStorage.getItem('tenantSlug') ||
+      (localStorage.getItem('tenantSlug') ||
       localStorage.getItem('selectedTenant') ||
       localStorage.getItem('tenant') ||
       localStorage.getItem('institutionSlug') ||
-      'srms-cet-bareilly'
+      '').replace(/^tenant_/, '').replace(/^tenant-/, '')
     );
   }, []);
 
   const getHeaders = useCallback(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const tenantSlug = getTenantSlug();
-    let userId = '2025107990';
-    let userName = 'AAFREEN KHAN';
+    let userId = 'user';
+    let userName = 'User';
     let userRole = role || 'STUDENT';
     let userAvatar = '';
 
@@ -253,8 +253,8 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
 
       // Current user cache
       let currentUser: any = null;
-      let senderId = '2025107990';
-      let senderName = 'AAFREEN KHAN';
+      let senderId = 'user';
+      let senderName = 'User';
       let senderRole = role || 'STUDENT';
       let senderAvatar = '';
 

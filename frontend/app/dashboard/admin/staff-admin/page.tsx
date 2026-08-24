@@ -135,7 +135,7 @@ export default function StaffAdminPage() {
         setUserColgCd(userColg);
         setUserTenantSlug(userSlug);
         if (role !== 'SUPER_ADMIN') {
-          setSelectedCollegeFilter(userColg);
+          setSelectedCollegeFilter('all');
         }
       }
 
@@ -373,7 +373,7 @@ export default function StaffAdminPage() {
   const filteredFaculties = useMemo(() => {
     return faculties.filter((fac: Faculty) => {
       // 1. College filter
-      if (selectedCollegeFilter !== 'all') {
+      if (userRole === 'SUPER_ADMIN' && selectedCollegeFilter !== 'all') {
         const targetCol = colleges.find(c => String(c.code) === String(selectedCollegeFilter) || String(c.id) === String(selectedCollegeFilter) || c.slug === selectedCollegeFilter);
         const targetColCode = targetCol?.code || selectedCollegeFilter;
         const targetColSlug = targetCol?.slug || selectedCollegeFilter;

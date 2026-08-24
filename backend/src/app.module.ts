@@ -18,6 +18,7 @@ import { CollegeMasterModule } from './college-master/college-master.module';
 import { StudentMasterModule } from './student-master/student-master.module';
 import { AdminMasterModule } from './admin-master/admin-master.module';
 import { TimetableModule } from './timetable/timetable.module';
+import { MedicalTimetableModule } from './medical-timetable/medical-timetable.module';
 import { LessonModule } from './lesson/lesson.module';
 import { RepositoryModule } from './repository/repository.module';
 import { PlacementDriveModule } from './placement-drive/placement-drive.module';
@@ -57,6 +58,7 @@ import { validationSchema } from './config/joi.validation';
     StudentMasterModule,
     AdminMasterModule,
     TimetableModule,
+    MedicalTimetableModule,
     LessonModule,
     RepositoryModule,
     PlacementDriveModule,

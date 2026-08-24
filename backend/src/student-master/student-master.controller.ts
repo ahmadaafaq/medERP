@@ -5,8 +5,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { StudentMasterService } from './student-master.service';
 import { CreateStudentDto, UpdateStudentDto, BulkLinkProfessionalDto, BulkLinkGroupDto } from './dto/student-master.dto';
 import { Roles } from '../common/decorators/roles.decorator';
-import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { TenantSlug } from '../common/decorators/tenant.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { UserRole } from '../common/enums/role.enum';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -18,12 +18,11 @@ import { RolesGuard } from '../common/guards/roles.guard';
 export class StudentMasterController {
   constructor(private readonly studentMasterService: StudentMasterService) {}
 
-  @Public()
   @Get()
   @ApiOperation({ summary: 'List all students with filters' })
   async listStudents(
     @CurrentUser() user: JwtPayload,
-    @Query('tenant') tenant?: string,
+    @TenantSlug() tenantSlug: string,
     @Query('search') search?: string,
     @Query('collegeId') collegeId?: string,
     @Query('courseId') courseId?: string,
@@ -35,7 +34,7 @@ export class StudentMasterController {
     @Query('groupId') groupId?: string,
     @Query('linkedOnly') linkedOnly?: string,
   ) {
-    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : (tenant || 'srms-cet-bareilly');
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenantSlug;
     const effectiveCollegeId = (user && user.role !== UserRole.SUPER_ADMIN && user.colgCd) ? user.colgCd : collegeId;
     return this.studentMasterService.listStudents(effectiveTenant, {
       search,
@@ -51,14 +50,13 @@ export class StudentMasterController {
     }, user);
   }
 
-  @Public()
   @Get('next-registration-no')
   @ApiOperation({ summary: 'Generate next sequential registration number' })
   async getNextRegistrationNo(
-    @Query('tenant') tenant: string,
+    @TenantSlug() tenantSlug: string,
     @Query('sessionYear') sessionYear: string,
   ) {
-    const registrationNo = await this.studentMasterService.generateNextRegistrationNo(tenant || 'srms', sessionYear);
+    const registrationNo = await this.studentMasterService.generateNextRegistrationNo(tenantSlug, sessionYear);
     return { registrationNo };
   }
 
@@ -66,70 +64,68 @@ export class StudentMasterController {
   @ApiOperation({ summary: 'Bulk link and promote selected students to a professional phase' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async bulkLinkPhase(
+    @TenantSlug() tenantSlug: string,
     @Body() dto: BulkLinkProfessionalDto,
-    @Query('tenant') tenant?: string,
   ) {
-    return this.studentMasterService.bulkLinkProfessional(tenant || 'srms', dto);
+    return this.studentMasterService.bulkLinkProfessional(tenantSlug, dto);
   }
 
   @Post('bulk-link-group')
   @ApiOperation({ summary: 'Bulk link and assign selected students to an academic group (Group A, B, C)' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async bulkLinkGroup(
+    @TenantSlug() tenantSlug: string,
     @Body() dto: BulkLinkGroupDto,
-    @Query('tenant') tenant?: string,
   ) {
-    return this.studentMasterService.bulkLinkGroup(tenant || 'srms', dto);
+    return this.studentMasterService.bulkLinkGroup(tenantSlug, dto);
   }
 
-  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get student details by ID' })
   async getStudent(
+    @TenantSlug() tenantSlug: string,
     @Param('id') id: string,
-    @Query('tenant') tenant?: string,
   ) {
-    return this.studentMasterService.getStudent(tenant || 'srms', id);
+    return this.studentMasterService.getStudent(tenantSlug, id);
   }
 
   @Post()
   @ApiOperation({ summary: 'Register/Create a new student' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async createStudent(
+    @TenantSlug() tenantSlug: string,
     @Body() dto: CreateStudentDto,
-    @Query('tenant') tenant?: string,
   ) {
-    return this.studentMasterService.createStudent(tenant || 'srms', dto);
+    return this.studentMasterService.createStudent(tenantSlug, dto);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Update a student profile' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async updateStudent(
+    @TenantSlug() tenantSlug: string,
     @Param('id') id: string,
     @Body() dto: UpdateStudentDto,
-    @Query('tenant') tenant?: string,
   ) {
-    return this.studentMasterService.updateStudent(tenant || 'srms', id, dto);
+    return this.studentMasterService.updateStudent(tenantSlug, id, dto);
   }
 
-  @Public()
   @Post('sync-live')
   @ApiOperation({ summary: 'Sync live students from SRMS into tenant schema' })
   async syncLive(
+    @TenantSlug() tenantSlug: string,
     @Body('students') students: any[],
-    @Query('tenant') tenant?: string,
   ) {
-    return this.studentMasterService.syncLiveStudents(tenant || 'srms-cet-bareilly', students || []);
+    return this.studentMasterService.syncLiveStudents(tenantSlug, students || []);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a student profile' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async deleteStudent(
+    @TenantSlug() tenantSlug: string,
     @Param('id') id: string,
-    @Query('tenant') tenant?: string,
   ) {
-    return this.studentMasterService.deleteStudent(tenant || 'srms', id);
+    return this.studentMasterService.deleteStudent(tenantSlug, id);
   }
 }

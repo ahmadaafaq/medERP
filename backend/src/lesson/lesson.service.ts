@@ -24,7 +24,7 @@ export class LessonService {
   constructor(private readonly dataSource: DataSource) {}
 
   private resolveTenantSlug(tenantSlug?: string): string {
-    const slug = (tenantSlug || 'srms-cet-bareilly').toLowerCase().trim();
+    const slug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
     return slug.replace(/[^a-z0-9_-]/g, '');
   }
 

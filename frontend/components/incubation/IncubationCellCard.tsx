@@ -15,117 +15,41 @@ export default function IncubationCellCard({ role = 'faculty', className = '' }:
 
   const getTenantSlug = () => {
     if (typeof window !== 'undefined') {
-      const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+      const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '';
       return slug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
     }
-    return 'srms-cet-bareilly';
+    return '';
   };
 
   const fetchProjects = async () => {
+    setLoading(true);
     try {
       const slug = getTenantSlug();
-      // Try local next proxy first then backend port 3001
-      const res = await fetch(`/api/incubation-cell/projects?tenant=${slug}`).catch(() => null);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: Record<string, string> = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(slug ? { 'x-tenant-slug': slug, 'x-tenant': slug } : {}),
+      };
+
+      const res = await fetch(`/api/incubation-cell/projects${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
       if (res && res.ok) {
         const json = await res.json();
         const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
-        if (list.length > 0) {
-          setProjects(list);
-          setLoading(false);
-          return;
-        }
+        setProjects(list);
+        setLoading(false);
+        return;
       }
 
-      const directRes = await fetch(`http://localhost:3001/api/v1/incubation-cell/projects?tenant=${slug}`).catch(() => null);
+      const directRes = await fetch(`http://localhost:3001/api/v1/incubation-cell/projects${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
       if (directRes && directRes.ok) {
         const json = await directRes.json();
         const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
         setProjects(list);
       } else {
-        // High quality fallback dataset if backend server offline
-        setProjects([
-          {
-            id: 7,
-            title: 'Autonomous Campus Delivery Rover with LiDAR SLAM',
-            description: 'Autonomous indoor/outdoor campus courier bot utilizing LiDAR 3D SLAM mapping and path planning.',
-            score: 96,
-            percentage: 96,
-            grade: 'A+',
-            incubationStatus: 'Incubated',
-            fundingAmount: 50000,
-            studentName: 'JASPREET SINGH',
-            studentRegNo: '2025107666',
-            rollNo: '2500141790019',
-            courseName: 'B.TECH.',
-            batchName: 'Batch 2024',
-            mentorAssigned: 'Dr. Sanjay Singh',
-          },
-          {
-            id: 4,
-            title: 'AI Smart Hospital & Patient Triage System',
-            description: 'An end-to-end intelligent patient triage and vitals telemetry tracking pipeline with predictive queue management.',
-            score: 94,
-            percentage: 94,
-            grade: 'A',
-            incubationStatus: 'Selected',
-            fundingAmount: 25000,
-            studentName: 'AAFREEN KHAN',
-            studentRegNo: '2500140100018',
-            rollNo: '2500140100018',
-            courseName: 'B.TECH.',
-            batchName: 'Batch 2025',
-            studentPhoto: 'https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/2025107990/2025107990.JPG',
-            mentorAssigned: 'Prof. R.K. Sharma',
-          },
-          {
-            id: 5,
-            title: 'Decentralized Academic Credential & Skill Passport',
-            description: 'Blockchain-anchored verifiable credentialing registry for university transcripts and verified internship certificates.',
-            score: 89,
-            percentage: 89,
-            grade: 'A',
-            incubationStatus: 'Funded',
-            fundingAmount: 75000,
-            studentName: 'JATIN PRATAP SINGH',
-            studentRegNo: '2500141790020',
-            rollNo: '2500141790020',
-            courseName: 'B.TECH.',
-            batchName: 'Batch 2025',
-            studentPhoto: 'https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/2025108112/2025108112.JPG',
-            mentorAssigned: 'Dr. Ankit Verma',
-          },
-          {
-            id: 6,
-            title: 'PharmaTrack: Cold-Chain Drug Tracking & IoT Telemetry',
-            description: 'IoT sensor network with real-time temperature/humidity telemetry for vaccine storage compliance.',
-            score: 86,
-            percentage: 86,
-            grade: 'A',
-            incubationStatus: 'Under Review',
-            studentName: 'Aditya Sharma',
-            studentRegNo: '2500140500002',
-            rollNo: '2500140500002',
-            courseName: 'B.PHARM.',
-            batchName: 'Batch 2025',
-          },
-          {
-            id: 1,
-            title: 'AI-Resume-Analyzer',
-            description: 'Ai Resume Analyzer is a tool which parses information from a resume using natural language processing.',
-            score: 85,
-            percentage: 85,
-            grade: 'A',
-            incubationStatus: 'Under Review',
-            studentName: 'TANISH PANDEY',
-            studentRegNo: '2025107715',
-            rollNo: '2025107715',
-            courseName: 'BCA',
-            batchName: '2025',
-          },
-        ]);
+        setProjects([]);
       }
     } catch {
-      // Fallback
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -135,19 +59,13 @@ export default function IncubationCellCard({ role = 'faculty', className = '' }:
     fetchProjects();
   }, []);
 
-  // Compute metrics
-  const totalProjects = projects.length || 8;
-  const fundedCount = projects.filter((p) => p.incubationStatus === 'Funded' || (p.fundingAmount && p.fundingAmount > 0)).length || 2;
-  const selectedCount = projects.filter((p) => p.incubationStatus === 'Selected' || p.incubationStatus === 'Incubated').length || 4;
+  // Compute metrics from actual fetched projects
+  const totalProjects = projects.length;
+  const fundedCount = projects.filter((p) => p.incubationStatus === 'Funded' || (p.fundingAmount && p.fundingAmount > 0)).length;
+  const selectedCount = projects.filter((p) => p.incubationStatus === 'Selected' || p.incubationStatus === 'Incubated').length;
   
-  // Latest project description
-  const latestProject = projects[0] || {
-    title: 'Autonomous Campus Delivery Rover with LiDAR SLAM',
-    description: 'Autonomous indoor/outdoor campus courier bot utilizing LiDAR 3D SLAM mapping.',
-    studentName: 'JASPREET SINGH',
-    courseName: 'B.TECH.',
-    score: 96,
-  };
+  // Latest project description if any exist
+  const latestProject = projects[0] || null;
 
   // Top Student Innovators for Avatar Row (Unique students)
   const uniqueStudents = Array.from(
@@ -179,7 +97,7 @@ export default function IncubationCellCard({ role = 'faculty', className = '' }:
         {/* Total Ventures & Sub-counts */}
         <div className="flex items-baseline justify-between">
           <p className="text-2xl font-black text-[#5B4BFF] dark:text-indigo-400">
-            {totalProjects} Ventures
+            {loading ? '...' : `${totalProjects} Ventures`}
           </p>
           <span className="text-[11px] font-black text-[#00C48C]">
             {fundedCount} Funded • {selectedCount} Shortlisted
@@ -187,27 +105,38 @@ export default function IncubationCellCard({ role = 'faculty', className = '' }:
         </div>
 
         {/* Latest Incubated Project Description Highlight Box */}
-        <div className="p-2 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/60 dark:border-purple-800/40">
-          <div className="flex items-center justify-between text-[10px] font-black text-purple-900 dark:text-purple-300">
-            <span className="flex items-center gap-1 truncate">
-              <span>🌟</span>
-              <span className="truncate">Latest: {latestProject.title}</span>
-            </span>
-            <span className="shrink-0 font-extrabold text-[#F36C21]">{latestProject.score}% ⭐</span>
+        {latestProject ? (
+          <div className="p-2 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/60 dark:border-purple-800/40">
+            <div className="flex items-center justify-between text-[10px] font-black text-purple-900 dark:text-purple-300">
+              <span className="flex items-center gap-1 truncate">
+                <span>🌟</span>
+                <span className="truncate">Latest: {latestProject.title}</span>
+              </span>
+              {latestProject.score ? (
+                <span className="shrink-0 font-extrabold text-[#F36C21]">{latestProject.score}% ⭐</span>
+              ) : null}
+            </div>
+            <p className="text-xs font-bold text-[#1B1E28] dark:text-white truncate line-clamp-1 mt-0.5" title={latestProject.description}>
+              {latestProject.description || 'Innovation project nominated for incubation.'}
+            </p>
+            <p className="text-[9px] text-[#4E5969] dark:text-slate-400 font-medium truncate mt-0.5">
+              Lead: <strong className="text-indigo-600 dark:text-indigo-300">{latestProject.studentName}</strong> {latestProject.courseName ? `(${latestProject.courseName})` : ''}
+            </p>
           </div>
-          <p className="text-xs font-bold text-[#1B1E28] dark:text-white truncate line-clamp-1 mt-0.5" title={latestProject.description}>
-            {latestProject.description || 'AI & Robotics commercialization venture nominated for incubation.'}
-          </p>
-          <p className="text-[9px] text-[#4E5969] dark:text-slate-400 font-medium truncate mt-0.5">
-            Lead: <strong className="text-indigo-600 dark:text-indigo-300">{latestProject.studentName}</strong> ({latestProject.courseName || 'B.Tech'})
-          </p>
-        </div>
+        ) : (
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex items-center gap-2">
+            <span className="text-sm">💡</span>
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+              No incubation ventures registered yet.
+            </p>
+          </div>
+        )}
 
         {/* Side-by-Side / Overlapping Student Profile Pictures */}
         <div className="flex items-center justify-between pt-0.5">
           <div className="flex items-center gap-1.5">
             <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-black border border-amber-500/20">
-              Top: #{1} Rank
+              {totalProjects > 0 ? 'Top: #1 Rank' : 'Active R&D'}
             </span>
             <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-700 dark:text-purple-300 text-[10px] font-black border border-purple-500/20">
               {uniqueStudents.length} Innovators
@@ -215,40 +144,44 @@ export default function IncubationCellCard({ role = 'faculty', className = '' }:
           </div>
 
           {/* Side-by-side Avatar Circles */}
-          <div className="flex items-center -space-x-2">
-            {uniqueStudents.slice(0, 3).map((st, idx) => (
-              <div
-                key={st.studentRegNo || idx}
-                className="relative w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-slate-200 dark:bg-slate-700 ring-2 ring-white dark:ring-slate-900 shadow-sm flex items-center justify-center font-black text-[8px] text-white"
-                style={{
-                  backgroundColor: idx === 0 ? '#5B4BFF' : idx === 1 ? '#F36C21' : '#00C48C',
-                  zIndex: 10 - idx,
-                }}
-                title={`Rank #${idx + 1}: ${st.studentName} (${st.courseName || 'Student'})`}
-              >
-                {st.studentPhoto ? (
-                  <img
-                    src={st.studentPhoto}
-                    alt={st.studentName}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
-                ) : null}
-                <span>{st.studentName ? st.studentName.charAt(0) : 'S'}</span>
-              </div>
-            ))}
-            {uniqueStudents.length > 3 && (
-              <div
-                className="relative w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-400 flex items-center justify-center font-black text-[8px] ring-2 ring-white dark:ring-slate-900 shadow-sm"
-                style={{ zIndex: 5 }}
-                title={`${uniqueStudents.length - 3} more student innovators`}
-              >
-                +{uniqueStudents.length - 3}
-              </div>
-            )}
-          </div>
+          {uniqueStudents.length > 0 ? (
+            <div className="flex items-center -space-x-2">
+              {uniqueStudents.slice(0, 3).map((st, idx) => (
+                <div
+                  key={st.studentRegNo || idx}
+                  className="relative w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-slate-200 dark:bg-slate-700 ring-2 ring-white dark:ring-slate-900 shadow-sm flex items-center justify-center font-black text-[8px] text-white"
+                  style={{
+                    backgroundColor: idx === 0 ? '#5B4BFF' : idx === 1 ? '#F36C21' : '#00C48C',
+                    zIndex: 10 - idx,
+                  }}
+                  title={`Rank #${idx + 1}: ${st.studentName} (${st.courseName || 'Student'})`}
+                >
+                  {st.studentPhoto ? (
+                    <img
+                      src={st.studentPhoto}
+                      alt={st.studentName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : null}
+                  <span>{st.studentName ? st.studentName.charAt(0) : 'S'}</span>
+                </div>
+              ))}
+              {uniqueStudents.length > 3 && (
+                <div
+                  className="relative w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-400 flex items-center justify-center font-black text-[8px] ring-2 ring-white dark:ring-slate-900 shadow-sm"
+                  style={{ zIndex: 5 }}
+                  title={`${uniqueStudents.length - 3} more student innovators`}
+                >
+                  +{uniqueStudents.length - 3}
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="text-[10px] text-slate-400 font-mono">0 records</span>
+          )}
         </div>
 
         {/* Progress Bar & Interactive Action Link */}
@@ -257,13 +190,13 @@ export default function IncubationCellCard({ role = 'faculty', className = '' }:
             <div
               className="h-full rounded-full bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#F36C21] transition-all duration-500"
               style={{
-                width: `${Math.min(100, Math.max(25, (totalProjects / 10) * 100))}%`
+                width: `${totalProjects > 0 ? Math.min(100, Math.max(25, (totalProjects / 10) * 100)) : 0}%`
               }}
             />
           </div>
           <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
             <span className="font-bold text-[#5B4BFF] dark:text-indigo-400">
-              ⚡ Hustle Board Active
+              ⚡ Hustle Board {totalProjects > 0 ? 'Active' : 'Ready'}
             </span>
             <span className="text-[#F36C21] font-bold group-hover:underline flex items-center gap-0.5">
               Open Hustle Board ➔

@@ -125,7 +125,7 @@ export class InternshipsController {
     @Query('tenant') queryTenant?: string,
     @Request() req?: any,
   ) {
-    const slug = queryTenant || tenantSlug || req?.headers?.['x-tenant'] || req?.headers?.['x-tenant-id']?.replace(/^tenant_/, '') || 'srms-cet-bareilly';
+    const slug = tenantSlug || queryTenant || '';
     return this.internshipsService.getApplicants(slug, programId);
   }
 

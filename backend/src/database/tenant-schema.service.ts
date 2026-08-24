@@ -17,9 +17,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
   ) {}
 
   public resolveTenantSlug(slug?: string): string {
-    if (!slug || slug === 'all') return 'srms-cet-bareilly';
+    if (!slug) return '';
     const s = slug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
-    if (s === 'all' || s === '') return 'srms-cet-bareilly';
+    if (s === 'all' || s === '') return '';
     if (s === 'srms' || s === 'srms-cet' || s === 'cet' || s === '1') return 'srms-cet-bareilly';
     if (s === 'srms-ims' || s === 'ims' || s === '2') return 'srms-ims';
     if (s === 'srms-cetr' || s === 'srms-cetr-bareilly') return 'srms-cetr-bareilly';
@@ -175,11 +175,17 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           domain VARCHAR(255) UNIQUE,
           colg_cd VARCHAR(50),
           firm_mode VARCHAR(50) DEFAULT 'NONMED',
+          timetable_module_type VARCHAR(50) DEFAULT 'ENGINEERING',
           schema_provisioned BOOLEAN DEFAULT true,
           is_active BOOLEAN DEFAULT true,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+        ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+        ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS firm_mode VARCHAR(50) DEFAULT 'NONMED';
+        ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS timetable_module_type VARCHAR(50) DEFAULT 'ENGINEERING';
+        ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS domain VARCHAR(255);
       `);
 
       // 3. Create public.firms
@@ -196,6 +202,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           level_type firm_level_type_enum NOT NULL DEFAULT 'STANDARD',
           theme_color VARCHAR(20) NOT NULL DEFAULT '#5B4BFF',
           firm_mode firm_mode_enum NOT NULL DEFAULT 'NONMED',
+          timetable_module_type VARCHAR(50) DEFAULT 'ENGINEERING',
           status firm_status_enum NOT NULL DEFAULT 'ACTIVE',
           trial_days INTEGER DEFAULT 365,
           trial_started_at TIMESTAMPTZ DEFAULT NOW(),
@@ -203,6 +210,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        ALTER TABLE public.firms ADD COLUMN IF NOT EXISTS timetable_module_type VARCHAR(50) DEFAULT 'ENGINEERING';
         CREATE INDEX IF NOT EXISTS idx_firms_slug ON public.firms (slug);
         CREATE INDEX IF NOT EXISTS idx_firms_status ON public.firms (status);
       `);
@@ -857,6 +865,67 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ADD COLUMN IF NOT EXISTS is_longitudinal BOOLEAN DEFAULT false;
       `);
 
+      // ── Units Master (Medical Curriculum) ──
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".units (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          subject_id UUID REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
+          unit_number INT DEFAULT 1,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_units_subject ON "${schema}".units (subject_id);
+      `);
+
+      // Alter topics table to add unit_id
+      await runner.query(`
+        ALTER TABLE "${schema}".topics 
+        ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES "${schema}".units(id) ON DELETE SET NULL;
+      `);
+
+      // ── Medical Schedule Entries (Parallel Medical Timetable Module) ──
+      await runner.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".medical_schedule_entries (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          course_id VARCHAR(50) DEFAULT 'MBBS',
+          course_name VARCHAR(100) DEFAULT 'MBBS',
+          department_id UUID,
+          department_name VARCHAR(200),
+          professional_year_id UUID,
+          professional_year_name VARCHAR(100),
+          subject_id UUID,
+          subject_name VARCHAR(200),
+          linked_subject_id UUID,
+          linked_subject_name VARCHAR(200),
+          faculty_id UUID,
+          faculty_name VARCHAR(200),
+          faculty_emp_id VARCHAR(50),
+          unit_id UUID,
+          unit_name VARCHAR(255),
+          topic_id UUID,
+          topic_name VARCHAR(255),
+          competency_ids JSONB DEFAULT '[]'::jsonb,
+          competency_codes VARCHAR(255),
+          room VARCHAR(100),
+          day_of_week INT NOT NULL,
+          start_time VARCHAR(20) NOT NULL,
+          end_time VARCHAR(20) NOT NULL,
+          session_type VARCHAR(50) DEFAULT 'Lecture',
+          delivery_type_id UUID,
+          notes TEXT,
+          created_by UUID,
+          updated_by UUID,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_med_sched_dept_prof ON "${schema}".medical_schedule_entries (department_id, professional_year_id);
+        CREATE INDEX IF NOT EXISTS idx_med_sched_faculty ON "${schema}".medical_schedule_entries (faculty_id);
+        CREATE INDEX IF NOT EXISTS idx_med_sched_day_time ON "${schema}".medical_schedule_entries (day_of_week, start_time, end_time);
+      `);
+
       // Alter topics and competencies to add linker_id column
       await runner.query(`
         ALTER TABLE "${schema}".topics 
@@ -1197,12 +1266,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       CREATE TABLE IF NOT EXISTS "${schema}".departments (
         id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
         name        VARCHAR(200) NOT NULL,
-        code        VARCHAR(20)  UNIQUE NOT NULL,
+        code        VARCHAR(50)  NOT NULL,
         type        VARCHAR(50)  DEFAULT 'ACADEMIC',
         hod_user_id UUID        REFERENCES "${schema}".users(id),
         is_active   BOOLEAN      DEFAULT true,
         created_at  TIMESTAMPTZ  DEFAULT NOW()
-      )
+      );
+      DROP INDEX IF EXISTS "${schema}".departments_code_idx;
+      ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_key;
+      ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_idx;
+      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
     `);
 
     // ── Faculty ────────────────────────────────────────────────────────────
@@ -2201,7 +2277,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       }
     } catch (e) {}
 
-    // ── Seed Default Authentic Users (Admin, Clerk, Faculty, Student, Warden) ──
+    // ── Seed Demo Records ONLY for baseline Demo Tenants (srms-cet-bareilly, srms-ims) ──
+    const isDemoSeedTenant = resolvedSlug === 'srms-cet-bareilly' || resolvedSlug === 'srms-ims';
+    if (!isDemoSeedTenant) {
+      this.logger.log(`Tenant '${resolvedSlug}' initialized with clean schema (zero sample data).`);
+      return;
+    }
+
     const defaultPasswordHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.'; // Default password hash for 'Password@123' / 'admin@123' / '1234'
 
     // 1. College Admin (admin / admin@123)
@@ -2402,66 +2484,205 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       const isMedical = resolvedSlug.includes('ims') || resolvedSlug.includes('iahs') || resolvedSlug.includes('nursing');
 
       if (isMedical) {
+        // Medical Courses
+        await runner.query(`
+          INSERT INTO "${schema}".courses (code, name, type, duration_years, is_active)
+          SELECT * FROM (VALUES
+            ('MBBS', 'Bachelor of Medicine and Bachelor of Surgery', 'MEDICAL', 5, true),
+            ('BAMS', 'Bachelor of Ayurvedic Medicine and Surgery', 'AYUSH', 5, true),
+            ('MD-MED', 'Doctor of Medicine (General Medicine)', 'POSTGRADUATE', 3, true),
+            ('MS-SUR', 'Master of Surgery (General Surgery)', 'POSTGRADUATE', 3, true)
+          ) AS v(code, name, type, duration_years, is_active)
+          WHERE NOT EXISTS (
+            SELECT 1 FROM "${schema}".courses c WHERE c.code = v.code
+          );
+        `).catch(() => {});
+
+        // Medical Departments
         await runner.query(`
           INSERT INTO "${schema}".departments (name, code, type, is_active)
           SELECT * FROM (VALUES
+            ('Department of Anatomy', 'ANA', 'PRE_CLINICAL', true),
             ('Department of Physiology', 'PHY', 'PRE_CLINICAL', true),
-            ('Department of Anatomy', 'ANA', 'PRE_CLINICAL', true)
+            ('Department of Biochemistry', 'BIO', 'PRE_CLINICAL', true),
+            ('Department of Pathology', 'PAT', 'PARA_CLINICAL', true),
+            ('Department of Pharmacology', 'PHA', 'PARA_CLINICAL', true),
+            ('Department of Microbiology', 'MIC', 'PARA_CLINICAL', true),
+            ('Department of Forensic Medicine & Toxicology', 'FMT', 'PARA_CLINICAL', true),
+            ('Department of Community Medicine', 'COM', 'CLINICAL', true),
+            ('Department of General Medicine', 'MED', 'CLINICAL', true),
+            ('Department of General Surgery', 'SUR', 'CLINICAL', true),
+            ('Department of Rachana Sharir (Anatomy)', 'RAC', 'AYUSH', true),
+            ('Department of Kriya Sharir (Physiology)', 'KRI', 'AYUSH', true),
+            ('Department of Dravyaguna Vigyan (Pharmacology)', 'DRA', 'AYUSH', true),
+            ('Department of Samhita & Siddhant', 'SAM', 'AYUSH', true)
           ) AS v(name, code, type, is_active)
           WHERE NOT EXISTS (
             SELECT 1 FROM "${schema}".departments d WHERE d.code = v.code
           );
         `).catch(() => {});
 
+        // Professional Phases (Medical & BAMS)
+        await runner.query(`
+          INSERT INTO "${schema}".professional_phases (name, course_cd, phase_order, academic_system, is_active)
+          SELECT * FROM (VALUES
+            ('1st Professional MBBS', 'MBBS', 1, 'professional', true),
+            ('2nd Professional MBBS', 'MBBS', 2, 'professional', true),
+            ('3rd Professional MBBS (Part I)', 'MBBS', 3, 'professional', true),
+            ('3rd Professional MBBS (Part II)', 'MBBS', 4, 'professional', true),
+            ('1st Professional BAMS', 'BAMS', 1, 'professional', true),
+            ('2nd Professional BAMS', 'BAMS', 2, 'professional', true),
+            ('3rd Professional BAMS', 'BAMS', 3, 'professional', true),
+            ('Final Professional BAMS', 'BAMS', 4, 'professional', true)
+          ) AS v(name, course_cd, phase_order, academic_system, is_active)
+          WHERE NOT EXISTS (
+            SELECT 1 FROM "${schema}".professional_phases p WHERE p.name = v.name AND p.course_cd = v.course_cd
+          );
+        `).catch(() => {});
+
+        // Medical Subjects
         await runner.query(`
           INSERT INTO "${schema}".subjects (name, code, credits, type, is_active)
           SELECT * FROM (VALUES
+            ('Human Anatomy & Histology', 'ANA101', 4, 'THEORY', true),
             ('Human Physiology & Organ Systems', 'PHY101', 4, 'THEORY', true),
-            ('Human Anatomy & Histology', 'ANA101', 4, 'THEORY', true)
+            ('Medical Biochemistry & Molecular Biology', 'BIO101', 4, 'THEORY', true),
+            ('General & Systemic Pathology', 'PAT201', 4, 'THEORY', true),
+            ('Medical Pharmacology & Therapeutics', 'PHA201', 4, 'THEORY', true),
+            ('Medical Microbiology & Immunology', 'MIC201', 4, 'THEORY', true),
+            ('Rachana Sharir (Ayurvedic Anatomy)', 'RAC101', 4, 'THEORY', true),
+            ('Kriya Sharir (Ayurvedic Physiology)', 'KRI101', 4, 'THEORY', true)
           ) AS v(name, code, credits, type, is_active)
           WHERE NOT EXISTS (
             SELECT 1 FROM "${schema}".subjects s WHERE s.code = v.code
           );
         `).catch(() => {});
 
+        // Link subjects to departments
         await runner.query(`
-          INSERT INTO "${schema}".batches (code, year, course_cd, is_active)
-          SELECT * FROM (VALUES
-            ('2023-MBBS', 2023, 'MBBS', true),
-            ('2025', 2025, 'MBBS', true)
-          ) AS v(code, year, course_cd, is_active)
-          WHERE NOT EXISTS (
-            SELECT 1 FROM "${schema}".batches b WHERE b.code = v.code
-          );
+          UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='ANA' LIMIT 1) WHERE code='ANA101' AND department_id IS NULL;
+          UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='PHY' LIMIT 1) WHERE code='PHY101' AND department_id IS NULL;
+          UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='BIO' LIMIT 1) WHERE code='BIO101' AND department_id IS NULL;
+          UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='PAT' LIMIT 1) WHERE code='PAT201' AND department_id IS NULL;
+          UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='PHA' LIMIT 1) WHERE code='PHA201' AND department_id IS NULL;
+          UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='MIC' LIMIT 1) WHERE code='MIC201' AND department_id IS NULL;
+          UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='RAC' LIMIT 1) WHERE code='RAC101' AND department_id IS NULL;
+          UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='KRI' LIMIT 1) WHERE code='KRI101' AND department_id IS NULL;
         `).catch(() => {});
 
+        // Seed Units for Anatomy and Physiology
+        const anaSubId = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='ANA101'`))[0]?.id;
+        const phySubId = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='PHY101'`))[0]?.id;
+
+        if (anaSubId) {
+          await runner.query(`
+            INSERT INTO "${schema}".units (subject_id, unit_number, name, description)
+            SELECT $1, v.unit_number, v.name, v.description FROM (VALUES
+              (1, 'General Anatomy & Musculoskeletal System', 'Basic anatomy principles, bones, joints and muscles'),
+              (2, 'Upper Limb Anatomy & Neurovasculature', 'Pectoral region, axilla, arm, forearm, hand and nerve plexuses'),
+              (3, 'Thorax & Cardiovascular Anatomy', 'Thoracic wall, mediastinum, heart and lungs'),
+              (4, 'Head, Neck & Neuroanatomy', 'Cranial cavity, brain, spinal cord and autonomic nervous system')
+            ) AS v(unit_number, name, description)
+            WHERE NOT EXISTS (
+              SELECT 1 FROM "${schema}".units u WHERE u.subject_id = $1 AND u.unit_number = v.unit_number
+            );
+          `, [anaSubId]).catch(() => {});
+        }
+
+        if (phySubId) {
+          await runner.query(`
+            INSERT INTO "${schema}".units (subject_id, unit_number, name, description)
+            SELECT $1, v.unit_number, v.name, v.description FROM (VALUES
+              (1, 'General Physiology & Cellular Transport', 'Cell membrane dynamics, resting membrane potential and action potential'),
+              (2, 'Nerve-Muscle Physiology & Reflexes', 'Neuromuscular transmission, muscle contraction mechanisms and reflexes'),
+              (3, 'Cardiovascular System Physiology', 'Cardiac cycle, blood pressure regulation, cardiac output and ECG'),
+              (4, 'Respiratory & Renal Physiology', 'Pulmonary mechanics, gas exchange, GFR and countercurrent mechanisms')
+            ) AS v(unit_number, name, description)
+            WHERE NOT EXISTS (
+              SELECT 1 FROM "${schema}".units u WHERE u.subject_id = $1 AND u.unit_number = v.unit_number
+            );
+          `, [phySubId]).catch(() => {});
+        }
+
+        // Seed Topics
+        const anaUnit2 = (await runner.query(`SELECT id FROM "${schema}".units WHERE subject_id = $1 AND unit_number = 2`, [anaSubId]))[0]?.id;
+        const phyUnit2 = (await runner.query(`SELECT id FROM "${schema}".units WHERE subject_id = $1 AND unit_number = 2`, [phySubId]))[0]?.id;
+        const phyUnit3 = (await runner.query(`SELECT id FROM "${schema}".units WHERE subject_id = $1 AND unit_number = 3`, [phySubId]))[0]?.id;
+
+        if (anaUnit2 && anaSubId) {
+          await runner.query(`
+            INSERT INTO "${schema}".topics (subject_id, unit_id, code, name, description, hours)
+            SELECT $1, $2, v.code, v.name, v.description, v.hours FROM (VALUES
+              ('TOP-AN-01', 'Brachial Plexus & Axillary Region', 'Formation of brachial plexus, relations and cords', 2),
+              ('TOP-AN-02', 'Scapular Region & Rotator Cuff', 'Supraspinatus, Infraspinatus, Teres Minor, Subscapularis', 2),
+              ('TOP-AN-03', 'Osteology of Clavicle, Scapula and Humerus', 'Bony landmarks and muscle attachments', 2)
+            ) AS v(code, name, description, hours)
+            WHERE NOT EXISTS (
+              SELECT 1 FROM "${schema}".topics t WHERE t.subject_id = $1 AND t.code = v.code
+            );
+          `, [anaSubId, anaUnit2]).catch(() => {});
+        }
+
+        if (phyUnit2 && phySubId) {
+          await runner.query(`
+            INSERT INTO "${schema}".topics (subject_id, unit_id, code, name, description, hours)
+            SELECT $1, $2, v.code, v.name, v.description, v.hours FROM (VALUES
+              ('TOP-PY-01', 'Neuromuscular Junction & Synaptic Transmission', 'Acetylcholine release, end-plate potential, NMJ blockers', 2),
+              ('TOP-PY-02', 'Excitation-Contraction Coupling in Skeletal Muscle', 'Sarcoplasmic reticulum, calcium release, cross-bridge cycle', 2),
+              ('TOP-PY-03', 'Spirometry & Mechanics of Pulmonary Ventilation', 'Lung volumes, capacities and spirometric evaluation', 3)
+            ) AS v(code, name, description, hours)
+            WHERE NOT EXISTS (
+              SELECT 1 FROM "${schema}".topics t WHERE t.subject_id = $1 AND t.code = v.code
+            );
+          `, [phySubId, phyUnit2]).catch(() => {});
+        }
+
+        if (phyUnit3 && phySubId) {
+          await runner.query(`
+            INSERT INTO "${schema}".topics (subject_id, unit_id, code, name, description, hours)
+            SELECT $1, $2, v.code, v.name, v.description, v.hours FROM (VALUES
+              ('TOP-PY-04', 'Cardiac Action Potential & Conduction System', 'SA node pacemaker potential, AV node delay, Purkinje fibers', 2),
+              ('TOP-PY-05', 'Electrocardiogram (ECG) Waves & Clinical Interpretation', 'P-QRS-T complex, vector analysis, arrhythmias', 3)
+            ) AS v(code, name, description, hours)
+            WHERE NOT EXISTS (
+              SELECT 1 FROM "${schema}".topics t WHERE t.subject_id = $1 AND t.code = v.code
+            );
+          `, [phySubId, phyUnit3]).catch(() => {});
+        }
+
+        // Competencies
         await runner.query(`
           CREATE UNIQUE INDEX IF NOT EXISTS competencies_code_uidx ON "${schema}".competencies (code);
         `).catch(() => {});
 
+        const topAn01 = (await runner.query(`SELECT id FROM "${schema}".topics WHERE code='TOP-AN-01'`))[0]?.id;
+        const topAn02 = (await runner.query(`SELECT id FROM "${schema}".topics WHERE code='TOP-AN-02'`))[0]?.id;
+        const topAn03 = (await runner.query(`SELECT id FROM "${schema}".topics WHERE code='TOP-AN-03'`))[0]?.id;
+        const topPy01 = (await runner.query(`SELECT id FROM "${schema}".topics WHERE code='TOP-PY-01'`))[0]?.id;
+        const topPy02 = (await runner.query(`SELECT id FROM "${schema}".topics WHERE code='TOP-PY-02'`))[0]?.id;
+        const topPy03 = (await runner.query(`SELECT id FROM "${schema}".topics WHERE code='TOP-PY-03'`))[0]?.id;
+        const topPy04 = (await runner.query(`SELECT id FROM "${schema}".topics WHERE code='TOP-PY-04'`))[0]?.id;
+
         await runner.query(`
-          INSERT INTO "${schema}".competencies (code, description, domain, level, is_core, is_active) VALUES
-            ('PY2.1', 'Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-            ('PY2.5', 'Perform and interpret spirometry and pulmonary function tests in normal subjects', 'SKILL', 'PERFORMS', true, true),
-            ('PY3.1', 'Describe cardiac action potential, conduction system of heart and normal ECG waves', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-            ('PY4.2', 'Describe renal clearance and glomerular filtration rate measurement', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-            ('PY5.1', 'Describe synaptic transmission, neurotransmitters and receptor mechanisms', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-            ('AN1.1', 'Describe osteology of upper limb, clavicle, scapula and humerus attachments', 'KNOWLEDGE', 'KNOWS', true, true),
-            ('AN2.3', 'Describe brachial plexus formation, branches and clinical nerve injury syndromes', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
-            ('AN10.1', 'Describe scapular region muscles, rotator cuff and shoulder abduction', 'KNOWLEDGE', 'KNOWS', true, true)
-          ON CONFLICT (code) DO UPDATE SET description = EXCLUDED.description;
+          INSERT INTO "${schema}".competencies (subject_id, topic_id, code, description, domain, level, is_core, is_active) VALUES
+            ('${anaSubId}', '${topAn03 || null}', 'AN1.1', 'Describe osteology of upper limb, clavicle, scapula and humerus attachments', 'KNOWLEDGE', 'KNOWS', true, true),
+            ('${anaSubId}', '${topAn01 || null}', 'AN2.3', 'Describe brachial plexus formation, branches and clinical nerve injury syndromes', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
+            ('${anaSubId}', '${topAn02 || null}', 'AN10.1', 'Describe scapular region muscles, rotator cuff and shoulder abduction', 'KNOWLEDGE', 'KNOWS', true, true),
+            ('${phySubId}', '${topPy02 || null}', 'PY2.1', 'Describe excitation-contraction coupling in skeletal muscle and neuromuscular junction transmission', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
+            ('${phySubId}', '${topPy03 || null}', 'PY2.5', 'Perform and interpret spirometry and pulmonary function tests in normal subjects', 'SKILL', 'PERFORMS', true, true),
+            ('${phySubId}', '${topPy04 || null}', 'PY3.1', 'Describe cardiac action potential, conduction system of heart and normal ECG waves', 'KNOWLEDGE', 'KNOWS_HOW', true, true),
+            ('${phySubId}', '${topPy01 || null}', 'PY5.1', 'Describe synaptic transmission, neurotransmitters and receptor mechanisms', 'KNOWLEDGE', 'KNOWS_HOW', true, true)
+          ON CONFLICT (code) DO UPDATE SET 
+            description = EXCLUDED.description,
+            subject_id = COALESCE(EXCLUDED.subject_id, "${schema}".competencies.subject_id),
+            topic_id = COALESCE(EXCLUDED.topic_id, "${schema}".competencies.topic_id);
         `).catch(() => {});
 
         const phyDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='PHY'`))[0]?.id;
         const anaDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='ANA'`))[0]?.id;
-
-        const phySub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='PHY101'`))[0]?.id;
-        const anaSub = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='ANA101'`))[0]?.id;
-
-        const mbbsBatch = (await runner.query(`SELECT id FROM "${schema}".batches WHERE code='2023-MBBS' OR code='2025' LIMIT 1`))[0]?.id;
-        
         const sarahFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1001' OR name LIKE '%Sarah%' LIMIT 1`))[0]?.id;
         const aparnaFacId = (await runner.query(`SELECT id FROM "${schema}".faculty WHERE emp_id='EMP1002' OR name LIKE '%Aparna%' LIMIT 1`))[0]?.id;
+        const mbbsBatch = (await runner.query(`SELECT id FROM "${schema}".batches WHERE code='2023-MBBS' OR code='2025' OR course_cd='MBBS' LIMIT 1`))[0]?.id;
 
         // Ensure faculty department IDs are linked properly
         if (sarahFacId && phyDept) {
@@ -2475,10 +2696,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         await runner.query(`
           DELETE FROM "${schema}".timetable_slots 
           WHERE subject_id NOT IN ($1, $2) OR faculty_id NOT IN ($3, $4) OR faculty_id IS NULL;
-        `, [phySub, anaSub, sarahFacId || '00000000-0000-0000-0000-000000000000', aparnaFacId || '00000000-0000-0000-0000-000000000000']).catch(() => {});
+        `, [phySubId, anaSubId, sarahFacId || '00000000-0000-0000-0000-000000000000', aparnaFacId || '00000000-0000-0000-0000-000000000000']).catch(() => {});
 
         const countRes = await runner.query(`SELECT COUNT(*) as count FROM "${schema}".timetable_slots`);
-        if (parseInt(countRes[0]?.count || '0', 10) === 0 && mbbsBatch && phySub && anaSub && sarahFacId && aparnaFacId) {
+        if (parseInt(countRes[0]?.count || '0', 10) === 0 && mbbsBatch && phySubId && anaSubId && sarahFacId && aparnaFacId) {
           await runner.query(`
             INSERT INTO "${schema}".timetable_slots
               (department_id, subject_id, batch_id, faculty_id, day_of_week, start_time, end_time, room, slot_type, topic, competency_codes)
@@ -2494,8 +2715,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
               ($6, $7, $5, $4, 4, '10:00:00'::TIME, '11:00:00'::TIME, 'Dissection Hall 1', 'LECTURE', 'Scapular Region & Shoulder Abduction', 'AN10.1'),
               ($1, $2, $5, $3, 5, '10:00:00'::TIME, '12:00:00'::TIME, 'Physiology Lab B', 'PRACTICAL', 'Synaptic Transmission & Neurotransmitters', 'PY5.1');
           `, [
-            phyDept, phySub, sarahFacId, aparnaFacId, mbbsBatch,
-            anaDept, anaSub
+            phyDept, phySubId, sarahFacId, aparnaFacId, mbbsBatch,
+            anaDept, anaSubId
           ]);
         }
       } else {

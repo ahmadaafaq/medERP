@@ -2,6 +2,7 @@ import {
   IsString, IsOptional, IsBoolean, IsNumber,
   IsDateString, MaxLength, MinLength, IsEmail,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 // ─── 1. COLLEGE ─────────────────────────────────────────────────────────────
@@ -84,8 +85,15 @@ export class CreateCourseDto {
 
   @ApiPropertyOptional({ example: 5 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   durationYears?: number;
+
+  @ApiPropertyOptional({ example: 5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  duration_years?: number;
 
   @ApiPropertyOptional({ example: 'Phase I (1st Professional MBBS)' })
   @IsOptional()
@@ -106,6 +114,11 @@ export class CreateCourseDto {
   @IsOptional()
   @IsString()
   courseCd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
 
   @ApiPropertyOptional({ example: 'UG' })
   @IsOptional()
@@ -383,10 +396,17 @@ export class CreateProfessionalDto {
   @IsNumber()
   academicYear?: number;
 
-  @ApiPropertyOptional({ example: 1 })
+  @ApiPropertyOptional({ example: 4.5 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   durationYears?: number;
+
+  @ApiPropertyOptional({ example: 4.5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  duration_years?: number;
 
   @ApiPropertyOptional({ example: 'professional' })
   @IsOptional()

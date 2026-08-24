@@ -1321,6 +1321,13 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       const collegeName = targetCollege?.name || '';
       const collegeCode = targetCollege?.code || '';
       const schema = `tenant_${slug}`;
+      await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
+      await this.ds.query(`
+        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50);
+        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
+        ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1);
+      `).catch(() => {});
 
       try {
         const rows = await this.tenantSchemaService.queryInTenant(
@@ -1331,8 +1338,10 @@ export class CollegeMasterService implements OnApplicationBootstrap {
            FROM courses
            ORDER BY created_at ASC, code ASC`,
         );
-        if (rows.length === 0) {
-          await this.syncExternalCourses(slug);
+
+        const isSrms = SRMS_FIRM_LOCATIONS.some(l => l.slug === slug || l.locid === slug || l.code === slug);
+        if (rows.length === 0 && isSrms) {
+          await this.syncExternalCourses(slug).catch(() => []);
           const fresh = await this.tenantSchemaService.queryInTenant(
             slug,
             `SELECT id, code, name, degree_level, duration_years, professional_phase,
@@ -1357,22 +1366,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
           college_slug: slug,
         }));
       } catch (err: any) {
-        await this.syncExternalCourses(slug);
-        const rows = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT id, code, name, degree_level, duration_years, professional_phase,
-                  COALESCE(academic_system, CASE WHEN '${slug}' = 'srms-ims' THEN 'professional' ELSE 'semester' END) AS academic_system,
-                  course_cd, course_type, is_active, created_at
-           FROM courses
-           ORDER BY created_at ASC, code ASC`,
-        ).catch(() => []);
-        return rows.map(r => ({
-          ...r,
-          college_id: collegeId,
-          college_name: collegeName,
-          college_code: collegeCode,
-          college_slug: slug,
-        }));
+        return [];
       }
     }
 
@@ -1414,7 +1408,10 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     const schema = `tenant_${slug}`;
     const isIms = (slug === 'srms-ims');
     const academicSystem = dto.academicSystem || dto.academic_system || (isIms ? 'professional' : 'semester');
-    const duration = dto.durationYears || (isIms ? 5.5 : 4.0);
+    const rawDuration = dto.durationYears ?? (dto as any).duration_years;
+    const duration = rawDuration !== undefined && rawDuration !== null && !isNaN(Number(rawDuration))
+      ? Number(rawDuration)
+      : (isIms ? 5.5 : 4.0);
     const phase = dto.professionalPhase || (isIms ? '1st Professional (Phase I)' : 'Semester 1 (1st Year)');
 
     await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
@@ -1422,6 +1419,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50) DEFAULT '${academicSystem}';
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
+      ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1);
     `).catch(() => {});
 
     const courseCdVal = dto.courseCd || (dto as any).course_cd || dto.code || '1';
@@ -1442,11 +1440,16 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     const isIms = (slug === 'srms-ims');
     const academicSystem = dto.academicSystem || dto.academic_system;
     const courseCdVal = dto.courseCd || (dto as any).course_cd || dto.code;
+    const rawDuration = dto.durationYears ?? (dto as any).duration_years;
+    const durationVal = rawDuration !== undefined && rawDuration !== null && !isNaN(Number(rawDuration))
+      ? Number(rawDuration)
+      : null;
 
     await this.ds.query(`
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50);
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
+      ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1);
     `).catch(() => {});
 
     const rows = await this.tenantSchemaService.queryInTenant(
@@ -1463,7 +1466,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
            code = COALESCE($9, code)
        WHERE id = $10
        RETURNING *`,
-      [dto.name, dto.degreeLevel, dto.durationYears, dto.professionalPhase, academicSystem, courseCdVal, dto.courseType, dto.isActive ?? dto.is_active, courseCdVal, id],
+      [dto.name, dto.degreeLevel, durationVal, dto.professionalPhase, academicSystem, courseCdVal, dto.courseType, dto.isActive ?? dto.is_active, courseCdVal, id],
     );
     if (rows.length === 0) throw new NotFoundException('Course not found');
     const collegeId = await this.getCollegeIdBySlug(slug);

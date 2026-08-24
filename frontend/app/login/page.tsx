@@ -452,15 +452,15 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMsg('');
 
-    const targetSlug = selectedCollege.slug || 'srms-cet-bareilly';
+    const targetSlug = selectedCollege.slug || '';
     const targetColgCd = String(selectedCollege.colg_cd || selectedCollege.code || '1');
 
     try {
-      const res = await fetch(`${API_BASE}/auth/login?tenant=${targetSlug}`, {
+      const res = await fetch(`${API_BASE}/auth/login${targetSlug ? `?tenant=${targetSlug}` : ''}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-tenant-slug': targetSlug,
+          ...(targetSlug ? { 'x-tenant-slug': targetSlug } : {}),
         },
         body: JSON.stringify({
           email: email.trim(),
@@ -473,10 +473,12 @@ export default function LoginPage() {
         const json = await res.json();
         const authData = json.data || json;
         if (authData.accessToken) {
+          const verifiedSlug = authData.user?.tenantSlug || authData.tenantSlug || targetSlug || 'srms-cet-bareilly';
           localStorage.setItem('token', authData.accessToken);
           localStorage.setItem('refreshToken', authData.refreshToken || '');
-          localStorage.setItem('tenantSlug', targetSlug);
-          localStorage.setItem('selectedTenant', targetSlug);
+          localStorage.setItem('tenantSlug', verifiedSlug);
+          localStorage.setItem('selectedTenant', verifiedSlug);
+          localStorage.setItem('tenant', verifiedSlug);
           localStorage.setItem('colg_cd', targetColgCd);
           localStorage.setItem('role', role);
 
@@ -484,7 +486,7 @@ export default function LoginPage() {
             authData.user?.collegeName ||
             authData.user?.tenantName ||
             selectedCollege?.name ||
-            (targetSlug === 'srms-cet-bareilly' ? 'SRMS CET, BAREILLY' : targetSlug.toUpperCase());
+            (verifiedSlug === 'srms-cet-bareilly' ? 'SRMS CET, BAREILLY' : verifiedSlug.toUpperCase());
 
           localStorage.setItem('collegeName', institutionName);
           localStorage.setItem('college_name', institutionName);
@@ -493,6 +495,7 @@ export default function LoginPage() {
 
           // Set cookie for Next.js Middleware route guard
           document.cookie = `auth_token=${authData.accessToken}; path=/; max-age=604800; SameSite=Lax`;
+          document.cookie = `auth_tenant=${verifiedSlug}; path=/; max-age=604800; SameSite=Lax`;
           document.cookie = `auth_role=${(authData.user?.role || role).toLowerCase()}; path=/; max-age=604800; SameSite=Lax`;
 
           if (authData.user) {

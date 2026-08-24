@@ -17,6 +17,7 @@ interface Firm {
   level_type?: string;
   theme_color?: string;
   firm_mode: 'MED' | 'NONMED';
+  timetable_module_type?: 'ENGINEERING' | 'MEDICAL';
   status: 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED';
   trial_days?: number;
   trial_started_at?: string;
@@ -354,6 +355,37 @@ function OwnerDashboardContent() {
       setLicenseMsg({ type: 'error', text: err.message || 'Failed to apply license key' });
     } finally {
       setApplyKeyLoading(false);
+    }
+  };
+
+  const handleToggleTimetableModule = async (firmId: string, firmTitle: string, newModule: string) => {
+    const isConfirmed = window.confirm(
+      `Are you sure you want to switch the Timetable Module for "${firmTitle}" to ${newModule}?\n\nThis will immediately switch what all Admins, Clerks, Faculty, and Students see for this institution.`,
+    );
+    if (!isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/firms/${firmId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timetable_module_type: newModule }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.message || 'Failed to update timetable module setting');
+      }
+
+      setGlobalBanner({
+        type: 'success',
+        text: `Timetable module for "${firmTitle}" switched to ${newModule} successfully!`,
+      });
+      fetchFirms();
+    } catch (err: any) {
+      setGlobalBanner({
+        type: 'error',
+        text: err.message || 'Failed to update timetable module',
+      });
     }
   };
 
@@ -1091,6 +1123,7 @@ function OwnerDashboardContent() {
                         <th className="py-3 px-4">Tenant Schema</th>
                         <th className="py-3 px-4">Domain</th>
                         <th className="py-3 px-4">Mode</th>
+                        <th className="py-3 px-4">Timetable Module</th>
                         <th className="py-3 px-4">Status</th>
                         <th className="py-3 px-4">Registered</th>
                         <th className="py-3 px-4 text-right">Actions & Slips</th>
@@ -1134,6 +1167,21 @@ function OwnerDashboardContent() {
                             >
                               {firm.firm_mode}
                             </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <select
+                              value={firm.timetable_module_type || (firm.firm_mode === 'MED' ? 'MEDICAL' : 'ENGINEERING')}
+                              onChange={(e) => handleToggleTimetableModule(firm.id, firm.title, e.target.value)}
+                              title="Assign Timetable Module: Engineering vs Medical (BAMS/MBBS)"
+                              className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer border focus:outline-none transition-all shadow-sm ${
+                                (firm.timetable_module_type || (firm.firm_mode === 'MED' ? 'MEDICAL' : 'ENGINEERING')) === 'MEDICAL'
+                                  ? 'bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100'
+                                  : 'bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100'
+                              }`}
+                            >
+                              <option value="ENGINEERING">⚙️ Engineering</option>
+                              <option value="MEDICAL">🩺 Medical (BAMS/MBBS)</option>
+                            </select>
                           </td>
                           <td className="py-3.5 px-4">
                             <select

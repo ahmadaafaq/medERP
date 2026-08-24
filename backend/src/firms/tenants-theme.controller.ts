@@ -37,7 +37,8 @@ export class TenantsThemeController {
   @Get('theme/resolve')
   @Public()
   async resolveTheme(@Query('tenant') tenantSlug?: string) {
-    return await this.firmsService.getTenantTheme(tenantSlug || 'srms-cet-bareilly');
+    if (!tenantSlug) return null;
+    return await this.firmsService.getTenantTheme(tenantSlug);
   }
 
   /**

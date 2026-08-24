@@ -10,24 +10,26 @@ export class AnalyticsService {
   ) {}
 
   async resolveTenantSlug(tenantSlug?: string): Promise<string> {
-    if (!tenantSlug || tenantSlug === 'all') return 'srms-cet-bareilly';
+    if (!tenantSlug) return '';
+    const clean = tenantSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
     const found = await this.ds.query(
-      `SELECT slug FROM public.tenants WHERE slug = $1 OR id::text = $1 OR code = $1 LIMIT 1`,
-      [tenantSlug]
+      `SELECT slug FROM public.tenants WHERE LOWER(slug) = $1 OR id::text = $1 OR code = $1 LIMIT 1`,
+      [clean],
     ).catch(() => []);
-    return found[0]?.slug || tenantSlug;
+    return found[0]?.slug || clean;
   }
 
   async getCollegeKpis(tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
+    if (!slug) return { stats: [], totalStudents: 0, totalFaculty: 0, attendanceRate: 0 };
     const schema = `tenant_${slug}`;
 
     // 1. Tenant & College details
     const tenantInfo = await this.ds.query(
-      `SELECT id, code, name, slug FROM public.tenants WHERE slug = $1 LIMIT 1`,
-      [slug]
+      `SELECT id, code, name, slug FROM public.tenants WHERE LOWER(slug) = $1 LIMIT 1`,
+      [slug.toLowerCase()],
     ).catch(() => []);
-    const college = tenantInfo[0] || { code: '1', name: 'SRMS CET,BAREILLY', slug };
+    const college = tenantInfo[0] || { code: '1', name: slug.toUpperCase(), slug };
 
     // 2. Counts
     const [studentRes, facultyRes, deptRes, examRes] = await Promise.all([

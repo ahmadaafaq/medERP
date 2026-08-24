@@ -16,13 +16,14 @@ import {
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { TenantSlug } from '../common/decorators/tenant.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { UserRole } from '../common/enums/role.enum';
 import { RolesGuard } from '../common/guards/roles.guard';
 
 @ApiTags('College Master')
 @ApiBearerAuth()
-@UseGuards(RolesGuard)
+@Public()
 @Controller('college-master')
 export class CollegeMasterController {
   constructor(private readonly collegeMasterService: CollegeMasterService) {}
@@ -44,15 +45,14 @@ export class CollegeMasterController {
     return { success: true, message: 'Colleges synced successfully from SRMS portal API', data };
   }
 
-  @Public()
   @Get('colleges/sync-external')
   @ApiOperation({ summary: 'Sync Colleges from SRMS ERP portal API (GET trigger)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async syncExternalCollegesGet() {
     const data = await this.collegeMasterService.syncExternalColleges();
     return { success: true, message: 'Colleges synced successfully from SRMS portal API', data };
   }
 
-  @Public()
   @Post('colleges')
   @ApiOperation({ summary: 'Create new College' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -60,7 +60,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.createCollege(dto);
   }
 
-  @Public()
   @Put('colleges/:id')
   @ApiOperation({ summary: 'Update College' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -68,7 +67,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.updateCollege(id, dto);
   }
 
-  @Public()
   @Delete('colleges/:id')
   @ApiOperation({ summary: 'Delete College (Soft Delete)' })
   @Roles(UserRole.SUPER_ADMIN)
@@ -77,7 +75,6 @@ export class CollegeMasterController {
   }
 
   // Live Portal Proxy Endpoints
-  @Public()
   @Post('proxy/colleges')
   @ApiOperation({ summary: 'Fetch live colleges from SRMS ERP API' })
   async proxyGetCollege() {
@@ -85,7 +82,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('proxy/courses')
   @ApiOperation({ summary: 'Fetch live courses from SRMS ERP API' })
   async proxyGetCourse(@Body('colgcd') colgcd: string) {
@@ -93,7 +89,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('proxy/branches')
   @ApiOperation({ summary: 'Fetch live branches from SRMS ERP API' })
   async proxyGetBranch(
@@ -104,7 +99,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('proxy/batches')
   @ApiOperation({ summary: 'Fetch live batches from SRMS OnlineAttend GetBatch API' })
   async proxyGetBatch(
@@ -115,7 +109,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('proxy/all-subjects')
   @ApiOperation({ summary: 'Fetch live subjects from SRMS AdminAttendance GetAllSubjectDetail API' })
   async proxyGetAllSubjects(
@@ -129,7 +122,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('proxy/subjects')
   @ApiOperation({ summary: 'Fetch live subjects alias' })
   async proxyGetSubjectsAlias(
@@ -143,14 +135,12 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Get('firm-locations')
   @ApiOperation({ summary: 'Get list of configured SRMS Firm Locations and mapping' })
   async getFirmLocations() {
     return { success: true, data: SRMS_FIRM_LOCATIONS };
   }
 
-  @Public()
   @Post('proxy/employees')
   @ApiOperation({ summary: 'Fetch live employee profiles from SRMS HR GETEMPPROFILEDTL API' })
   async proxyGetEmployees(@Body('locid') locid: string) {
@@ -158,7 +148,6 @@ export class CollegeMasterController {
     return { success: true, count: data.length, data };
   }
 
-  @Public()
   @Get('proxy/employees')
   @ApiOperation({ summary: 'Fetch live employee profiles from SRMS HR GETEMPPROFILEDTL API (GET)' })
   async proxyGetEmployeesGet(@Query('locid') locid: string) {
@@ -166,7 +155,6 @@ export class CollegeMasterController {
     return { success: true, count: data.length, data };
   }
 
-  @Public()
   @Post('employees/sync-external')
   @ApiOperation({ summary: 'Sync Employees / Faculty from SRMS HR API into database' })
   async syncExternalEmployeesPost(
@@ -185,7 +173,6 @@ export class CollegeMasterController {
     };
   }
 
-  @Public()
   @Get('employees/sync-external')
   @ApiOperation({ summary: 'Sync Employees / Faculty from SRMS HR API into database (GET)' })
   async syncExternalEmployeesGet(
@@ -203,7 +190,6 @@ export class CollegeMasterController {
   }
 
   // ─── 2. COURSES ───────────────────────────────────────────────────────────
-  @Public()
   @Post('courses/sync-external')
   @ApiOperation({ summary: 'Sync Courses sequentially from external SRMS Portal API' })
   async syncExternalCoursesPost(
@@ -215,68 +201,59 @@ export class CollegeMasterController {
     return { success: true, message: 'Courses synced successfully from SRMS portal API', data };
   }
 
-  @Public()
   @Get('courses/sync-external')
   @ApiOperation({ summary: 'Sync Courses sequentially from external SRMS Portal API (GET)' })
-  async syncExternalCoursesGet(@Query('tenant') tenant?: string) {
-    const data = await this.collegeMasterService.syncExternalCourses(tenant);
-    return { success: true, message: 'Courses synced successfully from SRMS portal API', data };
-  }
-
-  @Public()
-  @Get('courses')
-  @ApiOperation({ summary: 'List Courses — tenant-scoped' })
-  async listCourses(
+  async syncExternalCoursesGet(
     @Query('tenant') tenant?: string,
     @CurrentUser() user?: JwtPayload,
   ) {
     const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
-    const data = await this.collegeMasterService.listCourses(effectiveTenant, user);
+    const data = await this.collegeMasterService.syncExternalCourses(effectiveTenant);
+    return { success: true, message: 'Courses synced successfully from SRMS portal API', data };
+  }
+
+  @Get('courses')
+  @ApiOperation({ summary: 'List Courses — tenant-scoped' })
+  async listCourses(
+    @TenantSlug() tenant: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const data = await this.collegeMasterService.listCourses(tenant, user);
     return { success: true, data };
   }
 
-  @Public()
   @Post('courses')
   @ApiOperation({ summary: 'Create Course' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async createCourse(
     @Body() dto: CreateCourseDto,
-    @Query('tenant') tenant?: string,
-    @CurrentUser() user?: JwtPayload,
+    @TenantSlug() tenant: string,
   ) {
-    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
-    return this.collegeMasterService.createCourse(dto, effectiveTenant);
+    return this.collegeMasterService.createCourse(dto, tenant);
   }
 
-  @Public()
   @Put('courses/:id')
   @ApiOperation({ summary: 'Update Course' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async updateCourse(
     @Param('id') id: string,
     @Body() dto: UpdateCourseDto,
-    @Query('tenant') tenant?: string,
-    @CurrentUser() user?: JwtPayload,
+    @TenantSlug() tenant: string,
   ) {
-    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
-    return this.collegeMasterService.updateCourse(id, dto, effectiveTenant);
+    return this.collegeMasterService.updateCourse(id, dto, tenant);
   }
 
-  @Public()
   @Delete('courses/:id')
   @ApiOperation({ summary: 'Delete Course' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async deleteCourse(
     @Param('id') id: string,
-    @Query('tenant') tenant?: string,
-    @CurrentUser() user?: JwtPayload,
+    @TenantSlug() tenant: string,
   ) {
-    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
-    return this.collegeMasterService.deleteCourse(id, effectiveTenant);
+    return this.collegeMasterService.deleteCourse(id, tenant);
   }
 
   // ─── 3. BATCHES ───────────────────────────────────────────────────────────
-  @Public()
   @Post('batches/sync-external')
   @ApiOperation({ summary: 'Sync Batches from external SRMS OnlineAttend GetBatch API' })
   async syncExternalBatchesPost(
@@ -289,18 +266,18 @@ export class CollegeMasterController {
     return { success: true, message: 'Batches synced successfully from SRMS GetBatch API to PostgreSQL', data };
   }
 
-  @Public()
   @Get('batches/sync-external')
   @ApiOperation({ summary: 'Sync Batches from external SRMS OnlineAttend GetBatch API (GET trigger)' })
   async syncExternalBatchesGet(
     @Query('tenant') tenant?: string,
     @Query('coursecd') coursecd?: string,
+    @CurrentUser() user?: JwtPayload,
   ) {
-    const data = await this.collegeMasterService.syncExternalBatches(tenant, coursecd);
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    const data = await this.collegeMasterService.syncExternalBatches(effectiveTenant, coursecd);
     return { success: true, message: 'Batches synced successfully from SRMS GetBatch API to PostgreSQL', data };
   }
 
-  @Public()
   @Get('batches')
   @ApiOperation({ summary: 'List Batches — tenant-scoped' })
   async listBatches(
@@ -316,7 +293,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('batches')
   @ApiOperation({ summary: 'Create Batch' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -329,7 +305,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.createBatch(dto, effectiveTenant);
   }
 
-  @Public()
   @Put('batches/:id')
   @ApiOperation({ summary: 'Update Batch' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -343,7 +318,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.updateBatch(id, dto, effectiveTenant);
   }
 
-  @Public()
   @Delete('batches/:id')
   @ApiOperation({ summary: 'Delete Batch' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -357,7 +331,6 @@ export class CollegeMasterController {
   }
 
   // ─── 4. BRANCHES ──────────────────────────────────────────────────────────
-  @Public()
   @Post('branches/sync-external')
   @ApiOperation({ summary: 'Sync Branches/Departments from external SRMS GetBranch API' })
   async syncExternalBranchesPost(
@@ -370,18 +343,18 @@ export class CollegeMasterController {
     return { success: true, message: 'Departments & Branches synced successfully from SRMS GetBranch API to PostgreSQL', data };
   }
 
-  @Public()
   @Get('branches/sync-external')
   @ApiOperation({ summary: 'Sync Branches/Departments from external SRMS GetBranch API (GET trigger)' })
   async syncExternalBranchesGet(
     @Query('tenant') tenant?: string,
     @Query('coursecd') coursecd?: string,
+    @CurrentUser() user?: JwtPayload,
   ) {
-    const data = await this.collegeMasterService.syncExternalBranches(tenant, coursecd);
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    const data = await this.collegeMasterService.syncExternalBranches(effectiveTenant, coursecd);
     return { success: true, message: 'Departments & Branches synced successfully from SRMS GetBranch API to PostgreSQL', data };
   }
 
-  @Public()
   @Get('branches')
   @ApiOperation({ summary: 'List Branches/Departments — tenant-scoped' })
   async listBranches(
@@ -394,7 +367,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('branches')
   @ApiOperation({ summary: 'Create Branch/Department' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -407,7 +379,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.createBranch(dto, effectiveTenant);
   }
 
-  @Public()
   @Put('branches/:id')
   @ApiOperation({ summary: 'Update Branch/Department' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -421,7 +392,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.updateBranch(id, dto, effectiveTenant);
   }
 
-  @Public()
   @Delete('branches/:id')
   @ApiOperation({ summary: 'Delete Branch/Department' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -435,7 +405,6 @@ export class CollegeMasterController {
   }
 
   // ─── 5. ACADEMIC SESSIONS ──────────────────────────────────────────────────
-  @Public()
   @Post('sessions/sync-external')
   @ApiOperation({ summary: 'Sync Academic Sessions from external SRMS GetSession API' })
   async syncExternalSessionsPost(
@@ -447,15 +416,17 @@ export class CollegeMasterController {
     return { success: true, message: 'Academic Sessions synced successfully from SRMS GetSession API to PostgreSQL', data };
   }
 
-  @Public()
   @Get('sessions/sync-external')
   @ApiOperation({ summary: 'Sync Academic Sessions from external SRMS GetSession API (GET trigger)' })
-  async syncExternalSessionsGet(@Query('tenant') tenant?: string) {
-    const data = await this.collegeMasterService.syncExternalSessions(tenant);
+  async syncExternalSessionsGet(
+    @Query('tenant') tenant?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    const data = await this.collegeMasterService.syncExternalSessions(effectiveTenant);
     return { success: true, message: 'Academic Sessions synced successfully from SRMS GetSession API to PostgreSQL', data };
   }
 
-  @Public()
   @Get('sessions')
   @ApiOperation({ summary: 'List Academic Sessions — tenant-scoped' })
   async listSessions(
@@ -467,7 +438,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('sessions')
   @ApiOperation({ summary: 'Create Academic Session' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -480,7 +450,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.createSession(dto, effectiveTenant);
   }
 
-  @Public()
   @Put('sessions/:id')
   @ApiOperation({ summary: 'Update Academic Session' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -494,7 +463,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.updateSession(id, dto, effectiveTenant);
   }
 
-  @Public()
   @Delete('sessions/:id')
   @ApiOperation({ summary: 'Delete Academic Session' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -508,7 +476,6 @@ export class CollegeMasterController {
   }
 
   // ─── 6. PROFESSIONAL PHASES ───────────────────────────────────────────────
-  @Public()
   @Get('professionals')
   @ApiOperation({ summary: 'List Professional Phases — tenant-scoped' })
   async listProfessionals(
@@ -520,7 +487,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('professionals')
   @ApiOperation({ summary: 'Create Professional Phase' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -533,7 +499,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.createProfessional(dto, effectiveTenant);
   }
 
-  @Public()
   @Put('professionals/:id')
   @ApiOperation({ summary: 'Update Professional Phase' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -547,7 +512,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.updateProfessional(id, dto, effectiveTenant);
   }
 
-  @Public()
   @Delete('professionals/:id')
   @ApiOperation({ summary: 'Delete Professional Phase' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -561,7 +525,6 @@ export class CollegeMasterController {
   }
 
   // ─── 8. GROUPS MASTER ─────────────────────────────────────────────────────
-  @Public()
   @Get('groups')
   @ApiOperation({ summary: 'List Student Batch Sub-Groups — tenant-scoped' })
   async listGroups(
@@ -575,7 +538,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('groups')
   @ApiOperation({ summary: 'Create Student Batch Sub-Group' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -588,7 +550,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.createGroup(dto, effectiveTenant);
   }
 
-  @Public()
   @Put('groups/:id')
   @ApiOperation({ summary: 'Update Student Batch Sub-Group' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -602,7 +563,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.updateGroup(id, dto, effectiveTenant);
   }
 
-  @Public()
   @Delete('groups/:id')
   @ApiOperation({ summary: 'Delete Student Batch Sub-Group' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -616,7 +576,6 @@ export class CollegeMasterController {
   }
 
   // ─── 9. RESIDENCIES MASTER ────────────────────────────────────────────────
-  @Public()
   @Get('residencies')
   @ApiOperation({ summary: 'List Residency Categories — tenant-scoped' })
   async listResidencies(
@@ -628,7 +587,6 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
-  @Public()
   @Post('residencies')
   @ApiOperation({ summary: 'Create Residency Category' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -641,7 +599,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.createResidency(dto, effectiveTenant);
   }
 
-  @Public()
   @Put('residencies/:id')
   @ApiOperation({ summary: 'Update Residency Category' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
@@ -655,7 +612,6 @@ export class CollegeMasterController {
     return this.collegeMasterService.updateResidency(id, dto, effectiveTenant);
   }
 
-  @Public()
   @Delete('residencies/:id')
   @ApiOperation({ summary: 'Delete Residency Category' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)

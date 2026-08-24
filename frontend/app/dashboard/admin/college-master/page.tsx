@@ -246,6 +246,14 @@ interface ResidencyCategory {
 
 const API_BASE = 'http://localhost:3001/api/v1/college-master';
 
+const getAuthHeaders = (): Record<string, string> => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
+
 export default function CollegeMasterPage() {
   const [activeTab, setActiveTab] = useState<SubCategory>('colleges');
   const [searchTerm, setSearchTerm] = useState('');
@@ -301,7 +309,7 @@ export default function CollegeMasterPage() {
     try {
       const res = await fetch(`${API_BASE}/colleges/sync-external`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
         const data = await res.json();
@@ -337,7 +345,7 @@ export default function CollegeMasterPage() {
     setSyncing(true);
     if (showToast) setSyncMessage(`⚡ Querying SRMS GetCourse API for ${col.name}...`);
     try {
-      const res = await fetch(`${API_BASE}/courses/sync-external?tenant=${col.slug}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/courses/sync-external?tenant=${col.slug}`, { method: 'POST', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const list: any[] = data.data || [];
@@ -380,7 +388,7 @@ export default function CollegeMasterPage() {
     try {
       const slug = getActiveTenantSlug();
       const queryParam = selectedCollegeFilter === 'all' ? '?tenant=all' : (slug ? `?tenant=${slug}` : '');
-      const res = await fetch(`${API_BASE}/courses/sync-external${queryParam}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/courses/sync-external${queryParam}`, { method: 'POST', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const list = data.data || [];
@@ -412,7 +420,7 @@ export default function CollegeMasterPage() {
     setSyncing(true);
     if (showToast) setSyncMessage(`⚡ Querying SRMS GetBranch API for ${col.name}...`);
     try {
-      const res = await fetch(`${API_BASE}/branches/sync-external?tenant=${col.slug}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/branches/sync-external?tenant=${col.slug}`, { method: 'POST', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const list: any[] = data.data || [];
@@ -444,7 +452,7 @@ export default function CollegeMasterPage() {
     try {
       const slug = getActiveTenantSlug();
       const queryParam = selectedCollegeFilter === 'all' ? '?tenant=all' : (slug ? `?tenant=${slug}` : '');
-      const res = await fetch(`${API_BASE}/branches/sync-external${queryParam}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/branches/sync-external${queryParam}`, { method: 'POST', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const list = data.data || [];
@@ -468,7 +476,7 @@ export default function CollegeMasterPage() {
     setSyncing(true);
     if (showToast) setSyncMessage(`⚡ Querying SRMS GetBatch API for ${col.name}...`);
     try {
-      const res = await fetch(`${API_BASE}/batches/sync-external?tenant=${col.slug}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/batches/sync-external?tenant=${col.slug}`, { method: 'POST', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const list: any[] = data.data || [];
@@ -500,7 +508,7 @@ export default function CollegeMasterPage() {
     try {
       const slug = getActiveTenantSlug();
       const queryParam = selectedCollegeFilter === 'all' ? '?tenant=all' : (slug ? `?tenant=${slug}` : '');
-      const res = await fetch(`${API_BASE}/batches/sync-external${queryParam}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/batches/sync-external${queryParam}`, { method: 'POST', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const list = data.data || [];
@@ -557,7 +565,7 @@ export default function CollegeMasterPage() {
           setUserTenantId(uTenantId);
         }
 
-        const res = await fetch(`${API_BASE}/colleges`);
+        const res = await fetch(`${API_BASE}/colleges`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           const list: College[] = (data.data || data || []).map((t: any) => ({
@@ -597,7 +605,7 @@ export default function CollegeMasterPage() {
     if (tab === 'colleges') {
       setLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/colleges`);
+        const res = await fetch(`${API_BASE}/colleges`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           const list: College[] = (data.data || data || []).map((t: any) => ({
@@ -652,7 +660,7 @@ export default function CollegeMasterPage() {
       const tenantParam = userRole === 'SUPER_ADMIN'
         ? ((selectedCollegeFilter === 'all' || tab === 'courses' || tab === 'professionals') && selectedCollegeFilter === 'all' ? 'all' : slug)
         : (userTenantSlug || slug || 'srms-cet-bareilly');
-      const res = await fetch(`${API_BASE}/${endpoint}?tenant=${tenantParam}`);
+      const res = await fetch(`${API_BASE}/${endpoint}?tenant=${tenantParam}`, { headers: getAuthHeaders() });
       if (!res.ok) {
         const errText = await res.text();
         console.error(`[CollegeMaster] API ${tab} failed (${res.status}):`, errText);
@@ -1129,6 +1137,7 @@ export default function CollegeMasterPage() {
       const slug = getActiveTenantSlug();
       const res = await fetch(`${API_BASE}/sessions/sync-external?tenant=${slug}`, {
         method: 'POST',
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
         const json = await res.json();
@@ -1159,7 +1168,7 @@ export default function CollegeMasterPage() {
     if (availableCourses.length === 0 && selectedCol) {
       try {
         // 1. Fetch courses for this tenant from backend (which looks in postgresql schema)
-        const res = await fetch(`${API_BASE}/courses?tenant=${targetSlug}`);
+        const res = await fetch(`${API_BASE}/courses?tenant=${targetSlug}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const json = await res.json();
           const list = json.data || (Array.isArray(json) ? json : []);
@@ -1565,7 +1574,7 @@ export default function CollegeMasterPage() {
             };
             await fetch(`${API_BASE}/professionals?tenant=${slug}`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: getAuthHeaders(),
               body: JSON.stringify(payload),
             });
           }
@@ -1666,7 +1675,7 @@ export default function CollegeMasterPage() {
     try {
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(bodyPayload),
       });
       if (res.ok) {
@@ -1717,7 +1726,7 @@ export default function CollegeMasterPage() {
     try {
       const res = await fetch(`${API_BASE}/${endpoint}/${id}?tenant=${slug}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
         console.log(`[CollegeMaster] Deleted ${activeTab} ${id} successfully ✅`);

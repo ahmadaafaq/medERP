@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 
@@ -193,6 +193,248 @@ interface Competency {
   is_active: boolean;
 }
 
+
+export const MEDICAL_LEARNING_METHODS = [
+  "LGT",
+  "SGT",
+  "LGT SGT",
+  "LGT, SGT/Tutorials",
+  "LGT Student Seminars",
+  "Lecture",
+  "Lectures",
+  "Small Group Teaching",
+  "Tutorial",
+  "Tutorials",
+  "Seminar",
+  "Seminars",
+  "Student Seminar",
+  "Demonstration",
+  "Practical",
+  "Practical Demonstration",
+  "Laboratory",
+  "Clinical Demonstration",
+  "Bedside Teaching",
+  "Bedside Clinical Teaching",
+  "Case-Based Learning",
+  "Case Discussion",
+  "Case Presentation",
+  "Problem-Based Learning",
+  "Team-Based Learning",
+  "Group Discussion",
+  "Interactive Session",
+  "Discussion",
+  "Workshop",
+  "Skill Lab",
+  "Simulation",
+  "Simulation-Based Learning",
+  "Clinical Skills Training",
+  "Self-Directed Learning",
+  "Self-Learning",
+  "E-Learning",
+  "Online Learning",
+  "Blended Learning",
+  "Flipped Classroom",
+  "Demonstration and Practice",
+  "Field Visit",
+  "Community-Based Learning",
+  "Community Visit",
+  "Integrated Teaching",
+  "Integrated Learning",
+  "Interdisciplinary Teaching",
+  "AETCOM Session",
+  "Role Play",
+  "Reflective Learning",
+  "Experiential Learning",
+  "Peer Learning",
+  "Peer Teaching",
+  "Assignment",
+  "Project-Based Learning",
+  "Other"
+];
+
+export const MEDICAL_ASSESSMENT_METHODS = [
+  "Written Assessment",
+  "Written Examination",
+  "Written Test",
+  "Written/ Viva voce",
+  "Viva voce",
+  "Viva",
+  "Oral Examination",
+  "MCQ",
+  "Multiple Choice Questions",
+  "SAQ",
+  "Short Answer Questions",
+  "LAQ",
+  "Long Answer Questions",
+  "Theory Examination",
+  "Practical Examination",
+  "Practical Assessment",
+  "Clinical Assessment",
+  "Clinical Examination",
+  "OSCE",
+  "OSPE",
+  "Objective Structured Clinical Examination",
+  "Objective Structured Practical Examination",
+  "Skill Assessment",
+  "Skill-Based Assessment",
+  "Case-Based Assessment",
+  "Case Presentation",
+  "Case Discussion",
+  "Assignment Assessment",
+  "Seminar Assessment",
+  "Presentation",
+  "Project Assessment",
+  "Group Assessment",
+  "Individual Assessment",
+  "Formative Assessment",
+  "Summative Assessment",
+  "Continuous Assessment",
+  "Internal Assessment",
+  "End-Term Assessment",
+  "Mid-Term Examination",
+  "Class Test",
+  "Unit Test",
+  "Quiz",
+  "Online Assessment",
+  "Practical/Viva voce",
+  "Written/Practical/Viva voce",
+  "Written/Practical",
+  "Portfolio Assessment",
+  "Logbook Assessment",
+  "Direct Observation",
+  "Workplace-Based Assessment",
+  "Peer Assessment",
+  "Self-Assessment",
+  "Reflective Assessment",
+  "Attendance/Participation",
+  "Other"
+];
+
+export const ENGINEERING_LEARNING_METHODS = [
+  "LGT",
+  "SGT",
+  "LGT SGT",
+  "Lecture",
+  "Lectures",
+  "Tutorial",
+  "Practical",
+  "Laboratory",
+  "Lab Session",
+  "Workshop",
+  "Seminar",
+  "Student Seminar",
+  "Presentation",
+  "Group Discussion",
+  "Case Study",
+  "Case Discussion",
+  "Case-Based Learning",
+  "Problem-Based Learning",
+  "Project-Based Learning",
+  "Experiential Learning",
+  "Activity-Based Learning",
+  "Self-Learning",
+  "E-Learning",
+  "Blended Learning",
+  "Flipped Classroom",
+  "Simulation",
+  "Demonstration",
+  "Industrial Training",
+  "Industrial Visit",
+  "Field Visit",
+  "Internship",
+  "Project Work",
+  "Mini Project",
+  "Major Project",
+  "Capstone Project",
+  "Research-Based Learning",
+  "Coding Practice",
+  "Problem Solving",
+  "Hands-on Training",
+  "Software Lab",
+  "Computer Lab",
+  "Management Game",
+  "Role Play",
+  "Team Activity",
+  "Brainstorming",
+  "Debate",
+  "Quiz",
+  "Assignment",
+  "Mentoring",
+  "Guest Lecture",
+  "Expert Lecture",
+  "Industry Interaction",
+  "Entrepreneurship Activity",
+  "Innovation Activity",
+  "Other"
+];
+
+export const ENGINEERING_ASSESSMENT_METHODS = [
+  "Written Assessment",
+  "Written Examination",
+  "Written Test",
+  "Theory Examination",
+  "Internal Assessment",
+  "Continuous Assessment",
+  "Formative Assessment",
+  "Summative Assessment",
+  "Mid-Term Examination",
+  "End-Term Examination",
+  "Class Test",
+  "Unit Test",
+  "Quiz",
+  "MCQ",
+  "Multiple Choice Questions",
+  "Short Answer Questions",
+  "Long Answer Questions",
+  "Assignment Assessment",
+  "Tutorial Assessment",
+  "Practical Assessment",
+  "Laboratory Assessment",
+  "Lab Examination",
+  "Project Assessment",
+  "Mini Project Assessment",
+  "Major Project Assessment",
+  "Capstone Project Assessment",
+  "Internship Assessment",
+  "Industrial Training Assessment",
+  "Seminar Assessment",
+  "Presentation Assessment",
+  "Case Study Assessment",
+  "Case Analysis",
+  "Group Discussion Assessment",
+  "Viva voce",
+  "Viva",
+  "Oral Examination",
+  "Practical/Viva voce",
+  "Written/Viva voce",
+  "Written/Practical",
+  "Written/Practical/Viva voce",
+  "Coding Assessment",
+  "Programming Test",
+  "Design Assessment",
+  "Technical Assessment",
+  "Skill Assessment",
+  "Performance Assessment",
+  "Simulation Assessment",
+  "Portfolio Assessment",
+  "Logbook Assessment",
+  "Research Assessment",
+  "Research Paper Assessment",
+  "Attendance/Participation",
+  "Peer Assessment",
+  "Self-Assessment",
+  "Team Assessment",
+  "Field Work Assessment",
+  "Industrial Visit Assessment",
+  "Innovation Assessment",
+  "Entrepreneurship Assessment",
+  "Case Presentation",
+  "Project Presentation",
+  "Report Assessment",
+  "Final Project Defense",
+  "Other"
+];
+
 interface TempCompetencyItem {
   code: string;
   name?: string;
@@ -205,6 +447,14 @@ interface TempCompetencyItem {
 
 const API_BASE = 'http://localhost:3001/api/v1/admin-master';
 const COLLEGE_API_BASE = 'http://localhost:3001/api/v1/college-master';
+
+const getAuthHeaders = (): Record<string, string> => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
 
 export default function AdminMasterPage() {
   const [activeTab, setActiveTab] = useState<SubCategory>('departments');
@@ -252,6 +502,8 @@ export default function AdminMasterPage() {
   const [subTopicLevel, setSubTopicLevel] = useState('Knows How');
   const [subTopicBloom, setSubTopicBloom] = useState('KL-2 (Understand)');
   const [subTopicCore, setSubTopicCore] = useState(true);
+  const [subTopicLearningMethod, setSubTopicLearningMethod] = useState('');
+  const [subTopicAssessmentMethod, setSubTopicAssessmentMethod] = useState('');
 
   const getActiveTenantSlug = (): string => {
     if (selectedCollegeFilter !== 'all') {
@@ -378,22 +630,35 @@ export default function AdminMasterPage() {
 
   const syncDepartmentsFromPortal = async () => {
     setSyncing(true);
-    setSyncMessage('');
+    setSyncMessage('🔄 Copying & syncing branch data to Department Master in PostgreSQL...');
     try {
       const targetSlug = getActiveTenantSlug() === 'all' ? 'all' : getActiveTenantSlug();
-      const res = await fetch(`${COLLEGE_API_BASE}/branches/sync-external?tenant=${targetSlug}`, {
+      const res = await fetch(`${API_BASE}/departments/sync-from-branches?tenant=${targetSlug}`, {
         method: 'POST',
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
-        setSyncMessage(`Departments & Specialties synced successfully from SRMS Portal ✅`);
+        const json = await res.json();
+        setSyncMessage(`⚡ Successfully synced ${json.count ?? ''} Departments from Branch data into PostgreSQL ✅`);
         await fetchCategoryData('departments');
         setTimeout(() => setSyncMessage(''), 5000);
       } else {
-        setSyncMessage('Failed to sync departments from SRMS Portal.');
+        // Fallback to college-master sync if needed
+        const fallbackRes = await fetch(`${COLLEGE_API_BASE}/branches/sync-external?tenant=${targetSlug}`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+        });
+        if (fallbackRes.ok) {
+          setSyncMessage(`Departments & Specialties synced successfully from Branch data ✅`);
+          await fetchCategoryData('departments');
+          setTimeout(() => setSyncMessage(''), 5000);
+        } else {
+          setSyncMessage('Failed to sync departments.');
+        }
       }
     } catch (err) {
       console.error('[AdminMaster] Sync error:', err);
-      setSyncMessage('Error syncing departments from SRMS Portal.');
+      setSyncMessage('Error syncing departments.');
     } finally {
       setSyncing(false);
     }
@@ -809,9 +1074,8 @@ export default function AdminMasterPage() {
       const chosenUnitCode = chosenUnit?.code || '';
       const chosenBloom = chosenUnit?.bloom_level || 'KL-2 (Understand)';
 
-      const subPrefix = chosenSubjectCode ? `${chosenSubjectCode}-` : '';
-      const unitPrefix = chosenUnitCode ? `${chosenUnitCode.replace('UNIT-', 'U')}-` : '';
-      const autoTopicCode = `${subPrefix}${unitPrefix}T${String(topics.length + 1).padStart(2, '0')}`;
+      const topicsForSub = topics.filter(t => t.subject_code === chosenSubjectCode || t.subject_id === chosenSubjectCode);
+      const autoTopicCode = chosenSubjectCode ? `${chosenSubjectCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
 
       setFormData({
         college_id: targetColCd,
@@ -1635,23 +1899,56 @@ export default function AdminMasterPage() {
                 </select>
               </div>
 
-              {/* 5. Semester Selector */}
-              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>🔢</span> Sem:</span>
-                <select
-                  value={selectedSemesterFilter}
-                  onChange={(e) => {
-                    setSelectedSemesterFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
-                >
-                  <option value="all">All Semesters</option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                    <option key={s} value={String(s)}>Sem #{s}</option>
-                  ))}
-                </select>
-              </div>
+              {/* 5. Dynamic Semester / Professional Phase Selector */}
+              {(() => {
+                const activeCol = colleges.find(c => c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter || c.code === selectedCollegeFilter);
+                const activeCrs = courses.find(c => c.course_cd === selectedCourseFilter || c.code === selectedCourseFilter || c.id === selectedCourseFilter);
+                const isMedicalFilter = (
+                  activeCrs?.academic_system === 'professional' ||
+                  activeCrs?.academicSystem === 'professional' ||
+                  activeCrs?.name?.toUpperCase().includes('MBBS') ||
+                  activeCrs?.name?.toUpperCase().includes('BAMS') ||
+                  activeCrs?.name?.toUpperCase().includes('MD') ||
+                  activeCrs?.name?.toUpperCase().includes('MS') ||
+                  activeCrs?.name?.toUpperCase().includes('BDS') ||
+                  activeCrs?.code === '100' ||
+                  activeCol?.slug === 'srms-ims' ||
+                  activeCol?.slug === 'rmribar'
+                );
+
+                return (
+                  <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
+                    <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+                      <span>{isMedicalFilter ? '🩺' : '🔢'}</span> {isMedicalFilter ? 'Phase:' : 'Sem:'}
+                    </span>
+                    <select
+                      value={selectedSemesterFilter}
+                      onChange={(e) => {
+                        setSelectedSemesterFilter(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[160px] truncate"
+                    >
+                      {isMedicalFilter ? (
+                        <>
+                          <option value="all">All Phases</option>
+                          <option value="1">Phase I (1st Prof)</option>
+                          <option value="2">Phase II (2nd Prof)</option>
+                          <option value="3">Phase III Part 1 (3rd Prof P1)</option>
+                          <option value="4">Phase III Part 2 (3rd Prof P2)</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="all">All Semesters</option>
+                          {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                            <option key={s} value={String(s)}>Sem #{s}</option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  </div>
+                );
+              })()}
 
               {/* 6. Subject Selector */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
@@ -1724,9 +2021,14 @@ export default function AdminMasterPage() {
               {/* Actions */}
               <div className="flex items-center gap-2 ml-auto">
                 {activeTab === 'departments' && (
-                  <button onClick={syncDepartmentsFromPortal} disabled={syncing} className="px-3 py-2 text-xs font-bold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95">
-                    <span className={syncing ? 'animate-spin' : ''}>🌐</span>
-                    <span>{syncing ? 'Syncing...' : 'Sync SRMS'}</span>
+                  <button
+                    onClick={syncDepartmentsFromPortal}
+                    disabled={syncing}
+                    title="Copy and Sync from Branch data to Department Master in PostgreSQL"
+                    className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95"
+                  >
+                    <span className={syncing ? 'animate-spin' : ''}>🔄</span>
+                    <span>{syncing ? 'Syncing...' : 'Sync Dept'}</span>
                   </button>
                 )}
                 {(activeTab === 'subjects' || activeTab === 'subject-offerings') && (
@@ -1786,7 +2088,7 @@ export default function AdminMasterPage() {
                       {paginatedList.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="p-10 text-center text-slate-500 font-semibold">
-                            No departments found for the selected college filter. Click &apos;Sync SRMS Departments&apos; or &apos;Add New Department&apos;.
+                            No departments found for the selected college filter. Click &apos;Sync Dept&apos; or &apos;Add New&apos;.
                           </td>
                         </tr>
                       ) : (
@@ -1860,7 +2162,7 @@ export default function AdminMasterPage() {
                         <th className="p-4 pl-5">Subject Code</th>
                         <th className="p-4">Subject Name & Details</th>
                         <th className="p-4">Type</th>
-                        <th className="p-4">Batch & Semester</th>
+                        <th className="p-4">Batch & Term / Phase</th>
                         <th className="p-4">Mapped College & Dept</th>
                         <th className="p-4">Longitudinal?</th>
                         <th className="p-4">Credits</th>
@@ -1880,6 +2182,14 @@ export default function AdminMasterPage() {
                           const col = colleges.find(c => c.id === s.college_id || c.slug === s.college_slug);
                           const colName = col?.name || s.college_name || 'SRMS Institution';
                           const colCode = col?.code || s.college_code || '';
+                          const isMedicalSub = Boolean(
+                            s.professional_phase ||
+                            s.course_name?.toUpperCase().includes('MBBS') ||
+                            s.course_name?.toUpperCase().includes('BAMS') ||
+                            s.course_cd === '100' ||
+                            col?.slug === 'srms-ims' ||
+                            col?.slug === 'rmribar'
+                          );
 
                           return (
                             <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -1911,7 +2221,9 @@ export default function AdminMasterPage() {
                               <td className="p-4 whitespace-nowrap">
                                 <div className="flex flex-col gap-0.5 text-[11px] font-semibold">
                                   <span className="text-slate-800 dark:text-slate-200">📅 Batch #{s.batch_cd || s.batch_code || '—'}</span>
-                                  <span className="text-slate-500 dark:text-slate-400">🔢 Sem #{s.sem_cd || s.semester || '—'}</span>
+                                  <span className="text-slate-500 dark:text-slate-400">
+                                    {isMedicalSub ? `🩺 Phase #${s.sem_cd || s.semester || '1'}` : `🔢 Sem #${s.sem_cd || s.semester || '—'}`}
+                                  </span>
                                 </div>
                               </td>
                               <td className="p-4 whitespace-nowrap">
@@ -2254,100 +2566,166 @@ export default function AdminMasterPage() {
                 )}
 
                 {activeTab === 'competencies' && (
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">
-                      <tr>
-                        <th className="p-4 pl-5">Sub-Topic Code</th>
-                        <th className="p-4">Sub-Topic Description / Title</th>
-                        <th className="p-4">Subject</th>
-                        <th className="p-4">Unit</th>
-                        <th className="p-4">Topic (Description)</th>
-                        <th className="p-4">Bloom&apos;s Level</th>
-                        <th className="p-4">Mastery / Core</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4 pr-5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium">
-                      {paginatedList.length === 0 ? (
-                        <tr><td colSpan={9} className="p-8 text-center text-slate-500 font-medium">No sub-topics registered matching the selected filter. Click &apos;Add New&apos; to create.</td></tr>
-                      ) : (
-                        paginatedList.map((c: any) => (
-                          <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                            <td className="p-4 pl-5 whitespace-nowrap">
-                              <span className="font-extrabold text-[#5B4BFF] font-mono text-xs bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 shadow-sm inline-block">
-                                {c.code}
-                              </span>
-                            </td>
-                            <td className="p-4">
-                              {c.name && <div className="font-extrabold text-slate-900 dark:text-white text-xs mb-0.5">{c.name}</div>}
-                              <div className="text-slate-700 dark:text-slate-300 text-xs leading-relaxed max-w-md">
-                                {c.description}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse min-w-[1150px]">
+                      <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">
+                        <tr>
+                          <th className="py-3.5 px-4 pl-5 w-32">Sub-Topic Code</th>
+                          <th className="py-3.5 px-4 min-w-[340px]">Sub-Topic Title & Statement</th>
+                          <th className="py-3.5 px-4 w-44">Subject</th>
+                          <th className="py-3.5 px-4 w-36">Unit</th>
+                          <th className="py-3.5 px-4 w-48">Topic</th>
+                          <th className="py-3.5 px-4 w-44">Pedagogy & Assessment</th>
+                          <th className="py-3.5 px-4 w-36">Domain & Mastery</th>
+                          <th className="py-3.5 px-4 w-24 text-center">Status</th>
+                          <th className="py-3.5 px-4 pr-5 text-right w-24">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800/60 font-medium">
+                        {paginatedList.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="p-12 text-center text-slate-500 font-medium">
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                <span className="text-3xl">📋</span>
+                                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">No sub-topics registered matching the selected filter</span>
+                                <span className="text-xs text-slate-400">Click &apos;Add New&apos; above to register a new sub-topic or competency.</span>
                               </div>
-                            </td>
-                            <td className="p-4 whitespace-nowrap">
-                              <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1">
-                                <span>📚</span> {c.subject_name || c.subject_code || 'General Subject'}
-                              </div>
-                              {c.subject_code && (
-                                <div className="text-[11px] text-slate-500 font-mono">Code: #{c.subject_code}</div>
-                              )}
-                            </td>
-                            <td className="p-4 whitespace-nowrap">
-                              {c.unit_code ? (
-                                <span className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-[#5B4BFF] font-mono font-bold text-xs border border-indigo-200 dark:border-indigo-800 inline-block">
-                                  📑 {c.unit_code} {c.unit_name && c.unit_name !== c.unit_code ? `(${c.unit_name})` : ''}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">—</span>
-                              )}
-                            </td>
-                            <td className="p-4">
-                              {c.topic_name ? (
-                                <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1">
-                                  <span>📌</span> {c.topic_name}
-                                </div>
-                              ) : c.topic_code ? (
-                                <div className="font-bold text-slate-900 dark:text-white text-xs font-mono">
-                                  📌 [{c.topic_code}]
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 italic text-[11px]">General Topic</span>
-                              )}
-                              {c.topic_description && (
-                                <div className="text-[11px] text-slate-500 dark:text-slate-400 italic line-clamp-2 max-w-xs mt-0.5">
-                                  {c.topic_description}
-                                </div>
-                              )}
-                            </td>
-                            <td className="p-4 whitespace-nowrap">
-                              <span className="px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-bold text-[11px] border border-purple-200 dark:border-purple-800 inline-flex items-center gap-1 shadow-sm">
-                                <span>🧠</span>
-                                {c.domain || 'Knowledge'} • {c.bloom_level || 'KL-2'}
-                              </span>
-                            </td>
-                            <td className="p-4 whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-slate-800 dark:text-slate-200 font-bold text-xs">{c.level || 'Knows How'}</span>
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${c.is_core ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'
-                                  }`}>
-                                  {c.is_core ? '⭐ CORE' : 'OPT'}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="p-4 whitespace-nowrap">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${c.is_active !== false ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20'}`}>
-                                {c.is_active !== false ? 'ACTIVE' : 'INACTIVE'}
-                              </span>
-                            </td>
-                            <td className="p-4 pr-5 text-right whitespace-nowrap">
-                              <ActionButtons onEdit={() => handleEdit(c)} onDelete={() => handleDelete(c.id, c.college_slug)} />
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          paginatedList.map((c: any) => {
+                            const hasDuplicateText = c.name && c.description && c.name.trim().toLowerCase() === c.description.trim().toLowerCase();
+                            const displayName = c.name && !hasDuplicateText ? c.name.trim() : '';
+                            const displayDesc = c.description ? c.description.trim() : (c.name || '—');
+
+                            return (
+                              <tr key={c.id} className="hover:bg-indigo-50/25 dark:hover:bg-slate-800/40 transition-colors group">
+                                {/* Sub-Topic Code */}
+                                <td className="py-3.5 px-4 pl-5 align-top whitespace-nowrap">
+                                  <span className="font-extrabold text-[#5B4BFF] font-mono text-xs bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-lg border border-indigo-200/80 dark:border-indigo-800/80 shadow-xs inline-block">
+                                    {c.code}
+                                  </span>
+                                  {c.batch_year && (
+                                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                      Batch: {c.batch_year}
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Sub-Topic Title & Statement */}
+                                <td className="py-3.5 px-4 align-top">
+                                  {displayName && (
+                                    <div className="font-extrabold text-slate-900 dark:text-white text-xs mb-1 group-hover:text-[#5B4BFF] transition-colors leading-snug">
+                                      {displayName}
+                                    </div>
+                                  )}
+                                  <div className="text-slate-700 dark:text-slate-300 text-xs leading-relaxed">
+                                    {displayDesc}
+                                  </div>
+                                </td>
+
+                                {/* Subject */}
+                                <td className="py-3.5 px-4 align-top whitespace-nowrap">
+                                  <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
+                                    <span className="text-sm">📚</span>
+                                    <span className="truncate max-w-[140px]">{c.subject_name || c.subject_code || 'General Subject'}</span>
+                                  </div>
+                                  {c.subject_code && (
+                                    <div className="text-[11px] text-slate-500 font-mono mt-0.5 ml-5">
+                                      Code: #{c.subject_code}
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Unit */}
+                                <td className="py-3.5 px-4 align-top whitespace-nowrap">
+                                  {c.unit_code ? (
+                                    <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono font-bold text-xs border border-slate-200 dark:border-slate-700 inline-flex items-center gap-1">
+                                      <span>📑</span> {c.unit_code}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )}
+                                  {c.unit_name && c.unit_name !== c.unit_code && (
+                                    <div className="text-[10px] text-slate-500 truncate max-w-[130px] mt-0.5">
+                                      {c.unit_name}
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Topic */}
+                                <td className="py-3.5 px-4 align-top">
+                                  {c.topic_name ? (
+                                    <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1">
+                                      <span className="text-rose-500 text-xs">📌</span>
+                                      <span className="truncate max-w-[160px]">{c.topic_name}</span>
+                                    </div>
+                                  ) : c.topic_code ? (
+                                    <div className="font-bold text-slate-900 dark:text-white text-xs font-mono">
+                                      📌 [{c.topic_code}]
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic text-[11px]">General Topic</span>
+                                  )}
+                                  {c.topic_description && c.topic_description !== 'Nill' && c.topic_description !== c.topic_name && (
+                                    <div className="text-[11px] text-slate-500 dark:text-slate-400 italic line-clamp-2 mt-0.5">
+                                      {c.topic_description}
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Pedagogy & Assessment */}
+                                <td className="py-3.5 px-4 align-top">
+                                  <div className="space-y-1">
+                                    {c.learning_method ? (
+                                      <div className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-200/60 dark:border-indigo-800/60 truncate max-w-[160px]" title={`Learning: ${c.learning_method}`}>
+                                        📖 {c.learning_method}
+                                      </div>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 italic">Method: —</span>
+                                    )}
+                                    {c.assessment_method && (
+                                      <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-800/60 truncate max-w-[160px]" title={`Assessment: ${c.assessment_method}`}>
+                                        📝 {c.assessment_method}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Domain & Mastery */}
+                                <td className="py-3.5 px-4 align-top whitespace-nowrap">
+                                  <div className="space-y-1">
+                                    <span className="px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-bold text-[11px] border border-purple-200 dark:border-purple-800 inline-flex items-center gap-1">
+                                      <span>🧠</span>
+                                      {c.domain || 'Knowledge'} • {c.bloom_level || 'KL-2'}
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-slate-700 dark:text-slate-300 font-medium text-[11px]">{c.level || 'Knows How'}</span>
+                                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${c.is_core ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'}`}>
+                                        {c.is_core ? '⭐ CORE' : 'OPT'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Status */}
+                                <td className="py-3.5 px-4 align-top text-center whitespace-nowrap">
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase inline-block ${c.is_active !== false ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20'}`}>
+                                    {c.is_active !== false ? 'ACTIVE' : 'INACTIVE'}
+                                  </span>
+                                </td>
+
+                                {/* Actions */}
+                                <td className="py-3.5 px-4 pr-5 align-top text-right whitespace-nowrap">
+                                  <ActionButtons onEdit={() => handleEdit(c)} onDelete={() => handleDelete(c.id, c.college_slug)} />
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
 
                 {totalItems > 0 && (
@@ -2545,6 +2923,27 @@ export default function AdminMasterPage() {
                       return matchCol && matchCourse;
                     });
 
+                    const selectedCourseObj = colCourses.find((c: any) => c.course_cd === selectedCourseCd || c.code === selectedCourseCd || c.id === selectedCourseCd);
+                    const isMedical = Boolean(
+                      selectedCourseObj?.academic_system === 'professional' ||
+                      selectedCourseObj?.academicSystem === 'professional' ||
+                      selectedCourseObj?.name?.toUpperCase().includes('MBBS') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('BAMS') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('MD') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('MS') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('BDS') ||
+                      selectedCourseObj?.code === '100' ||
+                      selectedCourseObj?.course_cd === '100' ||
+                      targetColSlug === 'srms-ims' ||
+                      targetColSlug === 'rmribar'
+                    );
+
+                    const availablePhases = profPhases.filter((p: any) => {
+                      const matchCol = !currentCol || p.college_id === currentCol.id || p.college_slug === currentCol.slug || String(p.colg_cd) === String(targetColCd);
+                      const matchCourse = !selectedCourseCd || p.course_cd === selectedCourseCd || p.course_code === selectedCourseCd;
+                      return matchCol && matchCourse;
+                    });
+
                     return (
                       <>
                         {/* Step 1: Select College */}
@@ -2599,15 +2998,26 @@ export default function AdminMasterPage() {
                               value={selectedCourseCd}
                               onChange={(e) => {
                                 const newCrsCd = e.target.value;
+                                const newCrsObj = colCourses.find((c: any) => c.course_cd === newCrsCd || c.code === newCrsCd || c.id === newCrsCd);
+                                const isNewMed = Boolean(
+                                  newCrsObj?.academic_system === 'professional' ||
+                                  newCrsObj?.name?.toUpperCase().includes('MBBS') ||
+                                  newCrsObj?.name?.toUpperCase().includes('BAMS') ||
+                                  newCrsObj?.code === '100' ||
+                                  newCrsObj?.course_cd === '100'
+                                );
                                 const newDepts = departments.filter(d => (d.college_id === currentCol?.id || d.college_slug === currentCol?.slug || String(d.colg_cd) === String(targetColCd)) && (d.course_cd === newCrsCd || d.course_code === newCrsCd));
                                 const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
+                                const defaultSemOrPhase = isNewMed ? '1' : (formData.sem_cd || '1');
                                 setFormData({
                                   ...formData,
                                   course_cd: newCrsCd,
                                   branch_cd: firstBranchCd,
                                   department_id: firstBranchCd,
+                                  sem_cd: defaultSemOrPhase,
+                                  semester: isNewMed ? `Phase ${defaultSemOrPhase}` : `Semester ${defaultSemOrPhase}`,
                                 });
-                                fetchSrmsLiveSubjects(targetColCd, newCrsCd, firstBranchCd, selectedBatchCd, selectedSemCd);
+                                fetchSrmsLiveSubjects(targetColCd, newCrsCd, firstBranchCd, selectedBatchCd, defaultSemOrPhase);
                               }}
                               className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
@@ -2641,7 +3051,7 @@ export default function AdminMasterPage() {
                               className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
                               {colDepts.length === 0 ? (
-                                <option value="1">🏢 BCA General / Dept #1</option>
+                                <option value="1">🏢 General / Dept #1</option>
                               ) : (
                                 colDepts.map(d => (
                                   <option key={d.id} value={d.branch_cd || d.code || d.id}>
@@ -2653,7 +3063,7 @@ export default function AdminMasterPage() {
                           </div>
                         </div>
 
-                        {/* Step 4: Batch & Semester Selectors */}
+                        {/* Step 4: Batch & Dynamic (Professional Phase vs Semester) Selectors */}
                         <div className="grid grid-cols-2 gap-3 bg-emerald-50/50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
                           <div>
                             <label className="text-emerald-900 dark:text-emerald-300 font-extrabold text-xs block mb-1 flex items-center justify-between">
@@ -2688,26 +3098,52 @@ export default function AdminMasterPage() {
 
                           <div>
                             <label className="text-emerald-900 dark:text-emerald-300 font-extrabold text-xs block mb-1 flex items-center justify-between">
-                              <span>📖 Semester *</span>
-                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">semcd: #{selectedSemCd}</span>
+                              <span>{isMedical ? '🩺 Professional Phase *' : '📖 Semester *'}</span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                                {isMedical ? `phase: #${selectedSemCd}` : `semcd: #${selectedSemCd}`}
+                              </span>
                             </label>
                             <select
                               value={selectedSemCd}
                               onChange={(e) => {
                                 const newSemCd = e.target.value;
-                                setFormData({ ...formData, sem_cd: newSemCd });
+                                setFormData({
+                                  ...formData,
+                                  sem_cd: newSemCd,
+                                  semester: isMedical ? `Phase ${newSemCd}` : `Semester ${newSemCd}`,
+                                  professional_phase: isMedical ? `Phase ${newSemCd}` : undefined,
+                                });
                                 fetchSrmsLiveSubjects(targetColCd, selectedCourseCd, selectedBranchCd, selectedBatchCd, newSemCd);
                               }}
                               className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              <option value="1">Semester 1 (Code: #1)</option>
-                              <option value="2">Semester 2 (Code: #2)</option>
-                              <option value="3">Semester 3 (Code: #3)</option>
-                              <option value="4">Semester 4 (Code: #4)</option>
-                              <option value="5">Semester 5 (Code: #5)</option>
-                              <option value="6">Semester 6 (Code: #6)</option>
-                              <option value="7">Semester 7 (Code: #7)</option>
-                              <option value="8">Semester 8 (Code: #8)</option>
+                              {isMedical ? (
+                                availablePhases.length > 0 ? (
+                                  availablePhases.map((p: any) => (
+                                    <option key={p.id || p.phase_order} value={String(p.phase_order || p.code || p.id)}>
+                                      🩺 {p.phase_name || p.name || `Phase ${p.phase_order}`} (Code: #{p.phase_order || p.code || p.id})
+                                    </option>
+                                  ))
+                                ) : (
+                                  <>
+                                    <option value="1">🩺 1st Professional (Phase I) (Code: #1)</option>
+                                    <option value="2">🩺 2nd Professional (Phase II) (Code: #2)</option>
+                                    <option value="3">🩺 3rd Professional Part 1 (Phase III Part 1) (Code: #3)</option>
+                                    <option value="4">🩺 4th Professional Part 2 (Phase III Part 2) (Code: #4)</option>
+                                  </>
+                                )
+                              ) : (
+                                <>
+                                  <option value="1">📖 Semester 1 (Code: #1)</option>
+                                  <option value="2">📖 Semester 2 (Code: #2)</option>
+                                  <option value="3">📖 Semester 3 (Code: #3)</option>
+                                  <option value="4">📖 Semester 4 (Code: #4)</option>
+                                  <option value="5">📖 Semester 5 (Code: #5)</option>
+                                  <option value="6">📖 Semester 6 (Code: #6)</option>
+                                  <option value="7">📖 Semester 7 (Code: #7)</option>
+                                  <option value="8">📖 Semester 8 (Code: #8)</option>
+                                </>
+                              )}
                             </select>
                           </div>
                         </div>
@@ -2831,15 +3267,38 @@ export default function AdminMasterPage() {
                           <div>
                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Type / SubTyp</label>
                             <select
-                              value={formData.type || 'THEORY'}
-                              onChange={e => setFormData({ ...formData, type: e.target.value })}
+                              value={formData.type || (deliveryTypes[0]?.code || 'THEORY')}
+                              onChange={e => {
+                                const val = e.target.value;
+                                const matched = deliveryTypes.find(dt => dt.code === val || dt.name === val || dt.id === val);
+                                setFormData({
+                                  ...formData,
+                                  type: matched?.code || matched?.name || val,
+                                  sub_typ: matched?.code || matched?.name || val,
+                                  delivery_type_id: matched?.id,
+                                });
+                              }}
                               className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              <option value="THEORY">THEORY</option>
-                              <option value="PRACTICAL">PRACTICAL</option>
-                              <option value="VALUE ADDITION">VALUE ADDITION</option>
-                              <option value="TUTORIAL">TUTORIAL</option>
-                              <option value="COMBINED">COMBINED</option>
+                              {deliveryTypes.length > 0 ? (
+                                deliveryTypes.map(dt => (
+                                  <option key={dt.id || dt.code} value={dt.code || dt.name}>
+                                    {dt.name || dt.code} {dt.code && dt.name !== dt.code ? `(${dt.code})` : ''}
+                                  </option>
+                                ))
+                              ) : (
+                                <>
+                                  <option value="THEORY">THEORY</option>
+                                  <option value="PRACTICAL">PRACTICAL</option>
+                                  <option value="CLINICAL">CLINICAL</option>
+                                  <option value="SDL">SDL (Self Directed Learning)</option>
+                                  <option value="AETCOM">AETCOM</option>
+                                  <option value="SGD">SGD (Small Group Discussion)</option>
+                                  <option value="TUTORIAL">TUTORIAL</option>
+                                  <option value="VALUE ADDITION">VALUE ADDITION</option>
+                                  <option value="COMBINED">COMBINED</option>
+                                </>
+                              )}
                             </select>
                           </div>
                         </div>
@@ -3495,36 +3954,73 @@ export default function AdminMasterPage() {
                           </select>
                         </div>
 
-                        {/* Unit Code & Bloom's Level */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Unit Code *</label>
-                            <input
-                              type="text"
-                              required
-                              value={formData.code || ''}
-                              onChange={e => setFormData({ ...formData, code: e.target.value })}
-                              placeholder="e.g. UNIT-1 / U1 / UNIT-01"
-                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Bloom&apos;s Knowledge Level (KL) *</label>
-                            <select
-                              required
-                              value={formData.bloom_level || 'KL-2 (Understand)'}
-                              onChange={e => setFormData({ ...formData, bloom_level: e.target.value })}
-                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                            >
-                              <option value="KL-1 (Remember)">KL-1 (Remember) — Recall facts & basic concepts</option>
-                              <option value="KL-2 (Understand)">KL-2 (Understand) — Explain ideas or concepts</option>
-                              <option value="KL-3 (Apply)">KL-3 (Apply) — Use information in new situations</option>
-                              <option value="KL-4 (Analyze)">KL-4 (Analyze) — Draw connections among ideas</option>
-                              <option value="KL-5 (Evaluate)">KL-5 (Evaluate) — Justify a stand or decision</option>
-                              <option value="KL-6 (Create)">KL-6 (Create) — Produce new or original work</option>
-                            </select>
-                          </div>
-                        </div>
+                        {/* Unit Code & Dynamic (Competency Count vs Bloom's Level) */}
+                        {(() => {
+                          const selectedCourseObj = availableCourses.find((c: any) => c.course_cd === formData.course_cd || c.code === formData.course_cd || c.id === formData.course_cd);
+                          const isMedicalUnit = Boolean(
+                            selectedCourseObj?.academic_system === 'professional' ||
+                            selectedCourseObj?.name?.toUpperCase().includes('MBBS') ||
+                            selectedCourseObj?.name?.toUpperCase().includes('BAMS') ||
+                            selectedCourseObj?.code === '100' ||
+                            currentCollege?.slug === 'srms-ims' ||
+                            currentCollege?.slug === 'rmribar'
+                          );
+
+                          return (
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Unit Code *</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={formData.code || ''}
+                                  onChange={e => setFormData({ ...formData, code: e.target.value })}
+                                  placeholder="e.g. UNIT-1 / U1 / UNIT-01"
+                                  className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  {isMedicalUnit ? 'Enter No of Competencies Under This Unit *' : "Bloom's Knowledge Level (KL) *"}
+                                </label>
+                                {isMedicalUnit ? (
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="100"
+                                    required
+                                    value={formData.competency_count || formData.competencies_count || (formData.bloom_level && !isNaN(Number(formData.bloom_level)) ? formData.bloom_level : '')}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setFormData({
+                                        ...formData,
+                                        competency_count: val,
+                                        competencies_count: val,
+                                        bloom_level: val ? `Competencies: ${val}` : '',
+                                      });
+                                    }}
+                                    placeholder="e.g. 10"
+                                    className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                  />
+                                ) : (
+                                  <select
+                                    required
+                                    value={formData.bloom_level || 'KL-2 (Understand)'}
+                                    onChange={e => setFormData({ ...formData, bloom_level: e.target.value })}
+                                    className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                  >
+                                    <option value="KL-1 (Remember)">KL-1 (Remember) — Recall facts & basic concepts</option>
+                                    <option value="KL-2 (Understand)">KL-2 (Understand) — Explain ideas or concepts</option>
+                                    <option value="KL-3 (Apply)">KL-3 (Apply) — Use information in new situations</option>
+                                    <option value="KL-4 (Analyze)">KL-4 (Analyze) — Draw connections among ideas</option>
+                                    <option value="KL-5 (Evaluate)">KL-5 (Evaluate) — Justify a stand or decision</option>
+                                    <option value="KL-6 (Create)">KL-6 (Create) — Produce new or original work</option>
+                                  </select>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Unit Description / Syllabus Content *</label>
@@ -3629,7 +4125,8 @@ export default function AdminMasterPage() {
                                   (!firstSubCode || u.subject_code === firstSubCode)
                                 );
                                 const firstUnit = newUnits[0];
-                                const autoCode = `${firstSubCode ? firstSubCode + '-' : ''}${firstUnit?.code ? firstUnit.code.replace('UNIT-', 'U') + '-' : ''}T${String(topics.length + 1).padStart(2, '0')}`;
+                                const topicsForSub = topics.filter(t => t.subject_code === firstSubCode || t.subject_id === firstSubCode);
+                                const autoCode = firstSubCode ? `${firstSubCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
 
                                 setFormData({
                                   ...formData,
@@ -3680,7 +4177,8 @@ export default function AdminMasterPage() {
                                   (!firstSubCode || u.subject_code === firstSubCode)
                                 );
                                 const firstUnit = newUnits[0];
-                                const autoCode = `${firstSubCode ? firstSubCode + '-' : ''}${firstUnit?.code ? firstUnit.code.replace('UNIT-', 'U') + '-' : ''}T${String(topics.length + 1).padStart(2, '0')}`;
+                                const topicsForSub = topics.filter(t => t.subject_code === firstSubCode || t.subject_id === firstSubCode);
+                                const autoCode = firstSubCode ? `${firstSubCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
 
                                 setFormData({
                                   ...formData,
@@ -3725,7 +4223,8 @@ export default function AdminMasterPage() {
                                   (!firstSubCode || u.subject_code === firstSubCode)
                                 );
                                 const firstUnit = newUnits[0];
-                                const autoCode = `${firstSubCode ? firstSubCode + '-' : ''}${firstUnit?.code ? firstUnit.code.replace('UNIT-', 'U') + '-' : ''}T${String(topics.length + 1).padStart(2, '0')}`;
+                                const topicsForSub = topics.filter(t => t.subject_code === firstSubCode || t.subject_id === firstSubCode);
+                                const autoCode = firstSubCode ? `${firstSubCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
 
                                 setFormData({
                                   ...formData,
@@ -3772,7 +4271,8 @@ export default function AdminMasterPage() {
                                   (!subCode || u.subject_code === subCode)
                                 );
                                 const firstUnit = newUnits[0];
-                                const autoCode = `${subCode ? subCode + '-' : ''}${firstUnit?.code ? firstUnit.code.replace('UNIT-', 'U') + '-' : ''}T${String(topics.length + 1).padStart(2, '0')}`;
+                                const topicsForSub = topics.filter(t => t.subject_code === subCode || t.subject_id === subCode);
+                                const autoCode = subCode ? `${subCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
 
                                 setFormData({
                                   ...formData,
@@ -3795,75 +4295,116 @@ export default function AdminMasterPage() {
                           </div>
                         </div>
 
-                        {/* Row 2: Unit, Topic Code (Auto), Bloom's Level */}
-                        <div className="grid grid-cols-3 gap-2.5">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                              📑 5. Select Unit *
-                            </label>
-                            <select
-                              required
-                              value={units.find(u => u.id === formData.unit_id || u.code === formData.unit_id)?.code || formData.unit_id || ''}
-                              onChange={e => {
-                                const val = e.target.value;
-                                const found = availableUnits.find(u => u.code === val || u.id === val);
-                                const unitCode = found?.code || val;
-                                const subCode = formData.subject_code || formData.subject_id || '';
-                                const autoCode = `${subCode ? subCode + '-' : ''}${unitCode ? unitCode.replace('UNIT-', 'U') + '-' : ''}T${String(topics.length + 1).padStart(2, '0')}`;
+                        {/* Row 2: Unit, Topic Code (Auto), Dynamic (Competency Count vs Bloom's Level) */}
+                        {(() => {
+                          const selectedCourseObj = availableCourses.find((c: any) => c.course_cd === selectedCourseCd || c.code === selectedCourseCd || c.id === selectedCourseCd);
+                          const isMedicalTopic = Boolean(
+                            selectedCourseObj?.academic_system === 'professional' ||
+                            selectedCourseObj?.academicSystem === 'professional' ||
+                            selectedCourseObj?.name?.toUpperCase().includes('MBBS') ||
+                            selectedCourseObj?.name?.toUpperCase().includes('BAMS') ||
+                            selectedCourseObj?.name?.toUpperCase().includes('MD') ||
+                            selectedCourseObj?.name?.toUpperCase().includes('MS') ||
+                            selectedCourseObj?.name?.toUpperCase().includes('BDS') ||
+                            selectedCourseObj?.code === '100' ||
+                            selectedCourseObj?.course_cd === '100' ||
+                            currentCollege?.slug === 'srms-ims' ||
+                            currentCollege?.slug === 'rmribar'
+                          );
 
-                                setFormData({
-                                  ...formData,
-                                  unit_id: found?.code || found?.id || val,
-                                  unit_code: found?.code || '',
-                                  _resolved_unit_id: found?.id,
-                                  bloom_level: found?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
-                                  code: autoCode,
-                                });
-                              }}
-                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                            >
-                              <option value="">-- Choose Unit --</option>
-                              {availableUnits.map(u => (
-                                <option key={u.id} value={u.code || u.id}>
-                                  📑 {u.code} — {u.name && u.name !== u.code ? u.name : (u.description ? u.description.slice(0, 20) : u.code)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                          return (
+                            <div className="grid grid-cols-3 gap-2.5">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  📑 5. Select Unit *
+                                </label>
+                                <select
+                                  required
+                                  value={units.find(u => u.id === formData.unit_id || u.code === formData.unit_id)?.code || formData.unit_id || ''}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    const found = availableUnits.find(u => u.code === val || u.id === val);
+                                    const unitCode = found?.code || val;
+                                    const subCode = formData.subject_code || formData.subject_id || '';
+                                    const topicsForSub = topics.filter(t => t.subject_code === subCode || t.subject_id === subCode);
+                                    const autoCode = subCode ? `${subCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
 
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                              Topic Code (Auto) *
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={formData.code || ''}
-                              onChange={e => setFormData({ ...formData, code: e.target.value })}
-                              placeholder="e.g. 88534-U1-T01"
-                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
-                            />
-                          </div>
+                                    setFormData({
+                                      ...formData,
+                                      unit_id: found?.code || found?.id || val,
+                                      unit_code: found?.code || '',
+                                      _resolved_unit_id: found?.id,
+                                      bloom_level: found?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
+                                      code: autoCode,
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                >
+                                  <option value="">-- Choose Unit --</option>
+                                  {availableUnits.map(u => (
+                                    <option key={u.id} value={u.code || u.id}>
+                                      📑 {u.code} — {u.name && u.name !== u.code ? u.name : (u.description ? u.description.slice(0, 20) : u.code)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
 
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                              Bloom&apos;s Knowledge Level *
-                            </label>
-                            <select
-                              required
-                              value={formData.bloom_level || 'KL-2 (Understand)'}
-                              onChange={e => setFormData({ ...formData, bloom_level: e.target.value })}
-                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                            >
-                              <option value="KL-1 (Remember)">KL-1 (Remember)</option>
-                              <option value="KL-2 (Understand)">KL-2 (Understand)</option>
-                              <option value="KL-3 (Apply)">KL-3 (Apply)</option>
-                              <option value="KL-4 (Analyze)">KL-4 (Analyze)</option>
-                              <option value="KL-5 (Evaluate)">KL-5 (Evaluate)</option>
-                              <option value="KL-6 (Create)">KL-6 (Create)</option>
-                            </select>
-                          </div>
-                        </div>
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Topic Code (Auto) *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={formData.code || ''}
+                                  onChange={e => setFormData({ ...formData, code: e.target.value })}
+                                  placeholder="e.g. 88534-U1-T01"
+                                  className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 truncate" title={isMedicalTopic ? 'Enter No of Competency Under This Topic' : "Bloom's Knowledge Level"}>
+                                  {isMedicalTopic ? 'Enter No of Competency Under This Topic *' : "Bloom's Knowledge Level *"}
+                                </label>
+                                {isMedicalTopic ? (
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="100"
+                                    required
+                                    value={formData.competency_count || formData.competencies_count || (formData.bloom_level && !isNaN(Number(formData.bloom_level)) ? formData.bloom_level : '')}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setFormData({
+                                        ...formData,
+                                        competency_count: val,
+                                        competencies_count: val,
+                                        bloom_level: val ? `Competencies: ${val}` : '',
+                                      });
+                                    }}
+                                    placeholder="e.g. 5"
+                                    className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                  />
+                                ) : (
+                                  <select
+                                    required
+                                    value={formData.bloom_level || 'KL-2 (Understand)'}
+                                    onChange={e => setFormData({ ...formData, bloom_level: e.target.value })}
+                                    className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                  >
+                                    <option value="KL-1 (Remember)">KL-1 (Remember)</option>
+                                    <option value="KL-2 (Understand)">KL-2 (Understand)</option>
+                                    <option value="KL-3 (Apply)">KL-3 (Apply)</option>
+                                    <option value="KL-4 (Analyze)">KL-4 (Analyze)</option>
+                                    <option value="KL-5 (Evaluate)">KL-5 (Evaluate)</option>
+                                    <option value="KL-6 (Create)">KL-6 (Create)</option>
+                                  </select>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Row 3: Topic Title (col-span-2), Allocated Hours (col-span-1) */}
                         <div className="grid grid-cols-3 gap-2.5">
@@ -3893,6 +4434,46 @@ export default function AdminMasterPage() {
                               onChange={e => setFormData({ ...formData, hours: Number(e.target.value) })}
                               className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:border-[#5B4BFF]"
                             />
+                          </div>
+                        </div>
+
+                        
+                        {/* Row: Learning Method & Assessment Method */}
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Learning Method
+                            </label>
+                            <select
+                              value={formData.learning_method || ''}
+                              onChange={e => setFormData({ ...formData, learning_method: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">-- Select Learning Method --</option>
+                              {(isMedicalTopic ? MEDICAL_LEARNING_METHODS : ENGINEERING_LEARNING_METHODS).map(opt => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Assessment Method
+                            </label>
+                            <select
+                              value={formData.assessment_method || ''}
+                              onChange={e => setFormData({ ...formData, assessment_method: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">-- Select Assessment Method --</option>
+                              {(isMedicalTopic ? MEDICAL_ASSESSMENT_METHODS : ENGINEERING_ASSESSMENT_METHODS).map(opt => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         </div>
 
@@ -4457,6 +5038,73 @@ export default function AdminMasterPage() {
                               </label>
                             </div>
                           </div>
+
+                          
+                          {/* Row: Learning Method & Assessment Method */}
+                          {(() => {
+                            const selectedCourseObj = availableCourses.find((c: any) => c.course_cd === selectedCourseCd || c.code === selectedCourseCd || c.id === selectedCourseCd);
+                            const isMedicalComp = Boolean(
+                              selectedCourseObj?.academic_system === 'professional' ||
+                              selectedCourseObj?.academicSystem === 'professional' ||
+                              selectedCourseObj?.name?.toUpperCase().includes('MBBS') ||
+                              selectedCourseObj?.name?.toUpperCase().includes('BAMS') ||
+                              selectedCourseObj?.name?.toUpperCase().includes('MD') ||
+                              selectedCourseObj?.name?.toUpperCase().includes('MS') ||
+                              selectedCourseObj?.name?.toUpperCase().includes('BDS') ||
+                              selectedCourseObj?.code === '100' ||
+                              selectedCourseObj?.course_cd === '100' ||
+                              currentCollege?.slug === 'srms-ims' ||
+                              currentCollege?.slug === 'rmribar'
+                            );
+                            const learningOptions = isMedicalComp ? MEDICAL_LEARNING_METHODS : ENGINEERING_LEARNING_METHODS;
+                            const assessmentOptions = isMedicalComp ? MEDICAL_ASSESSMENT_METHODS : ENGINEERING_ASSESSMENT_METHODS;
+
+                            return (
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                    Learning Method
+                                  </label>
+                                  <select
+                                    value={subTopicLearningMethod || formData.learning_method || ''}
+                                    onChange={e => {
+                                      setSubTopicLearningMethod(e.target.value);
+                                      setFormData({ ...formData, learning_method: e.target.value });
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                  >
+                                    <option value="">-- Select Learning Method --</option>
+                                    {learningOptions.map(opt => (
+                                      <option key={opt} value={opt}>
+                                        {opt}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                    Assessment Method
+                                  </label>
+                                  <select
+                                    value={subTopicAssessmentMethod || formData.assessment_method || ''}
+                                    onChange={e => {
+                                      setSubTopicAssessmentMethod(e.target.value);
+                                      setFormData({ ...formData, assessment_method: e.target.value });
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                  >
+                                    <option value="">-- Select Assessment Method --</option>
+                                    {assessmentOptions.map(opt => (
+                                      <option key={opt} value={opt}>
+                                        {opt}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {/* Row 4: Title, Statement, Add Button */}
                           <div className="grid grid-cols-12 gap-2.5 items-end">

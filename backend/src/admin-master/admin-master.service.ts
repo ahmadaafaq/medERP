@@ -91,6 +91,17 @@ export class AdminMasterService {
     try {
       await this.ds.query(`CREATE SCHEMA IF NOT EXISTS "${schema}";`);
 
+      // 0. departments schema cleanup
+      await this.ds.query(`
+        DROP INDEX IF EXISTS "${schema}".departments_code_idx;
+        ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_key;
+        ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_idx;
+        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+      `).catch(() => {});
+
       // 1. professional_linkers
       await this.ds.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".professional_linkers (
@@ -506,9 +517,209 @@ export class AdminMasterService {
     return allDepartments;
   }
 
+  async syncDepartmentsFromBranches(tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const colleges = await this.listColleges();
+    const targetSlugs = (slug === 'all' || !slug) ? colleges.map(c => c.slug).filter(Boolean) : [slug];
+
+    let totalSynced = 0;
+    const syncedDepartments: any[] = [];
+
+    for (const s of targetSlugs) {
+      const schema = `tenant_${s}`;
+      await this.ensureAdminMasterTables(s);
+
+      const targetCol = colleges.find(c => c.slug === s || c.code === s || c.id === s);
+      const colId = targetCol?.id || s;
+      const colName = targetCol?.name || '';
+      const colCode = targetCol?.code || s;
+      const isIms = (s === 'srms-ims' || s === 'rmribar' || colCode === '11' || colName.toLowerCase().includes('medical') || colName.toLowerCase().includes('hospital'));
+
+      // 1. Fetch courses in this tenant to know which course branches belong to
+      const courses = await this.tenantSchemaService.queryInTenant(
+        s,
+        `SELECT code, name, course_cd, degree_level, academic_system FROM courses ORDER BY code ASC`,
+      ).catch(() => []);
+
+      const branchItemsToSync: Array<{
+        code: string;
+        name: string;
+        type: string;
+        course_cd: string;
+        course_name: string;
+      }> = [];
+
+      // 2. If SRMS tenant, query live SRMS GetBranch API
+      if (s.startsWith('srms')) {
+        for (const crs of courses) {
+          const cd = String(colCode || '1');
+          const courseCd = String(crs.course_cd || crs.code || '');
+          try {
+            const res = await srmsFetch('https://myportal.srms.ac.in/SRMSERP/erpadmin/GetBranch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ colgcd: cd, coursecd: courseCd }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const list = (data && data.data && Array.isArray(data.data)) ? data.data : (Array.isArray(data) ? data : []);
+              for (const ext of list) {
+                const rawName = String(ext.branch_name || ext.name || '').trim();
+                const bCd = String(ext.branch_cd || ext.code || '1').trim();
+                let deptType = 'General';
+                if (isIms) {
+                  deptType = rawName.toLowerCase().includes('anat') || rawName.toLowerCase().includes('physio') ? 'Pre-Clinical'
+                    : rawName.toLowerCase().includes('path') || rawName.toLowerCase().includes('pharm') || rawName.toLowerCase().includes('micro') ? 'Para-Clinical'
+                    : 'Clinical';
+                } else {
+                  deptType = 'Engineering';
+                }
+                branchItemsToSync.push({
+                  code: bCd,
+                  name: rawName || `${crs.name} Branch ${bCd}`,
+                  type: deptType,
+                  course_cd: courseCd,
+                  course_name: crs.name,
+                });
+              }
+            }
+          } catch (err) {}
+        }
+      }
+
+      // 3. If medical college tenant (e.g. rmribar or srms-ims) and standard departments needed for MBBS/BAMS:
+      if (isIms || courses.some((c: any) => c.name?.toUpperCase().includes('MBBS') || c.code === '100')) {
+        const mbbsCourse = courses.find((c: any) => c.name?.toUpperCase().includes('MBBS') || c.code === '100') || courses[0];
+        const cCd = String(mbbsCourse?.course_cd || mbbsCourse?.code || '100');
+        const cName = mbbsCourse?.name || 'MBBS';
+
+        const standardMedicalDepts = [
+          { code: '50', name: 'ANATOMY', type: 'Pre-Clinical' },
+          { code: '60', name: 'PHYSIOLOGY', type: 'Pre-Clinical' },
+          { code: '70', name: 'BIOCHEMISTRY', type: 'Pre-Clinical' },
+          { code: '80', name: 'PATHOLOGY', type: 'Para-Clinical' },
+          { code: '90', name: 'MICROBIOLOGY', type: 'Para-Clinical' },
+          { code: '100', name: 'PHARMACOLOGY', type: 'Para-Clinical' },
+          { code: '110', name: 'FORENSIC MEDICINE & TOXICOLOGY', type: 'Para-Clinical' },
+          { code: '120', name: 'COMMUNITY MEDICINE', type: 'Para-Clinical' },
+          { code: '130', name: 'GENERAL MEDICINE', type: 'Clinical' },
+          { code: '140', name: 'PEDIATRICS', type: 'Clinical' },
+          { code: '150', name: 'DERMATOLOGY, VENEREOLOGY & LEPROSY', type: 'Clinical' },
+          { code: '160', name: 'PSYCHIATRY', type: 'Clinical' },
+          { code: '170', name: 'RESPIRATORY MEDICINE', type: 'Clinical' },
+          { code: '180', name: 'GENERAL SURGERY', type: 'Clinical' },
+          { code: '190', name: 'ORTHOPEDICS', type: 'Clinical' },
+          { code: '200', name: 'OPHTHALMOLOGY', type: 'Clinical' },
+          { code: '210', name: 'OTO-RHINO-LARYNGOLOGY (ENT)', type: 'Clinical' },
+          { code: '220', name: 'OBSTETRICS & GYNAECOLOGY', type: 'Clinical' },
+          { code: '230', name: 'ANESTHESIOLOGY', type: 'Clinical' },
+          { code: '240', name: 'RADIO-DIAGNOSIS', type: 'Clinical' },
+          { code: '250', name: 'DENTISTRY', type: 'Clinical' },
+          { code: '260', name: 'EMERGENCY MEDICINE', type: 'Clinical' },
+        ];
+
+        for (const md of standardMedicalDepts) {
+          if (!branchItemsToSync.some(b => b.code === md.code && b.course_cd === cCd)) {
+            branchItemsToSync.push({
+              code: md.code,
+              name: md.name,
+              type: md.type,
+              course_cd: cCd,
+              course_name: cName,
+            });
+          }
+        }
+      }
+
+      // 4. Upsert all branch items into tenant departments table
+      for (const item of branchItemsToSync) {
+        const branchCode = item.code;
+        const branchName = item.name;
+        const courseCd = item.course_cd;
+        const courseName = item.course_name;
+        const deptType = item.type || 'General';
+
+        const existing = await this.tenantSchemaService.queryInTenant(
+          s,
+          `SELECT id FROM departments WHERE (branch_cd = $1 OR code = $1) AND (course_cd = $2 OR $2 IS NULL) LIMIT 1`,
+          [branchCode, courseCd],
+        ).catch(() => []);
+
+        if (existing && existing.length > 0) {
+          const updated = await this.tenantSchemaService.queryInTenant(
+            s,
+            `UPDATE departments
+             SET name = $1,
+                 branch_cd = $2,
+                 code = $2,
+                 type = $3,
+                 course_cd = COALESCE($4, course_cd),
+                 course_name = COALESCE($5, course_name),
+                 colg_cd = COALESCE($6, colg_cd),
+                 is_active = true
+             WHERE id = $7
+             RETURNING *`,
+            [branchName, branchCode, deptType, courseCd, courseName, colCode, existing[0].id],
+          );
+          if (updated && updated[0]) {
+            syncedDepartments.push({ ...updated[0], college_id: colId, college_name: colName, college_code: colCode, college_slug: s });
+            totalSynced++;
+          }
+        } else {
+          const inserted = await this.tenantSchemaService.queryInTenant(
+            s,
+            `INSERT INTO departments (code, branch_cd, name, type, course_cd, course_name, colg_cd, is_active)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+             RETURNING *`,
+            [branchCode, branchCode, branchName, deptType, courseCd, courseName, colCode],
+          );
+          if (inserted && inserted[0]) {
+            syncedDepartments.push({ ...inserted[0], college_id: colId, college_name: colName, college_code: colCode, college_slug: s });
+            totalSynced++;
+          }
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: `Successfully synced ${totalSynced} departments from Branch data into PostgreSQL`,
+      count: totalSynced,
+      data: syncedDepartments,
+    };
+  }
+
   async createDepartment(dto: CreateDepartmentMasterDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(dto.college_id || tenantSlug);
     const branchCdVal = String(dto.branch_cd || dto.code || '').trim() || '1';
+
+    await this.ensureAdminMasterTables(slug);
+
+    // If department with same branch_cd and course_cd exists in this tenant, update it
+    const existing = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT id FROM departments WHERE (branch_cd = $1 OR code = $1) AND (course_cd = $2 OR $2 IS NULL) LIMIT 1`,
+      [branchCdVal, dto.course_cd || null],
+    ).catch(() => []);
+
+    if (existing && existing.length > 0) {
+      const updated = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE departments
+         SET name = $1,
+             type = $2,
+             course_cd = COALESCE($3, course_cd),
+             course_name = COALESCE($4, course_name),
+             colg_cd = COALESCE($5, colg_cd),
+             hod_user_id = COALESCE($6, hod_user_id),
+             is_active = true
+         WHERE id = $7
+         RETURNING *`,
+        [dto.name, dto.type || 'General', dto.course_cd || null, dto.course_name || null, dto.colg_cd || null, dto.hod_user_id || null, existing[0].id],
+      );
+      return updated[0];
+    }
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO departments (code, branch_cd, name, type, course_cd, course_name, colg_cd, hod_user_id, is_active)
@@ -994,10 +1205,13 @@ export class AdminMasterService {
       }
     }
 
+    const learningMethod = dto.learning_method || dto.learningMethod || null;
+    const assessmentMethod = dto.assessment_method || dto.assessmentMethod || null;
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO topics (subject_id, subject_code, unit_id, unit_code, course_cd, branch_cd, batch_year, bloom_level, code, name, description, hours, is_active, linker_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13)
+      `INSERT INTO topics (subject_id, subject_code, unit_id, unit_code, course_cd, branch_cd, batch_year, bloom_level, code, name, description, hours, is_active, linker_id, learning_method, assessment_method)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13, $14, $15)
        RETURNING *`,
       [
         subjectId || null,
@@ -1013,6 +1227,8 @@ export class AdminMasterService {
         dto.description?.trim() || null,
         dto.hours || 1,
         dto.linker_id || dto.linkerId || null,
+        learningMethod,
+        assessmentMethod,
       ],
     );
 
@@ -1086,6 +1302,9 @@ export class AdminMasterService {
       }
     }
 
+    const learningMethod = dto.learning_method !== undefined ? dto.learning_method : dto.learningMethod;
+    const assessmentMethod = dto.assessment_method !== undefined ? dto.assessment_method : dto.assessmentMethod;
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE topics
@@ -1103,8 +1322,10 @@ export class AdminMasterService {
            hours = COALESCE($12, hours),
            is_active = COALESCE($13, is_active),
            linker_id = COALESCE($14, linker_id),
+           learning_method = COALESCE($15, learning_method),
+           assessment_method = COALESCE($16, assessment_method),
            updated_at = NOW()
-       WHERE id = $15
+       WHERE id = $17
        RETURNING *`,
       [
         subjectId || null,
@@ -1121,6 +1342,8 @@ export class AdminMasterService {
         dto.hours || null,
         dto.is_active,
         dto.linker_id || null,
+        learningMethod !== undefined ? learningMethod : null,
+        assessmentMethod !== undefined ? assessmentMethod : null,
         id,
       ],
     );
@@ -1364,10 +1587,13 @@ export class AdminMasterService {
       return insertedList[0] || { success: true };
     }
 
+    const learningMethod = dto.learning_method || dto.learningMethod || null;
+    const assessmentMethod = dto.assessment_method || dto.assessmentMethod || null;
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO competencies (subject_id, subject_code, unit_id, unit_code, topic_id, topic_code, course_cd, branch_cd, batch_year, code, name, description, domain, level, bloom_level, is_core, is_active, linker_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, true, $17)
+      `INSERT INTO competencies (subject_id, subject_code, unit_id, unit_code, topic_id, topic_code, course_cd, branch_cd, batch_year, code, name, description, domain, level, bloom_level, is_core, is_active, linker_id, learning_method, assessment_method)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, true, $17, $18, $19)
        RETURNING *`,
       [
         subjectId || null,
@@ -1387,6 +1613,8 @@ export class AdminMasterService {
         bloomLevel || 'KL-2 (Understand)',
         dto.is_core ?? dto.isCore ?? true,
         dto.linker_id || dto.linkerId || null,
+        learningMethod,
+        assessmentMethod,
       ],
     );
 
@@ -1465,6 +1693,9 @@ export class AdminMasterService {
       }
     }
 
+    const learningMethod = dto.learning_method !== undefined ? dto.learning_method : dto.learningMethod;
+    const assessmentMethod = dto.assessment_method !== undefined ? dto.assessment_method : dto.assessmentMethod;
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE competencies
@@ -1486,8 +1717,10 @@ export class AdminMasterService {
            is_core = COALESCE($16, is_core),
            is_active = COALESCE($17, is_active),
            linker_id = COALESCE($18, linker_id),
+           learning_method = COALESCE($19, learning_method),
+           assessment_method = COALESCE($20, assessment_method),
            updated_at = NOW()
-       WHERE id = $19
+       WHERE id = $21
        RETURNING *`,
       [
         subjectId || null,
@@ -1501,7 +1734,7 @@ export class AdminMasterService {
         dto.batch_year || null,
         dto.code ? dto.code.trim().toUpperCase() : null,
         dto.name ? dto.name.trim() : null,
-        dto.description ? dto.description.trim() : null,
+        dto.description !== undefined ? dto.description : null,
         dto.domain || null,
         dto.level || null,
         bloomLevel || null,

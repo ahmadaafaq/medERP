@@ -107,7 +107,53 @@ export class AuthService {
       }
     }
 
-    const resolvedSlug = tenantSlug ? this.tenantSchemaService.resolveTenantSlug(tenantSlug) : null;
+    let resolvedSlug = tenantSlug ? this.tenantSchemaService.resolveTenantSlug(tenantSlug) : null;
+
+    // ── Smart Tenant Auto-Detection by Email Domain & User Scan ──
+    if (searchIdentifier.includes('@')) {
+      const emailDomain = searchIdentifier.split('@')[1].toLowerCase().trim();
+      if (emailDomain && !emailDomain.includes('srms.ac.in') && !emailDomain.includes('srms.edu')) {
+        try {
+          const matchingFirms = await this.ds.query(
+            `SELECT slug FROM public.firms 
+             WHERE LOWER(domain) ILIKE $1 
+                OR LOWER(domain) ILIKE $2 
+                OR LOWER(slug) = $3
+                OR (LOWER(title) ILIKE '%rajshree%' AND $4 ILIKE '%rmri%')
+             LIMIT 1`,
+            [`%${emailDomain}%`, `%${emailDomain.split('.')[0]}%`, emailDomain.split('.')[0], searchIdentifier],
+          );
+          if (matchingFirms.length > 0 && matchingFirms[0].slug) {
+            resolvedSlug = matchingFirms[0].slug;
+            this.logger.log(`Auto-resolved tenant '${resolvedSlug}' from email domain '${emailDomain}' for ${searchIdentifier}`);
+          }
+        } catch {}
+      }
+    }
+
+    // Scan schemas to find authentic tenant for specific email if not matched
+    if (!resolvedSlug || resolvedSlug === 'srms-cet-bareilly') {
+      try {
+        const schemaRows = await this.ds.query(
+          `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%' ORDER BY schema_name ASC`,
+        );
+        for (const sr of schemaRows) {
+          const sName = sr.schema_name;
+          const userMatch = await this.ds.query(
+            `SELECT id FROM "${sName}".users WHERE LOWER(email) = $1 LIMIT 1`,
+            [searchIdentifier],
+          ).catch(() => []);
+          if (userMatch.length > 0) {
+            const detectedSlug = sName.replace(/^tenant_/, '');
+            if (detectedSlug !== resolvedSlug) {
+              this.logger.log(`Smart-routed user ${searchIdentifier} to authentic tenant '${detectedSlug}'`);
+              resolvedSlug = detectedSlug;
+            }
+            break;
+          }
+        }
+      } catch {}
+    }
 
     if (resolvedSlug) {
       // ── Strict Firm License Check ──

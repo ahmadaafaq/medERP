@@ -50,13 +50,14 @@ export class FirmsService {
     const levelType = dto.level_type || FirmLevelType.STANDARD;
     const themeColor = dto.theme_color || '#5B4BFF';
     const firmMode = dto.firm_mode || FirmMode.MED;
+    const ttModule = dto.timetable_module_type || (firmMode === FirmMode.MED ? 'MEDICAL' : 'ENGINEERING');
 
     const rows = await this.dataSource.query(
       `INSERT INTO public.firms (
         title, slug, tenant_name, domain, logo_url, cover_url, banner_url,
-        level_type, theme_color, firm_mode, status, trial_days, trial_started_at, trial_ends_at,
+        level_type, theme_color, firm_mode, timetable_module_type, status, trial_days, trial_started_at, trial_ends_at,
         created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
       RETURNING *`,
       [
         dto.title.trim(),
@@ -69,6 +70,7 @@ export class FirmsService {
         levelType,
         themeColor,
         firmMode,
+        ttModule,
         FirmStatus.TRIAL,
         trialDays,
         now,
@@ -91,10 +93,10 @@ export class FirmsService {
         ).catch(() => {});
       }
       await this.dataSource.query(
-        `INSERT INTO public.tenants (id, name, slug, code, is_active, schema_provisioned, created_at, updated_at)
-         VALUES ($1, $2, $3, $3, true, true, NOW(), NOW())
-         ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, code = EXCLUDED.code, schema_provisioned = true, updated_at = NOW()`,
-        [savedFirm.id, savedFirm.title, cleanSlug],
+        `INSERT INTO public.tenants (id, name, slug, code, is_active, schema_provisioned, timetable_module_type, created_at, updated_at)
+         VALUES ($1, $2, $3, $3, true, true, $4, NOW(), NOW())
+         ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, code = EXCLUDED.code, timetable_module_type = EXCLUDED.timetable_module_type, schema_provisioned = true, updated_at = NOW()`,
+        [savedFirm.id, savedFirm.title, cleanSlug, ttModule],
       );
     } catch (e: any) {
       this.logger.warn(`Could not auto-provision schema for ${cleanSlug}: ${e.message}`);
@@ -206,18 +208,19 @@ export class FirmsService {
         level_type = COALESCE($8, level_type),
         theme_color = COALESCE($9, theme_color),
         firm_mode = COALESCE($10, firm_mode),
-        status = COALESCE($11, status),
-        trial_days = COALESCE($12, trial_days),
+        timetable_module_type = COALESCE($11, timetable_module_type),
+        status = COALESCE($12, status),
+        trial_days = COALESCE($13, trial_days),
         trial_ends_at = CASE 
-          WHEN $12::int IS NOT NULL THEN (NOW() + ($12::int || ' days')::interval)
+          WHEN $13::int IS NOT NULL THEN (NOW() + ($13::int || ' days')::interval)
           ELSE trial_ends_at 
         END,
         theme_config = CASE
-          WHEN $13::jsonb IS NOT NULL THEN $13::jsonb
+          WHEN $14::jsonb IS NOT NULL THEN $14::jsonb
           ELSE theme_config
         END,
         updated_at = NOW()
-      WHERE id = $14
+      WHERE id = $15
       RETURNING *`,
       [
         dto.title !== undefined ? dto.title.trim() : null,
@@ -230,12 +233,20 @@ export class FirmsService {
         dto.level_type !== undefined ? dto.level_type : null,
         dto.theme_color !== undefined ? dto.theme_color : null,
         dto.firm_mode !== undefined ? dto.firm_mode : null,
+        dto.timetable_module_type !== undefined ? dto.timetable_module_type : null,
         dto.status !== undefined ? dto.status : null,
         dto.trial_days !== undefined ? dto.trial_days : null,
         dto.theme_config !== undefined ? JSON.stringify(dto.theme_config) : null,
         firm.id,
       ],
     );
+
+    if (dto.timetable_module_type) {
+      await this.dataSource.query(
+        `UPDATE public.tenants SET timetable_module_type = $1, updated_at = NOW() WHERE slug = $2`,
+        [dto.timetable_module_type, cleanSlug],
+      ).catch(() => {});
+    }
 
     if (dto.status) {
       if (dto.status === 'SUSPENDED') {
