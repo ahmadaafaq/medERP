@@ -1,7 +1,7 @@
 'use client';
 
-import AdminLogbookLeaderboardPage from '../../../admin/reports/logbook/page';
+import LogbookLeaderboardView from '../../../../../components/logbook/LogbookLeaderboardView';
 
 export default function FacultyLogbookReportPage() {
-  return <AdminLogbookLeaderboardPage />;
+  return <LogbookLeaderboardView role="faculty" />;
 }

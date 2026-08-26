@@ -562,8 +562,8 @@ export class LogbookService {
                st.photo_url,
                st.course_cd,
                st.batch_cd,
-               cr.name AS course_name,
-               COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, st.batch_cd) AS batch_name,
+               COALESCE(cr.name, 'Undergraduate Program') AS course_name,
+               COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, st.batch_cd, 'Batch 2025') AS batch_name,
                t.category_id,
                c.name AS category_name,
                e.marks_obtained,
@@ -573,9 +573,9 @@ export class LogbookService {
         JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
         LEFT JOIN "${schema}".logbook_categories c ON c.id = t.category_id
         JOIN "${schema}".logbook_evaluations e ON e.submission_id = s.id
-        JOIN "${schema}".students st ON st.id = s.student_id
-        LEFT JOIN "${schema}".courses cr ON cr.course_cd = st.course_cd
-        LEFT JOIN "${schema}".batches b ON (b.id = st.batch_id OR (b.batch_cd = st.batch_cd AND b.course_cd = st.course_cd))
+        JOIN "${schema}".students st ON st.id::text = s.student_id::text
+        LEFT JOIN "${schema}".courses cr ON (cr.course_cd = st.course_cd OR cr.id::text = st.course_id::text OR cr.id::text = t.course_id::text)
+        LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR b.id::text = t.batch_id::text OR (b.batch_cd = st.batch_cd AND b.course_cd = st.course_cd))
         ${whereClause}
       )
       SELECT student_id, student_name, rollno, registration_no, photo_url, course_name, batch_name,
