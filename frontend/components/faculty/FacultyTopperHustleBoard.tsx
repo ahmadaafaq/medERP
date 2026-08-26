@@ -15,9 +15,13 @@ interface TopperStudent {
   photoUrl: string;
   attendancePct: number;
   theoryScore: number;
+  examName?: string;
   projectGrade: string;
   projectScorePct: number;
+  projectTitle?: string;
   isIncubationSelected: boolean;
+  incubationStatus?: string;
+  fundingAmount?: number;
   isChatActive: boolean;
   compositeScore: number;
   tier: string;

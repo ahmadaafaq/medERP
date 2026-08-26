@@ -69,8 +69,8 @@ export default function OwnerLoginPage() {
       document.cookie = `auth_token=${token}; path=/; max-age=604800; SameSite=Lax`;
       document.cookie = `auth_role=owner; path=/; max-age=604800; SameSite=Lax`;
 
-      // 3. Navigate to Owner Dashboard
-      router.push('/dashboard/owner');
+      // 3. Navigate to Owner Dashboard with full browser state reload
+      window.location.href = '/dashboard/owner';
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed. Please verify network connectivity.');
     } finally {
