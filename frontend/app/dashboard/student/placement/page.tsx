@@ -48,6 +48,29 @@ export default function StudentPlacementPage() {
     ).replace(/^tenant_/, '');
   };
 
+  const getAuthHeaders = () => {
+    if (typeof window === 'undefined') return {};
+    const tenant = getTenantSlug();
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token') || '';
+    let regNo = '';
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        regNo = u?.registration_no || u?.profile?.registration_no || u?.rollno || u?.username || '';
+      }
+    } catch {}
+
+    const headers: Record<string, string> = {
+      'x-tenant-slug': tenant,
+      'x-tenant': tenant,
+      'x-user-role': 'STUDENT',
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (regNo) headers['x-user-reg-no'] = regNo;
+    return headers;
+  };
+
   useEffect(() => {
     loadData();
   }, []);
@@ -56,12 +79,13 @@ export default function StudentPlacementPage() {
     setLoading(true);
     try {
       const tenant = getTenantSlug();
+      const headers = getAuthHeaders();
       const [drivesRes, offersRes] = await Promise.all([
-        axios.get(`/api/placement-drive/list?tenant=${tenant}`).catch(async () => {
-          return axios.get(`http://localhost:3001/api/v1/placement-drive/list?tenant=${tenant}`);
+        axios.get(`/api/placement-drive/list?tenant=${tenant}`, { headers }).catch(async () => {
+          return axios.get(`http://localhost:3001/api/v1/placement-drive/list?tenant=${tenant}`, { headers });
         }),
-        axios.get(`/api/placement-drive/student/offers?tenant=${tenant}`).catch(async () => {
-          return axios.get(`http://localhost:3001/api/v1/placement-drive/student/offers?tenant=${tenant}`);
+        axios.get(`/api/placement-drive/student/offers?tenant=${tenant}`, { headers }).catch(async () => {
+          return axios.get(`http://localhost:3001/api/v1/placement-drive/student/offers?tenant=${tenant}`, { headers });
         }),
       ]);
 
@@ -88,15 +112,30 @@ export default function StudentPlacementPage() {
 
     try {
       const tenant = getTenantSlug();
+      const headers = getAuthHeaders();
       const payload = {
         drive_id: applyingCompany.drive_id,
         resume_link: resumeLink,
         cover_note: coverNote,
       };
 
-      await axios.post(`/api/placement-drive/apply?tenant=${tenant}`, payload).catch(async () => {
-        return axios.post(`http://localhost:3001/api/v1/placement-drive/apply?tenant=${tenant}`, payload);
+      await axios.post(`/api/placement-drive/apply?tenant=${tenant}`, payload, { headers }).catch(async () => {
+        return axios.post(`http://localhost:3001/api/v1/placement-drive/apply?tenant=${tenant}`, payload, { headers });
       });
+
+      // Optimistically mark as applied
+      setCompanies((prev) =>
+        prev.map((c) =>
+          c.drive_id === applyingCompany.drive_id
+            ? {
+                ...c,
+                has_applied: true,
+                application_status: 'Applied',
+                my_application: { status: 'Applied', applied_at: new Date().toISOString() },
+              }
+            : c
+        )
+      );
 
       setApplySuccess(true);
       setTimeout(() => {

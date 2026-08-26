@@ -78,12 +78,13 @@ export class InternshipsController {
     @TenantSlug() tenantSlug: string,
     @Query('category') category: string,
     @Query('fee_type') feeType: string,
+    @Query('campus_type') campusType: string,
     @Query('tenant') queryTenant: string,
     @Request() req: any,
   ) {
     const slug = queryTenant || tenantSlug;
     const user = this.extractUser(req);
-    return this.internshipsService.listPrograms(slug, user, category, feeType);
+    return this.internshipsService.listPrograms(slug, user, category, feeType, campusType);
   }
 
   @Public()
@@ -147,6 +148,15 @@ export class InternshipsController {
     @Body() dto: UpdateApplicantStatusDto,
   ) {
     return this.internshipsService.updateApplicationStatus(tenantSlug, applicationId, dto);
+  }
+
+  @Public()
+  @Post('applications/upload-certificate')
+  async uploadCertificate(
+    @TenantSlug() tenantSlug: string,
+    @Body() dto: any,
+  ) {
+    return this.internshipsService.uploadExternalCertificate(tenantSlug, dto);
   }
 
   @Public()

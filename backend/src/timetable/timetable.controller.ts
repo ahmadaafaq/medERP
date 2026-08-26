@@ -15,7 +15,7 @@ import { TenantSlug } from '../common/decorators/tenant.decorator';
 @UseGuards(RolesGuard)
 @Controller('timetable')
 export class TimetableController {
-  constructor(private readonly timetableService: TimetableService) {}
+  constructor(private readonly timetableService: TimetableService) { }
 
   @Public()
   @Get()
@@ -26,6 +26,12 @@ export class TimetableController {
   @ApiQuery({ name: 'facultyId', required: false })
   @ApiQuery({ name: 'subjectId', required: false })
   @ApiQuery({ name: 'courseId', required: false })
+  @ApiQuery({ name: 'courseCd', required: false })
+  @ApiQuery({ name: 'branchCd', required: false })
+  @ApiQuery({ name: 'batchCd', required: false })
+  @ApiQuery({ name: 'colgCd', required: false })
+  @ApiQuery({ name: 'semester', required: false })
+  @ApiQuery({ name: 'section', required: false })
   @ApiQuery({ name: 'sessionId', required: false })
   async listSlots(
     @TenantSlug() tenantSlug: string,
@@ -35,10 +41,30 @@ export class TimetableController {
     @Query('facultyId') facultyId?: string,
     @Query('subjectId') subjectId?: string,
     @Query('courseId') courseId?: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+    @Query('batchCd') batchCd?: string,
+    @Query('colgCd') colgCd?: string,
+    @Query('semester') semester?: string,
+    @Query('section') section?: string,
     @Query('sessionId') sessionId?: string,
   ) {
     const day = dayOfWeek !== undefined && dayOfWeek !== '' ? parseInt(dayOfWeek, 10) : undefined;
-    const data = await this.timetableService.listSlots(tenantSlug, { departmentId, batchId, dayOfWeek: day, facultyId, subjectId, courseId, sessionId });
+    const data = await this.timetableService.listSlots(tenantSlug, {
+      departmentId,
+      batchId,
+      dayOfWeek: day,
+      facultyId,
+      subjectId,
+      courseId,
+      courseCd,
+      branchCd,
+      batchCd,
+      colgCd,
+      semester,
+      section,
+      sessionId,
+    });
     return { success: true, data };
   }
 
@@ -46,11 +72,31 @@ export class TimetableController {
   @Get('student-schedule')
   @ApiOperation({ summary: 'Get current active lecture and weekly schedule for student portal' })
   @ApiQuery({ name: 'batchId', required: false })
+  @ApiQuery({ name: 'courseCd', required: false })
+  @ApiQuery({ name: 'branchCd', required: false })
+  @ApiQuery({ name: 'batchCd', required: false })
+  @ApiQuery({ name: 'colgCd', required: false })
+  @ApiQuery({ name: 'semester', required: false })
+  @ApiQuery({ name: 'section', required: false })
   async getStudentSchedule(
     @TenantSlug() tenantSlug: string,
     @Query('batchId') batchId?: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+    @Query('batchCd') batchCd?: string,
+    @Query('colgCd') colgCd?: string,
+    @Query('semester') semester?: string,
+    @Query('section') section?: string,
   ) {
-    const data = await this.timetableService.getStudentSchedule(tenantSlug, batchId);
+    const data = await this.timetableService.getStudentSchedule(tenantSlug, {
+      batchId,
+      courseCd,
+      branchCd,
+      batchCd,
+      colgCd,
+      semester,
+      section,
+    });
     return { success: true, data };
   }
 

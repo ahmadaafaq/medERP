@@ -27,12 +27,17 @@ export default function DepartmentFacultyPage() {
 
   const fetchDepartmentFaculty = async () => {
     setLoading(true);
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+    let rawSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+    let slug = rawSlug.replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+    if (slug === 'srms-cet') slug = 'srms-cet-bareilly';
+    if (slug === 'srms-cetr') slug = 'srms-cetr-bareilly';
+
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
     try {
       // 1. Fetch current logged-in faculty department name
-      const meRes = await fetch(`http://localhost:3001/api/v1/auth/me`, {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const meRes = await fetch(`${API_BASE}/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
@@ -51,10 +56,10 @@ export default function DepartmentFacultyPage() {
         setDeptName(userDeptName);
       }
 
-      // 2. Query faculty members filtered by departmentId
-      let url = `http://localhost:3001/api/v1/users/faculty?tenant=${slug}`;
+      // 2. Query faculty members
+      let url = `${API_BASE}/users/faculty?tenant=${slug}&limit=500`;
       if (deptId) {
-        url += `&departmentId=${deptId}`;
+        url += `&departmentId=${encodeURIComponent(deptId)}`;
       }
 
       const res = await fetch(url, {
@@ -66,16 +71,29 @@ export default function DepartmentFacultyPage() {
 
       if (res.ok) {
         const json = await res.json();
-        const list = Array.isArray(json.data) ? json.data : Array.isArray(json.items) ? json.items : Array.isArray(json) ? json : [];
+        const list = Array.isArray(json.data?.data)
+          ? json.data.data
+          : Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json.items)
+          ? json.items
+          : Array.isArray(json)
+          ? json
+          : [];
         
         // Filter to display colleagues belonging to the same department
         const filtered = list.filter((f: any) => {
-          if (!deptId) return true;
-          return f.department_id === deptId || (f.department_name && f.department_name.includes(userDeptName.replace('Department of ', '')));
+          if (!deptId && (!userDeptName || userDeptName === 'Department')) return true;
+          if (deptId && (f.department_id === deptId || f.department_code === deptId)) return true;
+          const cleanUserDept = userDeptName.replace(/Department of /i, '').trim().toLowerCase();
+          if (f.department_name && f.department_name.toLowerCase().includes(cleanUserDept)) return true;
+          return false;
         });
 
         if (filtered.length > 0) {
           setColleagues(filtered);
+        } else if (list.length > 0) {
+          setColleagues(list);
         } else {
           setColleagues([]);
         }

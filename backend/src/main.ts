@@ -46,8 +46,8 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   const port = process.env.PORT || 3001;
-  await app.listen(port);
-  logger.log(`🚀 MedERP Backend API running on port ${port}`);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`🚀 MedERP Backend API running on port ${port} (0.0.0.0)`);
   logger.log(`📄 Swagger Documentation available at http://localhost:${port}/docs`);
 }
 bootstrap();

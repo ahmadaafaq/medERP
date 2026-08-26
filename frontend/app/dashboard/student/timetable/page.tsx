@@ -24,6 +24,9 @@ interface TimetableSlot {
   group_name?: string;
   topic?: string;
   competency_codes?: string;
+  unit_name?: string;
+  unit_id?: string;
+  sub_topics?: string;
   faculty_name?: string;
   subject_name?: string;
   subject_code?: string;
@@ -47,6 +50,7 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 
 export default function StudentTimetablePage() {
   const [selectedDay, setSelectedDay] = useState<number>(1);
+  const [tenantSlug, setTenantSlug] = useState<string>('srms-cet-bareilly');
   const [currentLecture, setCurrentLecture] = useState<TimetableSlot | null>(null);
   const [weeklySlots, setWeeklySlots] = useState<TimetableSlot[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -77,36 +81,101 @@ export default function StudentTimetablePage() {
     const slug = getStorageItem('tenantSlug') || getStorageItem('selectedTenant') || 'srms-cet-bareilly';
     try {
       const token = getStorageItem('token') || '';
-      const res = await fetch(`${API_BASE}/timetable/student-schedule?tenant=${slug}`, {
+
+      // 1. Fetch Logged-In Student Profile for precise Course, Branch, Batch, Semester filtering
+      let courseCd = '';
+      let branchCd = '';
+      let batchCd = '';
+      let batchId = '';
+      let semester = '';
+      let section = '';
+      let colgCd = '';
+
+      try {
+        const meRes = await fetch(`${API_BASE}/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-slug': slug,
+          },
+        }).catch(() => null);
+
+        if (meRes && meRes.ok) {
+          const meJson = await meRes.json();
+          const meData = meJson.data || meJson;
+          const p = meData.profile || meData;
+          courseCd = p.course_cd || meData.course_cd || meData.courseCd || (p.course_name?.includes('BCA') ? '13' : '');
+          branchCd = p.branch_cd || meData.branch_cd || meData.branchCd || '1';
+          batchCd = p.batch_cd || meData.batch_cd || meData.batchCd || '2';
+          batchId = p.batch_id || meData.batch_id || meData.batchId || '';
+          semester = p.semester || p.current_semester || meData.semester || '3';
+          section = p.section || meData.section || '1';
+          colgCd = p.colg_cd || meData.colg_cd || meData.colgcd || '1';
+        }
+      } catch {
+        // Continue with query
+      }
+
+      let url = `${API_BASE}/timetable/student-schedule?tenant=${slug}`;
+      if (batchId) url += `&batchId=${encodeURIComponent(batchId)}`;
+      if (courseCd) url += `&courseCd=${encodeURIComponent(courseCd)}`;
+      if (branchCd) url += `&branchCd=${encodeURIComponent(branchCd)}`;
+      if (batchCd) url += `&batchCd=${encodeURIComponent(batchCd)}`;
+      if (semester) url += `&semester=${encodeURIComponent(semester)}`;
+      if (section) url += `&section=${encodeURIComponent(section)}`;
+      if (colgCd) url += `&colgCd=${encodeURIComponent(colgCd)}`;
+
+      const res = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
         },
-      });
+      }).catch(() => null);
 
-      if (res.ok) {
+      let rawSlots: TimetableSlot[] = [];
+      let currentActive: TimetableSlot | null = null;
+
+      if (res && res.ok) {
         const json = await res.json();
         if (json && json.data) {
-          const slots: TimetableSlot[] = Array.isArray(json.data.weeklySlots) 
-            ? json.data.weeklySlots 
-            : Array.isArray(json.data.todaysSlots) 
-            ? json.data.todaysSlots 
-            : Array.isArray(json.data) 
-            ? json.data 
-            : [];
-          setWeeklySlots(slots);
-          setCurrentLecture(json.data.currentLecture || (slots.length > 0 ? slots[0] : null));
+          rawSlots = Array.isArray(json.data.weeklySlots)
+            ? json.data.weeklySlots
+            : Array.isArray(json.data.todaysSlots)
+              ? json.data.todaysSlots
+              : Array.isArray(json.data)
+                ? json.data
+                : [];
+          currentActive = json.data.currentLecture || null;
           if (json.data.currentDayOfWeek) {
             setSelectedDay(json.data.currentDayOfWeek);
           }
-        } else {
-          setWeeklySlots([]);
-          setCurrentLecture(null);
         }
-      } else {
-        setWeeklySlots([]);
-        setCurrentLecture(null);
       }
+
+      // If strict filter had no slots, fallback to tenant timetable
+      if (rawSlots.length === 0) {
+        const fbRes = await fetch(`${API_BASE}/timetable?tenant=${slug}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-slug': slug,
+          },
+        }).catch(() => null);
+        if (fbRes && fbRes.ok) {
+          const fbJson = await fbRes.json();
+          rawSlots = Array.isArray(fbJson.data) ? fbJson.data : [];
+        }
+      }
+
+      const seen = new Set<string>();
+      const slots = rawSlots.filter(s => {
+        const normSub = (s.subject_name || s.subject_code || s.topic || '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
+        const key = `${s.day_of_week}_${s.start_time?.slice(0, 5)}_${normSub}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      setWeeklySlots(slots);
+      setCurrentLecture(currentActive || (slots.length > 0 ? slots[0] : null));
     } catch {
       setWeeklySlots([]);
       setCurrentLecture(null);
@@ -132,7 +201,7 @@ export default function StudentTimetablePage() {
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#4E5969] dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar role="student" />
-      
+
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Student Academic Schedule & Timetable" />
 
@@ -149,7 +218,7 @@ export default function StudentTimetablePage() {
                   Today: {DAY_NAMES[(new Date().getDay() === 0 ? 7 : new Date().getDay()) - 1]}
                 </span>
               </div>
-              <button 
+              <button
                 type="button"
                 onClick={fetchSchedule}
                 className="text-xs text-white bg-white/15 hover:bg-white/25 border border-white/20 px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer shadow-sm"
@@ -228,11 +297,10 @@ export default function StudentTimetablePage() {
                       key={dayName}
                       type="button"
                       onClick={() => setSelectedDay(dayNum)}
-                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                        isSelected 
-                          ? 'bg-[#5B4BFF] text-white shadow-md font-bold' 
+                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${isSelected
+                          ? 'bg-[#5B4BFF] text-white shadow-md font-bold'
                           : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] hover:bg-white dark:hover:bg-slate-800'
-                      }`}
+                        }`}
                     >
                       {dayName}
                     </button>
@@ -269,15 +337,15 @@ export default function StudentTimetablePage() {
                         <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-[#F6F8FC] dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-300 border border-[#E7EAF3] dark:border-slate-700">
                           {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
                         </span>
-                        <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs">
-                          {slot.subject_code || 'MBBS'} • {slot.slot_type || 'LECTURE'}
+                        <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs uppercase">
+                          {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'BCA')} • {slot.slot_type || 'LECTURE'}
                         </span>
                       </div>
 
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-mono font-black text-[#5B4BFF] dark:text-indigo-300 uppercase">
-                            {slot.subject_code || 'MBBS'}
+                            {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'BCA')}
                           </span>
                           {slot.group_name && (
                             <span className="text-[10px] px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold border border-purple-500/20">
@@ -286,7 +354,7 @@ export default function StudentTimetablePage() {
                           )}
                         </div>
                         <h4 className="font-black text-lg text-[#1B1E28] dark:text-white group-hover:text-[#5B4BFF] transition-colors tracking-tight">
-                          {slot.subject_name || 'Medical Subject'}
+                          {slot.subject_name || slot.topic || 'Academic Subject'}
                         </h4>
                         <p className="text-xs text-[#5B4BFF] dark:text-indigo-400 font-semibold flex items-center gap-1.5 pt-0.5">
                           <span>📖</span>
@@ -297,14 +365,14 @@ export default function StudentTimetablePage() {
                       {displayCompCodes && (
                         <div className="text-xs text-purple-700 dark:text-purple-300 bg-purple-50/80 dark:bg-purple-950/40 p-2.5 rounded-2xl border border-purple-200/80 dark:border-purple-900/30 flex items-center justify-between font-semibold">
                           <span className="flex items-center gap-1.5">
-                            <span>🎯</span> NMC Competency:
+                            <span>🎯</span> {tenantSlug.includes('ims') ? 'NMC Competency:' : 'Curriculum Unit / Topic:'}
                           </span>
                           <span className="font-mono font-black text-[#1B1E28] dark:text-white">{displayCompCodes}</span>
                         </div>
                       )}
 
                       <div className="pt-2 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between text-xs text-[#4E5969] dark:text-slate-400">
-                        <span className="font-bold text-[#1B1E28] dark:text-slate-200">🏫 {slot.room || 'Lecture Hall 1'}</span>
+                        <span className="font-bold text-[#1B1E28] dark:text-slate-200">🏫 {slot.room || 'Room 204'}</span>
                         <span className="text-[#00C48C] font-black text-xs">👨‍🏫 {slot.faculty_name || 'Faculty Member'}</span>
                       </div>
 
@@ -315,70 +383,83 @@ export default function StudentTimetablePage() {
                         <div
                           onMouseEnter={() => handleSlotMouseEnter(slot.id)}
                           onMouseLeave={handleSlotMouseLeave}
-                          className="absolute bottom-full left-0 mb-2 w-72 max-w-[270px] rounded-2xl bg-gradient-to-br from-[#2D2575] via-[#231C63] to-[#1B1652] text-white border-2 border-[#5B4BFF]/50 shadow-2xl shadow-[#2D2575]/60 backdrop-blur-xl z-50 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-3 space-y-2"
+                          className="absolute bottom-full left-0 mb-2 w-80 max-w-[290px] rounded-[22px] bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 shadow-2xl backdrop-blur-xl z-50 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-4 space-y-2.5"
                         >
-                          {/* Top Deep Purple Ribbon Header */}
-                          <div className="flex items-center justify-between gap-1.5 border-b border-white/10 pb-1.5">
+                          {/* Header: Subject & Session Type */}
+                          <div className="flex items-center justify-between gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-1.5">
                             <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#F36C21] text-white shadow-xs uppercase">
-                              {slot.subject_code || 'MBBS'} • {slot.slot_type || 'LECTURE'}
+                              {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'BCA')} • {slot.slot_type || 'LECTURE'}
                             </span>
-                            <span className="font-mono text-indigo-200 text-[10px] font-bold">
-                              🕒 {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
+                            <span className="font-mono text-[#5B4BFF] dark:text-indigo-300 text-[10px] font-bold">
+                              ⏰ {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
                             </span>
                           </div>
 
-                          <div className="space-y-1.5">
-                            <div>
-                              <h5 className="font-extrabold text-xs text-white leading-tight truncate">{slot.subject_name || 'Subject'}</h5>
+                          <div className="space-y-1">
+                            <h5 className="font-extrabold text-xs text-slate-900 dark:text-white leading-tight truncate">
+                              {slot.subject_name || slot.topic || 'Subject'}
+                            </h5>
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                              <span>👨‍🏫 {slot.faculty_name || 'Faculty Member'}</span>
+                              <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono font-bold text-slate-700 dark:text-slate-300">
+                                {slot.room || 'Room 204'}
+                              </span>
                             </div>
+                          </div>
 
-                            {/* Scheduled Topic */}
-                            <div className="p-2 rounded-lg bg-white/10 border border-white/15 space-y-0.5">
-                              <div className="text-[9px] font-black uppercase text-[#F36C21] tracking-wider">
-                                📖 Scheduled Topic
-                              </div>
-                              <p className="text-[11px] font-bold text-white leading-snug">
-                                {slot.topic || 'Curriculum Module / Lesson'}
-                              </p>
+                          {/* 1. Unit Badge */}
+                          <div className="p-2 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40 space-y-0.5">
+                            <div className="text-[9px] font-black uppercase text-[#5B4BFF] dark:text-indigo-400 tracking-wider">
+                              🏷️ 1. Unit
                             </div>
+                            <p className="text-[11px] font-bold text-slate-900 dark:text-white leading-snug">
+                              {slot.unit_name || 'Unit 1: Fundamentals'}
+                            </p>
+                          </div>
 
-                            {/* Scheduled Sub Topics & Competencies */}
-                            <div className="p-2 rounded-lg bg-white/10 border border-white/15 space-y-1">
-                              <div className="text-[9px] font-black uppercase text-indigo-200 tracking-wider flex items-center justify-between">
-                                <span>🎯 SUB TOPICS/TEACHING TOPICS</span>
-                                {compList.length > 0 && (
-                                  <span className="px-1.5 py-0.2 rounded-full bg-[#5B4BFF] text-white text-[8.5px] font-mono font-bold">
-                                    {compList.length}
-                                  </span>
-                                )}
-                              </div>
+                          {/* 2. Scheduled Topic */}
+                          <div className="p-2 rounded-xl bg-orange-50/80 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/30 space-y-0.5">
+                            <div className="text-[9px] font-black uppercase text-[#F36C21] tracking-wider">
+                              📖 2. Scheduled Topic
+                            </div>
+                            <p className="text-[11px] font-bold text-slate-900 dark:text-white leading-snug">
+                              {slot.topic || 'Curriculum Module / Lesson'}
+                            </p>
+                          </div>
 
-                              {compList.length > 0 ? (
-                                <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-                                  {compList.map((c, i) => (
-                                    <div key={i} className="p-1 px-1.5 rounded bg-black/25 border border-white/10 text-[10px] flex items-start gap-1.5">
-                                      <span className="shrink-0 px-1 py-0.2 rounded bg-[#5B4BFF] text-white font-mono font-bold text-[9px]">
-                                        {c.code}
-                                      </span>
-                                      <p className="text-indigo-100 text-[9.5px] leading-tight font-medium self-center">{c.description}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : displayCompCodes ? (
-                                <div className="p-1 px-1.5 rounded bg-black/25 border border-white/10 text-[10px] space-y-0.5">
-                                  <p className="font-mono font-black text-white">{displayCompCodes}</p>
-                                </div>
-                              ) : (
-                                <p className="text-[10px] text-indigo-200 italic font-medium">
-                                  Sub topics: Scheduled per topic syllabus
-                                </p>
+                          {/* 3. Sub Topics / Competencies */}
+                          <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
+                            <div className="text-[9px] font-black uppercase text-slate-600 dark:text-slate-300 tracking-wider flex items-center justify-between">
+                              <span>🎯 3. SUB TOPICS</span>
+                              {compList.length > 0 && (
+                                <span className="px-1.5 py-0.2 rounded-full bg-[#5B4BFF] text-white text-[8.5px] font-mono font-bold">
+                                  {compList.length}
+                                </span>
                               )}
                             </div>
-                          </div>
 
-                          <div className="pt-1.5 border-t border-white/10 flex justify-between text-[10px]">
-                            <span className="font-bold text-indigo-100 truncate">🏫 Hall: {slot.room || 'Lecture Hall 1'}</span>
-                            <span className="font-black text-[#00C48C] shrink-0 ml-1">👨‍🏫 {slot.faculty_name || 'Faculty'}</span>
+                            {compList.length > 0 ? (
+                              <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                {compList.map((c, i) => (
+                                  <div key={i} className="p-1 px-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] flex items-start gap-1.5">
+                                    <span className="shrink-0 px-1 py-0.2 rounded bg-[#5B4BFF] text-white font-mono font-bold text-[9px]">
+                                      {c.code}
+                                    </span>
+                                    <p className="text-slate-700 dark:text-slate-300 text-[9.5px] leading-tight font-medium self-center">{c.description}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : slot.sub_topics ? (
+                              <p className="text-[10px] text-slate-700 dark:text-slate-300 font-medium">
+                                {slot.sub_topics}
+                              </p>
+                            ) : displayCompCodes ? (
+                              <p className="font-mono font-black text-slate-800 dark:text-slate-200 text-[10px]">{displayCompCodes}</p>
+                            ) : (
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500 italic font-medium">
+                                Sub topics: Scheduled per curriculum syllabus
+                              </p>
+                            )}
                           </div>
                         </div>
                       )}

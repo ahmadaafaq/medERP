@@ -231,20 +231,13 @@ export default function FacultyLessonsPage() {
           code: String(c.course_cd || c.code || c.id || '1'),
           name: c.course_name || c.name || `Course ${c.course_cd || 1}`,
         }));
-        const finalCourses = mapped.length > 0 ? mapped : [
-          { id: '13', code: '13', name: 'BCA - Bachelor of Computer Applications' },
-          { id: '1', code: '1', name: 'B.Tech - Computer Science & Engineering' },
-          { id: '2', code: '2', name: 'MBBS - Bachelor of Medicine & Surgery' }
-        ];
-        setCoursesList(finalCourses);
-        activeCourse = finalCourses[0].code;
-        setSelectedCourse(activeCourse);
+        setCoursesList(mapped);
+        if (mapped.length > 0) {
+          activeCourse = mapped[0].code;
+          setSelectedCourse(activeCourse);
+        }
       } else {
-        setCoursesList([
-          { id: '13', code: '13', name: 'BCA - Bachelor of Computer Applications' },
-          { id: '1', code: '1', name: 'B.Tech - Computer Science & Engineering' },
-          { id: '2', code: '2', name: 'MBBS - Bachelor of Medicine & Surgery' }
-        ]);
+        setCoursesList([]);
       }
 
       fetchBranchesAndBatches('1', activeCourse);
@@ -275,17 +268,10 @@ export default function FacultyLessonsPage() {
             name: validName,
           };
         });
-        const finalBranches = mapped.length > 0 ? mapped : [
-          { id: '1', code: '1', name: 'Computer Science & Engineering' },
-          { id: '2', code: '2', name: 'General Academic Branch' }
-        ];
-        setBranchesList(finalBranches);
-        setSelectedBranch(finalBranches[0].code);
+        setBranchesList(mapped);
+        if (mapped.length > 0) setSelectedBranch(mapped[0].code);
       } else {
-        setBranchesList([
-          { id: '1', code: '1', name: 'Computer Science & Engineering' },
-          { id: '2', code: '2', name: 'General Academic Branch' }
-        ]);
+        setBranchesList([]);
       }
 
       if (btRes && btRes.ok) {
@@ -296,21 +282,10 @@ export default function FacultyLessonsPage() {
           code: String(b.batch_cd || b.code || b.batch_name || '1'),
           name: String(b.batch_name || b.name || b.year || b.batch_cd),
         }));
-        const finalBatches = mapped.length > 0 ? mapped : [
-          { id: '2025', code: '2025', name: '2025' },
-          { id: '2024', code: '2024', name: '2024' },
-          { id: '2023', code: '2023', name: '2023' },
-          { id: '2022', code: '2022', name: '2022' }
-        ];
-        setBatchesList(finalBatches);
-        setSelectedBatch(finalBatches[0].code);
+        setBatchesList(mapped);
+        if (mapped.length > 0) setSelectedBatch(mapped[0].code);
       } else {
-        setBatchesList([
-          { id: '2025', code: '2025', name: '2025' },
-          { id: '2024', code: '2024', name: '2024' },
-          { id: '2023', code: '2023', name: '2023' },
-          { id: '2022', code: '2022', name: '2022' }
-        ]);
+        setBatchesList([]);
       }
     } catch (err) {
       console.warn('Error fetching branches/batches:', err);

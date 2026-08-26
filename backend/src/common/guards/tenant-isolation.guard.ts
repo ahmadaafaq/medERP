@@ -52,7 +52,9 @@ export class TenantIsolationGuard implements CanActivate {
       throw new UnauthorizedException('User is not associated with any college tenant');
     }
 
-    const lockedSlug = user.tenantSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
+    let lockedSlug = user.tenantSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
+    if (lockedSlug === 'srms-cet') lockedSlug = 'srms-cet-bareilly';
+    if (lockedSlug === 'srms-cetr') lockedSlug = 'srms-cetr-bareilly';
     const lockedColgCd = user.colgCd ? String(user.colgCd) : '1';
 
     // Override req.tenant strictly with verified JWT claims
@@ -66,13 +68,8 @@ export class TenantIsolationGuard implements CanActivate {
     request.tenantSlug = lockedSlug;
 
     // Sanitize any user-supplied query/headers/body params to prevent parameter tampering
-    if (request.query) {
-      request.query.tenant = lockedSlug;
-      request.query.overrideTenant = lockedSlug;
-      request.query.tenantSlug = lockedSlug;
-      request.query.colgcd = lockedColgCd;
-      request.query.colg_cd = lockedColgCd;
-      request.query.collegeId = lockedColgCd;
+    if (request.query && typeof request.query === 'object') {
+      if ('tenant' in request.query) request.query.tenant = lockedSlug;
     }
 
     if (request.headers) {
@@ -85,9 +82,6 @@ export class TenantIsolationGuard implements CanActivate {
       if ('tenant' in request.body) request.body.tenant = lockedSlug;
       if ('tenantSlug' in request.body) request.body.tenantSlug = lockedSlug;
       if ('tenant_slug' in request.body) request.body.tenant_slug = lockedSlug;
-      if ('colgcd' in request.body) request.body.colgcd = lockedColgCd;
-      if ('colg_cd' in request.body) request.body.colg_cd = lockedColgCd;
-      if ('collegeId' in request.body) request.body.collegeId = lockedColgCd;
     }
 
     return true;

@@ -33,8 +33,6 @@ export class PlacementDriveController {
   constructor(private readonly placementDriveService: PlacementDriveService) {}
 
   private extractUser(req: any, dto?: any): any {
-    if (req.user && req.user.role) return req.user;
-
     const authHeader = req.headers?.authorization || req.headers?.Authorization;
     let tokenUser: any = null;
     if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
@@ -47,16 +45,24 @@ export class PlacementDriveController {
       } catch {}
     }
 
+    if (req.user && req.user.role && !tokenUser) {
+      tokenUser = req.user;
+    }
+
     const regNo =
       dto?.student_reg_no ||
       req.headers?.['x-user-reg-no'] ||
       req.headers?.['x-user-id'] ||
+      req.query?.student_reg_no ||
+      req.query?.regNo ||
       tokenUser?.registration_no ||
       tokenUser?.username ||
       tokenUser?.rollno ||
-      '2025107990';
-    const role = (dto?.role || req.headers?.['x-user-role'] || tokenUser?.role || 'STUDENT').toUpperCase();
-    const name = dto?.student_name || req.headers?.['x-user-name'] || tokenUser?.name || 'AAFREEN KHAN';
+      tokenUser?.sub ||
+      '';
+
+    const role = (dto?.role || req.headers?.['x-user-role'] || tokenUser?.role || req.user?.role || 'STUDENT').toUpperCase();
+    const name = dto?.student_name || req.headers?.['x-user-name'] || tokenUser?.name || req.user?.name || 'Student';
 
     return {
       id: tokenUser?.id || tokenUser?.sub || regNo,
@@ -65,6 +71,7 @@ export class PlacementDriveController {
       rollno: regNo,
       role,
       name,
+      email: tokenUser?.email || req.headers?.['x-user-email'] || '',
     };
   }
 
@@ -127,6 +134,24 @@ export class PlacementDriveController {
       status,
       company_name: companyName,
     });
+  }
+
+  @Public()
+  @Get('template')
+  async downloadTemplate(@Request() req: any) {
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.resolve(__dirname, '../../templates/placement-drive-import-template.xlsx');
+    if (fs.existsSync(filePath)) {
+      const buffer = fs.readFileSync(filePath);
+      return {
+        success: true,
+        filename: 'placement-drive-import-template.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: buffer.toString('base64'),
+      };
+    }
+    return { success: false, message: 'Template file not found' };
   }
 
   @Public()

@@ -49,6 +49,9 @@ export default function StudentSchedulePage() {
   const [filterType, setFilterType] = useState<string>('ALL');
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay() === 0 ? 7 : new Date().getDay());
   const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null);
+  const [tenantSlug, setTenantSlug] = useState<string>('srms-cet-bareilly');
+
+  const isMedical = tenantSlug.includes('ims') || tenantSlug.includes('medical') || tenantSlug.includes('med');
 
   useEffect(() => {
     fetchSchedule();
@@ -57,44 +60,100 @@ export default function StudentSchedulePage() {
   const fetchSchedule = async () => {
     setLoading(true);
     const slug = getStorageItem('tenantSlug') || getStorageItem('selectedTenant') || 'srms-cet-bareilly';
+    setTenantSlug(slug);
     try {
       const token = getStorageItem('token') || '';
-      const res = await fetch(`${API_BASE}/timetable/student-schedule?tenant=${slug}`, {
+
+      // 1. Fetch Logged-In Student Profile for precise Course, Branch, Batch, Semester filtering
+      let courseCd = '';
+      let branchCd = '';
+      let batchCd = '';
+      let batchId = '';
+      let semester = '';
+      let section = '';
+      let colgCd = '';
+
+      try {
+        const meRes = await fetch(`${API_BASE}/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-slug': slug,
+          },
+        }).catch(() => null);
+
+        if (meRes && meRes.ok) {
+          const meJson = await meRes.json();
+          const meData = meJson.data || meJson;
+          const p = meData.profile || meData;
+          courseCd = p.course_cd || meData.course_cd || meData.courseCd || (p.course_name?.includes('BCA') ? '13' : '');
+          branchCd = p.branch_cd || meData.branch_cd || meData.branchCd || '1';
+          batchCd = p.batch_cd || meData.batch_cd || meData.batchCd || '2';
+          batchId = p.batch_id || meData.batch_id || meData.batchId || '';
+          semester = p.semester || p.current_semester || meData.semester || '3';
+          section = p.section || meData.section || '1';
+          colgCd = p.colg_cd || meData.colg_cd || meData.colgcd || '1';
+        }
+      } catch {
+        // Continue with query
+      }
+
+      let url = `${API_BASE}/timetable/student-schedule?tenant=${slug}`;
+      if (batchId) url += `&batchId=${encodeURIComponent(batchId)}`;
+      if (courseCd) url += `&courseCd=${encodeURIComponent(courseCd)}`;
+      if (branchCd) url += `&branchCd=${encodeURIComponent(branchCd)}`;
+      if (batchCd) url += `&batchCd=${encodeURIComponent(batchCd)}`;
+      if (semester) url += `&semester=${encodeURIComponent(semester)}`;
+      if (section) url += `&section=${encodeURIComponent(section)}`;
+      if (colgCd) url += `&colgCd=${encodeURIComponent(colgCd)}`;
+
+      const res = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
         },
       }).catch(() => null);
 
+      let rawSlots: TimetableSlot[] = [];
+
       if (res && res.ok) {
         const json = await res.json();
         if (json && json.data) {
-          const slots: TimetableSlot[] = Array.isArray(json.data.weeklySlots) 
-            ? json.data.weeklySlots 
-            : Array.isArray(json.data.todaysSlots) 
-            ? json.data.todaysSlots 
-            : Array.isArray(json.data) 
-            ? json.data 
-            : [];
-          setScheduleSlots(slots);
+          rawSlots = Array.isArray(json.data.weeklySlots)
+            ? json.data.weeklySlots
+            : Array.isArray(json.data.todaysSlots)
+              ? json.data.todaysSlots
+              : Array.isArray(json.data)
+                ? json.data
+                : [];
           if (json.data.currentDayOfWeek) {
             setSelectedDay(json.data.currentDayOfWeek);
           }
-        } else {
-          setScheduleSlots([]);
         }
-      } else {
-        // Fallback to /timetable
+      }
+
+      // If strict filter had no slots, fallback to tenant timetable
+      if (rawSlots.length === 0) {
         const fbRes = await fetch(`${API_BASE}/timetable?tenant=${slug}`, {
-          headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug },
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-slug': slug,
+          },
         }).catch(() => null);
         if (fbRes && fbRes.ok) {
           const fbJson = await fbRes.json();
-          setScheduleSlots(Array.isArray(fbJson.data) ? fbJson.data : []);
-        } else {
-          setScheduleSlots([]);
+          rawSlots = Array.isArray(fbJson.data) ? fbJson.data : [];
         }
       }
+
+      const seen = new Set<string>();
+      const slots = rawSlots.filter(s => {
+        const normSub = (s.subject_name || s.subject_code || s.topic || '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
+        const key = `${s.day_of_week}_${s.start_time?.slice(0, 5)}_${normSub}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setScheduleSlots(slots);
     } catch {
       setScheduleSlots([]);
     } finally {
@@ -213,7 +272,7 @@ export default function StudentSchedulePage() {
 
                         {displayCompCodes && (
                           <div className="text-[10px] text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 p-2 rounded-xl border border-purple-200 dark:border-purple-900/30 font-mono font-bold">
-                            🎯 NMC Competency: {displayCompCodes}
+                            🎯 {isMedical ? 'NMC Competency:' : 'Sub Topics:'} {displayCompCodes}
                           </div>
                         )}
 
@@ -232,7 +291,7 @@ export default function StudentSchedulePage() {
                             {/* Top Deep Purple Ribbon Header */}
                             <div className="p-3.5 bg-gradient-to-r from-[#2D2575] to-[#3E3498] text-white flex items-center justify-between text-xs font-black force-text-white border-b border-white/10">
                               <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/80 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs">
-                                {item.subject_code || 'MBBS'} • {item.slot_type || 'LECTURE'}
+                                {item.subject_code || 'BCA'} • {item.slot_type || 'LECTURE'}
                               </span>
                               <span className="font-mono text-white text-xs font-bold">
                                 🕒 {item.start_time?.slice(0, 5)} - {item.end_time?.slice(0, 5)}
@@ -251,7 +310,7 @@ export default function StudentSchedulePage() {
                               {compList.length > 0 ? (
                                 <div className="space-y-2 pt-1">
                                   <p className="text-[10px] font-black uppercase tracking-wider text-[#F36C21] flex items-center gap-1.5">
-                                    <span>🎯 {item.subject_code || ''} Topic Competencies</span>
+                                    <span>🎯 {item.subject_code || ''} {isMedical ? 'Topic Competencies' : 'Sub Topics'}</span>
                                     <span className="px-1.5 py-0.2 rounded-full bg-purple-50 text-purple-700 text-[9px] font-mono font-bold">
                                       {compList.length}
                                     </span>
@@ -269,7 +328,7 @@ export default function StudentSchedulePage() {
                                 </div>
                               ) : displayCompCodes ? (
                                 <div className="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/30 text-xs space-y-0.5">
-                                  <p className="text-[10px] font-black uppercase text-[#F36C21]">🎯 {item.subject_code || ''} Competencies</p>
+                                  <p className="text-[10px] font-black uppercase text-[#F36C21]">🎯 {item.subject_code || ''} {isMedical ? 'Competencies' : 'Sub Topics'}</p>
                                   <p className="font-mono font-black text-[#5B4BFF] dark:text-purple-300">{displayCompCodes}</p>
                                 </div>
                               ) : null}

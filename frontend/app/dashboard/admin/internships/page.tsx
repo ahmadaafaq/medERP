@@ -14,7 +14,8 @@ import {
   Filter, 
   Award, 
   Users, 
-  Loader2 
+  Loader2,
+  Building2
 } from 'lucide-react';
 
 export default function AdminInternshipsPage() {
@@ -23,6 +24,7 @@ export default function AdminInternshipsPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [feeFilter, setFeeFilter] = useState('ALL');
+  const [campusFilter, setCampusFilter] = useState('ALL');
 
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [reviewProgram, setReviewProgram] = useState<InternshipProgram | null>(null);
@@ -56,12 +58,16 @@ export default function AdminInternshipsPage() {
   const filtered = programs.filter((p) => {
     const matchSearch =
       p.title?.toLowerCase().includes(search.toLowerCase()) ||
-      p.description?.toLowerCase().includes(search.toLowerCase());
+      p.description?.toLowerCase().includes(search.toLowerCase()) ||
+      p.organization_name?.toLowerCase().includes(search.toLowerCase()) ||
+      p.off_campus_title?.toLowerCase().includes(search.toLowerCase()) ||
+      p.location?.toLowerCase().includes(search.toLowerCase());
 
     const matchCategory = categoryFilter === 'ALL' || p.category === categoryFilter;
     const matchFee = feeFilter === 'ALL' || p.fee_type === feeFilter;
+    const matchCampus = campusFilter === 'ALL' || p.campus_type === campusFilter;
 
-    return matchSearch && matchCategory && matchFee;
+    return matchSearch && matchCategory && matchFee && matchCampus;
   });
 
   return (
@@ -77,19 +83,19 @@ export default function AdminInternshipsPage() {
               <div className="flex items-center gap-2 text-xs font-bold text-[#5B4BFF] uppercase tracking-wider mb-1">
                 <span>Skill Development Cell</span>
                 <span>•</span>
-                <span>Institutional Certification</span>
+                <span>On-Campus Labs & Off-Campus Placements</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-[#1B1E28] dark:text-white tracking-tight">
                 Internship & Certification Programs
               </h1>
               <p className="text-xs sm:text-sm text-[#4E5969] dark:text-slate-400 mt-1">
-                Publish IT, Management & Para-Medical workshops, lock applications, evaluate capstones, and issue digital certificates.
+                Publish in-house college innovation units or external company/hospital internships, manage applicants, and issue verifiable digital or off-campus certificates.
               </p>
             </div>
 
             <button
               onClick={() => setIsComposerOpen(true)}
-              className="px-5 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all flex items-center gap-2 active:scale-95 shrink-0"
+              className="px-5 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all flex items-center gap-2 active:scale-95 shrink-0 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               Publish Program
@@ -97,16 +103,28 @@ export default function AdminInternshipsPage() {
           </div>
 
           {/* Filters */}
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-[22px] border border-[#E7EAF3] dark:border-slate-700 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="relative">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-[22px] border border-[#E7EAF3] dark:border-slate-700 shadow-sm grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="relative sm:col-span-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search program or track..."
+                placeholder="Search program, company, city..."
                 className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
               />
+            </div>
+
+            <div>
+              <select
+                value={campusFilter}
+                onChange={(e) => setCampusFilter(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+              >
+                <option value="ALL">All Campus Modes (On & Off)</option>
+                <option value="ON_CAMPUS">🏛️ On-Campus (In-House)</option>
+                <option value="OFF_CAMPUS">🏢 Off-Campus (Industry / Hospital / Factory)</option>
+              </select>
             </div>
 
             <div>
@@ -128,9 +146,10 @@ export default function AdminInternshipsPage() {
                 onChange={(e) => setFeeFilter(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
               >
-                <option value="ALL">All Pricing</option>
+                <option value="ALL">All Financial Models</option>
                 <option value="FREE">100% Free</option>
-                <option value="PAID">Paid Enrollment</option>
+                <option value="STIPEND">💰 Stipend Offered</option>
+                <option value="PAID">Paid Enrollment Fee</option>
               </select>
             </div>
           </div>
@@ -149,7 +168,7 @@ export default function AdminInternshipsPage() {
               </h3>
               <button
                 onClick={() => setIsComposerOpen(true)}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#5B4BFF] text-white shadow-sm"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#5B4BFF] text-white shadow-sm cursor-pointer"
               >
                 Publish First Program
               </button>

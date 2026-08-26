@@ -32,14 +32,16 @@ export class ChatService implements OnModuleInit {
 
   async onModuleInit() {
     const defaultSlugs = ['srms-ims', 'srms-cet-bareilly', 'srms-cetr-bareilly'];
-    for (const slug of defaultSlugs) {
-      try {
-        await this.ensureTables(slug);
-        await this.syncGroupsAndMembers(slug);
-      } catch (e) {
-        this.logger.warn(`Chat initialization for tenant '${slug}': ${e?.message || e}`);
+    setImmediate(async () => {
+      for (const slug of defaultSlugs) {
+        try {
+          await this.ensureTables(slug);
+          await this.syncGroupsAndMembers(slug);
+        } catch (e: any) {
+          this.logger.warn(`Chat initialization for tenant '${slug}': ${e?.message || e}`);
+        }
       }
-    }
+    });
   }
 
   private resolveTenantSlug(tenantSlug?: string): string {

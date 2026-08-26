@@ -99,7 +99,141 @@ export async function POST(req: NextRequest) {
     const startMeta = formatToSrmsTimetblDate(rawStart, '08:30');
     const endMeta = formatToSrmsTimetblDate(rawEnd, '09:40');
 
-    // 1. New SRMS AddEvent API Payload (https://myportal.srms.ac.in/srmserp/Timetbl/AddEvent)
+    // 1. Resolve target PostgreSQL schema first
+    const tenantHeader = req.headers.get('x-tenant-id') || req.headers.get('x-tenant') || req.headers.get('x-tenant-slug') || '';
+    let slug = tenantHeader.replace(/^tenant_/, '').replace(/^tenant-/, '') || (colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly');
+    if (!slug) slug = 'srms-cet-bareilly';
+    const schema = `tenant_${slug}`;
+
+    // 2. Pre-Validation: Faculty Overlap Validation across All Departments & Courses for the SAME DAY & TIME SLOT
+    const facIdentifier = empid || linkcd;
+    if (facIdentifier) {
+      // Find faculty details from faculty table
+      const facRows = await queryDb(
+        `SELECT id, emp_id, name FROM "${schema}".faculty 
+         WHERE emp_id = $1 OR id::text = $1 OR name ILIKE $2
+         LIMIT 1`,
+        [facIdentifier, `%${description || title}%`]
+      ).catch(() => []);
+
+      const targetFacId = facRows[0]?.id ? String(facRows[0].id) : null;
+      const targetEmpId = facRows[0]?.emp_id ? String(facRows[0].emp_id) : (empid || null);
+      const targetFacName = facRows[0]?.name || title.match(/\(([^)]+)\)/)?.[1] || description.match(/\(([^)]+)\)/)?.[1] || empid || 'Faculty Member';
+
+      // Check BOTH timetable_slots and srms_timetable_events for conflicts on this day of week and overlapping time
+      const [slotClashes, eventClashes] = await Promise.all([
+        queryDb(
+          `SELECT ts.id, ts.start_time, ts.end_time, ts.day_of_week, ts.topic, ts.description,
+                  ts.course_cd, ts.branch_cd, ts.batch_cd, ts.semester, ts.section,
+                  f.name AS faculty_name, f.emp_id AS faculty_code,
+                  sub.name AS subject_name,
+                  d.name AS department_name,
+                  b.code AS batch_code, b.name AS batch_name
+           FROM "${schema}".timetable_slots ts
+           LEFT JOIN "${schema}".faculty f ON f.id = ts.faculty_id
+           LEFT JOIN "${schema}".subjects sub ON sub.id = ts.subject_id
+           LEFT JOIN "${schema}".departments d ON d.id = ts.department_id
+           LEFT JOIN "${schema}".batches b ON b.id = ts.batch_id
+           WHERE ts.day_of_week = $1
+             AND (ts.start_time, ts.end_time) OVERLAPS ($2::TIME, $3::TIME)
+             AND (
+               ts.faculty_id::text = $4
+               OR f.emp_id = $5
+               OR f.name ILIKE $6
+               OR ts.description ILIKE $6
+             )
+           LIMIT 1`,
+          [startMeta.dayOfWeek, startMeta.timeStr, endMeta.timeStr, targetFacId || '00000000-0000-0000-0000-000000000000', targetEmpId || '', `%${targetFacName}%`]
+        ).catch(() => []),
+
+        queryDb(
+          `SELECT te.id, te.day_of_week, te.title, te.description,
+                  te.course_cd, te.branch_cd, te.batch_cd, te.sem_cd AS semester, te.txt_sec AS section,
+                  te.start_str, te.end_str,
+                  f.name AS faculty_name, f.emp_id AS faculty_code,
+                  sub.name AS subject_name,
+                  d.name AS department_name
+           FROM "${schema}".srms_timetable_events te
+           LEFT JOIN "${schema}".faculty f ON (f.emp_id = te.empid OR f.id::text = te.empid)
+           LEFT JOIN "${schema}".subjects sub ON (sub.code = te.linkcd OR sub.id::text = te.linkcd)
+           LEFT JOIN "${schema}".departments d ON (d.code = te.branch_cd OR d.id::text = te.branch_cd)
+           WHERE te.day_of_week = $1
+             AND (
+               (
+                 te.start_str LIKE '% ' || $2 || '%' 
+                 OR te.start_str LIKE '% ' || $3 || '%'
+                 OR (te.start_time::time, te.end_time::time) OVERLAPS ($4::TIME, $5::TIME)
+               )
+             )
+             AND (
+               te.empid = $6
+               OR f.emp_id = $6
+               OR f.id::text = $7
+               OR f.name ILIKE $8
+               OR te.description ILIKE $8
+             )
+           LIMIT 1`,
+          [
+            startMeta.dayOfWeek,
+            startMeta.timeStr.slice(0, 5),
+            startMeta.timeStr.slice(0, 2),
+            startMeta.timeStr,
+            endMeta.timeStr,
+            targetEmpId || '',
+            targetFacId || '00000000-0000-0000-0000-000000000000',
+            `%${targetFacName}%`
+          ]
+        ).catch(() => [])
+      ]);
+
+      const clash = (slotClashes && slotClashes.length > 0) ? slotClashes[0] : (eventClashes && eventClashes.length > 0 ? eventClashes[0] : null);
+
+      if (clash) {
+        const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        const dayName = days[clash.day_of_week] || `Day ${clash.day_of_week}`;
+        
+        let startTimeStr = '08:30';
+        let endTimeStr = '09:30';
+        if (clash.start_time && clash.end_time) {
+          startTimeStr = String(clash.start_time).slice(0, 5);
+          endTimeStr = String(clash.end_time).slice(0, 5);
+        } else if (clash.start_str) {
+          const matchStart = clash.start_str.match(/\d{1,2}:\d{2}/);
+          const matchEnd = clash.end_str?.match(/\d{1,2}:\d{2}/);
+          if (matchStart) startTimeStr = matchStart[0];
+          if (matchEnd) endTimeStr = matchEnd[0];
+        }
+        const timeRange = `${startTimeStr} - ${endTimeStr}`;
+
+        const facName = clash.faculty_name || targetFacName || 'Faculty Member';
+        const courseName = clash.course_cd ? (clash.course_cd === '13' ? 'Course: BCA' : `Course: ${clash.course_cd}`) : (clash.department_name ? `Course: ${clash.department_name}` : 'Course: Academic');
+        const batchName = clash.batch_name || clash.batch_code || clash.batch_cd ? `Batch: ${clash.batch_name || clash.batch_code || clash.batch_cd}` : 'Batch: Current';
+        const semVal = clash.semester || clash.sem_cd || '3';
+        const semesterName = `Semester: ${semVal}`;
+        const secRaw = String(clash.section || clash.txt_sec || '1');
+        const secLetter = secRaw === '1' ? 'A' : secRaw === '2' ? 'B' : secRaw === '3' ? 'C' : secRaw === '4' ? 'D' : secRaw;
+        const sectionName = `Section: ${secLetter}`;
+
+        const conflictMsg = `${facName} is already assigned to ${courseName}, ${batchName}, ${semesterName}, ${sectionName} on ${dayName} (${timeRange}). Please select a different time slot or choose another faculty member, or contact the Academic Administrator or Department Clerk to resolve the schedule overlap.`;
+
+        return NextResponse.json({
+          success: false,
+          error: conflictMsg,
+          message: conflictMsg,
+          conflict: {
+            faculty_name: facName,
+            course: courseName,
+            batch: batchName,
+            semester: semesterName,
+            section: sectionName,
+            time: timeRange,
+            day: dayName,
+          }
+        }, { status: 409 });
+      }
+    }
+
+    // 3. New SRMS AddEvent API Payload (https://myportal.srms.ac.in/srmserp/Timetbl/AddEvent)
     const srmsPayload = {
       title,
       description,
@@ -138,65 +272,6 @@ export async function POST(req: NextRequest) {
     } catch (srmsErr: any) {
       console.warn('[SRMS AddEvent remote error]:', srmsErr.message);
       srmsMessage = srmsErr.message;
-    }
-
-    // 2. Resolve target PostgreSQL schema
-    const tenantHeader = req.headers.get('x-tenant-id') || req.headers.get('x-tenant') || req.headers.get('x-tenant-slug') || '';
-    let slug = tenantHeader.replace(/^tenant_/, '').replace(/^tenant-/, '') || (colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly');
-    if (!slug) slug = 'srms-cet-bareilly';
-    const schema = `tenant_${slug}`;
-
-    // 3. Faculty Overlap Validation across All Departments for the SAME DATE & SAME TIME SLOT
-    if (empid) {
-      const clashRows = await queryDb(
-        `SELECT ts.id, ts.start_time, ts.end_time, ts.day_of_week, ts.title, ts.description,
-                f.name AS faculty_name, f.emp_id,
-                sub.name AS subject_name,
-                d.name AS department_name
-         FROM "${schema}".srms_timetable_events ts
-         LEFT JOIN "${schema}".faculty f ON (f.emp_id = ts.empid OR f.id::text = ts.empid)
-         LEFT JOIN "${schema}".subjects sub ON (sub.code = ts.linkcd OR sub.id::text = ts.linkcd)
-         LEFT JOIN "${schema}".departments d ON (d.code = ts.branch_cd OR d.id::text = ts.branch_cd)
-         WHERE (ts.empid = $1 OR f.id::text = $1)
-           AND ts.start_time::date = $2::date
-           AND (ts.start_time::time, ts.end_time::time) OVERLAPS ($3::TIME, $4::TIME)
-         LIMIT 1`,
-        [empid, startMeta.iso, startMeta.timeStr, endMeta.timeStr]
-      ).catch(() => []);
-
-      if (clashRows && clashRows.length > 0) {
-        const clash = clashRows[0];
-        const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-        const dayName = days[clash.day_of_week] || `Day ${clash.day_of_week}`;
-        const startTimeStr = clash.start_str && clash.start_str.includes(':') 
-          ? clash.start_str.split(' ')[1]?.slice(0, 5) 
-          : new Date(clash.start_time).toTimeString().slice(0, 5);
-        const endTimeStr = clash.end_str && clash.end_str.includes(':') 
-          ? clash.end_str.split(' ')[1]?.slice(0, 5) 
-          : new Date(clash.end_time).toTimeString().slice(0, 5);
-        const timeRange = `${startTimeStr || '08:30'} - ${endTimeStr || '09:40'}`;
-        const facName = clash.faculty_name || (clash.description?.match(/\(([^)]+)\)/)?.[1] || empid);
-        const deptName = clash.department_name || 'Academic Department';
-        const rawTitle = clash.title || clash.description || '';
-        const subName = clash.subject_name || rawTitle.split(' - ')[0].replace(/\([^)]*\)/g, '').trim() || 'Subject';
-        const dateFormatted = new Date(clash.start_time).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-
-        const conflictMsg = `This faculty (${facName}) is already scheduled on ${dateFormatted} (${dayName}) during ${timeRange} in Department (${deptName}), Subject (${subName}).`;
-
-        return NextResponse.json({
-          success: false,
-          error: conflictMsg,
-          message: conflictMsg,
-          conflict: {
-            faculty_name: facName,
-            department_name: deptName,
-            subject_name: subName,
-            date: dateFormatted,
-            time: timeRange,
-            day: dayName,
-          }
-        }, { status: 409 });
-      }
     }
 
     // 4. Ensure srms_timetable_events table and extended columns exist in PostgreSQL
@@ -298,35 +373,65 @@ export async function POST(req: NextRequest) {
         ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS competency_codes VARCHAR(255);
       `).catch(() => {});
 
-      await queryDb(
-        `INSERT INTO "${schema}".timetable_slots (
-          day_of_week, start_time, end_time, room, slot_type, topic,
-          unit_id, unit_name, sub_topics, competency_codes,
-          colg_cd, course_cd, branch_cd, batch_cd, semester, section, description
-        ) VALUES (
-          $1, $2, $3, $4, 'Lecture', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-        )`,
-        [
-          startMeta.dayOfWeek,
-          startMeta.timeStr,
-          endMeta.timeStr,
-          cameraLink ? `Room (Cam #${cameraLink})` : 'Room 204',
-          topic || title,
-          unitId || null,
-          unitName || null,
-          subTopics || null,
-          competencyCodes || null,
-          colgcd,
-          courseCd,
-          branchCd,
-          batchCd,
-          semCd,
-          txtSec,
-          description,
-        ]
+      // Check if slot already exists at this day and start time
+      const existingSlots = await queryDb(
+        `SELECT id FROM "${schema}".timetable_slots 
+         WHERE day_of_week = $1 AND start_time::text LIKE $2 || '%'
+         LIMIT 1`,
+        [startMeta.dayOfWeek, startMeta.timeStr.slice(0, 5)]
       );
+
+      if (existingSlots && existingSlots.length > 0) {
+        await queryDb(
+          `UPDATE "${schema}".timetable_slots SET
+            topic = COALESCE($1, topic),
+            unit_id = COALESCE($2, unit_id),
+            unit_name = COALESCE($3, unit_name),
+            sub_topics = COALESCE($4, sub_topics),
+            competency_codes = COALESCE($5, competency_codes),
+            description = COALESCE($6, description)
+          WHERE id = $7`,
+          [
+            topic || title,
+            unitId || null,
+            unitName || null,
+            subTopics || null,
+            competencyCodes || null,
+            description,
+            existingSlots[0].id,
+          ]
+        );
+      } else {
+        await queryDb(
+          `INSERT INTO "${schema}".timetable_slots (
+            day_of_week, start_time, end_time, room, slot_type, topic,
+            unit_id, unit_name, sub_topics, competency_codes,
+            colg_cd, course_cd, branch_cd, batch_cd, semester, section, description
+          ) VALUES (
+            $1, $2, $3, $4, 'Lecture', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+          )`,
+          [
+            startMeta.dayOfWeek,
+            startMeta.timeStr,
+            endMeta.timeStr,
+            cameraLink ? `Room (Cam #${cameraLink})` : 'Room 204',
+            topic || title,
+            unitId || null,
+            unitName || null,
+            subTopics || null,
+            competencyCodes || null,
+            colgcd,
+            courseCd,
+            branchCd,
+            batchCd,
+            semCd,
+            txtSec,
+            description,
+          ]
+        );
+      }
     } catch (slotErr) {
-      // Non-blocking slot insert
+      // Non-blocking slot sync
     }
 
     return NextResponse.json({

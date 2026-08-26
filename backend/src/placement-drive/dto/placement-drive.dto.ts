@@ -51,6 +51,16 @@ export class CreatePlacementDriveDto {
   @IsDateString()
   @IsNotEmpty()
   deadline_date: string;
+
+  @IsOptional()
+  eligible_branches?: any;
+
+  @IsOptional()
+  eligible_batches?: any;
+
+  @IsOptional()
+  @IsString()
+  logo_url?: string;
 }
 
 export class ApplyPlacementDriveDto {

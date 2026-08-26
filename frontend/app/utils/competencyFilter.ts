@@ -52,17 +52,13 @@ export function matchSlotDay(
 
   const slotNum = Number(slotDay);
   if (!isNaN(slotNum)) {
-    // 1-indexed exact match (e.g. 4 === 4)
+    // 1-indexed exact match (Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6, Sun=7)
     if (slotNum === selectedDay) return true;
-
-    // 0-indexed match (e.g. 3 === 4 - 1 for Mon=0 system)
-    if (slotNum === selectedDay - 1) return true;
 
     // 0-indexed Sunday (0 === 7)
     if (slotNum === 0 && selectedDay === 7) return true;
 
-    // 1-indexed Sunday (7 === 7)
-    if (slotNum === 7 && selectedDay === 7) return true;
+    return false;
   }
 
   const str = String(slotDay).toLowerCase().trim();

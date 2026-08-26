@@ -229,7 +229,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           status license_status_enum NOT NULL DEFAULT 'ACTIVE',
           is_renewal BOOLEAN NOT NULL DEFAULT FALSE,
           renewed_from_key_id UUID REFERENCES public.license_keys(id) ON DELETE SET NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT uq_license_keys_firm_prefix UNIQUE (firm_id, key_prefix)
         );
         CREATE INDEX IF NOT EXISTS idx_license_keys_firm_id ON public.license_keys (firm_id);
         CREATE INDEX IF NOT EXISTS idx_license_keys_status ON public.license_keys (status);
@@ -250,7 +251,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           duration_days INTEGER DEFAULT 365,
           expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '365 days'),
           is_renewal BOOLEAN DEFAULT TRUE,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT uq_transactions_firm_ref UNIQUE (firm_id, transaction_ref)
         );
         CREATE INDEX IF NOT EXISTS idx_transactions_firm_id ON public.transactions (firm_id);
         CREATE INDEX IF NOT EXISTS idx_transactions_ref ON public.transactions (transaction_ref);
@@ -377,12 +379,15 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           ON CONFLICT (slug) DO NOTHING;
         `);
 
-        // Insert active license key
+        const firmRow = await runner.query(`SELECT id FROM public.firms WHERE slug = $1 LIMIT 1`, [f.slug]);
+        const actualFirmId = firmRow[0]?.id || f.id;
+
+        // Insert active license key with ON CONFLICT check
         await runner.query(`
           INSERT INTO public.license_keys (
             firm_id, key_hash, key_prefix, duration_days, amount, issued_at, expires_at, status, is_renewal
           ) VALUES (
-            '${f.id}',
+            '${actualFirmId}',
             MD5('${f.slug}-DEFAULT-LICENSE-KEY'),
             'FIRM-${f.slug.toUpperCase().slice(0, 4)}',
             365,
@@ -392,15 +397,15 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             'ACTIVE',
             true
           )
-          ON CONFLICT DO NOTHING;
+          ON CONFLICT (firm_id, key_prefix) DO NOTHING;
         `);
 
-        // Insert transaction receipt
+        // Insert transaction receipt with ON CONFLICT check
         await runner.query(`
           INSERT INTO public.transactions (
             firm_id, amount, currency, payment_method, transaction_ref, status, paid_at, duration_days, expires_at, is_renewal
           ) VALUES (
-            '${f.id}',
+            '${actualFirmId}',
             250000.00,
             'INR',
             'NORNX Platform Billing / Bank Wire',
@@ -411,7 +416,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             NOW() + INTERVAL '365 days',
             true
           )
-          ON CONFLICT DO NOTHING;
+          ON CONFLICT (firm_id, transaction_ref) DO NOTHING;
         `);
       }
     } finally {
@@ -438,7 +443,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         await this.seedDefaultData(runner, resolvedSlug);
       }
       
-      // Alter users table to add username, name, phone, emp_id, usr_id, devicecd, loc_cd, department if missing
+      // Alter users table to add username, name, phone, emp_id, usr_id, devicecd, loc_cd, department, must_change_password if missing
       await runner.query(`
         ALTER TABLE "${schema}".users 
           ADD COLUMN IF NOT EXISTS username VARCHAR(100),
@@ -448,7 +453,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           ADD COLUMN IF NOT EXISTS usr_id VARCHAR(50),
           ADD COLUMN IF NOT EXISTS devicecd BIGINT,
           ADD COLUMN IF NOT EXISTS loc_cd INT,
-          ADD COLUMN IF NOT EXISTS department VARCHAR(100);
+          ADD COLUMN IF NOT EXISTS department VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS failed_login_count INT DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT true,
+          ADD COLUMN IF NOT EXISTS onboarding_step INT DEFAULT 0;
       `).catch(() => {});
 
       // Alter faculty table to add usr_id, devicecd, loc_cd, employment_status and all HR sync columns if missing
@@ -465,6 +476,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           ADD COLUMN IF NOT EXISTS experience VARCHAR(50),
           ADD COLUMN IF NOT EXISTS gender VARCHAR(20),
           ADD COLUMN IF NOT EXISTS photo_url TEXT,
+          ADD COLUMN IF NOT EXISTS cover_url TEXT,
+          ADD COLUMN IF NOT EXISTS bio TEXT,
+          ADD COLUMN IF NOT EXISTS github_url VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS linkedin_url VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS linkedin_connections VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS repository_evaluated_count INT DEFAULT 18,
+          ADD COLUMN IF NOT EXISTS followers_count INT DEFAULT 384,
+          ADD COLUMN IF NOT EXISTS research_interests TEXT[] DEFAULT '{}',
           ADD COLUMN IF NOT EXISTS date_of_joining DATE,
           ADD COLUMN IF NOT EXISTS joining_date DATE,
           ADD COLUMN IF NOT EXISTS date_of_birth DATE,

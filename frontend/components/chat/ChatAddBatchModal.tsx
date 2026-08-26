@@ -102,23 +102,53 @@ export default function ChatAddBatchModal({
 
       // 2. Fetch branches / departments
       const initialCourseCd = courseList[0]?.course_cd || '13';
-      const initialCourseName = courseList[0]?.course_name || 'B.Tech';
+      const initialCourseName = courseList[0]?.course_name || 'BCA';
       await loadBranchesForCourse(initialCourseCd, initialCourseName, tenant, token);
-
-      // 3. Batches
-      const batchList: BatchOption[] = [
-        { year: '2025', batch_name: '2025 Batch (1st Year)' },
-        { year: '2024', batch_name: '2024 Batch (2nd Year)' },
-        { year: '2023', batch_name: '2023 Batch (3rd Year)' },
-        { year: '2022', batch_name: '2022 Batch (4th Year)' },
-      ];
-      setBatches(batchList);
-      setSelectedBatchYear('2025');
+      await loadBatchesForCourse(initialCourseCd, tenant, token);
     } catch (err: any) {
       console.error('Error loading dropdown options:', err);
       setErrorMsg('Failed to load courses or departments.');
     } finally {
       setLoadingOptions(false);
+    }
+  };
+
+  const loadBatchesForCourse = async (courseCd: string, tenant: string, token: string) => {
+    let batchList: BatchOption[] = [];
+    try {
+      const isMed = tenant.includes('ims') || tenant.includes('med');
+      const defaultColg = isMed ? '11' : '1';
+      const btRes = await fetch('/api/srms/batches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ colgcd: defaultColg, coursecd: courseCd, tenantSlug: tenant }),
+      }).catch(() => null);
+
+      if (btRes && btRes.ok) {
+        const bJson = await btRes.json();
+        const list = Array.isArray(bJson) ? bJson : bJson.data || [];
+        batchList = list.map((b: any) => {
+          const rawYr = String(b.batch_name || b.year || b.name || b.batch_cd || '2025');
+          const cleanYr = rawYr.replace(/[^0-9]/g, '') || rawYr;
+          return {
+            year: cleanYr,
+            batch_name: b.batch_name?.startsWith('Batch') ? b.batch_name : `Batch ${b.batch_name || cleanYr}`,
+          };
+        });
+      }
+    } catch {}
+
+    if (batchList.length === 0) {
+      batchList = [
+        { year: '2025', batch_name: 'Batch 2025' },
+        { year: '2024', batch_name: 'Batch 2024' },
+        { year: '2023', batch_name: 'Batch 2023' },
+        { year: '2026', batch_name: 'Batch 2026' },
+      ];
+    }
+    setBatches(batchList);
+    if (batchList.length > 0) {
+      setSelectedBatchYear(String(batchList[0].year));
     }
   };
 
@@ -169,6 +199,7 @@ export default function ChatAddBatchModal({
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const tenant = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     await loadBranchesForCourse(cd, cName, tenant, token);
+    await loadBatchesForCourse(cd, tenant, token);
   };
 
   const handleDeptChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

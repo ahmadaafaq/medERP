@@ -31,32 +31,43 @@ export class AnalyticsService {
     ).catch(() => []);
     const college = tenantInfo[0] || { code: '1', name: slug.toUpperCase(), slug };
 
-    // 2. Counts
-    const [studentRes, facultyRes, deptRes, examRes] = await Promise.all([
+    // 2. Counts & Active percentages
+    const [studentRes, totalStudentRes, facultyRes, deptRes, examRes] = await Promise.all([
       this.tenantSchemaService.queryInTenant(slug, `SELECT COUNT(*) as count FROM students WHERE is_active = true`).catch(() => [{ count: 0 }]),
+      this.tenantSchemaService.queryInTenant(slug, `SELECT COUNT(*) as count FROM students`).catch(() => [{ count: 0 }]),
       this.tenantSchemaService.queryInTenant(slug, `SELECT COUNT(*) as count FROM faculty WHERE is_active = true`).catch(() => [{ count: 0 }]),
       this.tenantSchemaService.queryInTenant(slug, `SELECT COUNT(*) as count FROM departments WHERE is_active = true`).catch(() => [{ count: 0 }]),
-      this.tenantSchemaService.queryInTenant(slug, `SELECT COUNT(DISTINCT id) as count FROM examination_papers WHERE is_active = true`).catch(() => [{ count: 0 }]),
+      this.tenantSchemaService.queryInTenant(slug, `SELECT COUNT(DISTINCT id) as count FROM examination_papers`).catch(() => [{ count: 0 }]),
     ]);
 
     const totalStudents = parseInt(studentRes[0]?.count || 0, 10);
+    const totalAllStudents = parseInt(totalStudentRes[0]?.count || 0, 10);
     const totalFaculty = parseInt(facultyRes[0]?.count || 0, 10);
     const totalDepartments = parseInt(deptRes[0]?.count || 0, 10);
     const totalExams = parseInt(examRes[0]?.count || 0, 10);
+    const activeStudentPercentage =
+      totalAllStudents > 0
+        ? `${((totalStudents / totalAllStudents) * 100).toFixed(1)}%`
+        : '100%';
 
-    // 3. Admin & Faculty Punch IN / OUT for Current Day (2026-08-16)
+    // 3. Admin & Faculty Punch IN / OUT for Current Date
+    const todayDate = new Date();
+    const todayDateStr = todayDate.toISOString().split('T')[0];
+    const todayDisplayDate = todayDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
     const punchLogs = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT fp.id, fp.punch_time, fp.punch_type, fp.device_id,
               f.name as faculty_name, f.emp_id as faculty_code
        FROM faculty_punch_logs fp
        LEFT JOIN faculty f ON f.id = fp.faculty_id
+       WHERE DATE(fp.punch_time) = CURRENT_DATE
        ORDER BY fp.punch_time ASC`
     ).catch(() => []);
 
-    let punchInTime = '08:17 AM';
+    let punchInTime = '--';
     let punchOutTime = '--';
-    let punchStatus = 'Present / On Duty';
+    let punchStatus = 'Ready';
 
     if (punchLogs.length > 0) {
       const inLog = punchLogs.find((p: any) => p.punch_type === 'IN');
@@ -64,6 +75,7 @@ export class AnalyticsService {
       if (inLog) {
         const d = new Date(inLog.punch_time);
         punchInTime = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        punchStatus = 'Present / On Duty';
       }
       if (outLog) {
         const d = new Date(outLog.punch_time);
@@ -72,16 +84,16 @@ export class AnalyticsService {
       }
     }
 
-    // 4. Marks Results (Evaluated student assessment marks)
+    // 4. Marks Results (Evaluated student assessment marks from PostgreSQL)
     const results = await this.ds.query(
-      `SELECT DISTINCT ON (sr.id) sr.id, sr.marks_obtained, sr.practical_mark, sr.is_pass, sr.eval_status, sr.created_at,
+      `SELECT sr.id, sr.marks_obtained, sr.practical_mark, sr.is_pass, sr.eval_status, sr.created_at,
               s.name as student_name, s.rollno as roll_no,
-              ep.name as paper_name, ep.code as paper_code, ep.max_marks
+              ep.name as paper_name, ep.code as paper_code, COALESCE(ep.max_marks, 100) as max_marks
        FROM "${schema}".student_results sr
        LEFT JOIN "${schema}".students s ON s.id = sr.student_id
        LEFT JOIN "${schema}".examination_papers ep ON ep.id = sr.paper_id
-       WHERE sr.eval_status = 'EVALUATED' OR sr.eval_status IS NULL
-       ORDER BY sr.id, sr.created_at DESC
+       WHERE sr.eval_status = 'EVALUATED' OR sr.marks_obtained IS NOT NULL
+       ORDER BY sr.created_at DESC
        LIMIT 10`
     ).catch((err) => {
       console.error('[Analytics] Results query error:', err.message);
@@ -90,19 +102,32 @@ export class AnalyticsService {
 
     const totalEvaluated = results.length;
     let avgMarks = 0;
+    let passRate = '0%';
+    let maxMarks = 100;
     if (totalEvaluated > 0) {
       const sum = results.reduce((acc: number, curr: any) => acc + (parseFloat(curr.marks_obtained) || 0), 0);
       avgMarks = parseFloat((sum / totalEvaluated).toFixed(1));
+      const passedCount = results.filter((r: any) => r.is_pass).length;
+      passRate = `${Math.round((passedCount / totalEvaluated) * 100)}%`;
+      maxMarks = Math.max(...results.map((r: any) => Number(r.max_marks) || 100));
     }
 
     // 5. Timetable Schedule for College & Departments
+    const deptInfo = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT id, name, code FROM departments WHERE is_active = true ORDER BY name ASC LIMIT 1`
+    ).catch(() => []);
+    const departmentName = deptInfo[0]?.name || `${college.name} Academic Department`;
+
     const timetableRows = await this.ds.query(
       `SELECT ts.id, ts.day_of_week, ts.start_time, ts.end_time, ts.room,
               s.name as subject_name, s.code as subject_code,
-              f.name as faculty_name, f.emp_id as faculty_code
+              f.name as faculty_name, f.emp_id as faculty_code,
+              d.name as department_name
        FROM "${schema}".timetable_slots ts
        LEFT JOIN "${schema}".subjects s ON s.id = ts.subject_id
        LEFT JOIN "${schema}".faculty f ON f.id = ts.faculty_id
+       LEFT JOIN "${schema}".departments d ON d.id = ts.department_id
        ORDER BY ts.day_of_week, ts.start_time
        LIMIT 20`
     ).catch(() => []);
@@ -110,17 +135,17 @@ export class AnalyticsService {
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const formattedSlots = timetableRows.map((r: any) => ({
       id: r.id,
-      dayName: dayNames[r.day_of_week] || `Day ${r.day_of_week}`,
-      dayOfWeek: r.day_of_week,
-      startTime: String(r.start_time).slice(0, 5),
-      endTime: String(r.end_time).slice(0, 5),
-      timeRange: `${String(r.start_time).slice(0, 5)} - ${String(r.end_time).slice(0, 5)}`,
-      subjectName: r.subject_name || 'Subject',
+      dayName: dayNames[Number(r.day_of_week)] || `Day ${r.day_of_week}`,
+      dayOfWeek: Number(r.day_of_week),
+      startTime: String(r.start_time || '09:00').slice(0, 5),
+      endTime: String(r.end_time || '10:00').slice(0, 5),
+      timeRange: `${String(r.start_time || '09:00').slice(0, 5)} - ${String(r.end_time || '10:00').slice(0, 5)}`,
+      subjectName: r.subject_name || 'Subject Lecture',
       subjectCode: r.subject_code || 'SUB',
-      facultyName: r.faculty_name || 'Shorab Ahmad',
-      facultyCode: r.faculty_code || '202516224',
-      room: r.room || 'Room 204',
-      departmentName: 'BCA General (CSE)',
+      facultyName: r.faculty_name || 'Faculty Member',
+      facultyCode: r.faculty_code || 'FAC',
+      room: r.room || 'Lecture Hall',
+      departmentName: r.department_name || departmentName,
     }));
 
     return {
@@ -137,43 +162,39 @@ export class AnalyticsService {
         totalFaculty,
         totalDepartments,
         totalExams,
-        activeStudentPercentage: '98.5%',
-        monthlyFeeRevenue: '₹14.5L',
+        activeStudentPercentage,
+        monthlyFeeRevenue: '₹0',
       },
       adminPunch: {
-        date: '2026-08-16',
-        displayDate: 'August 16, 2026',
+        date: todayDateStr,
+        displayDate: todayDisplayDate,
         punchIn: punchInTime,
         punchOut: punchOutTime,
         status: punchStatus,
         device: 'SRMS-BIOMETRIC-01',
       },
       marksResults: {
-        totalEvaluated: totalEvaluated || 3,
-        averageMarks: avgMarks || 73.5,
-        maxMarks: 80,
-        passingRate: '100%',
-        recentList: (results.length > 0 ? results : [
-          { student_name: 'Aayush Saxena', roll_no: '2400140130001', paper_name: 'Mid Term BCA 3rd Sem Exam 2025 Batch', marks_obtained: '74.50', max_marks: '80.00', eval_status: 'EVALUATED', is_pass: true },
-          { student_name: 'Abhishek Kumar', roll_no: '2400140130002', paper_name: 'Mid Term BCA 3rd Sem Exam 2025 Batch', marks_obtained: '68.00', max_marks: '80.00', eval_status: 'EVALUATED', is_pass: true },
-          { student_name: 'Adarsh Singh', roll_no: '2400140130003', paper_name: 'Mid Term BCA 3rd Sem Exam 2025 Batch', marks_obtained: '78.00', max_marks: '80.00', eval_status: 'EVALUATED', is_pass: true }
-        ]).map((r: any) => ({
+        totalEvaluated,
+        averageMarks: avgMarks,
+        maxMarks,
+        passingRate: passRate,
+        recentList: results.map((r: any) => ({
           id: r.id || r.roll_no,
           studentName: r.student_name || 'Student',
           rollNo: r.roll_no || 'N/A',
-          paperName: r.paper_name || 'Mid Term Exam',
-          paperCode: r.paper_code || 'WBTECHPYTHON2026-1',
-          marksObtained: r.marks_obtained,
-          maxMarks: r.max_marks || '80.00',
-          percentage: `${((parseFloat(r.marks_obtained) / (parseFloat(r.max_marks) || 80)) * 100).toFixed(1)}%`,
-          status: r.eval_status || 'EVALUATED',
+          paperName: r.paper_name || 'Assessment Paper',
+          paperCode: r.paper_code || 'EXAM',
+          marksObtained: String(r.marks_obtained || 0),
+          maxMarks: String(r.max_marks || 100),
+          percentage: `${((parseFloat(r.marks_obtained || 0) / (parseFloat(r.max_marks) || 100)) * 100).toFixed(1)}%`,
+          status: r.eval_status || (r.is_pass ? 'EVALUATED' : 'PENDING'),
           evaluatedAt: r.created_at || new Date().toISOString(),
         })),
       },
       timetable: {
         hasSchedule: formattedSlots.length > 0,
         departmentExists: totalDepartments > 0,
-        departmentName: 'BCA General / Computer Science & Engineering',
+        departmentName,
         totalSlots: formattedSlots.length,
         slots: formattedSlots,
       },

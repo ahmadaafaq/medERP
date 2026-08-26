@@ -11,6 +11,7 @@ import {
   Sparkles, 
   ArrowRight, 
   Loader2,
+  Download,
   Table as TableIcon
 } from 'lucide-react';
 
@@ -36,15 +37,22 @@ export default function ImportDrivesModal({ onClose, onSuccess }: ImportDrivesMo
     setLoadingPreview(true);
 
     try {
-      const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly').replace(/^tenant_/, '') : 'srms-cet-bareilly';
+      const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || localStorage.getItem('colg_slug') || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '') : 'srms-cet-bareilly';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('access_token') || localStorage.getItem('accessToken') : null;
+      const headers: Record<string, string> = {
+        'Content-Type': 'multipart/form-data',
+        'x-tenant-id': tenant,
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const formData = new FormData();
       formData.append('file', selected);
 
       const res = await axios.post(`/api/placement-drive/import-preview?tenant=${tenant}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers,
       }).catch(async () => {
         return axios.post(`http://localhost:3001/api/v1/placement-drive/import-preview?tenant=${tenant}`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers,
         });
       });
 
@@ -63,15 +71,21 @@ export default function ImportDrivesModal({ onClose, onSuccess }: ImportDrivesMo
     setError(null);
 
     try {
-      const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly').replace(/^tenant_/, '') : 'srms-cet-bareilly';
+      const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || localStorage.getItem('colg_slug') || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '') : 'srms-cet-bareilly';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('access_token') || localStorage.getItem('accessToken') : null;
+      const headers: Record<string, string> = {
+        'x-tenant-id': tenant,
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const payload = {
         batch_title: batchTitle,
         source_file_name: file?.name || 'placement_companies.xlsx',
         companies: previewData.preview_rows,
       };
 
-      await axios.post(`/api/placement-drive/import-confirm?tenant=${tenant}`, payload).catch(async () => {
-        return axios.post(`http://localhost:3001/api/v1/placement-drive/import-confirm?tenant=${tenant}`, payload);
+      await axios.post(`/api/placement-drive/import-confirm?tenant=${tenant}`, payload, { headers }).catch(async () => {
+        return axios.post(`http://localhost:3001/api/v1/placement-drive/import-confirm?tenant=${tenant}`, payload, { headers });
       });
 
       onSuccess();
@@ -80,6 +94,37 @@ export default function ImportDrivesModal({ onClose, onSuccess }: ImportDrivesMo
       setError(err?.response?.data?.message || err?.message || 'Failed to save companies.');
     } finally {
       setLoadingConfirm(false);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      // First try direct download link
+      const directUrl = '/templates/placement-drive-import-template.xlsx';
+      const a = document.createElement('a');
+      a.href = directUrl;
+      a.download = 'placement-drive-import-template.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch {
+      // Fallback to backend API
+      try {
+        const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
+        const res = await axios.get(`/api/placement-drive/template?tenant=${tenant}`).catch(async () => {
+          return axios.get(`http://localhost:3001/api/v1/placement-drive/template?tenant=${tenant}`);
+        });
+        if (res.data?.base64) {
+          const link = document.createElement('a');
+          link.href = `data:${res.data.contentType};base64,${res.data.base64}`;
+          link.download = res.data.filename || 'placement-drive-import-template.xlsx';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      } catch (err) {
+        console.error('Failed to download template:', err);
+      }
     }
   };
 
@@ -117,9 +162,39 @@ export default function ImportDrivesModal({ onClose, onSuccess }: ImportDrivesMo
           </div>
         )}
 
-        {/* Step 1: Upload Dropzone */}
+        {/* Step 1: Upload Dropzone & Download Format Banner */}
         {!previewData && (
           <div className="space-y-4">
+            
+            {/* Download Template Format Card */}
+            <div className="p-4 rounded-[22px] bg-gradient-to-r from-[#5B4BFF]/10 via-[#7867FF]/10 to-[#00C48C]/10 border border-[#5B4BFF]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 text-[#5B4BFF] shadow-xs shrink-0">
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>Download Excel Template Format</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00C48C]/15 text-[#00C48C]">
+                      Standard Format
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                    Download the pre-formatted template with column headers, instructions, and sample rows.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-[#5B4BFF] dark:text-[#7867FF] text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-2 shrink-0 active:scale-95 cursor-pointer hover:border-[#5B4BFF]"
+              >
+                <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Download Template (.xlsx)</span>
+              </button>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">
                 Drive Batch Title

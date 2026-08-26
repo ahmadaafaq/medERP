@@ -35,17 +35,18 @@ interface StaffPunchRecord {
 }
 
 const LOCATION_OPTIONS = [
-  { id: '1', label: 'Loc 1 — SRMS IMS Bareilly' },
-  { id: '2', label: 'Loc 2 — SRMS Hospital Bareilly' },
-  { id: '3', label: 'Loc 3 — SRMS IPS Bareilly' },
-  { id: '4', label: 'Loc 4 — SRMS Nursing Bareilly' },
-  { id: '5', label: 'Loc 5 — SRMS Trust Office' },
-  { id: '6', label: 'Loc 6 — SRMS IBS Lucknow' },
   { id: '7', label: 'Loc 7 — SRMS CET Bareilly (Default)' },
+  { id: '1', label: 'Loc 1 — SRMS IMS & Central Campus' },
   { id: '8', label: 'Loc 8 — SRMS CETR Bareilly' },
-  { id: '9', label: 'Loc 9 — SRMS Law Bareilly' },
+  { id: '6', label: 'Loc 6 — SRMS IBS Lucknow' },
+  { id: '4', label: 'Loc 4 — SRMS Nursing Bareilly' },
   { id: '10', label: 'Loc 10 — SRMS Pharmacy' },
-  { id: '11', label: 'Loc 11 — SRMS City Campus' },
+  { id: '2', label: 'Loc 2 — SRMS Hospital Bareilly' },
+  { id: '5', label: 'Loc 5 — SRMS Trust Office' },
+  { id: '9', label: 'Loc 9 — SRMS Law Bareilly' },
+  { id: '12', label: 'Loc 12 — SRMS Unnao Campus' },
+  { id: '14', label: 'Loc 14 — SRMS Allied Health Sciences' },
+  { id: 'ALL', label: 'All Campus Locations Combined' },
 ];
 
 export default function FacultyDailyPunchWidget() {

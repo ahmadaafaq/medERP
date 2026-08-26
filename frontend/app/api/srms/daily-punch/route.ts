@@ -14,35 +14,71 @@ export async function POST(request: NextRequest) {
     // punch_typ: '1' for Punch In, '2' for Punch Out
     const punch_typ = String(body.punch_typ || body.punch_type || '1');
 
-    const srmsPayload = {
-      LocId,
-      date,
-      punch_typ,
-    };
+    let list: any[] = [];
 
-    const response = await fetch('https://myportal.srms.ac.in/HR/HR/GetDailyPunchRpt', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
-      },
-      body: JSON.stringify(srmsPayload),
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: `SRMS API responded with status ${response.status}`,
-          data: [],
-        },
-        { status: response.status }
+    if (LocId === 'ALL') {
+      // Fetch across all known active SRMS campus locations in parallel
+      const locIds = ['1', '2', '4', '5', '6', '7', '8', '9', '10', '12', '14'];
+      const results = await Promise.allSettled(
+        locIds.map(async (loc) => {
+          const res = await fetch('https://myportal.srms.ac.in/HR/HR/GetDailyPunchRpt', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+            },
+            body: JSON.stringify({ LocId: loc, date, punch_typ }),
+            cache: 'no-store',
+          });
+          if (!res.ok) return [];
+          const data = await res.json().catch(() => []);
+          return Array.isArray(data) ? data : [];
+        })
       );
-    }
 
-    const rawData = await response.json();
-    const list: any[] = Array.isArray(rawData) ? rawData : [];
+      const seen = new Set<string>();
+      for (const res of results) {
+        if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+          for (const item of res.value) {
+            const key = `${item.EmpID}_${item.PUNCHTIME}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              list.push(item);
+            }
+          }
+        }
+      }
+    } else {
+      const srmsPayload = {
+        LocId,
+        date,
+        punch_typ,
+      };
+
+      const response = await fetch('https://myportal.srms.ac.in/HR/HR/GetDailyPunchRpt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+        },
+        body: JSON.stringify(srmsPayload),
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `SRMS API responded with status ${response.status}`,
+            data: [],
+          },
+          { status: response.status }
+        );
+      }
+
+      const rawData = await response.json();
+      list = Array.isArray(rawData) ? rawData : [];
+    }
 
     // Clean and normalize staff records
     const processedList = list.map((item: any) => {

@@ -43,41 +43,11 @@ export default function FacultyTopperHustleBoard() {
           ...(slug ? { 'x-tenant-slug': slug, 'x-tenant': slug } : {}),
         };
 
-        const res = await fetch(`http://localhost:3001/api/v1/student-master${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
+        const res = await fetch(`http://localhost:3001/api/v1/student-master/hustle-board${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
         if (res && res.ok) {
           const json = await res.json();
           const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
-          if (list.length > 0) {
-            const mapped: TopperStudent[] = list.slice(0, 5).map((s: any, idx: number) => {
-              const att = Number(s.attendance_percentage || s.attendance_pct || 80);
-              const theory = Number(s.theory_score || 85);
-              const scorePct = Number(s.score_pct || 80);
-              const comp = Math.round((att * 0.25 + theory * 0.3 + scorePct * 0.2 + 25) * 10) / 10;
-              return {
-                rank: idx + 1,
-                id: s.id || String(idx + 1),
-                name: s.name || s.student_name || 'Enrolled Student',
-                regNo: s.registration_no || s.reg_no || '',
-                rollNo: s.roll_no || s.rollno || s.registration_no || '',
-                course: s.course_name || s.course_cd || 'B.Tech',
-                batch: s.batch_name ? `Batch ${s.batch_name}` : 'Batch 2025',
-                photoUrl: s.photo_url || s.student_photo || '',
-                attendancePct: att,
-                theoryScore: theory,
-                projectGrade: s.grade || 'A',
-                projectScorePct: scorePct,
-                isIncubationSelected: Boolean(s.is_incubated),
-                isChatActive: true,
-                compositeScore: comp,
-                tier: idx === 0 ? 'Tier S' : idx < 3 ? 'Tier A+' : 'Tier A',
-                tierColor: idx === 0 ? 'from-amber-400 to-yellow-600' : 'from-indigo-500 to-purple-600',
-                hustleTag: idx === 0 ? '👑 High Academic Scorer & Innovator' : '🎖️ Active Batch Contributor',
-              };
-            });
-            setStudents(mapped);
-          } else {
-            setStudents([]);
-          }
+          setStudents(list);
         } else {
           setStudents([]);
         }
@@ -265,19 +235,23 @@ export default function FacultyTopperHustleBoard() {
                   <span className={`px-2 py-0.5 rounded-md border ${
                     student.attendancePct >= 75
                       ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
-                      : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                      : student.attendancePct > 0
+                      ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                   }`}>
-                    📊 Attd: {student.attendancePct}%
+                    📊 Attd: {student.attendancePct > 0 ? `${student.attendancePct}%` : 'Live Sync'}
                   </span>
                   <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
-                    📝 Theory Exam: {student.theoryScore}%
+                    📝 Theory Exam: {student.theoryScore !== null ? `${student.theoryScore}%` : 'Pending'}
                   </span>
-                  <span className="px-2 py-0.5 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20">
-                    📂 Repo: Grade {student.projectGrade} ({student.projectScorePct}%)
-                  </span>
+                  {student.projectScorePct > 0 ? (
+                    <span className="px-2 py-0.5 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20 truncate max-w-[240px]" title={student.projectTitle || ''}>
+                      📂 Repo: Grade {student.projectGrade} ({student.projectScorePct}%)
+                    </span>
+                  ) : null}
                   {student.isIncubationSelected && (
                     <span className="px-2 py-0.5 rounded-md bg-orange-500/10 text-orange-700 dark:text-orange-300 border border-orange-500/20 flex items-center gap-0.5">
-                      🚀 Incubation
+                      🚀 Incubation ({student.incubationStatus || 'Selected'})
                     </span>
                   )}
                   {student.isChatActive && (

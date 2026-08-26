@@ -246,11 +246,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
           }))
         );
       } else {
-        setCoursesList([
-          { id: '13', code: '13', name: 'BCA' },
-          { id: '1', code: '1', name: 'B.Tech' },
-          { id: '2', code: '2', name: 'MCA' },
-        ]);
+        setCoursesList([]);
       }
     } catch (err) {
       console.warn('Failed to fetch academic metadata:', err);

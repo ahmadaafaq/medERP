@@ -13,7 +13,8 @@ import {
   CheckCircle2, 
   Loader2, 
   Sparkles,
-  DollarSign
+  DollarSign,
+  Building2
 } from 'lucide-react';
 
 export default function StudentInternshipsPage() {
@@ -21,6 +22,7 @@ export default function StudentInternshipsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [campusFilter, setCampusFilter] = useState('ALL');
   const [certificateData, setCertificateData] = useState<CertificateData | null>(null);
   const [loadingCert, setLoadingCert] = useState(false);
 
@@ -67,6 +69,18 @@ export default function StudentInternshipsPage() {
   };
 
   const handleApply = async (program: InternshipProgram) => {
+    if (program.application_deadline) {
+      try {
+        const deadlineDate = new Date(program.application_deadline);
+        const endOfDay = new Date(deadlineDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (endOfDay.getTime() < Date.now()) {
+          alert('Applications for this program are closed as the deadline has expired.');
+          return;
+        }
+      } catch {}
+    }
+
     try {
       const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
       let userObj: any = {};
@@ -143,11 +157,15 @@ export default function StudentInternshipsPage() {
   const filtered = programs.filter((p) => {
     const matchSearch =
       p.title?.toLowerCase().includes(search.toLowerCase()) ||
-      p.description?.toLowerCase().includes(search.toLowerCase());
+      p.description?.toLowerCase().includes(search.toLowerCase()) ||
+      p.organization_name?.toLowerCase().includes(search.toLowerCase()) ||
+      p.off_campus_title?.toLowerCase().includes(search.toLowerCase()) ||
+      p.location?.toLowerCase().includes(search.toLowerCase());
 
     const matchCategory = categoryFilter === 'ALL' || p.category === categoryFilter;
+    const matchCampus = campusFilter === 'ALL' || p.campus_type === campusFilter;
 
-    return matchSearch && matchCategory;
+    return matchSearch && matchCategory && matchCampus;
   });
 
   return (
@@ -166,17 +184,17 @@ export default function StudentInternshipsPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-black text-slate-900 dark:text-white">
-                    You have {completedCerts.length} Verified Digital Certificate(s) Available!
+                    You have {completedCerts.length} Verified Certificate(s) Available!
                   </h3>
                   <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Official e-certificates signed by Dean Academics ready for print and portfolio download.
+                    Official in-house e-certificates and uploaded corporate completion credentials ready for download.
                   </p>
                 </div>
               </div>
 
               <button
                 onClick={() => handleViewCertificate(completedCerts[0].my_application!.id, completedCerts[0].title)}
-                className="px-5 py-2.5 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-md transition-all shrink-0 active:scale-95 flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-md transition-all shrink-0 active:scale-95 flex items-center gap-1.5 cursor-pointer"
               >
                 <Award className="w-4 h-4" />
                 View Latest Certificate
@@ -191,22 +209,34 @@ export default function StudentInternshipsPage() {
                 Internship & Certification Programs
               </h1>
               <p className="text-xs sm:text-sm text-[#4E5969] dark:text-slate-400 mt-1">
-                Upskill with industry-recognized certificate tracks in IT, Business Analytics, and Para-Medical systems.
+                Explore On-Campus university labs and Off-Campus corporate/hospital opportunities in IT, Engineering, Management, and Healthcare.
               </p>
             </div>
           </div>
 
           {/* Search & Filter */}
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-[22px] border border-[#E7EAF3] dark:border-slate-700 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="relative">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-[22px] border border-[#E7EAF3] dark:border-slate-700 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="relative sm:col-span-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search domain or certification topic..."
+                placeholder="Search domain, company, city..."
                 className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
               />
+            </div>
+
+            <div>
+              <select
+                value={campusFilter}
+                onChange={(e) => setCampusFilter(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+              >
+                <option value="ALL">All Modes (On-Campus & Off-Campus)</option>
+                <option value="ON_CAMPUS">🏛️ On-Campus (College Labs & Units)</option>
+                <option value="OFF_CAMPUS">🏢 Off-Campus (Industry / Hospitals)</option>
+              </select>
             </div>
 
             <div>

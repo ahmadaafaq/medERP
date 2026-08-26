@@ -44,7 +44,25 @@ export class TimetableService implements OnModuleInit {
     }
   }
 
-  async listSlots(tenantSlug: string, query: { departmentId?: string; batchId?: string; dayOfWeek?: number; facultyId?: string; subjectId?: string; courseId?: string; sessionId?: string }) {
+  async listSlots(
+    tenantSlug: string,
+    query: {
+      departmentId?: string;
+      batchId?: string;
+      dayOfWeek?: number;
+      facultyId?: string;
+      subjectId?: string;
+      courseId?: string;
+      courseCd?: string;
+      branchId?: string;
+      branchCd?: string;
+      batchCd?: string;
+      colgCd?: string;
+      semester?: string;
+      section?: string;
+      sessionId?: string;
+    },
+  ) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
 
     const params: any[] = [];
@@ -55,9 +73,11 @@ export class TimetableService implements OnModuleInit {
              ts.unit_name, ts.unit_id, ts.sub_topics, ts.colg_cd, ts.course_cd, ts.branch_cd, ts.batch_cd,
              ts.semester, ts.section, ts.description,
              COALESCE(f.name, '') AS faculty_name, f.emp_id AS faculty_code,
-             COALESCE(s.name, '') AS subject_name, COALESCE(s.code, '') AS subject_code,
+             COALESCE(s.name, '') AS subject_name, COALESCE(s.code, '') AS subject_code, COALESCE(s.type, '') AS subject_type,
              COALESCE(d.name, '') AS department_name, d.code AS department_code,
-             b.code AS batch_code, b.year AS batch_year
+             COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, ts.batch_cd, b.code) AS batch_code,
+             COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, ts.batch_cd, b.code) AS batch_name,
+             b.year AS batch_year, b.batch_cd AS batch_numeric_cd
       FROM timetable_slots ts
       LEFT JOIN faculty f ON f.id = ts.faculty_id
       LEFT JOIN subjects s ON s.id = ts.subject_id
@@ -107,7 +127,7 @@ export class TimetableService implements OnModuleInit {
       if (this.isUUID(query.batchId)) {
         sql += ` AND (ts.batch_id = $${pIdx} OR b.id = $${pIdx})`;
       } else {
-        sql += ` AND (b.year::text = $${pIdx} OR b.code = $${pIdx} OR b.name = $${pIdx} OR b.name ILIKE '%' || $${pIdx} || '%' OR ts.batch_id::text = $${pIdx})`;
+        sql += ` AND (b.year::text = $${pIdx} OR b.code = $${pIdx} OR b.name = $${pIdx} OR b.name ILIKE '%' || $${pIdx} || '%' OR ts.batch_id::text = $${pIdx} OR ts.batch_cd = $${pIdx})`;
       }
     }
 
@@ -117,8 +137,44 @@ export class TimetableService implements OnModuleInit {
       if (this.isUUID(query.courseId)) {
         sql += ` AND (b.course_id = $${pIdx} OR s.course_id = $${pIdx})`;
       } else {
-        sql += ` AND (b.course_cd = $${pIdx} OR s.course_cd = $${pIdx} OR b.course_name ILIKE '%' || $${pIdx} || '%')`;
+        sql += ` AND (b.course_cd = $${pIdx} OR s.course_cd = $${pIdx} OR b.course_name ILIKE '%' || $${pIdx} || '%' OR ts.course_cd = $${pIdx})`;
       }
+    }
+
+    if (query.courseCd && query.courseCd !== 'all') {
+      params.push(query.courseCd);
+      const pIdx = params.length;
+      sql += ` AND (ts.course_cd = $${pIdx} OR b.course_cd = $${pIdx} OR s.course_cd = $${pIdx})`;
+    }
+
+    if (query.branchCd && query.branchCd !== 'all') {
+      params.push(query.branchCd);
+      const pIdx = params.length;
+      sql += ` AND (ts.branch_cd = $${pIdx} OR d.branch_cd = $${pIdx} OR d.code = $${pIdx})`;
+    }
+
+    if (query.batchCd && query.batchCd !== 'all') {
+      params.push(query.batchCd);
+      const pIdx = params.length;
+      sql += ` AND (ts.batch_cd = $${pIdx} OR b.batch_cd = $${pIdx} OR b.code = $${pIdx} OR b.year::text = $${pIdx} OR b.name ILIKE '%' || $${pIdx} || '%')`;
+    }
+
+    if (query.colgCd && query.colgCd !== 'all') {
+      params.push(query.colgCd);
+      const pIdx = params.length;
+      sql += ` AND (ts.colg_cd = $${pIdx} OR ts.colg_cd IS NULL)`;
+    }
+
+    if (query.semester && query.semester !== 'all') {
+      params.push(String(query.semester));
+      const pIdx = params.length;
+      sql += ` AND (ts.semester = $${pIdx} OR ts.semester IS NULL)`;
+    }
+
+    if (query.section && query.section !== 'all') {
+      params.push(String(query.section));
+      const pIdx = params.length;
+      sql += ` AND (ts.section = $${pIdx} OR ts.section IS NULL OR ts.section = 'All' OR ts.section = '1' OR ts.section = 'A')`;
     }
 
     if (query.dayOfWeek !== undefined && !isNaN(Number(query.dayOfWeek))) {
@@ -129,9 +185,119 @@ export class TimetableService implements OnModuleInit {
 
     const slots = await this.tenantSchemaService.queryInTenant(slug, sql, params);
 
-    // Fetch authentic conducted sessions from attendance_sessions database table
+    // 1. Index PostgreSQL designed slots
+    const slotMap = new Map<string, any>();
+    for (const s of slots) {
+      slotMap.set(s.id, { ...s });
+    }
+
+    // 2. Fetch SRMS Timetable Events strictly matching requested academic filters
+    let srmsWhere: string[] = ['1=1'];
+    let srmsParams: any[] = [];
+    if (query.colgCd && query.colgCd !== 'all') {
+      srmsParams.push(query.colgCd);
+      srmsWhere.push(`(colg_cd = $${srmsParams.length} OR colg_cd IS NULL)`);
+    }
+    if (query.courseCd && query.courseCd !== 'all') {
+      srmsParams.push(query.courseCd);
+      srmsWhere.push(`(course_cd = $${srmsParams.length} OR course_cd IS NULL)`);
+    }
+    if (query.branchCd && query.branchCd !== 'all') {
+      srmsParams.push(query.branchCd);
+      srmsWhere.push(`(branch_cd = $${srmsParams.length} OR branch_cd IS NULL)`);
+    }
+    if (query.batchCd && query.batchCd !== 'all') {
+      srmsParams.push(query.batchCd);
+      srmsWhere.push(`(batch_cd = $${srmsParams.length} OR batch_cd IS NULL)`);
+    }
+    if (query.semester && query.semester !== 'all') {
+      srmsParams.push(String(query.semester));
+      srmsWhere.push(`(sem_cd = $${srmsParams.length} OR sem_cd IS NULL)`);
+    }
+    if (query.facultyId && query.facultyId !== 'all') {
+      srmsParams.push(query.facultyId);
+      srmsWhere.push(`(empid = $${srmsParams.length} OR empid ILIKE '%' || $${srmsParams.length} || '%')`);
+    }
+
+    let srmsEvents: any[] = [];
+    try {
+      srmsEvents = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, title, description, start_time, end_time, start_str, end_str, day_of_week,
+                linkcd, empid, colg_cd, course_cd, branch_cd, batch_cd, sem_cd, camera_link,
+                unit_name, unit_id, topic, sub_topics, competency_codes
+         FROM srms_timetable_events
+         WHERE ${srmsWhere.join(' AND ')}
+         ORDER BY start_time ASC`,
+        srmsParams,
+      );
+    } catch (e) {
+      // Graceful fallback
+    }
+
+    for (const ev of srmsEvents) {
+      const sTime = ev.start_str && ev.start_str.includes(':')
+        ? ev.start_str.split(' ')[1]?.slice(0, 8)
+        : (ev.start_time ? String(ev.start_time).slice(11, 19) : '09:30:00');
+      const eTime = ev.end_str && ev.end_str.includes(':')
+        ? ev.end_str.split(' ')[1]?.slice(0, 8)
+        : (ev.end_time ? String(ev.end_time).slice(11, 19) : '10:30:00');
+      const dayVal = ev.day_of_week || 1;
+      const sTimePrefix = (sTime || '').slice(0, 5);
+
+      // Check if a slot already exists for this exact day and start time
+      let matchingSlotKey: string | null = null;
+      for (const [key, slot] of slotMap.entries()) {
+        if (Number(slot.day_of_week) === Number(dayVal) && String(slot.start_time || '').slice(0, 5) === sTimePrefix) {
+          matchingSlotKey = key;
+          break;
+        }
+      }
+
+      const rawTitle = String(ev.title || ev.description || '');
+      const cleanName = rawTitle.replace(/\([^)]*\)/g, '').trim();
+      const teacher = (rawTitle.match(/\(([^)]+)\)/)?.[1] || 'Faculty Incharge').trim();
+
+      if (matchingSlotKey) {
+        // Merge metadata into existing rich slot
+        const existing = slotMap.get(matchingSlotKey);
+        slotMap.set(matchingSlotKey, {
+          ...existing,
+          topic: existing.topic || ev.topic || cleanName || rawTitle,
+          unit_name: existing.unit_name || ev.unit_name,
+          unit_id: existing.unit_id || ev.unit_id,
+          sub_topics: existing.sub_topics || ev.sub_topics,
+          competency_codes: existing.competency_codes || ev.competency_codes,
+          room: existing.room || (ev.camera_link ? `Room 204 (Cam #${ev.camera_link})` : 'Room 204'),
+        });
+      } else if (!slotMap.has(ev.id)) {
+        slotMap.set(ev.id, {
+          id: ev.id,
+          day_of_week: dayVal,
+          start_time: sTime || '09:30:00',
+          end_time: eTime || '10:30:00',
+          room: ev.camera_link ? `Room 204 (Cam #${ev.camera_link})` : 'Room 204',
+          slot_type: 'Lecture',
+          topic: ev.topic || cleanName || rawTitle,
+          unit_name: ev.unit_name,
+          unit_id: ev.unit_id,
+          sub_topics: ev.sub_topics,
+          competency_codes: ev.competency_codes,
+          subject_name: cleanName || rawTitle,
+          subject_code: ev.linkcd || 'BCA',
+          faculty_name: teacher,
+          faculty_code: ev.empid,
+          department_name: 'Department of Computer Applications',
+          batch_code: ev.batch_cd ? `Batch ${ev.batch_cd}` : 'Batch 2025',
+          batch_name: ev.batch_cd ? `Batch ${ev.batch_cd}` : 'Batch 2025',
+          batch_year: 2025,
+        });
+      }
+    }
+
+    // 3. Enrich existing slots with conducted session updates from attendance_sessions
     let sessionParams: any[] = [];
-    let sessionWhere: string[] = ['s.is_cancelled = false'];
+    let sessionWhere: string[] = ['s.is_cancelled = false', 's.timetable_slot_id IS NOT NULL'];
 
     if (query.facultyId && query.facultyId !== 'all') {
       sessionParams.push(query.facultyId);
@@ -142,129 +308,33 @@ export class TimetableService implements OnModuleInit {
         sessionWhere.push(`(f.emp_id = $${pIdx} OR f.id::text = $${pIdx} OR f.name ILIKE '%' || $${pIdx} || '%')`);
       }
     }
-    if (query.subjectId && query.subjectId !== 'all') {
-      sessionParams.push(query.subjectId);
-      const pIdx = sessionParams.length;
-      if (this.isUUID(query.subjectId)) {
-        sessionWhere.push(`s.subject_id = $${pIdx}`);
-      } else {
-        sessionWhere.push(`(sub.code = $${pIdx} OR sub.id::text = $${pIdx} OR sub.name ILIKE '%' || $${pIdx} || '%')`);
-      }
-    }
-    if (query.batchId && query.batchId !== 'all') {
-      sessionParams.push(query.batchId);
-      const pIdx = sessionParams.length;
-      if (this.isUUID(query.batchId)) {
-        sessionWhere.push(`s.batch_id = $${pIdx}`);
-      } else {
-        sessionWhere.push(`(b.year::text = $${pIdx} OR b.code = $${pIdx} OR b.name = $${pIdx} OR b.name ILIKE '%' || $${pIdx} || '%')`);
-      }
-    }
 
-    let sessionSql = `
-      SELECT 
-        s.id,
-        s.faculty_id,
-        s.subject_id,
-        s.batch_id,
-        EXTRACT(ISODOW FROM s.session_date)::integer AS day_of_week,
-        s.session_date::text AS session_date,
-        COALESCE(ts.start_time, '09:00:00'::time) AS start_time,
-        COALESCE(ts.end_time, '10:00:00'::time) AS end_time,
-        COALESCE(ts.room, 'Lecture Hall 1') AS room,
-        COALESCE(s.session_type, ts.slot_type, 'LECTURE') AS slot_type,
-        s.topic_covered AS topic,
-        COALESCE(ts.competency_codes, s.topic_covered) AS competency_codes,
-        COALESCE(f.name, ts_fac.name, 'Faculty Marker') AS faculty_name,
-        COALESCE(f.emp_id, ts_fac.emp_id) AS faculty_code,
-        COALESCE(sub.name, 'Subject') AS subject_name,
-        COALESCE(sub.code, 'SUB') AS subject_code,
-        d.name AS department_name,
-        b.code AS batch_code,
-        b.year AS batch_year,
-        s.timetable_slot_id
-      FROM attendance_sessions s
-      LEFT JOIN subjects sub ON sub.id = s.subject_id
-      LEFT JOIN batches b ON b.id = s.batch_id
-      LEFT JOIN faculty f ON f.id = s.faculty_id
-      LEFT JOIN timetable_slots ts ON ts.id = s.timetable_slot_id
-      LEFT JOIN faculty ts_fac ON ts_fac.id = ts.faculty_id
-      LEFT JOIN departments d ON d.id = ts.department_id OR d.id = sub.department_id
-      WHERE ${sessionWhere.join(' AND ')}
-      ORDER BY s.session_date DESC
-    `;
-
-    let conductedSessions: any[] = [];
     try {
-      conductedSessions = await this.tenantSchemaService.queryInTenant(slug, sessionSql, sessionParams);
-    } catch (e) {
-      // Graceful fallback if schema migration is pending
-    }
-
-    // Merge timetable slots & authentic conducted sessions from attendance_sessions & srms_timetable_events
-    const slotMap = new Map<string, any>();
-
-    for (const s of slots) {
-      slotMap.set(s.id, { ...s });
-    }
-
-    let srmsEvents: any[] = [];
-    try {
-      srmsEvents = await this.tenantSchemaService.queryInTenant(
+      const conductedSessions = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, title, description, start_time, end_time, start_str, end_str, day_of_week,
-                linkcd, empid, colg_cd, course_cd, branch_cd, batch_cd, sem_cd, camera_link
-         FROM srms_timetable_events
-         ORDER BY start_time ASC`
+        `SELECT s.id, s.timetable_slot_id, s.topic_covered AS topic, s.session_date::text AS session_date,
+                COALESCE(f.name, '') AS faculty_name
+         FROM attendance_sessions s
+         LEFT JOIN timetable_slots ts ON ts.id = s.timetable_slot_id
+         LEFT JOIN faculty f ON f.id = s.faculty_id
+         WHERE ${sessionWhere.join(' AND ')}
+         ORDER BY s.session_date DESC`,
+        sessionParams,
       );
+
+      for (const cs of conductedSessions) {
+        if (cs.timetable_slot_id && slotMap.has(cs.timetable_slot_id)) {
+          const existing = slotMap.get(cs.timetable_slot_id);
+          slotMap.set(cs.timetable_slot_id, {
+            ...existing,
+            topic: cs.topic || existing.topic,
+            session_date: cs.session_date,
+            faculty_name: cs.faculty_name || existing.faculty_name,
+          });
+        }
+      }
     } catch (e) {
       // Graceful fallback
-    }
-
-    for (const ev of srmsEvents) {
-      if (!slotMap.has(ev.id)) {
-        const rawTitle = String(ev.title || ev.description || '');
-        const cleanName = rawTitle.replace(/\([^)]*\)/g, '').trim();
-        const teacher = (rawTitle.match(/\(([^)]+)\)/)?.[1] || 'Faculty Incharge').trim();
-        const sTime = ev.start_str && ev.start_str.includes(':') 
-          ? ev.start_str.split(' ')[1] 
-          : (ev.start_time ? String(ev.start_time).slice(11, 19) : '09:30:00');
-        const eTime = ev.end_str && ev.end_str.includes(':') 
-          ? ev.end_str.split(' ')[1] 
-          : (ev.end_time ? String(ev.end_time).slice(11, 19) : '10:30:00');
-
-        slotMap.set(ev.id, {
-          id: ev.id,
-          day_of_week: ev.day_of_week || 1,
-          start_time: sTime || '09:30:00',
-          end_time: eTime || '10:30:00',
-          room: ev.camera_link ? `Room 204 (Cam #${ev.camera_link})` : 'Room 204',
-          slot_type: 'Lecture',
-          topic: cleanName || rawTitle,
-          subject_name: cleanName || rawTitle,
-          subject_code: ev.linkcd || 'BCA',
-          faculty_name: teacher,
-          faculty_code: ev.empid,
-          department_name: 'Faculty of Computer Applications',
-          batch_code: '2025',
-          batch_year: 2025,
-        });
-      }
-    }
-
-    for (const cs of conductedSessions) {
-      if (cs.timetable_slot_id && slotMap.has(cs.timetable_slot_id)) {
-        const existing = slotMap.get(cs.timetable_slot_id);
-        slotMap.set(cs.timetable_slot_id, {
-          ...existing,
-          topic: cs.topic || existing.topic,
-          session_date: cs.session_date,
-          faculty_name: cs.faculty_name || existing.faculty_name,
-          competency_codes: cs.competency_codes || existing.competency_codes,
-        });
-      } else {
-        slotMap.set(cs.id, cs);
-      }
     }
 
     const mergedSlots = Array.from(slotMap.values());
@@ -309,8 +379,19 @@ export class TimetableService implements OnModuleInit {
     });
   }
 
-  async getStudentSchedule(tenantSlug: string, batchId?: string) {
-    const slots = await this.listSlots(tenantSlug, { batchId });
+  async getStudentSchedule(
+    tenantSlug: string,
+    filters: {
+      batchId?: string;
+      courseCd?: string;
+      branchCd?: string;
+      batchCd?: string;
+      colgCd?: string;
+      semester?: string;
+      section?: string;
+    },
+  ) {
+    const slots = await this.listSlots(tenantSlug, filters);
     const now = new Date();
     const jsDay = now.getDay();
     const currentDayOfWeek = jsDay === 0 ? 7 : jsDay;
@@ -406,8 +487,8 @@ export class TimetableService implements OnModuleInit {
       batchId: resolvedBatchId || undefined,
     };
 
-    // Note: Overlap validation is handled date-wise via srms_timetable_events
-    // to allow the same faculty on different calendar dates without false day-of-week conflicts.
+    // Enforce faculty, room, and batch overlap validation across all departments & courses
+    await this.checkOverlap(slug, resolvedDto);
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -476,7 +557,8 @@ export class TimetableService implements OnModuleInit {
       competencyCodes: dto.competencyCodes !== undefined ? dto.competencyCodes : current.competency_codes,
     } as CreateTimetableSlotDto;
 
-    // Date-bound overlap is handled via srms_timetable_events
+    // Enforce faculty, room, and batch overlap validation across all departments & courses
+    await this.checkOverlap(slug, merged, id);
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -545,7 +627,7 @@ export class TimetableService implements OnModuleInit {
         slug,
         `DELETE FROM timetable_slots WHERE id = $1`,
         [id],
-      ).catch(() => {});
+      ).catch(() => { });
     }
 
     // Also delete from srms_timetable_events by id or raw_payload
@@ -558,7 +640,7 @@ export class TimetableService implements OnModuleInit {
             OR linkcd = $1`,
         [id],
       );
-    } catch {}
+    } catch { }
 
     return { success: true, message: 'Timetable slot deleted successfully' };
   }
@@ -630,10 +712,11 @@ export class TimetableService implements OnModuleInit {
 
     let sql = `
       SELECT ts.id, ts.room, ts.slot_type, ts.start_time, ts.end_time, ts.day_of_week,
+             ts.course_cd, ts.branch_cd, ts.batch_cd, ts.semester, ts.section, ts.topic, ts.description,
              f.name AS faculty_name, f.emp_id AS faculty_code,
              sub.name AS subject_name,
              d.name AS department_name,
-             b.code AS batch_code
+             b.code AS batch_code, b.name AS batch_name
       FROM timetable_slots ts
       LEFT JOIN faculty f ON f.id = ts.faculty_id
       LEFT JOIN subjects sub ON sub.id = ts.subject_id
@@ -656,17 +739,22 @@ export class TimetableService implements OnModuleInit {
       const dayName = days[conflict.day_of_week] || `Day ${conflict.day_of_week}`;
       const timeRange = `${String(conflict.start_time).slice(0, 5)} - ${String(conflict.end_time).slice(0, 5)}`;
 
+      const courseName = conflict.course_cd ? (conflict.course_cd === '13' ? 'BCA' : `Course ${conflict.course_cd}`) : (conflict.department_name || 'Academic Course');
+      const batchName = conflict.batch_name || conflict.batch_code || conflict.batch_cd ? `Batch ${conflict.batch_name || conflict.batch_code || conflict.batch_cd}` : 'Batch';
+      const semesterName = conflict.semester ? `Semester ${conflict.semester}` : 'Semester';
+      const sectionName = conflict.section === '1' ? 'Section A' : conflict.section === '2' ? 'Section B' : conflict.section === '3' ? 'Section C' : conflict.section === '4' ? 'Section D' : (conflict.section ? `Section ${conflict.section}` : 'Section');
+
       if (dto.facultyId && conflict.faculty_name) {
-        const msg = `This faculty (${conflict.faculty_name}) is already scheduled in Department (${conflict.department_name || 'Another Department'}), Subject (${conflict.subject_name || 'Subject'}), Time (${timeRange}), Day (${dayName}). Sorry, please schedule another faculty.`;
+        const msg = `${conflict.faculty_name} is already assigned to ${courseName}, ${batchName}, ${semesterName}, ${sectionName} on ${dayName} (${timeRange}). Please select a different time slot or choose another faculty member, or contact the Academic Administrator or Department Clerk to resolve the schedule overlap.`;
         throw new BadRequestException(msg);
-      } else if (dto.batchId && conflict.batch_code) {
-        const msg = `Batch (${conflict.batch_code}) is already scheduled for another class during ${timeRange} on ${dayName}.`;
+      } else if (dto.batchId && (conflict.batch_code || conflict.batch_name)) {
+        const msg = `${batchName} (${courseName}, ${semesterName}, ${sectionName}) already has a scheduled session (${conflict.subject_name || conflict.topic || 'Subject'}) on ${dayName} (${timeRange}).`;
         throw new BadRequestException(msg);
       } else if (dto.room && conflict.room) {
-        const msg = `Room (${conflict.room}) is already occupied during ${timeRange} on ${dayName}.`;
+        const msg = `Room (${conflict.room}) is already occupied on ${dayName} (${timeRange}).`;
         throw new BadRequestException(msg);
       } else {
-        throw new BadRequestException(`An overlapping timetable session already exists during ${timeRange} on ${dayName}.`);
+        throw new BadRequestException(`An overlapping timetable session already exists on ${dayName} (${timeRange}).`);
       }
     }
   }

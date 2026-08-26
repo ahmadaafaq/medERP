@@ -112,13 +112,15 @@ export async function GET(request: NextRequest) {
     }
 
     const ts = Date.now();
+    const fetchRemote = searchParams.get('fetch_remote') === 'true' || searchParams.get('sync') === 'true';
 
-    // 1. Fetch remote SRMS JsonResponse.ashx (strictly by requested date range)
-    const targetUrl = `https://myportal.srms.ac.in/timetable/master/JsonResponse.ashx?course=${course}&batch=${batch}&branch=${branch}&sem=${sem}&sec=${sec}&colgcd=${colgcd}&_=${ts}&start=${start}&end=${end}`;
-
-    let remoteData = await fetchSrmsJson(targetUrl);
-
-    if (!Array.isArray(remoteData)) remoteData = [];
+    // 1. Fetch remote SRMS JsonResponse.ashx only when explicitly requested (Sync action)
+    let remoteData: any[] = [];
+    if (fetchRemote) {
+      const targetUrl = `https://myportal.srms.ac.in/timetable/master/JsonResponse.ashx?course=${course}&batch=${batch}&branch=${branch}&sem=${sem}&sec=${sec}&colgcd=${colgcd}&_=${ts}&start=${start}&end=${end}`;
+      remoteData = await fetchSrmsJson(targetUrl);
+      if (!Array.isArray(remoteData)) remoteData = [];
+    }
 
     // 2. Fetch PostgreSQL timetable events from srms_timetable_events (strictly within requested date range)
     const tenantHeader = request.headers.get('x-tenant-id') || request.headers.get('x-tenant') || request.headers.get('x-tenant-slug') || '';
@@ -159,13 +161,13 @@ export async function GET(request: NextRequest) {
       const endTimestamp = Number(end);
       const targetDateParam = searchParams.get('target_date');
 
-      let dateFilterSql = '';
+      const whereClauses: string[] = [`(colg_cd = $1 OR colg_cd IS NULL)`];
       const queryParams: any[] = [colgcd];
 
       if (!isNaN(startTimestamp) && !isNaN(endTimestamp) && startTimestamp > 0 && endTimestamp > 0) {
         queryParams.push(new Date(startTimestamp * 1000).toISOString());
         queryParams.push(new Date(endTimestamp * 1000).toISOString());
-        dateFilterSql = `AND (start_time >= $2 AND start_time <= $3)`;
+        whereClauses.push(`(start_time >= $${queryParams.length - 1} AND start_time <= $${queryParams.length})`);
       } else if (targetDateParam) {
         const targetBase = new Date(targetDateParam);
         const day = targetBase.getDay();
@@ -174,13 +176,33 @@ export async function GET(request: NextRequest) {
         endOfWeek.setDate(startOfWeek.getDate() + 7);
         queryParams.push(startOfWeek.toISOString());
         queryParams.push(endOfWeek.toISOString());
-        dateFilterSql = `AND (start_time >= $2 AND start_time <= $3)`;
+        whereClauses.push(`(start_time >= $${queryParams.length - 1} AND start_time <= $${queryParams.length})`);
+      }
+
+      if (course && course !== 'all') {
+        queryParams.push(String(course));
+        whereClauses.push(`(course_cd = $${queryParams.length} OR course_cd IS NULL)`);
+      }
+      if (branch && branch !== 'all') {
+        queryParams.push(String(branch));
+        whereClauses.push(`(branch_cd = $${queryParams.length} OR branch_cd IS NULL)`);
+      }
+      if (batch && batch !== 'all') {
+        queryParams.push(String(batch));
+        whereClauses.push(`(batch_cd = $${queryParams.length} OR batch_cd IS NULL)`);
+      }
+      if (sem && sem !== 'all') {
+        queryParams.push(String(sem));
+        whereClauses.push(`(sem_cd = $${queryParams.length} OR sem_cd IS NULL)`);
+      }
+      if (sec && sec !== 'all') {
+        queryParams.push(String(sec));
+        whereClauses.push(`(txt_sec = $${queryParams.length} OR txt_sec IS NULL)`);
       }
 
       const rows = await queryDb(
         `SELECT * FROM "${schema}".srms_timetable_events
-         WHERE (colg_cd = $1 OR colg_cd IS NULL)
-         ${dateFilterSql}
+         WHERE ${whereClauses.join(' AND ')}
          ORDER BY start_time ASC, created_at DESC`,
         queryParams
       );
@@ -223,19 +245,28 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Merge both datasets and enrich SRMS items with PostgreSQL unit, topic, subtopic
+    const normalizeTitle = (t: string) => String(t || '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
+
     const enrichedRemote = remoteData.map((item: any) => {
       const startUnix = parseDateToUnix(item.start);
+      const itemTitleNorm = normalizeTitle(item.title);
       // Find matching PostgreSQL record
-      const match = dbEvents.find(
-        (db) =>
-          (item.id && (String(db.srms_id) === String(item.id) || String(db.id) === String(item.id))) ||
-          (String(db.linkcd) === String(item.linkcd) && Math.abs(db.start - startUnix) < 300) ||
-          (String(db.title).toLowerCase() === String(item.title).toLowerCase() && Math.abs(db.start - startUnix) < 300)
-      );
+      const match = dbEvents.find((db) => {
+        if (item.id && (String(db.srms_id) === String(item.id) || String(db.id) === String(item.id))) return true;
+        const dbTitleNorm = normalizeTitle(db.title);
+        const timeDiff = Math.abs((db.start || 0) - startUnix);
+        if (timeDiff < 1800) {
+          if (itemTitleNorm && dbTitleNorm && (itemTitleNorm.includes(dbTitleNorm) || dbTitleNorm.includes(itemTitleNorm))) return true;
+          if (String(db.linkcd) === String(item.linkcd)) return true;
+        }
+        return false;
+      });
 
       if (match) {
         return {
           ...item,
+          camera_link: match.camera_link || item.camera_link || null,
+          room: match.room || item.room || null,
           unit_id: match.unit_id || item.unit_id || null,
           unit_name: match.unit_name || item.unit_name || null,
           topic: match.topic || item.topic || null,
@@ -247,20 +278,33 @@ export async function GET(request: NextRequest) {
       return item;
     });
 
-    const combined: any[] = [...enrichedRemote];
-    const seenKeys = new Set<string>();
+    const combined: any[] = [];
+    const seenSlots = new Set<string>();
 
-    // Index remote items
+    // Helper key generator: day + start time + subject title
+    const getSlotKey = (item: any): string => {
+      const startSec = parseDateToUnix(item.start);
+      const d = new Date(startSec * 1000);
+      const dayVal = item.day_of_week ?? (d.getDay() === 0 ? 7 : d.getDay());
+      const timeStr = String(item.start_time || item.start_str || `${d.getHours()}:${d.getMinutes()}`).slice(0, 5);
+      const subKey = normalizeTitle(item.title || item.subject_name || item.topic);
+      return `${dayVal}_${timeStr}_${subKey}`;
+    };
+
+    // Index and add remote items first
     for (const item of enrichedRemote) {
-      const key = `${item.title || ''}_${item.start || ''}_${item.linkcd || ''}`.toLowerCase();
-      if (key) seenKeys.add(key);
+      const key = getSlotKey(item);
+      if (!seenSlots.has(key)) {
+        seenSlots.add(key);
+        combined.push(item);
+      }
     }
 
-    // Add local PostgreSQL events if not duplicate
+    // Add local PostgreSQL events only if slot does not already exist
     for (const dbItem of dbEvents) {
-      const key = `${dbItem.title || ''}_${dbItem.start || ''}_${dbItem.linkcd || ''}`.toLowerCase();
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
+      const key = getSlotKey(dbItem);
+      if (!seenSlots.has(key)) {
+        seenSlots.add(key);
         combined.push(dbItem);
       }
     }

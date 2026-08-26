@@ -94,17 +94,31 @@ export class PlacementDriveService {
 
     const createdByEmpId = user?.emp_id || user?.username || user?.sub || user?.email || 'ADMIN001';
 
+    const branches = Array.isArray(dto.eligible_branches) 
+      ? dto.eligible_branches 
+      : typeof dto.eligible_branches === 'string'
+      ? dto.eligible_branches.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : (dto.eligibility_branch_cd ? [dto.eligibility_branch_cd] : ['CSE', 'IT', 'ECE']);
+
+    const batches = Array.isArray(dto.eligible_batches)
+      ? dto.eligible_batches
+      : typeof dto.eligible_batches === 'string'
+      ? dto.eligible_batches.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : (dto.eligibility_batch_cd ? [dto.eligibility_batch_cd] : ['2025', '2026']);
+
     const sql = `
       INSERT INTO "${schema}".placement_drives (
         colg_cd, company_name, role, package_ctc, description,
         eligibility_course_cd, eligibility_branch_cd, eligibility_batch_cd,
+        eligible_branches, eligible_batches, logo_url,
         min_score_required, drive_date, deadline_date, status,
         created_by_empid, created_at, updated_at
       ) VALUES (
         '1', $1, $2, $3, $4,
         $5, $6, $7,
-        $8, $9, $10, 'Open',
-        $11, NOW(), NOW()
+        $8, $9, $10,
+        $11, $12, $13, 'Open',
+        $14, NOW(), NOW()
       )
       RETURNING *
     `;
@@ -117,6 +131,9 @@ export class PlacementDriveService {
       dto.eligibility_course_cd,
       dto.eligibility_branch_cd || null,
       dto.eligibility_batch_cd,
+      branches,
+      batches,
+      dto.logo_url || null,
       dto.min_score_required || 0.0,
       dto.drive_date,
       dto.deadline_date,
@@ -208,19 +225,43 @@ export class PlacementDriveService {
 
     const drives = await this.tenantSchemaService.queryInTenant(slug, sql, params);
 
-    // If student user, attach student's own application status for each drive
-    if (user?.role === 'STUDENT') {
-      const student = await this.resolveStudent(slug, user);
-      const regNo = student.registration_no;
+    // Attach student's own application status for each drive
+    let regNo = user?.registration_no || user?.rollno || user?.username || '';
+    if (!regNo && user) {
+      try {
+        const student = await this.resolveStudent(slug, user);
+        regNo = student?.registration_no || '';
+      } catch {}
+    }
+
+    if (regNo) {
       const myApps = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT drive_id, status, applied_at, selected_company, selected_role FROM "${schema}".placement_applications WHERE student_reg_no = $1`,
-        [regNo],
-      );
-      const appMap = new Map(myApps.map((a: any) => [a.drive_id, a]));
+        `SELECT application_id, drive_id, status, applied_at, selected_company, selected_role, offer_status 
+         FROM "${schema}".placement_applications 
+         WHERE student_reg_no = $1 OR student_reg_no = $2`,
+        [regNo, user?.id || regNo],
+      ).catch(() => []);
+
+      const appMap = new Map();
+      myApps.forEach((a: any) => {
+        appMap.set(Number(a.drive_id), a);
+        appMap.set(String(a.drive_id), a);
+      });
 
       drives.forEach((d: any) => {
-        d.my_application = appMap.get(d.drive_id) || null;
+        const app = appMap.get(Number(d.drive_id)) || appMap.get(String(d.drive_id));
+        d.my_application = app || null;
+        d.has_applied = !!app;
+        d.application_status = app ? (app.status || 'Applied') : null;
+        d.offer_status = app ? app.offer_status : null;
+      });
+    } else {
+      drives.forEach((d: any) => {
+        d.my_application = null;
+        d.has_applied = false;
+        d.application_status = null;
+        d.offer_status = null;
       });
     }
 

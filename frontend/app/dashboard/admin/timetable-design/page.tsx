@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import { filterCompetenciesForSlot, filterCompetencyCodesString } from '../../../utils/competencyFilter';
+import TimeFormatDesigner, { TimeSlotConfig } from '../../../../components/timetable/TimeFormatDesigner';
 
 interface Department {
   id: string;
@@ -157,16 +158,16 @@ const TEACHING_MODES = [
   { value: 'Lunch Break', label: 'Lunch Break / Recess', color: 'bg-slate-800/90 text-slate-300 border-slate-700/80' },
 ];
 
-const TIME_SLOTS = [
-  { start: '08:30:00', end: '09:30:00', label: '08.30-09.30' },
-  { start: '09:30:00', end: '10:30:00', label: '09.30-10.30' },
-  { start: '10:30:00', end: '10:50:00', label: '10.30-10.50', isBreak: true, labelBreak: 'TEA BREAK' },
-  { start: '10:50:00', end: '11:50:00', label: '10.50-11.50' },
-  { start: '11:50:00', end: '12:50:00', label: '11.50-12.50' },
-  { start: '12:50:00', end: '13:50:00', label: '12.50-01.50' },
-  { start: '13:50:00', end: '14:50:00', label: '01.50-02.50', isBreak: true, labelBreak: 'LUNCH BREAK' },
-  { start: '14:50:00', end: '15:50:00', label: '02.50-03.50' },
-  { start: '15:50:00', end: '16:50:00', label: '03.50-04.50' },
+const DEFAULT_TIME_SLOTS: TimeSlotConfig[] = [
+  { id: 'ts_1', start: '08:30:00', end: '09:30:00', label: '08.30-09.30', name: 'Period 1', type: 'Lecture' },
+  { id: 'ts_2', start: '09:30:00', end: '10:30:00', label: '09.30-10.30', name: 'Period 2', type: 'Lecture' },
+  { id: 'ts_tb', start: '10:30:00', end: '10:50:00', label: '10.30-10.50', name: 'Tea Break', isBreak: true, labelBreak: 'TEA BREAK', type: 'Tea Break' },
+  { id: 'ts_3', start: '10:50:00', end: '11:50:00', label: '10.50-11.50', name: 'Period 3', type: 'Lecture' },
+  { id: 'ts_4', start: '11:50:00', end: '12:50:00', label: '11.50-12.50', name: 'Period 4', type: 'Lecture' },
+  { id: 'ts_5', start: '12:50:00', end: '13:50:00', label: '12.50-01.50', name: 'Period 5', type: 'Lecture' },
+  { id: 'ts_lb', start: '13:50:00', end: '14:50:00', label: '01.50-02.50', name: 'Lunch Break', isBreak: true, labelBreak: 'LUNCH BREAK', type: 'Lunch Break' },
+  { id: 'ts_6', start: '14:50:00', end: '15:50:00', label: '02.50-03.50', name: 'Period 6', type: 'Lecture' },
+  { id: 'ts_7', start: '15:50:00', end: '16:50:00', label: '03.50-04.50', name: 'Period 7', type: 'Lecture' },
 ];
 
 const DAYS_OF_WEEK = [
@@ -189,6 +190,10 @@ function extractArray<T = any>(json: any): T[] {
 }
 
 export default function TimetableDesignPage() {
+  // Top Level Navigation Tabs: 1. Course-Department Time Format | 2. Design - TimeTable
+  const [activeTab, setActiveTab] = useState<'format' | 'design'>('format');
+  const [configuredTimeSlots, setConfiguredTimeSlots] = useState<TimeSlotConfig[]>(DEFAULT_TIME_SLOTS);
+
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [allFaculties, setAllFaculties] = useState<any[]>([]);
@@ -225,6 +230,22 @@ export default function TimetableDesignPage() {
   // Live SRMS Cameras from EmployeeInfo.asmx/LoadCamera
   const [camerasList, setCamerasList] = useState<CameraItem[]>([]);
   const [cameraLoading, setCameraLoading] = useState(false);
+
+  // Load custom time format template from localStorage when college/course/dept changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storageKey = `srms_time_format_${selectedCollege}_${selectedCourse}_${selectedDept || 'all'}`;
+      const saved = localStorage.getItem(storageKey) || localStorage.getItem('srms_time_format_default');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setConfiguredTimeSlots(parsed);
+          }
+        } catch {}
+      }
+    }
+  }, [selectedCollege, selectedCourse, selectedDept]);
 
   // Datewise Week Navigation State
   const [currentDate, setCurrentDate] = useState<Date>(new Date()); // Current week (Aug 16 - 22)
@@ -386,8 +407,18 @@ export default function TimetableDesignPage() {
   // Loading & Alerts
   const [loading, setLoading] = useState(false);
   const [metadataLoading, setMetadataLoading] = useState(false);
-  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
+
+  const showAlert = (type: 'success' | 'error' | 'info', message: string, duration = 6000) => {
+    setAlert({ type, message });
+    if (duration > 0) {
+      setTimeout(() => {
+        setAlert(prev => prev?.message === message ? null : prev);
+      }, duration);
+    }
+  };
 
   const findMatchingCollege = (colVal: string) => {
     if (!colVal || !collegesList || collegesList.length === 0) return null;
@@ -452,6 +483,66 @@ export default function TimetableDesignPage() {
     if (!availableDepartments || availableDepartments.length === 0) return null;
     return availableDepartments.find(d => String(d.id) === String(selectedDept) || String(d.code) === String(selectedDept) || d.name === selectedDept) || availableDepartments[0];
   }, [availableDepartments, selectedDept]);
+
+  // Live Clash Detection: Check if selected faculty is already engaged in another course/batch/slot on the same day & time
+  const liveClash = useMemo(() => {
+    if (!isModalOpen) return null;
+    const targetFacId = formData.facultyId || formData.facultyEmpId;
+    const targetFacName = (formData.facultyName || '').toLowerCase().trim();
+    if (!targetFacId && !targetFacName) return null;
+
+    const day = formData.dayOfWeek;
+    const start = (formData.startTime || '08:30:00').slice(0, 5);
+    const end = (formData.endTime || '09:30:00').slice(0, 5);
+    if (!start || !end) return null;
+
+    // Check against all active slots
+    const clash = (slots || []).find((s) => {
+      if (editingSlot && String(s.id) === String(editingSlot.id)) return false;
+      if (s.day_of_week !== day) return false;
+
+      const sStart = String(s.start_time || '').slice(0, 5);
+      const sEnd = String(s.end_time || '').slice(0, 5);
+      const timesOverlap = (start < sEnd && end > sStart);
+      if (!timesOverlap) return false;
+
+      // Check faculty match
+      const facMatch = (
+        (targetFacId && (String(s.faculty_id) === String(targetFacId) || String(s.faculty_code) === String(targetFacId))) ||
+        (targetFacName && s.faculty_name && s.faculty_name.toLowerCase().includes(targetFacName)) ||
+        (s.topic && targetFacName && s.topic.toLowerCase().includes(targetFacName))
+      );
+      return facMatch;
+    });
+
+    if (clash) {
+      const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      const dayName = days[clash.day_of_week] || `Day ${clash.day_of_week}`;
+      const timeRange = `${String(clash.start_time).slice(0, 5)} - ${String(clash.end_time).slice(0, 5)}`;
+      const facName = clash.faculty_name || formData.facultyName || 'Faculty';
+      
+      const courseName = clash.course_cd ? (clash.course_cd === '13' ? 'Course: BCA' : `Course: ${clash.course_cd}`) : (selectedCourseObj?.name ? `Course: ${selectedCourseObj.name}` : 'Course: BCA');
+      const batchName = clash.batch_cd ? `Batch: ${clash.batch_cd}` : (selectedBatchObj?.name ? `Batch: ${selectedBatchObj.name}` : 'Batch: 2025');
+      const semVal = clash.semester || selectedSemester || '3';
+      const semesterName = `Semester: ${semVal}`;
+      const secRaw = String(clash.section || selectedSection || '1');
+      const secLetter = secRaw === '1' ? 'A' : secRaw === '2' ? 'B' : secRaw === '3' ? 'C' : secRaw === '4' ? 'D' : secRaw;
+      const sectionName = `Section: ${secLetter}`;
+
+      return {
+        faculty_name: facName,
+        course: courseName,
+        batch: batchName,
+        semester: semesterName,
+        section: sectionName,
+        day: dayName,
+        time: timeRange,
+        subject: clash.subject_name || clash.topic || 'Subject',
+        message: `${facName} is already assigned to ${courseName}, ${batchName}, ${semesterName}, ${sectionName} on ${dayName} (${timeRange}). Please select a different time slot or choose another faculty member, or contact the Academic Administrator or Department Clerk to resolve the schedule overlap.`,
+      };
+    }
+    return null;
+  }, [isModalOpen, formData.facultyId, formData.facultyEmpId, formData.facultyName, formData.dayOfWeek, formData.startTime, formData.endTime, slots, editingSlot, selectedCourseObj, selectedBatchObj, selectedSemester, selectedSection]);
 
   // Dynamically Filter Form Subjects based on Active College, Course, and Live SRMS Loadsubject
   const availableFormSubjects = useMemo(() => {
@@ -986,15 +1077,9 @@ export default function TimetableDesignPage() {
       return [];
     }
 
-    const activePeriods = [
-      { start: '08:30:00', end: '09:30:00', label: '08.30-09.30' },
-      { start: '09:30:00', end: '10:30:00', label: '09.30-10.30' },
-      { start: '10:50:00', end: '11:50:00', label: '10.50-11.50' },
-      { start: '11:50:00', end: '12:50:00', label: '11.50-12.50' },
-      { start: '12:50:00', end: '13:50:00', label: '12.50-01.50' },
-      { start: '14:50:00', end: '15:50:00', label: '02.50-03.50' },
-      { start: '15:50:00', end: '16:50:00', label: '03.50-04.50' },
-    ];
+    const activePeriods = configuredTimeSlots
+      .filter(s => !s.isBreak)
+      .map(s => ({ start: s.start, end: s.end, label: s.label }));
 
     const findSub = (predicate: (name: string, emp: string, code: string) => boolean) => {
       return subsList.find((s: any) => {
@@ -1185,8 +1270,20 @@ export default function TimetableDesignPage() {
               };
             });
 
-          setSlots(mappedSlots);
-          return mappedSlots;
+          const seenSlotKeys = new Set<string>();
+          const dedupedSlots = mappedSlots.filter(slot => {
+            const normSub = String(slot.subject_name || slot.subject_code || slot.topic || '')
+              .replace(/\([^)]*\)/g, '')
+              .trim()
+              .toLowerCase();
+            const key = `${slot.day_of_week}_${slot.start_time?.slice(0, 5)}_${normSub}`;
+            if (seenSlotKeys.has(key)) return false;
+            seenSlotKeys.add(key);
+            return true;
+          });
+
+          setSlots(dedupedSlots);
+          return dedupedSlots;
         } else {
           setSlots([]);
           return [];
@@ -1267,31 +1364,36 @@ export default function TimetableDesignPage() {
     setSelectedCourse(newCourseCd);
 
     const branches = await fetchBranchesForCourse(colgCd, newCourseCd);
+    const newBranchCd = branches[0]?.code || '1';
     if (branches.length > 0) {
-      setSelectedBranch(branches[0].code);
+      setSelectedBranch(newBranchCd);
     }
 
     const batches = await fetchBatchesForCourse(colgCd, newCourseCd);
     const curBatch = batches.find(b => b.name === '2025' || b.year === 2025 || b.code === '2') || batches[0];
+    const newBatchCd = curBatch?.code || '2';
     if (curBatch) {
-      setSelectedBatch(curBatch.code);
+      setSelectedBatch(newBatchCd);
     }
 
-    fetchSrmsSubjects(newCourseCd, branches[0]?.code || '1', curBatch?.code || '2', selectedSemester, selectedSection, colgCd);
+    fetchSrmsSubjects(newCourseCd, newBranchCd, newBatchCd, selectedSemester, selectedSection, colgCd);
+    fetchSrmsSchedule(newCourseCd, newBranchCd, newBatchCd, selectedSemester, selectedSection, colgCd, currentDate);
   };
 
   const handleFilterCourseChange = async (courseCd: string) => {
     setSelectedCourse(courseCd);
 
     const branches = await fetchBranchesForCourse(selectedCollege, courseCd);
+    const newBranchCd = branches[0]?.code || '1';
     if (branches.length > 0) {
-      setSelectedBranch(branches[0].code);
+      setSelectedBranch(newBranchCd);
     }
 
     const batches = await fetchBatchesForCourse(selectedCollege, courseCd);
     const curBatch = batches.find(b => b.name === '2025' || b.year === 2025 || b.code === '2') || batches[0];
+    const newBatchCd = curBatch?.code || '2';
     if (curBatch) {
-      setSelectedBatch(curBatch.code);
+      setSelectedBatch(newBatchCd);
     }
 
     const matchingDept = departmentsList.find((d: any) => String(d.course_cd) === String(courseCd) || d.course_code === courseCd);
@@ -1299,27 +1401,32 @@ export default function TimetableDesignPage() {
       setSelectedDept(matchingDept.id || matchingDept.code);
     }
 
-    fetchSrmsSubjects(courseCd, branches[0]?.code || '1', curBatch?.code || '2', selectedSemester, selectedSection, selectedCollege);
+    fetchSrmsSubjects(courseCd, newBranchCd, newBatchCd, selectedSemester, selectedSection, selectedCollege);
+    fetchSrmsSchedule(courseCd, newBranchCd, newBatchCd, selectedSemester, selectedSection, selectedCollege, currentDate);
   };
 
   const handleFilterBranchChange = (branchCd: string) => {
     setSelectedBranch(branchCd);
     fetchSrmsSubjects(selectedCourse, branchCd, selectedBatch, selectedSemester, selectedSection, selectedCollege);
+    fetchSrmsSchedule(selectedCourse, branchCd, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate);
   };
 
   const handleFilterBatchChange = (batchCd: string) => {
     setSelectedBatch(batchCd);
     fetchSrmsSubjects(selectedCourse, selectedBranch, batchCd, selectedSemester, selectedSection, selectedCollege);
+    fetchSrmsSchedule(selectedCourse, selectedBranch, batchCd, selectedSemester, selectedSection, selectedCollege, currentDate);
   };
 
   const handleFilterSemesterChange = (semCd: string) => {
     setSelectedSemester(semCd);
     fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, semCd, selectedSection, selectedCollege);
+    fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, semCd, selectedSection, selectedCollege, currentDate);
   };
 
   const handleFilterSectionChange = (secCd: string) => {
     setSelectedSection(secCd);
-    fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, secValOr(secCd), selectedCollege);
+    fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, secCd, selectedCollege);
+    fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, secCd, selectedCollege, currentDate);
   };
 
   function secValOr(v: string) { return v; }
@@ -1334,10 +1441,6 @@ export default function TimetableDesignPage() {
     fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege);
   }, [selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection]);
 
-  const showAlert = (type: 'success' | 'error', message: string) => {
-    setAlert({ type, message });
-    setTimeout(() => setAlert(null), 5000);
-  };
 
   const formatSrmsDateTime = (dayOfWeek: number, timeStr: string): string => {
     const dayDateInfo = weekDates.find(w => w.dayOfWeek === dayOfWeek);
@@ -1414,11 +1517,28 @@ export default function TimetableDesignPage() {
   const handleSaveSlot = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.subjectId || (!formData.facultyId && !formData.facultyEmpId)) {
-      setModalError('Subject and Faculty are required.');
+      const err = 'Please select both Subject and Faculty before saving.';
+      setModalError(err);
+      showAlert('error', err);
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
+    if (liveClash) {
+      const clashErr = liveClash.message;
+      setModalError(clashErr);
+      showAlert('error', clashErr);
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
       return;
     }
 
     setLoading(true);
+    setModalError(null);
+    showAlert('info', 'Saving timetable session and synchronizing with Database & SRMS Portal...');
     const tenantSlug = getActiveTenantSlug();
     const isEdit = !!editingSlot;
 
@@ -1591,12 +1711,18 @@ export default function TimetableDesignPage() {
         const finalError = srmsErrorMsg || pgErrorMsg || 'Schedule transaction rejected. Both APIs must succeed simultaneously.';
         showAlert('error', finalError);
         setModalError(finalError);
+        if (modalScrollRef.current) {
+          modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
         // Modal remains open so admin can review clash details and reschedule!
       }
     } catch (err: any) {
       const errText = err?.message || 'Network error during timetable atomic save.';
       showAlert('error', errText);
       setModalError(errText);
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } finally {
       setLoading(false);
     }
@@ -1736,6 +1862,7 @@ export default function TimetableDesignPage() {
 
   return (
     <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200">
+      {/* Timetable Print & Layout Styles */}
       <style dangerouslySetInnerHTML={{
         __html: `
         select, option {
@@ -1743,24 +1870,263 @@ export default function TimetableDesignPage() {
         }
         @media print {
           @page {
-            size: landscape;
-            margin: 0.5cm;
+            size: A4 landscape;
+            margin: 4mm 6mm 4mm 6mm;
+          }
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           body * {
-            visibility: hidden;
+            visibility: hidden !important;
           }
           #timetable-print-area, #timetable-print-area * {
-            visibility: visible;
+            visibility: visible !important;
           }
           #timetable-print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
             border: none !important;
             box-shadow: none !important;
             padding: 0 !important;
             margin: 0 !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            display: block !important;
+            page-break-before: avoid !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-before: avoid !important;
+            break-inside: avoid !important;
+            overflow: visible !important;
+          }
+          .no-print, .print\\:hidden, button, .group\\/slot .absolute {
+            display: none !important;
+          }
+          .print-compact-header {
+            margin-bottom: 4px !important;
+            padding-bottom: 2px !important;
+            border-bottom: 1.5px solid #0f172a !important;
+          }
+          .print-compact-header h2 {
+            font-size: 11pt !important;
+            line-height: 1.15 !important;
+            font-weight: 900 !important;
+            color: #0f172a !important;
+            margin: 0 0 1px 0 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+          }
+          .print-compact-header h3 {
+            font-size: 8.5pt !important;
+            line-height: 1.15 !important;
+            font-weight: 800 !important;
+            color: #1e293b !important;
+            margin: 0 0 1px 0 !important;
+            text-transform: uppercase !important;
+          }
+          .print-compact-header p {
+            font-size: 7pt !important;
+            line-height: 1.15 !important;
+            font-weight: 700 !important;
+            color: #334155 !important;
+            margin: 0 !important;
+            text-transform: uppercase !important;
+          }
+          /* Grid Table Print Overrides */
+          .print-grid-container {
+            width: 100% !important;
+            display: block !important;
+            margin-bottom: 3px !important;
+            overflow: visible !important;
+          }
+          #timetable-print-area table.timetable-main-grid {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            border: 1.5px solid #0f172a !important;
+            table-layout: fixed !important;
+            font-size: 6.5pt !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          #timetable-print-area table.timetable-main-grid th, 
+          #timetable-print-area table.timetable-main-grid td {
+            border: 1.5px solid #0f172a !important;
+            padding: 1.5px 2px !important;
+            vertical-align: top !important;
+            line-height: 1.1 !important;
+            box-sizing: border-box !important;
+          }
+          #timetable-print-area table.timetable-main-grid th {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+            font-size: 6.5pt !important;
+            font-weight: 800 !important;
+            text-align: center !important;
+            padding: 2px 1px !important;
+            height: 18px !important;
+            border: 1.5px solid #0f172a !important;
+          }
+          #timetable-print-area table.timetable-main-grid tr {
+            height: auto !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          #timetable-print-area table.timetable-main-grid td.day-cell {
+            background-color: #f8fafc !important;
+            font-weight: 900 !important;
+            font-size: 7pt !important;
+            text-align: center !important;
+            vertical-align: middle !important;
+            width: 64px !important;
+            padding: 1px !important;
+            border: 1.5px solid #0f172a !important;
+          }
+          #timetable-print-area table.timetable-main-grid td.break-cell {
+            background-color: #e2e8f0 !important;
+            color: #1e293b !important;
+            font-size: 5.5pt !important;
+            font-weight: 900 !important;
+            text-align: center !important;
+            vertical-align: middle !important;
+            width: 20px !important;
+            padding: 0 !important;
+            border: 1.5px solid #0f172a !important;
+          }
+          #timetable-print-area table.timetable-main-grid td.break-cell div {
+            padding: 2px 0 !important;
+            font-size: 5.5pt !important;
+            letter-spacing: 0.15em !important;
+          }
+          #timetable-print-area .slot-cell {
+            height: auto !important;
+            min-height: 40px !important;
+            padding: 1.5px 2px !important;
+            vertical-align: top !important;
+            background-color: #ffffff !important;
+            border: 1.5px solid #0f172a !important;
+          }
+          #timetable-print-area .slot-empty-box {
+            min-height: 38px !important;
+            height: 38px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+          #timetable-print-area .slot-card {
+            border: 1px solid #475569 !important;
+            background-color: #f8fafc !important;
+            padding: 1.5px 2px !important;
+            border-radius: 3px !important;
+            margin-bottom: 1px !important;
+            box-shadow: none !important;
+            min-height: 38px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            box-sizing: border-box !important;
+          }
+          #timetable-print-area .slot-subject {
+            font-size: 6.5pt !important;
+            font-weight: 900 !important;
+            color: #0f172a !important;
+            line-height: 1.1 !important;
+            margin-bottom: 0.5px !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+          }
+          #timetable-print-area .slot-unit {
+            font-size: 5pt !important;
+            font-weight: 800 !important;
+            color: #312e81 !important;
+            line-height: 1 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+          }
+          #timetable-print-area .slot-topic {
+            font-size: 5pt !important;
+            font-weight: 600 !important;
+            color: #334155 !important;
+            line-height: 1 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+          }
+          #timetable-print-area .slot-meta {
+            font-size: 5.5pt !important;
+            font-weight: 800 !important;
+            color: #0f172a !important;
+            border-top: 0.5px solid #cbd5e1 !important;
+            padding-top: 0.5px !important;
+            margin-top: 0.5px !important;
+            display: flex !important;
+            justify-content: space-between !important;
+          }
+          #timetable-print-area .slot-room {
+            font-size: 5pt !important;
+            font-weight: 800 !important;
+            background: #e2e8f0 !important;
+            padding: 0 1.5px !important;
+            border-radius: 2px !important;
+            border: 0.5px solid #94a3b8 !important;
+          }
+          /* Print Registry Footer */
+          .print-registry-box {
+            border: 1.5px solid #0f172a !important;
+            border-radius: 3px !important;
+            margin-top: 3px !important;
+            font-size: 5.5pt !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .print-registry-title {
+            background-color: #f1f5f9 !important;
+            font-size: 6pt !important;
+            font-weight: 900 !important;
+            padding: 1px 2px !important;
+            border-bottom: 1.5px solid #0f172a !important;
+            text-align: center !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+          }
+          .print-registry-row {
+            padding: 1px 2px !important;
+            font-size: 5.5pt !important;
+            line-height: 1.1 !important;
+          }
+          /* Signatures Footer */
+          .print-signatures {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: flex-end !important;
+            margin-top: 4px !important;
+            padding-top: 2px !important;
+            font-size: 6.5pt !important;
+            font-weight: 700 !important;
+            color: #0f172a !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .print-signatures .sig-line {
+            width: 140px !important;
+            border-bottom: 1.5px dashed #334155 !important;
+            margin-bottom: 2px !important;
+            height: 14px !important;
           }
         }
       ` }} />
@@ -1771,14 +2137,46 @@ export default function TimetableDesignPage() {
         <main className="p-6 space-y-6 flex-1 flex flex-col bg-slate-50 dark:bg-[#0F172A]">
 
           {alert && (
-            <div className={`p-4 rounded-2xl border text-xs font-extrabold transition-all shadow-lg animate-fade-in flex items-center gap-2 ${alert.type === 'success'
-              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
-              }`}>
-              <span>{alert.type === 'success' ? '✅' : '⚠️'}</span>
+            <div className={`p-4 rounded-2xl border text-xs font-extrabold transition-all shadow-lg animate-fade-in flex items-center gap-2 ${
+              alert.type === 'success'
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                : alert.type === 'info'
+                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
+                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
+            }`}>
+              <span>{alert.type === 'success' ? '✅' : alert.type === 'info' ? 'ℹ️' : '⚠️'}</span>
               <span>{alert.message}</span>
             </div>
           )}
+
+          {/* Top Level Navigation Tabs */}
+          <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab('format')}
+              className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-xs transition-all shadow-sm cursor-pointer ${
+                activeTab === 'format'
+                  ? 'bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] text-white shadow-indigo-500/25 ring-2 ring-[#5B4BFF]/30 scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800 hover:border-[#5B4BFF]/40'
+              }`}
+            >
+              <span className="text-base">⏱️</span>
+              <span>1. Course-Department Time Format</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('design')}
+              className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-xs transition-all shadow-sm cursor-pointer ${
+                activeTab === 'design'
+                  ? 'bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] text-white shadow-indigo-500/25 ring-2 ring-[#5B4BFF]/30 scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800 hover:border-[#5B4BFF]/40'
+              }`}
+            >
+              <span className="text-base">📅</span>
+              <span>2. Design - TimeTable</span>
+            </button>
+          </div>
 
           {/* Master Cascading Filters Bar — Follows Exact 1-6 Hierarchy */}
           <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-3 shadow-md hover:shadow-lg transition-all">
@@ -1936,6 +2334,28 @@ export default function TimetableDesignPage() {
             </div>
           </div>
 
+          {/* Tab 1: Course-Department Time Format Designer */}
+          {activeTab === 'format' && (
+            <TimeFormatDesigner
+              initialSlots={configuredTimeSlots}
+              selectedCollege={selectedCollege}
+              selectedCourse={selectedCourse}
+              selectedDept={selectedDept}
+              selectedBatch={selectedBatch}
+              collegeName={selectedCollegeObj?.name || 'SRMS CET, BAREILLY'}
+              courseName={selectedCourseObj?.name || 'BCA'}
+              deptName={selectedDeptObj?.name || selectedBranchObj?.name || 'BCA DEPARTMENT'}
+              onSaveTimeFormat={(updatedSlots) => {
+                setConfiguredTimeSlots(updatedSlots);
+                showAlert('success', `Saved Time Format with ${updatedSlots.length} periods & breaks for ${selectedCourseObj?.name || 'Course'}`);
+              }}
+              onSwitchToDesignTab={() => setActiveTab('design')}
+            />
+          )}
+
+          {/* Tab 2: Interactive Design - TimeTable Grid Schedule */}
+          {activeTab === 'design' && (
+            <>
           {/* Datewise Week Navigation Bar */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
             {/* Left: Previous, Today, Next buttons */}
@@ -2022,7 +2442,7 @@ export default function TimetableDesignPage() {
             <div id="timetable-print-area" className="bg-white dark:bg-slate-900 p-8 border-2 border-slate-800 dark:border-slate-700 rounded-3xl shadow-sm w-full mx-auto print:border-0 print:shadow-none print:p-0 text-slate-800 dark:text-slate-100">
 
               {/* College Header */}
-              <div className="text-center space-y-2 border-b-2 border-slate-800 dark:border-slate-700 pb-4 mb-6">
+              <div className="print-compact-header text-center space-y-2 border-b-2 border-slate-800 dark:border-slate-700 pb-4 mb-6">
                 <h2 className="text-xl font-extrabold uppercase tracking-wide text-slate-900 dark:text-white">
                   {selectedCollegeObj?.name || 'SHRI RAM MURTI SMARAK COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY'}
                 </h2>
@@ -2036,7 +2456,7 @@ export default function TimetableDesignPage() {
 
               {/* Empty / Unscheduled Week Banner */}
               {(!Array.isArray(slots) || slots.length === 0) && (
-                <div className="mb-4 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-amber-800 dark:text-amber-300">
+                <div className="no-print print:hidden mb-4 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-amber-800 dark:text-amber-300">
                   <div className="flex items-center gap-2">
                     <span className="text-base shrink-0">ℹ️</span>
                     <span>
@@ -2054,13 +2474,13 @@ export default function TimetableDesignPage() {
               )}
 
               {/* Timetable Grid Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse border-2 border-slate-800 dark:border-slate-700 text-center text-xs text-slate-800 dark:text-slate-200">
+              <div className="print-grid-container overflow-x-auto">
+                <table className="timetable-main-grid w-full border-collapse border-2 border-slate-800 dark:border-slate-700 text-center text-xs text-slate-800 dark:text-slate-200">
                   <thead>
                     <tr className="bg-slate-100 dark:bg-slate-800">
-                      <th className="border-2 border-slate-800 dark:border-slate-700 p-2 font-bold w-28 text-slate-900 dark:text-white">DAY / TIME</th>
-                      {TIME_SLOTS.map((ts, i) => (
-                        <th key={i} className={`border-2 border-slate-800 dark:border-slate-700 p-2 font-bold text-slate-900 dark:text-white ${ts.isBreak ? 'w-10 bg-slate-200 dark:bg-slate-800' : 'min-w-[110px]'}`}>
+                      <th className="day-cell border-2 border-slate-800 dark:border-slate-700 p-2 font-bold w-28 text-slate-900 dark:text-white">DAY / TIME</th>
+                      {configuredTimeSlots.map((ts, i) => (
+                        <th key={i} className={`border-2 border-slate-800 dark:border-slate-700 p-2 font-bold text-slate-900 dark:text-white ${ts.isBreak ? 'break-cell w-10 bg-slate-200 dark:bg-slate-800' : 'min-w-[110px]'}`}>
                           <div>{ts.label}</div>
                         </th>
                       ))}
@@ -2070,33 +2490,33 @@ export default function TimetableDesignPage() {
                     {DAYS_OF_WEEK.map((day, dayIdx) => {
                       const dayDateInfo = weekDates.find(w => w.dayOfWeek === day.value);
                       return (
-                        <tr key={day.value}>
-                          <td className="border-2 border-slate-800 dark:border-slate-700 p-2 font-bold bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white uppercase tracking-wider">
+                        <tr key={day.value} className="h-full">
+                          <td className="day-cell border-2 border-slate-800 dark:border-slate-700 p-2 font-bold bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white uppercase tracking-wider">
                             <div className="font-black text-xs">{day.name}</div>
                             {dayDateInfo && (
-                              <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono font-bold mt-0.5">
+                              <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono font-bold mt-0.5 print:text-[5.5pt]">
                                 {dayDateInfo.shortDate}
                               </div>
                             )}
                           </td>
-                          {TIME_SLOTS.map((ts, slotIdx) => {
+                          {configuredTimeSlots.map((ts, slotIdx) => {
                             if (ts.isBreak) {
                               if (dayIdx !== 0) return null;
                               return (
                                 <td
                                   key={slotIdx}
                                   rowSpan={DAYS_OF_WEEK.length}
-                                  className="border-2 border-slate-800 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 font-extrabold text-xs tracking-widest text-slate-800 dark:text-slate-200 p-2 text-center select-none align-middle"
+                                  className="break-cell border-2 border-slate-800 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 font-extrabold text-xs tracking-widest text-slate-800 dark:text-slate-200 p-2 text-center select-none align-middle"
                                 >
-                                  <div className="[writing-mode:vertical-lr] rotate-180 mx-auto font-mono py-4 uppercase font-black tracking-[0.25em] text-xs">
-                                    {ts.labelBreak}
+                                  <div className="[writing-mode:vertical-lr] rotate-180 mx-auto font-mono py-2 uppercase font-black tracking-[0.2em] text-xs">
+                                    {ts.labelBreak || 'BREAK'}
                                   </div>
                                 </td>
                               );
                             }
 
                             const safeSlots = Array.isArray(slots) ? slots : [];
-                            const cellSlots = safeSlots.filter(s => {
+                            const cellSlotsRaw = safeSlots.filter(s => {
                               if (!s || s.day_of_week !== day.value) return false;
                               const sStart = String(s.start_time || '');
                               const sEnd = String(s.end_time || '');
@@ -2106,14 +2526,26 @@ export default function TimetableDesignPage() {
                               return (slotStart >= colStart && slotStart < colEnd) || (sStart < ts.end && sEnd > ts.start);
                             });
 
+                            const seenCellKeys = new Set<string>();
+                            const cellSlots = cellSlotsRaw.filter(s => {
+                              const normSub = String(s.subject_name || s.subject_code || s.topic || '')
+                                .replace(/\([^)]*\)/g, '')
+                                .trim()
+                                .toLowerCase();
+                              const key = `${s.day_of_week}_${s.start_time?.slice(0, 5)}_${normSub}`;
+                              if (seenCellKeys.has(key)) return false;
+                              seenCellKeys.add(key);
+                              return true;
+                            });
+
                             return (
                               <td
                                 key={ts.start}
                                 onClick={() => handleGridCellClick(day.value, ts.start, ts.end)}
-                                className="border-2 border-slate-800 dark:border-slate-700 p-1.5 bg-white dark:bg-slate-900 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 group relative transition-colors h-24 align-top min-w-[110px]"
+                                className="slot-cell border-2 border-slate-800 dark:border-slate-700 p-1.5 bg-white dark:bg-slate-900 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 group relative transition-colors align-top min-w-[105px] min-h-[44px]"
                               >
                                 {cellSlots.length > 0 ? (
-                                  <div className="space-y-1 h-full flex flex-col justify-between">
+                                  <div className="space-y-1 h-full min-h-[40px] flex flex-col justify-between">
                                     {cellSlots.map(slot => {
                                       const safeSubs = Array.isArray(subjects) ? subjects : [];
                                       const safeFacs = Array.isArray(allFaculties) ? allFaculties : [];
@@ -2150,18 +2582,16 @@ export default function TimetableDesignPage() {
                                         ? slot.faculty_name 
                                         : (matchedFac?.name || (rawTitle.match(/\(([^)]+)\)/)?.[1] || ''));
 
-                                      const isLab = (slot.slot_type === 'Practical' || slot.slotType === 'Practical' || cleanSubName.toLowerCase().includes('lab'));
-
                                       return (
                                         <div
                                           key={slot.id}
-                                          className="p-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 transition-all text-left space-y-1 shadow-sm text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700/80 relative group/slot hover:shadow-md cursor-pointer"
+                                          className="slot-card p-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 transition-all text-left space-y-1 shadow-sm text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700/80 relative group/slot hover:shadow-md cursor-pointer"
                                           onClick={(e) => { e.stopPropagation(); handleSlotClick(slot, e); }}
                                           onMouseEnter={(e) => handleSlotMouseEnter(slot, e)}
                                           onMouseLeave={handleSlotMouseLeave}
                                         >
                                           {/* Quick Actions on Hover */}
-                                          <div className="absolute top-1 right-1 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center gap-1 z-10 bg-white/95 dark:bg-slate-900/95 rounded-lg p-0.5 shadow-md border border-slate-200 dark:border-slate-700">
+                                          <div className="absolute top-1 right-1 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center gap-1 z-10 bg-white/95 dark:bg-slate-900/95 rounded-lg p-0.5 shadow-md border border-slate-200 dark:border-slate-700 no-print print:hidden">
                                             <button
                                               type="button"
                                               onClick={(e) => { e.stopPropagation(); handleSlotClick(slot, e); }}
@@ -2181,36 +2611,36 @@ export default function TimetableDesignPage() {
                                           </div>
 
                                           {/* Subject Name Header */}
-                                          <div className="font-black text-slate-900 dark:text-white leading-snug text-[11px] truncate pr-10" title={cleanSubName}>
+                                          <div className="slot-subject font-black text-slate-900 dark:text-white leading-snug text-[11px] truncate pr-8" title={cleanSubName}>
                                             {cleanSubName}
                                           </div>
 
                                           {/* Unit Name Badge/Line */}
                                           {slot.unit_name && (
-                                            <div className="text-[8.5px] font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded-md truncate max-w-full" title={slot.unit_name}>
+                                            <div className="slot-unit text-[8.5px] font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded-md truncate max-w-full" title={slot.unit_name}>
                                               📦 {slot.unit_name}
                                             </div>
                                           )}
 
                                           {/* Topic Line */}
                                           {cleanTopic && (
-                                            <div className="text-[9px] text-slate-700 dark:text-slate-200 font-bold leading-tight line-clamp-2" title={cleanTopic}>
+                                            <div className="slot-topic text-[9px] text-slate-700 dark:text-slate-200 font-bold leading-tight line-clamp-1" title={cleanTopic}>
                                               📖 <span className="text-slate-500 font-medium">Topic:</span> {cleanTopic}
                                             </div>
                                           )}
 
                                           {/* Sub-topics Line */}
                                           {slot.sub_topics && (
-                                            <div className="text-[8.5px] text-slate-500 dark:text-slate-400 font-medium leading-tight line-clamp-1" title={slot.sub_topics}>
+                                            <div className="slot-topic text-[8.5px] text-slate-500 dark:text-slate-400 font-medium leading-tight line-clamp-1" title={slot.sub_topics}>
                                               📝 <span className="font-semibold text-slate-600 dark:text-slate-300">Sub:</span> {slot.sub_topics}
                                             </div>
                                           )}
 
                                           {/* Faculty & Room Line */}
-                                          <div className="flex items-center justify-between text-[8.5px] font-bold text-slate-700 dark:text-slate-300 pt-1 border-t border-slate-100 dark:border-slate-700/60 mt-1">
-                                            <span className="truncate max-w-[85px]">👨‍🏫 {facName ? facName.split(' ')[0] : 'Faculty'}</span>
+                                          <div className="slot-meta flex items-center justify-between text-[8.5px] font-bold text-slate-700 dark:text-slate-300 pt-0.5 border-t border-slate-100 dark:border-slate-700/60 mt-0.5">
+                                            <span className="truncate max-w-[80px]">👨‍🏫 {facName ? facName.split(' ')[0] : 'Faculty'}</span>
                                             {slot.room && (
-                                              <span className="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-1.5 py-0.5 rounded text-[7.5px] shrink-0 font-mono border border-slate-200 dark:border-slate-700 font-extrabold">
+                                              <span className="slot-room bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-1 py-0.5 rounded text-[7.5px] shrink-0 font-mono border border-slate-200 dark:border-slate-700 font-extrabold">
                                                 {slot.room.replace('Room', 'R-').replace('Classroom', 'R-')}
                                               </span>
                                             )}
@@ -2220,10 +2650,11 @@ export default function TimetableDesignPage() {
                                     })}
                                   </div>
                                 ) : (
-                                  <div className="h-full flex items-center justify-center">
-                                    <span className="text-[10px] text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity font-medium">
+                                  <div className="slot-empty-box h-full min-h-[40px] flex items-center justify-center">
+                                    <span className="text-[10px] text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity font-medium no-print print:hidden">
                                       + Add Slot
                                     </span>
+                                    <span className="hidden print:inline-block text-[6pt] text-transparent select-none">&nbsp;</span>
                                   </div>
                                 )}
                               </td>
@@ -2238,41 +2669,41 @@ export default function TimetableDesignPage() {
 
               {/* Dynamic Subject & Faculty Registry Footer List */}
               {registryList.length > 0 && (
-                <div className="mt-8 border-2 border-slate-800 dark:border-slate-700 text-left text-xs text-slate-800 dark:text-slate-200 rounded-xl overflow-hidden">
-                  <div className="bg-slate-100 dark:bg-slate-800 font-bold border-b-2 border-slate-800 dark:border-slate-700 p-2 text-center text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                    SUBJECT & FACULTY REGISTRY
+                <div className="print-registry-box mt-3 border-2 border-slate-800 dark:border-slate-700 text-left text-xs text-slate-800 dark:text-slate-200 rounded-xl overflow-hidden">
+                  <div className="print-registry-title bg-slate-100 dark:bg-slate-800 font-bold border-b-2 border-slate-800 dark:border-slate-700 p-1.5 text-center text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    SUBJECT &amp; FACULTY REGISTRY
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x-2 divide-slate-800 dark:divide-slate-700">
                     <div className="divide-y divide-slate-300 dark:divide-slate-800">
-                      <div className="grid grid-cols-3 p-1.5 font-bold bg-slate-50 dark:bg-slate-800/50 text-center text-[11px] text-slate-700 dark:text-slate-300">
-                        <div>SUBJECT CODE</div>
-                        <div>SUBJECT NAME</div>
+                      <div className="grid grid-cols-3 p-1 font-bold bg-slate-50 dark:bg-slate-800/50 text-center text-[11px] text-slate-700 dark:text-slate-300 print:text-[6pt] print:p-0.5 print:bg-slate-100">
+                        <div className="border-r border-slate-300 dark:border-slate-700 print:border-slate-800">SUBJECT CODE</div>
+                        <div className="border-r border-slate-300 dark:border-slate-700 print:border-slate-800">SUBJECT NAME</div>
                         <div>FACULTY NAME</div>
                       </div>
                       {registryList.slice(0, Math.ceil(registryList.length / 2)).map((s, idx) => (
                         <div
                           key={s.subject_code + idx}
-                          className="grid grid-cols-3 p-2 text-center text-xs align-middle hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                          className="print-registry-row grid grid-cols-3 p-1.5 text-center text-xs align-middle hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
                         >
-                          <div className="font-bold text-slate-900 dark:text-white font-mono">{s.subject_code || '-'}</div>
-                          <div className="truncate px-1 text-slate-700 dark:text-slate-300 font-medium">{s.subject_name || '-'}</div>
+                          <div className="font-bold text-slate-900 dark:text-white font-mono border-r border-slate-200 dark:border-slate-800 print:border-slate-400">{s.subject_code || '-'}</div>
+                          <div className="truncate px-1 text-slate-700 dark:text-slate-300 font-medium border-r border-slate-200 dark:border-slate-800 print:border-slate-400">{s.subject_name || '-'}</div>
                           <div className="truncate px-1 text-slate-600 dark:text-slate-400">{s.faculty_name || '-'}</div>
                         </div>
                       ))}
                     </div>
                     <div className="divide-y divide-slate-300 dark:divide-slate-800">
-                      <div className="grid grid-cols-3 p-1.5 font-bold bg-slate-50 dark:bg-slate-800/50 text-center text-[11px] text-slate-700 dark:text-slate-300">
-                        <div>SUBJECT CODE</div>
-                        <div>SUBJECT NAME</div>
+                      <div className="grid grid-cols-3 p-1 font-bold bg-slate-50 dark:bg-slate-800/50 text-center text-[11px] text-slate-700 dark:text-slate-300 print:text-[6pt] print:p-0.5 print:bg-slate-100">
+                        <div className="border-r border-slate-300 dark:border-slate-700 print:border-slate-800">SUBJECT CODE</div>
+                        <div className="border-r border-slate-300 dark:border-slate-700 print:border-slate-800">SUBJECT NAME</div>
                         <div>FACULTY NAME</div>
                       </div>
                       {registryList.slice(Math.ceil(registryList.length / 2)).map((s, idx) => (
                         <div
                           key={s.subject_code + idx}
-                          className="grid grid-cols-3 p-2 text-center text-xs align-middle hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                          className="print-registry-row grid grid-cols-3 p-1.5 text-center text-xs align-middle hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
                         >
-                          <div className="font-bold text-slate-900 dark:text-white font-mono">{s.subject_code || '-'}</div>
-                          <div className="truncate px-1 text-slate-700 dark:text-slate-300 font-medium">{s.subject_name || '-'}</div>
+                          <div className="font-bold text-slate-900 dark:text-white font-mono border-r border-slate-200 dark:border-slate-800 print:border-slate-400">{s.subject_code || '-'}</div>
+                          <div className="truncate px-1 text-slate-700 dark:text-slate-300 font-medium border-r border-slate-200 dark:border-slate-800 print:border-slate-400">{s.subject_name || '-'}</div>
                           <div className="truncate px-1 text-slate-600 dark:text-slate-400">{s.faculty_name || '-'}</div>
                         </div>
                       ))}
@@ -2282,22 +2713,24 @@ export default function TimetableDesignPage() {
               )}
 
               {/* Timetable Footer - Signatures */}
-              <div className="mt-12 grid grid-cols-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300 pt-6">
-                <div className="space-y-12">
-                  <div className="h-8 border-b-2 border-dashed border-slate-400 dark:border-slate-600 max-w-[180px] mx-auto"></div>
-                  <p className="font-bold">Time Table Incharge</p>
+              <div className="print-signatures mt-5 grid grid-cols-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300 pt-2">
+                <div className="space-y-3">
+                  <div className="sig-line h-6 border-b-2 border-dashed border-slate-400 dark:border-slate-600 max-w-[170px] mx-auto"></div>
+                  <p className="font-bold text-xs uppercase tracking-wider">Time Table Incharge</p>
                 </div>
-                <div className="space-y-12">
-                  <div className="h-8 border-b-2 border-dashed border-slate-400 dark:border-slate-600 max-w-[180px] mx-auto"></div>
-                  <p className="font-bold">Academic Coordinator</p>
+                <div className="space-y-3">
+                  <div className="sig-line h-6 border-b-2 border-dashed border-slate-400 dark:border-slate-600 max-w-[170px] mx-auto"></div>
+                  <p className="font-bold text-xs uppercase tracking-wider">Academic Coordinator</p>
                 </div>
-                <div className="space-y-12">
-                  <div className="h-8 border-b-2 border-dashed border-slate-400 dark:border-slate-600 max-w-[180px] mx-auto"></div>
-                  <p className="font-bold">Dean / Principal</p>
+                <div className="space-y-3">
+                  <div className="sig-line h-6 border-b-2 border-dashed border-slate-400 dark:border-slate-600 max-w-[170px] mx-auto"></div>
+                  <p className="font-bold text-xs uppercase tracking-wider">Dean / Principal</p>
                 </div>
               </div>
 
             </div>
+          )}
+          </>
           )}
 
         </main>
@@ -2416,9 +2849,11 @@ export default function TimetableDesignPage() {
       )}
 
       {/* Modal Dialog for Scheduling / Editing Timetable Session */}
-      {isModalOpen && (
+      {isModalOpen && (() => {
+        const activeClash = modalError || liveClash?.message || null;
+        return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div ref={modalScrollRef} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                 <span>{editingSlot ? '✏️' : '➕'}</span>
@@ -2433,13 +2868,20 @@ export default function TimetableDesignPage() {
               </button>
             </div>
 
-            {modalError && (
+            {activeClash && (
               <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/80 border-2 border-rose-500 shadow-md text-rose-800 dark:text-rose-200 text-xs font-bold space-y-1 animate-in fade-in zoom-in-95 duration-200">
                 <div className="flex items-center gap-1.5 font-black uppercase tracking-wider text-rose-700 dark:text-rose-300 text-[11px]">
                   <span>🚫</span>
-                  <span>Scheduling Conflict / Error</span>
+                  <span>Faculty Scheduling Conflict / Overlap</span>
                 </div>
-                <p className="leading-relaxed font-bold pl-5">{modalError}</p>
+                <p className="leading-relaxed font-bold pl-5">{activeClash}</p>
+              </div>
+            )}
+
+            {loading && (
+              <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-300 dark:border-indigo-700 shadow-md text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-2.5 animate-pulse">
+                <div className="w-4 h-4 border-2 border-indigo-600 dark:border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                <span>Saving timetable session and synchronizing with Database & SRMS Portal...</span>
               </div>
             )}
 
@@ -2544,14 +2986,14 @@ export default function TimetableDesignPage() {
                   )}
                 </label>
 
-                {modalError && (modalError.includes('already scheduled') || modalError.includes('faculty') || modalError.includes('Conflict')) && (
-                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/80 border-2 border-rose-500 shadow-sm text-rose-800 dark:text-rose-200 text-xs font-bold space-y-1">
+                {activeClash && (
+                  <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/80 border-2 border-rose-500 shadow-sm text-rose-800 dark:text-rose-200 text-xs font-bold space-y-1 animate-in fade-in">
                     <div className="flex items-center gap-1 text-rose-700 dark:text-rose-300 font-black text-[11px] uppercase tracking-wide">
                       <span>🚫</span>
                       <span>Faculty Overlap / Conflict</span>
                     </div>
-                    <p className="leading-relaxed font-bold">{modalError}</p>
-                    <div className="text-[11px] text-amber-800 dark:text-amber-300 font-extrabold flex items-center gap-1 pt-0.5">
+                    <p className="leading-relaxed font-bold">{activeClash}</p>
+                    <div className="text-[11px] text-amber-800 dark:text-amber-300 font-extrabold flex items-center gap-1 pt-0.5 border-t border-rose-200 dark:border-rose-800/60">
                       <span>👉</span>
                       <span>Please choose another available faculty member below for this session:</span>
                     </div>
@@ -2572,8 +3014,8 @@ export default function TimetableDesignPage() {
                     if (modalError) setModalError(null);
                   }}
                   className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl p-2.5 font-bold transition-all ${
-                    modalError && (modalError.includes('already scheduled') || modalError.includes('faculty') || modalError.includes('Conflict'))
-                      ? 'border-2 border-rose-500 bg-rose-50/20 ring-2 ring-rose-500/20'
+                    activeClash
+                      ? 'border-2 border-rose-500 bg-rose-50/20 ring-4 ring-rose-500/20 text-rose-900 dark:text-white'
                       : 'border-slate-300 dark:border-slate-700'
                   }`}
                   required
@@ -2794,6 +3236,26 @@ export default function TimetableDesignPage() {
                 </div>
               </div>
 
+              {/* Bottom Conflict Alert & Saving Alerts directly above Save button */}
+              {activeClash && (
+                <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/90 border-2 border-rose-500 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-start gap-2.5 shadow-sm animate-in fade-in">
+                  <span className="text-base shrink-0 mt-0.5">⚠️</span>
+                  <div className="space-y-0.5">
+                    <div className="font-black text-rose-700 dark:text-rose-300 uppercase tracking-wide text-[10px]">
+                      Scheduling Conflict Before Saving:
+                    </div>
+                    <p className="leading-relaxed font-bold">{activeClash}</p>
+                  </div>
+                </div>
+              )}
+
+              {loading && (
+                <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-2.5 shadow-sm animate-pulse">
+                  <div className="w-4 h-4 border-2 border-indigo-600 dark:border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span>Saving in progress... Please wait while schedule is committed.</span>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
                 {editingSlot ? (
@@ -2824,151 +3286,13 @@ export default function TimetableDesignPage() {
                     {loading && (
                       <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     )}
-                    <span>{editingSlot ? 'Save Changes' : 'Save (PostgreSQL & SRMS)'}</span>
+                    <span>{loading ? 'Saving...' : editingSlot ? 'Save Changes' : 'Save (PostgreSQL & SRMS)'}</span>
                   </button>
                 </div>
               </div>
             </form>
           </div>
         </div>
-      )}
-
-      {/* Slot Hover Details Popover — Theme Color & Scheduled Topics & Sub Topics */}
-      {hoveredSlotInfo && (() => {
-        const slot = hoveredSlotInfo.slot;
-
-        // Resolve subject & faculty details
-        const safeSubs = Array.isArray(subjects) ? subjects : [];
-        const safeFacs = Array.isArray(allFaculties) ? allFaculties : [];
-        const matchedSub = safeSubs.find(s => s && (String(s.id) === String(slot.subject_id) || String(s.code) === String(slot.subject_id) || String(s.code) === String(slot.subject_code)));
-        const subName = (slot.subject_name && slot.subject_name !== 'Medical Subject') ? slot.subject_name : (matchedSub?.name || slot.topic || 'Subject');
-        const subCode = (slot.subject_code && slot.subject_code !== 'MBBS') ? slot.subject_code : (matchedSub?.code || '');
-
-        const matchedFac = safeFacs.find(f => f && (String(f.id) === String(slot.faculty_id) || String(f.emp_id) === String(slot.faculty_id)));
-        const facName = (slot.faculty_name && slot.faculty_name !== 'Faculty Member') ? slot.faculty_name : (matchedFac?.name || 'Faculty Member');
-
-        // Extract Unit & Main Topic
-        const unitLabel = slot.unit_name || 'Unit 1';
-        const mainTopic = slot.topic || 'Curriculum Module / Lesson';
-
-        // Extract Sub Topics / Competencies
-        const rawCompCodes = slot.competency_codes ? slot.competency_codes.split(',').map(c => c.trim()).filter(Boolean) : [];
-        const customSubTopics = slot.sub_topics ? slot.sub_topics.split(',').map(s => s.trim()).filter(Boolean) : [];
-        const compList = filterCompetenciesForSlot(slot.competencies_detail || [], slot.subject_code, slot.subject_name, slot.topic);
-
-        // Map subtopics to detailed objects (with code & description)
-        const subTopics: { code: string; description?: string }[] = [];
-
-        if (customSubTopics.length > 0) {
-          customSubTopics.forEach((st, idx) => {
-            subTopics.push({ code: `ST-${idx + 1}`, description: st });
-          });
-        } else if (compList.length > 0) {
-          compList.forEach(c => {
-            subTopics.push({ code: c.code, description: c.description });
-          });
-        } else if (rawCompCodes.length > 0) {
-          rawCompCodes.forEach(code => {
-            const matchInMaster = (Array.isArray(allDbCompetencies) ? allDbCompetencies : []).find(
-              c => c && c.code && (c.code.toLowerCase() === code.toLowerCase() || c.id === code)
-            );
-            subTopics.push({
-              code: matchInMaster?.code || code,
-              description: matchInMaster?.description || undefined
-            });
-          });
-        }
-
-        return (
-          <div
-            style={{
-              top: `${Math.min(hoveredSlotInfo.y + 20, typeof window !== 'undefined' ? window.innerHeight - 340 : hoveredSlotInfo.y)}px`,
-              left: `${Math.min(hoveredSlotInfo.x, typeof window !== 'undefined' ? window.innerWidth - 300 : hoveredSlotInfo.x)}px`
-            }}
-            onMouseEnter={handlePopoverMouseEnter}
-            onMouseLeave={handlePopoverMouseLeave}
-            className="fixed z-50 p-3.5 rounded-2xl bg-gradient-to-br from-[#2D2575] via-[#231C63] to-[#1B1652] text-white shadow-2xl shadow-[#2D2575]/70 border-2 border-[#5B4BFF]/60 text-[11px] space-y-2.5 w-80 max-w-[290px] pointer-events-auto animate-fade-in backdrop-blur-xl"
-          >
-            {/* Header: Subject & Session Type Badge */}
-            <div className="flex items-center justify-between gap-1.5 border-b border-white/10 pb-1.5">
-              <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#F36C21] text-white shadow-xs uppercase tracking-wider">
-                {subCode ? `${subCode} • ` : ''}{slot.slot_type || slot.slotType || 'LECTURE'}
-              </span>
-              <span className="text-[10px] font-mono font-bold text-indigo-200">
-                ⏰ {slot.start_time.slice(0, 5)} - {slot.end_time.slice(0, 5)}
-              </span>
-            </div>
-
-            {/* Subject Title & Faculty Info */}
-            <div className="space-y-0.5">
-              <h4 className="font-extrabold text-xs text-white leading-tight truncate">
-                {subName}
-              </h4>
-              <div className="flex items-center justify-between text-[10px] text-indigo-200 font-medium pt-0.5">
-                <span className="truncate">👨‍🏫 {facName}</span>
-                {slot.room && (
-                  <span className="bg-white/15 px-1.5 py-0.2 rounded font-mono text-[9px] text-indigo-100 border border-white/20 font-bold shrink-0 ml-1">
-                    R-{slot.room}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* 1. Unit Badge / Card */}
-            <div className="p-2 rounded-xl bg-indigo-500/20 border border-indigo-400/30 space-y-0.5">
-              <div className="text-[9px] font-black uppercase text-indigo-300 tracking-wider flex items-center gap-1">
-                <span>🏷️ 1. Unit</span>
-              </div>
-              <p className="text-[11px] font-extrabold text-white leading-snug">
-                {unitLabel}
-              </p>
-            </div>
-
-            {/* 2. Scheduled Topic Card */}
-            <div className="p-2 rounded-xl bg-white/10 border border-white/15 space-y-0.5">
-              <div className="text-[9px] font-black uppercase text-[#F36C21] tracking-wider flex items-center gap-1">
-                <span>📖 2. Scheduled Topic</span>
-              </div>
-              <p className="text-[11px] font-bold text-white leading-snug">
-                {mainTopic}
-              </p>
-            </div>
-
-            {/* 3. Scheduled Sub Topics Card */}
-            <div className="p-2 rounded-xl bg-white/10 border border-white/15 space-y-1">
-              <div className="text-[9px] font-black uppercase text-indigo-200 tracking-wider flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <span>🎯 3. SUB TOPICS</span>
-                </span>
-                {subTopics.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-[#5B4BFF] text-white text-[8.5px] font-mono font-bold">
-                    {subTopics.length}
-                  </span>
-                )}
-              </div>
-
-              {subTopics.length > 0 ? (
-                <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-                  {subTopics.map((st, i) => (
-                    <div key={i} className="p-1 px-1.5 rounded bg-black/30 border border-white/10 text-[10px] flex items-start gap-1.5">
-                      <span className="shrink-0 px-1 py-0.2 rounded bg-[#5B4BFF] text-white font-mono font-bold text-[9px]">
-                        {st.code}
-                      </span>
-                      {st.description ? (
-                        <p className="text-indigo-100 text-[9.5px] leading-tight font-medium self-center">
-                          {st.description}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[10px] text-indigo-200 italic font-medium">
-                  Sub topics: Scheduled per curriculum syllabus
-                </p>
-              )}
-            </div>
-          </div>
         );
       })()}
     </div>

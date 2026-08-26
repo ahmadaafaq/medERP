@@ -171,16 +171,24 @@ export default function StaffAdminPage() {
     setLoading(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-      const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const role = typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN').toUpperCase() : 'ADMIN';
 
-      const role = typeof window !== 'undefined' ? (localStorage.getItem('role') || localStorage.getItem('auth_role') || 'ADMIN').toUpperCase() : 'ADMIN';
-      const userSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+      const rawSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+      let userSlug = rawSlug.replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+      if (userSlug === 'srms-cet') userSlug = 'srms-cet-bareilly';
+      if (userSlug === 'srms-cetr') userSlug = 'srms-cetr-bareilly';
 
       let querySlug = userSlug;
       if (role === 'SUPER_ADMIN') {
         const targetCollege = colleges.find(c => String(c.code) === String(colFilter) || String(c.id) === String(colFilter) || c.slug === colFilter);
-        querySlug = colFilter === 'all' ? 'all' : (targetCollege?.slug || colFilter || 'srms-cet-bareilly');
+        querySlug = colFilter === 'all' ? 'all' : (targetCollege?.slug || colFilter || userSlug);
       }
+
+      const headers: Record<string, string> = {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        'x-tenant-slug': querySlug,
+        'x-tenant': querySlug,
+      };
 
       const res = await fetch(`${API_BASE}/users/faculty?tenant=${querySlug}&limit=1000`, { headers });
       if (res.ok) {

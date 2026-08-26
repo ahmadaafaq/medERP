@@ -173,15 +173,15 @@ export default function CompanyCard({
 
         {role === 'student' && (
           <div>
-            {company.has_applied ? (
-              <span className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                {company.application_status || 'Applied'}
+            {(company.has_applied || (company as any).my_application || company.application_status) ? (
+              <span className="px-3.5 py-2 rounded-xl text-xs font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 shadow-sm">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Applied ({company.application_status || (company as any).my_application?.status || 'Under Review'})</span>
               </span>
             ) : (
               <button
                 onClick={() => onApply?.(company)}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
               >
                 Apply Now
               </button>

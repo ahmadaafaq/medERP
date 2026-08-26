@@ -228,7 +228,10 @@ export default function StaffMasterPage() {
       if (typeof window !== 'undefined') {
         role = (localStorage.getItem('role') || 'ADMIN').toUpperCase();
         userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
-        userSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+        userSlug = (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly')
+          .replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+        if (userSlug === 'srms-cet') userSlug = 'srms-cet-bareilly';
+        if (userSlug === 'srms-cetr') userSlug = 'srms-cetr-bareilly';
         setUserRole(role);
         setUserColgCd(userColg);
         setUserTenantSlug(userSlug);
@@ -311,16 +314,24 @@ export default function StaffMasterPage() {
     setLoading(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-      const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
 
       const role = typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN').toUpperCase() : 'ADMIN';
-      const userSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+      const rawSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+      let userSlug = rawSlug.replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+      if (userSlug === 'srms-cet') userSlug = 'srms-cet-bareilly';
+      if (userSlug === 'srms-cetr') userSlug = 'srms-cetr-bareilly';
 
       let querySlug = userSlug;
       if (role === 'SUPER_ADMIN') {
         const targetCollege = colleges.find(c => String(c.code) === String(colFilter) || String(c.id) === String(colFilter) || c.slug === colFilter);
-        querySlug = colFilter === 'all' ? 'all' : (targetCollege?.slug || colFilter || 'srms-cet-bareilly');
+        querySlug = colFilter === 'all' ? 'all' : (targetCollege?.slug || colFilter || userSlug);
       }
+
+      const headers: Record<string, string> = {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        'x-tenant-slug': querySlug,
+        'x-tenant': querySlug,
+      };
 
       const res = await fetch(`${API_BASE}/users/faculty?tenant=${querySlug}&limit=1000`, { headers });
       if (res.ok) {
@@ -773,6 +784,8 @@ export default function StaffMasterPage() {
         method,
         headers: {
           'Content-Type': 'application/json',
+          'x-tenant-slug': slug,
+          'x-tenant': slug,
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(body),
@@ -785,11 +798,13 @@ export default function StaffMasterPage() {
         setIsModalOpen(false);
 
         // Optimistically update local faculty state with updated fields
-        if (isEdit && json.data) {
-          const updatedItem = json.data;
-          setFaculties(prev => prev.map(f => f.id === editingItem.id ? { ...f, ...updatedItem, photo_url: updatedItem.photo_url || body.photoUrl } : f));
-          if (detailFaculty && detailFaculty.id === editingItem.id) {
-            setDetailFaculty(prev => prev ? { ...prev, ...updatedItem, photo_url: updatedItem.photo_url || body.photoUrl } : null);
+        if (isEdit) {
+          const updatedItem = json.data || json;
+          if (updatedItem && updatedItem.id) {
+            setFaculties(prev => prev.map(f => f.id === editingItem.id ? { ...f, ...updatedItem, photo_url: updatedItem.photo_url || body.photoUrl } : f));
+            if (detailFaculty && detailFaculty.id === editingItem.id) {
+              setDetailFaculty(prev => prev ? { ...prev, ...updatedItem, photo_url: updatedItem.photo_url || body.photoUrl } : null);
+            }
           }
         }
 
@@ -1213,8 +1228,30 @@ export default function StaffMasterPage() {
                     ))
                   ) : paginatedFaculties.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-14 text-center text-slate-400 font-medium">
-                        No staff records found matching the active filters. Click &quot;Sync from SRMS HR&quot; to import live records.
+                      <td colSpan={8} className="py-14 text-center">
+                        <div className="flex flex-col items-center justify-center space-y-3">
+                          <div className="w-12 h-12 rounded-full bg-orange-500/10 text-[#F36C21] flex items-center justify-center text-xl font-bold">
+                            🔍
+                          </div>
+                          <p className="text-sm font-bold text-[#1B1E28] dark:text-white">
+                            {faculties.length > 0
+                              ? 'No staff records match the active filter criteria.'
+                              : 'No staff records found in PostgreSQL database.'}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
+                            {faculties.length > 0
+                              ? `There are ${faculties.length} total staff records loaded. Try clearing the search query or resetting the Department / Type filters.`
+                              : 'Click "Sync from SRMS HR" above to fetch and import all live employee profiles into the system.'}
+                          </p>
+                          {faculties.length > 0 && isFilterActive && (
+                            <button
+                              onClick={handleResetFilters}
+                              className="mt-2 px-4 py-2 text-xs font-extrabold rounded-xl bg-[#5B4BFF] hover:bg-[#4938DF] text-white shadow-md shadow-[#5B4BFF]/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                            >
+                              Reset All Filters (Show All {faculties.length} Staff)
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ) : (

@@ -10,8 +10,20 @@ import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
 import AttendanceWidget from '../../../components/AttendanceWidget';
 import NoticeDashboardWidget from '../../../components/notices/NoticeDashboardWidget';
 import ChatDashboardWidget from '../../../components/chat/ChatDashboardWidget';
+import IncubationCarousel from '../../../components/incubation/IncubationCarousel';
 
-import { Sparkles, Rocket, Award, CheckCircle2, ArrowRight, FolderGit2 } from 'lucide-react';
+import {
+  Sparkles,
+  Rocket,
+  Award,
+  CheckCircle2,
+  ArrowRight,
+  FolderGit2,
+  Building2,
+  Briefcase,
+  Calendar,
+  Clock
+} from 'lucide-react';
 
 interface StudentInfo {
   name: string;
@@ -61,16 +73,16 @@ export default function StudentDashboard() {
 
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
   const [attendanceStats, setAttendanceStats] = useState({
-    percentage: 92.4,
-    totalClasses: 77,
-    totalPresent: 71,
-    theoryPct: 91.5,
-    practicalPct: 94.2,
+    percentage: 0,
+    totalClasses: 0,
+    totalPresent: 0,
+    theoryPct: 0,
+    practicalPct: 0,
   });
   const [examResults, setExamResults] = useState<ExamResult[]>([]);
-  const [upcomingExamsCount, setUpcomingExamsCount] = useState<number>(3);
-  const [logbookVerifiedCount, setLogbookVerifiedCount] = useState<number>(28);
-  const [logbookTotalCount, setLogbookTotalCount] = useState<number>(30);
+  const [upcomingExamsCount, setUpcomingExamsCount] = useState<number>(0);
+  const [logbookVerifiedCount, setLogbookVerifiedCount] = useState<number>(0);
+  const [logbookTotalCount, setLogbookTotalCount] = useState<number>(0);
   const [internshipSummary, setInternshipSummary] = useState({
     totalAvailable: 0,
     appliedCount: 0,
@@ -78,7 +90,16 @@ export default function StudentDashboard() {
     latestStatus: 'Available',
     progressPct: 0,
   });
+  const [timetableSummary, setTimetableSummary] = useState({
+    totalClasses: 0,
+    distinctSubjects: [] as string[],
+    activeSession: null as any,
+    todaysSlots: [] as any[],
+    weeklySlots: [] as any[],
+    loading: true,
+  });
   const [incubatedProjects, setIncubatedProjects] = useState<IncubatedProjectAlert[]>([]);
+  const [placementAlertDrives, setPlacementAlertDrives] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -119,16 +140,24 @@ export default function StudentDashboard() {
 
     try {
       // 1. Fetch Logged-In Student Profile
-      const meRes = await fetch(`${API_BASE}/auth/me`, { headers }).catch(() => null);
       const isMed = slug.includes('ims') || slug.includes('med');
       let regNo = cachedReg || (isMed ? '2023MBBS045' : '2025107990');
       let studentNameVal = cachedName || (isMed ? 'Rahul Verma' : 'AAFREEN KHAN');
       let studentRollVal = cachedRoll || (isMed ? 'MBBS2023045' : '2500141790001');
+      let courseCd = isMed ? '1' : '13';
+      let branchCd = '1';
+      let batchCd = '2';
+      let batchId = '';
+      let semester = '3';
+      let section = '1';
+      let colgCd = '1';
+
+      const meRes = await fetch(`${API_BASE}/auth/me`, { headers }).catch(() => null);
 
       if (meRes && meRes.ok) {
         const json = await meRes.json();
         const meData = json.data || json;
-        const p = meData.profile || meData;
+        const p = meData.profile || meData || {};
         regNo =
           p.registration_no ||
           meData.registrationNo ||
@@ -139,14 +168,22 @@ export default function StudentDashboard() {
         studentNameVal = meData.name || p.name || meData.student_name || studentNameVal;
         studentRollVal = p.rollno || meData.rollno || studentRollVal;
 
-        const courseStr = meData.courseName || p.course_name || p.course_cd || (isMed ? 'MBBS' : 'BCA');
+        courseCd = p.course_cd || meData.course_cd || meData.courseCd || (p.course_name?.includes('BCA') ? '13' : courseCd);
+        branchCd = p.branch_cd || meData.branch_cd || meData.branchCd || '1';
+        batchCd = p.batch_cd || meData.batch_cd || meData.batchCd || '2';
+        batchId = p.batch_id || meData.batch_id || meData.batchId || '';
+        semester = p.semester || p.current_semester || meData.semester || '3';
+        section = p.section || meData.section || '1';
+        colgCd = p.colg_cd || meData.colg_cd || meData.colgcd || '1';
+
+        const courseStr = meData.courseName || p.course_name || (courseCd === '13' ? 'BCA' : courseCd === '1' ? 'B.Tech' : courseCd);
         const deptStr = meData.departmentName || p.department_name || (isMed ? 'Phase 2 MBBS' : 'Computer Applications (BCA)');
 
         setStudentInfo({
           name: studentNameVal,
           rollno: studentRollVal,
           registration_no: regNo,
-          batch: p.batch_cd || meData.batchCd || (isMed ? '2023-MBBS Batch' : 'Batch 2025'),
+          batch: p.batch_name || p.batch_cd || (isMed ? '2023-MBBS Batch' : 'Batch 2025'),
           course: courseStr,
           department: deptStr,
         });
@@ -161,189 +198,231 @@ export default function StudentDashboard() {
         });
       }
 
-      // 2. Fetch Live Individual Student Attendance from SRMS
-      try {
-        const targetReg = regNo || '2025107990';
-        const liveRes = await fetch('/api/srms/student-individual-attendance', {
+      // 2. Fetch all real data in PARALLEL to load in one shot accurately
+      const targetReg = regNo || '2025107990';
+
+      let ttUrl = `${API_BASE}/timetable/student-schedule?tenant=${slug}`;
+      if (batchId) ttUrl += `&batchId=${encodeURIComponent(batchId)}`;
+      if (courseCd) ttUrl += `&courseCd=${encodeURIComponent(courseCd)}`;
+      if (branchCd) ttUrl += `&branchCd=${encodeURIComponent(branchCd)}`;
+      if (batchCd) ttUrl += `&batchCd=${encodeURIComponent(batchCd)}`;
+      if (semester) ttUrl += `&semester=${encodeURIComponent(semester)}`;
+      if (section) ttUrl += `&section=${encodeURIComponent(section)}`;
+      if (colgCd) ttUrl += `&colgCd=${encodeURIComponent(colgCd)}`;
+
+      const [
+        attendanceResult,
+        papersResult,
+        examResultsResult,
+        timetableResult,
+        internshipsResult,
+        incubationResult,
+        placementResult,
+      ] = await Promise.allSettled([
+        // 2a. Live Attendance
+        fetch('/api/srms/student-individual-attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            colg_cd: 1,
-            course_cd: 13,
-            branch_cd: 1,
-            batch_cd: 2,
+            colg_cd: Number(colgCd) || 1,
+            course_cd: Number(courseCd) || 13,
+            branch_cd: Number(branchCd) || 1,
+            batch_cd: Number(batchCd) || 2,
             stud_reg_no: targetReg,
           }),
-        });
-        if (liveRes.ok) {
-          const liveJson = await liveRes.json();
-          if (liveJson.success && liveJson.data) {
-            const pct =
-              typeof liveJson.data.percentage === 'number'
-                ? liveJson.data.percentage
-                : parseFloat(String(liveJson.data.percentage || '24.84'));
+        }).then((res) => (res.ok ? res.json() : null)),
 
-            setAttendanceStats((prev) => ({
-              ...prev,
-              percentage: isNaN(pct) ? 24.84 : pct,
-            }));
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load individual live attendance:', e);
-        setAttendanceStats((prev) => ({ ...prev, percentage: 24.84 }));
-      }
+        // 2b. Scheduled Papers Count
+        fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers })
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null),
 
-      // 3. Fetch Exam Results
-      const examRes = await fetch(`${API_BASE}/exams/student/${regNo}?tenant=${slug}`, { headers });
-      if (examRes.ok) {
-        const examJson = await examRes.json();
-        const list = examJson.data !== undefined ? examJson.data : examJson;
-        if (Array.isArray(list) && list.length > 0) {
-          setExamResults(list.slice(0, 4));
-        } else {
-          setExamResults(getFallbackExamResults(slug));
-        }
-      } else {
-        setExamResults(getFallbackExamResults(slug));
-      }
+        // 2c. Student Results Ledger
+        fetch(`${API_BASE}/exams/student/${encodeURIComponent(targetReg)}?tenant=${slug}`, { headers })
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null),
 
-      // 5. Fetch Live Student Internship & Certification Status
-      try {
-        const intRes = await fetch(`/api/internships/list`, {
+        // 2d. Timetable Schedule
+        fetch(ttUrl, { headers })
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null),
+
+        // 2e. Internships
+        fetch(`/api/internships/list`, {
           headers: {
             'x-tenant-id': `tenant_${slug}`,
             'x-tenant': slug,
-            'x-user-reg-no': regNo,
+            'x-user-reg-no': targetReg,
           },
-        });
-        if (intRes.ok) {
-          const j = await intRes.json();
-          const list = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
-          const totalAvailable = list.length;
-          const applied = list.filter((p: any) => p.my_application);
-          const completed = list.filter((p: any) => p.my_application?.status === 'completed');
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null),
 
-          let statusStr = 'Explore Tracks';
-          let pct = 0;
-          if (completed.length > 0) {
-            statusStr = 'Certified 🎓';
-            pct = 100;
-          } else if (applied.length > 0) {
-            const latest = applied[0]?.my_application?.status;
-            statusStr = latest ? latest.toUpperCase() : 'In Progress';
-            pct = latest === 'selected' ? 75 : 40;
-          }
-
-          setInternshipSummary({
-            totalAvailable,
-            appliedCount: applied.length,
-            completedCount: completed.length,
-            latestStatus: statusStr,
-            progressPct: pct,
-          });
-        }
-      } catch {}
-
-      // 6. Fetch Student Incubation Projects for Golden Alert Banner
-      try {
-        const incRes = await fetch(`/api/incubation-cell/projects?tenant=${slug}`, {
+        // 2f. Incubation Projects
+        fetch(`/api/incubation-cell/projects?tenant=${slug}`, {
           headers: {
             'x-tenant-id': `tenant_${slug}`,
             'x-tenant': slug,
             'x-tenant-slug': slug,
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null),
+
+        // 2g. Placement Drives
+        fetch(`/api/placement-drive/list?status=Open&tenant=${slug}`, {
+          headers: {
+            'x-tenant-slug': slug,
+            'x-tenant': slug,
+            'x-user-reg-no': targetReg,
+            'x-user-role': 'STUDENT',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null),
+      ]);
+
+      // Apply Attendance
+      if (attendanceResult.status === 'fulfilled' && attendanceResult.value?.success && attendanceResult.value.data) {
+        const pct =
+          typeof attendanceResult.value.data.percentage === 'number'
+            ? attendanceResult.value.data.percentage
+            : parseFloat(String(attendanceResult.value.data.percentage || '24.84'));
+        setAttendanceStats((prev) => ({
+          ...prev,
+          percentage: isNaN(pct) ? 24.84 : pct,
+        }));
+      } else {
+        setAttendanceStats((prev) => ({ ...prev, percentage: 24.84 }));
+      }
+
+      // Apply Papers Count
+      if (papersResult.status === 'fulfilled' && papersResult.value) {
+        const pData = papersResult.value.data !== undefined ? papersResult.value.data : papersResult.value;
+        setUpcomingExamsCount(Array.isArray(pData) ? pData.length : 0);
+      } else {
+        setUpcomingExamsCount(0);
+      }
+
+      // Apply Exam Results Ledger
+      if (examResultsResult.status === 'fulfilled' && examResultsResult.value) {
+        const list = examResultsResult.value.data !== undefined ? examResultsResult.value.data : examResultsResult.value;
+        setExamResults(Array.isArray(list) ? list : []);
+      } else {
+        setExamResults([]);
+      }
+
+      // Apply Timetable Schedule
+      let rawSlots: any[] = [];
+      let activeLecture: any = null;
+      if (timetableResult.status === 'fulfilled' && timetableResult.value?.data) {
+        rawSlots = Array.isArray(timetableResult.value.data.weeklySlots)
+          ? timetableResult.value.data.weeklySlots
+          : Array.isArray(timetableResult.value.data.todaysSlots)
+            ? timetableResult.value.data.todaysSlots
+            : Array.isArray(timetableResult.value.data)
+              ? timetableResult.value.data
+              : [];
+        activeLecture = timetableResult.value.data.currentLecture || null;
+      }
+
+      const seenSlots = new Set<string>();
+      const uniqueWeeklySlots = rawSlots.filter((s: any) => {
+        const normSub = (s.subject_name || s.subject_code || s.topic || '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
+        const key = `${s.day_of_week}_${String(s.start_time || '').slice(0, 5)}_${normSub}`;
+        if (seenSlots.has(key)) return false;
+        seenSlots.add(key);
+        return true;
+      });
+
+      const subjectNames = Array.from(
+        new Set(
+          uniqueWeeklySlots
+            .map((s: any) => (s.subject_name || s.subject_code || s.topic || '').replace(/\([^)]*\)/g, '').trim())
+            .filter(Boolean)
+        )
+      );
+
+      const jsDay = new Date().getDay();
+      const currentDayOfWeek = jsDay === 0 ? 7 : jsDay;
+      const filteredTodaysSlots = uniqueWeeklySlots.filter((s: any) => Number(s.day_of_week) === currentDayOfWeek);
+
+      setTimetableSummary({
+        totalClasses: uniqueWeeklySlots.length,
+        distinctSubjects: subjectNames,
+        activeSession: activeLecture || (filteredTodaysSlots.length > 0 ? filteredTodaysSlots[0] : uniqueWeeklySlots.length > 0 ? uniqueWeeklySlots[0] : null),
+        todaysSlots: filteredTodaysSlots,
+        weeklySlots: uniqueWeeklySlots,
+        loading: false,
+      });
+
+      // Apply Internships
+      if (internshipsResult.status === 'fulfilled' && internshipsResult.value) {
+        const list = Array.isArray(internshipsResult.value.data)
+          ? internshipsResult.value.data
+          : Array.isArray(internshipsResult.value)
+            ? internshipsResult.value
+            : [];
+        const totalAvailable = list.length;
+        const applied = list.filter((p: any) => p.my_application);
+        const completed = list.filter((p: any) => p.my_application?.status === 'completed');
+
+        let statusStr = 'Explore Tracks';
+        let pct = 0;
+        if (completed.length > 0) {
+          statusStr = 'Certified 🎓';
+          pct = 100;
+        } else if (applied.length > 0) {
+          const latest = applied[0]?.my_application?.status;
+          statusStr = latest ? latest.toUpperCase() : 'In Progress';
+          pct = latest === 'selected' ? 75 : 40;
+        }
+
+        setInternshipSummary({
+          totalAvailable,
+          appliedCount: applied.length,
+          completedCount: completed.length,
+          latestStatus: statusStr,
+          progressPct: pct,
         });
-        if (incRes.ok) {
-          const incJson = await incRes.json();
-          const list = Array.isArray(incJson.data) ? incJson.data : (Array.isArray(incJson) ? incJson : []);
-          const myIncubated = list.filter((p: any) => 
-            p.studentRegNo === regNo || 
-            p.rollNo === studentRollVal || 
+      }
+
+      // Apply Incubation Projects
+      if (incubationResult.status === 'fulfilled' && incubationResult.value) {
+        const list = Array.isArray(incubationResult.value.data)
+          ? incubationResult.value.data
+          : Array.isArray(incubationResult.value)
+            ? incubationResult.value
+            : [];
+        const myIncubated = list.filter(
+          (p: any) =>
+            p.studentRegNo === targetReg ||
+            p.rollNo === studentRollVal ||
             (p.studentName && studentNameVal && p.studentName.toLowerCase().trim() === studentNameVal.toLowerCase().trim()) ||
             ['Selected', 'Funded', 'Incubated'].includes(p.incubationStatus)
-          );
-          setIncubatedProjects(myIncubated);
-        }
-      } catch (e) {
-        console.warn('Failed to load incubation projects for student:', e);
+        );
+        setIncubatedProjects(myIncubated);
+      }
+
+      // Apply Placement Drives
+      if (placementResult.status === 'fulfilled' && placementResult.value) {
+        const list = Array.isArray(placementResult.value.data?.data)
+          ? placementResult.value.data.data
+          : Array.isArray(placementResult.value.data)
+            ? placementResult.value.data
+            : Array.isArray(placementResult.value)
+              ? placementResult.value
+              : [];
+        setPlacementAlertDrives(list);
       }
     } catch {
-      setExamResults(getFallbackExamResults(slug));
+      setExamResults([]);
+      setUpcomingExamsCount(0);
     } finally {
       setLoading(false);
     }
-  };
-
-  const getFallbackExamResults = (slug?: string): ExamResult[] => {
-    const isMed = slug && (slug.includes('ims') || slug.includes('med'));
-    if (isMed) {
-      return [
-        {
-          id: 'res-1',
-          paper_name: 'Physiology 1st Internal Assessment (Theory)',
-          paper_code: 'PHY_IA1_2026',
-          subject_name: 'Physiology',
-          marks_obtained: 85,
-          max_marks: 100,
-          is_pass: true,
-          paper_type: 'THEORY',
-        },
-        {
-          id: 'res-2',
-          paper_name: 'Anatomy Histology & Gross Viva',
-          paper_code: 'ANA_VIVA_2026',
-          subject_name: 'Anatomy',
-          marks_obtained: 78,
-          max_marks: 100,
-          is_pass: true,
-          paper_type: 'PRACTICAL_VIVA',
-        },
-        {
-          id: 'res-3',
-          paper_name: 'Biochemistry Formative Quiz 1',
-          paper_code: 'BIC_FA1_2026',
-          subject_name: 'Biochemistry',
-          marks_obtained: 42,
-          max_marks: 50,
-          is_pass: true,
-          paper_type: 'MCQ',
-        },
-      ];
-    }
-    return [
-      {
-        id: 'res-1',
-        paper_name: 'Database Management Systems Midterm',
-        paper_code: 'BCA-301',
-        subject_name: 'Database Systems',
-        marks_obtained: 88,
-        max_marks: 100,
-        is_pass: true,
-        paper_type: 'THEORY',
-      },
-      {
-        id: 'res-2',
-        paper_name: 'Data Structures & Algorithms Practical Viva',
-        paper_code: 'KCS-351',
-        subject_name: 'Data Structures',
-        marks_obtained: 92,
-        max_marks: 100,
-        is_pass: true,
-        paper_type: 'PRACTICAL_VIVA',
-      },
-      {
-        id: 'res-3',
-        paper_name: 'Object Oriented Programming with Java',
-        paper_code: 'BCA-302',
-        subject_name: 'Java Programming',
-        marks_obtained: 45,
-        max_marks: 50,
-        is_pass: true,
-        paper_type: 'THEORY',
-      },
-    ];
   };
 
   return (
@@ -351,11 +430,14 @@ export default function StudentDashboard() {
       <Sidebar role="student" />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Student Academic Portal Dashboard" />
-        
+
         <main className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 flex-1 max-w-[1600px] w-full mx-auto overflow-x-hidden">
-          
-          {/* PROFILE WELCOME CARD */}
-          <div className="p-6 rounded-[22px] bg-gradient-to-r from-[#2D2575] via-[#3E3498] to-[#2D2575] text-white shadow-soft flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
+          {loading ? (
+            <StudentDashboardSkeleton />
+          ) : (
+            <>
+              {/* PROFILE WELCOME CARD */}
+              <div className="p-6 rounded-[22px] bg-gradient-to-r from-[#2D2575] via-[#3E3498] to-[#2D2575] text-white shadow-soft flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
             <div className="space-y-2 z-10">
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 rounded-full bg-[#F36C21] text-white font-extrabold text-[10px] tracking-widest uppercase">
@@ -371,7 +453,7 @@ export default function StudentDashboard() {
               <p className="text-xs text-white/80 max-w-2xl leading-relaxed">
                 Official College Student Ledger. Track subject-wise attendance across Theory & Practical Lectures, examine published test results, and manage your academic syllabus.
               </p>
-              
+
               <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
                 <span className="px-3 py-1 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-medium">
                   🆔 <strong>Reg No:</strong> {studentInfo?.registration_no || '2025107715'}
@@ -443,94 +525,119 @@ export default function StudentDashboard() {
             </div>
           )}
 
-          {/* 🚀 GOLDEN OPPORTUNITY INCUBATION CELL SELECTION ALERT BANNER */}
+          {/* 🚀 GOLDEN OPPORTUNITY INCUBATION CELL SELECTION ALERT BANNER CAROUSEL */}
           {incubatedProjects.length > 0 && (
-            <div className="space-y-4">
-              {incubatedProjects.map((p) => {
-                const isFunded = p.incubationStatus === 'Funded';
-                const isSelected = p.incubationStatus === 'Selected';
-                const isIncubated = p.incubationStatus === 'Incubated';
+            <IncubationCarousel projects={incubatedProjects} />
+          )}
 
-                return (
-                  <div
-                    key={p.id}
-                    className="p-5 sm:p-6 rounded-[22px] bg-gradient-to-r from-amber-500 via-[#F36C21] to-[#5B4BFF] text-white shadow-xl relative overflow-hidden border-2 border-amber-300 animate-in fade-in slide-in-from-top-3 duration-300"
-                  >
-                    {/* Decorative Background Elements */}
-                    <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-                    <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
+          {/* 🏢 IMMEDIATE HIGHLIGHT ALERT: ADMIN POSTED NEW PLACEMENT DRIVES */}
+          {placementAlertDrives.length > 0 && (
+            <div className="p-5 sm:p-6 rounded-[22px] bg-gradient-to-r from-[#2D2575] via-[#3d328c] to-[#1E1757] text-white shadow-xl relative overflow-hidden border border-[#5B4BFF]/40 animate-in fade-in slide-in-from-top-3 duration-300 space-y-4">
+              {/* Background ambient lighting */}
+              <div className="absolute top-0 right-0 w-96 h-96 bg-[#5B4BFF]/20 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-[#F36C21]/20 rounded-full blur-2xl pointer-events-none" />
 
-                    <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
-                      <div className="space-y-2 max-w-3xl">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-3 py-1 rounded-full bg-white text-slate-900 font-black text-[11px] tracking-wider uppercase flex items-center gap-1.5 shadow-sm">
-                            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                            <span>🚀 GOLDEN OPPORTUNITY: INCUBATION SHORTLISTED</span>
-                          </span>
+              {/* Alert Header */}
+              <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/15 pb-3.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F36C21] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#F36C21]"></span>
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#F36C21] text-white font-extrabold text-[10px] tracking-wider uppercase">
+                      T&amp;P CELL NOTICE
+                    </span>
+                    <h2 className="text-sm sm:text-base font-black text-white tracking-tight">
+                      🏢 New Campus Placement Drives Announced ({placementAlertDrives.length} Visiting Corporate Partners)
+                    </h2>
+                  </div>
+                </div>
 
-                          <span className="px-3 py-1 rounded-full bg-black/20 backdrop-blur-md border border-white/30 text-white font-bold text-xs">
-                            Status: <strong>{p.incubationStatus}</strong> {isFunded ? '💰' : '🌟'}
-                          </span>
+                <Link
+                  href="/dashboard/student/placement"
+                  className="px-4 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs backdrop-blur-md border border-white/20 transition-all text-center flex items-center justify-center gap-1.5 self-start sm:self-auto"
+                >
+                  <span>Explore All Drives</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
 
-                          <span className="px-3 py-1 rounded-full bg-emerald-400 text-slate-950 font-black text-xs">
-                            Faculty Score: {p.score}% (Grade {p.grade})
+              {/* Drives Grid */}
+              <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {placementAlertDrives.slice(0, 3).map((d: any) => {
+                  const isApplied = !!d.has_applied || !!d.my_application || !!d.application_status;
+                  const statusText = d.application_status || d.my_application?.status || 'Applied';
+
+                  return (
+                    <div
+                      key={d.drive_id}
+                      className="p-4 rounded-2xl bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/15 transition-all flex flex-col justify-between space-y-3 group"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="text-sm font-black text-white group-hover:text-indigo-200 transition-colors line-clamp-1">
+                            {d.company_name}
+                          </h3>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-[#5B4BFF] text-white shrink-0">
+                            {d.package_ctc || '₹4.5 - ₹8.0 LPA'}
                           </span>
                         </div>
 
-                        <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
-                          <span>🎉 Congratulations! Selected Project: &quot;{p.title}&quot;</span>
-                        </h2>
-
-                        <p className="text-xs sm:text-sm text-white/95 leading-relaxed font-medium">
-                          🌟 You are a genius! Your repository project <strong>&quot;{p.title}&quot;</strong> has achieved top faculty marks and has been officially selected by the College Administration for the <strong>SRMS Venture Incubation Cell & Corporate Commercialization Pipeline</strong>.
+                        <p className="text-xs text-indigo-200 font-semibold line-clamp-1">
+                          {d.role || 'Associate Engineer'}
                         </p>
 
-                        {/* Seed Funding / Mentor Tagline */}
-                        <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
-                          {(p.fundingAmount || 0) > 0 && (
-                            <span className="px-3 py-1 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white font-black flex items-center gap-1.5">
-                              <span>💰 Seed Grant Approved:</span>
-                              <span className="text-amber-200">₹{Number(p.fundingAmount).toLocaleString('en-IN')}</span>
-                            </span>
-                          )}
-
-                          {p.mentorAssigned && (
-                            <span className="px-3 py-1 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white font-medium">
-                              👨‍🏫 <strong>Venture Mentor:</strong> {p.mentorAssigned}
-                            </span>
-                          )}
-
-                          {p.incubationNotes && (
-                            <span className="px-3 py-1 rounded-xl bg-white/15 backdrop-blur-md text-white/90 italic text-[11px]">
-                              &quot;{p.incubationNotes}&quot;
-                            </span>
-                          )}
+                        <div className="flex items-center gap-3 text-[11px] text-white/80 pt-1">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-[#F36C21]" />
+                            <span>{d.drive_date ? new Date(d.drive_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'TBA'}</span>
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-300" />
+                            <span>Deadline: {d.deadline_date ? new Date(d.deadline_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'Open'}</span>
+                          </span>
                         </div>
                       </div>
 
-                      {/* Action CTA */}
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                      {/* Footer: Applied status vs Apply button */}
+                      <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                        {isApplied ? (
+                          <span className="px-3 py-1 rounded-xl text-[11px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 flex items-center gap-1.5 shadow-sm">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Applied ({statusText})</span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                            <span>⚡ Application Open</span>
+                          </span>
+                        )}
+
                         <Link
-                          href="/dashboard/student/repository"
-                          className="px-5 py-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs shadow-lg transition-all text-center flex items-center justify-center gap-2 shrink-0 active:scale-95 cursor-pointer"
+                          href="/dashboard/student/placement"
+                          className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center gap-1 ${isApplied
+                              ? 'bg-white/10 hover:bg-white/20 text-white'
+                              : 'bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md'
+                            }`}
                         >
-                          <FolderGit2 className="w-4 h-4 text-[#5B4BFF]" />
-                          <span>View Project 📂</span>
+                          <span>{isApplied ? 'View Status' : 'Apply Now'}</span>
+                          <ArrowRight className="w-3 h-3" />
                         </Link>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
 
           {/* 5 MAIN KPI CARDS GRID */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-            
+
             {/* Card 1: Live Current Semester Attendance (Circular Graph) */}
-            <Link 
-              href="/dashboard/student/attendance" 
+            <Link
+              href="/dashboard/student/attendance"
               className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft hover:shadow-md transition-all duration-200 block group relative overflow-hidden"
             >
               <div className="flex items-center justify-between">
@@ -538,11 +645,10 @@ export default function StudentDashboard() {
                   Current Sem Attendance
                 </span>
                 <span
-                  className={`px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase ${
-                    attendanceStats.percentage >= 75
+                  className={`px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase ${attendanceStats.percentage >= 75
                       ? 'bg-[#00C48C]/15 text-[#00C48C]'
                       : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
-                  }`}
+                    }`}
                 >
                   {attendanceStats.percentage >= 75 ? '✅ Regular' : '⚠️ < 75%'}
                 </span>
@@ -603,16 +709,20 @@ export default function StudentDashboard() {
             </Link>
 
             {/* Card 2: Question Papers & Assessments */}
-            <Link 
-              href="/dashboard/student/assessment" 
+            <Link
+              href="/dashboard/student/assessment"
               className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft hover:shadow-md transition-all duration-200 block group"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
                   Question Papers & Tests
                 </span>
-                <span className="p-2 rounded-xl bg-[#5B4BFF]/15 text-[#5B4BFF] font-black text-xs">
-                  Active
+                <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase ${
+                  upcomingExamsCount > 0
+                    ? 'bg-[#5B4BFF]/15 text-[#5B4BFF] dark:text-indigo-400'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                }`}>
+                  {upcomingExamsCount > 0 ? `${upcomingExamsCount} Active` : '0 Active'}
                 </span>
               </div>
               <div className="mt-3 flex items-baseline gap-2">
@@ -620,72 +730,108 @@ export default function StudentDashboard() {
                   {upcomingExamsCount}
                 </p>
                 <span className="text-xs font-medium text-[#4E5969] dark:text-slate-400">
-                  Scheduled Assessments
+                  {upcomingExamsCount === 1 ? 'Scheduled Paper' : 'Scheduled Assessments'}
                 </span>
               </div>
-              <p className="mt-3 text-xs text-[#4E5969] dark:text-slate-400 font-medium">
-                Internal Theory & MCQ Papers Published
+              <p className="mt-3 text-xs text-[#4E5969] dark:text-slate-400 font-medium truncate">
+                {upcomingExamsCount > 0
+                  ? 'Internal Theory & MCQ Papers Published'
+                  : 'No open exam papers currently published'}
               </p>
               <span className="mt-3 text-[11px] font-bold text-[#5B4BFF] group-hover:translate-x-1 inline-block transition-transform">
                 Attempt / View Papers →
               </span>
             </Link>
 
-            {/* Card 3: Exam Marks & Score Ledger (With Performance Graph) */}
-            <Link 
-              href="/dashboard/student/reports/theory-result" 
-              className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft hover:shadow-md transition-all duration-200 block group"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
-                  Marks & Results
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-[#00C48C]/15 text-[#00C48C] font-black text-[10px] uppercase">
-                  100% Pass
-                </span>
-              </div>
-              <div className="mt-2 flex items-baseline justify-between">
-                <p className="text-2xl font-black text-[#1B1E28] dark:text-white group-hover:text-[#F36C21] transition-colors">
-                  85.6%
-                </p>
-                <span className="text-[10.5px] font-bold text-[#00C48C]">
-                  Highest: 92%
-                </span>
-              </div>
+            {/* Card 3: Exam Marks & Score Ledger (With Dynamic Performance Graph) */}
+            {(() => {
+              const totalObtained = examResults.reduce((acc, r) => acc + Number(r.marks_obtained || 0), 0);
+              const totalMax = examResults.reduce((acc, r) => acc + Number(r.max_marks || 100), 0);
+              const avgPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
+              const highestPct = examResults.length > 0
+                ? Math.max(...examResults.map(r => ((Number(r.marks_obtained || 0) / (Number(r.max_marks) || 100)) * 100)))
+                : 0;
+              const allPassed = examResults.length > 0 && examResults.every(r => r.is_pass);
+              const passRate = examResults.length > 0 ? Math.round((examResults.filter(r => r.is_pass).length / examResults.length) * 100) : 0;
 
-              {/* Subject Score Mini Bars Graph */}
-              <div className="mt-2.5 grid grid-cols-4 gap-1.5 items-end h-8 bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
-                <div className="flex flex-col items-center gap-0.5 h-full justify-end">
-                  <div className="w-full bg-[#5B4BFF] rounded-t-sm" style={{ height: '85%' }} title="Web Tech: 85%" />
-                  <span className="text-[7.5px] font-bold text-slate-400 font-mono">WT</span>
-                </div>
-                <div className="flex flex-col items-center gap-0.5 h-full justify-end">
-                  <div className="w-full bg-[#00C48C] rounded-t-sm" style={{ height: '78%' }} title="BC: 78%" />
-                  <span className="text-[7.5px] font-bold text-slate-400 font-mono">BC</span>
-                </div>
-                <div className="flex flex-col items-center gap-0.5 h-full justify-end">
-                  <div className="w-full bg-[#FFB020] rounded-t-sm" style={{ height: '92%' }} title="CO: 92%" />
-                  <span className="text-[7.5px] font-bold text-slate-400 font-mono">CO</span>
-                </div>
-                <div className="flex flex-col items-center gap-0.5 h-full justify-end">
-                  <div className="w-full bg-[#F36C21] rounded-t-sm" style={{ height: '88%' }} title="OOP: 88%" />
-                  <span className="text-[7.5px] font-bold text-slate-400 font-mono">OOP</span>
-                </div>
-              </div>
+              return (
+                <Link
+                  href="/dashboard/student/reports/theory-result"
+                  className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft hover:shadow-md transition-all duration-200 block group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
+                      Marks & Results
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full font-black text-[10px] uppercase ${
+                      examResults.length === 0
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                        : allPassed
+                          ? 'bg-[#00C48C]/15 text-[#00C48C]'
+                          : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                    }`}>
+                      {examResults.length === 0 ? 'No Marks' : allPassed ? '100% Pass' : `${passRate}% Pass`}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <p className="text-2xl font-black text-[#1B1E28] dark:text-white group-hover:text-[#F36C21] transition-colors">
+                      {examResults.length > 0 ? `${avgPct.toFixed(1)}%` : '0.0%'}
+                    </p>
+                    <span className="text-[10.5px] font-bold text-[#00C48C]">
+                      {examResults.length > 0 ? `Highest: ${highestPct.toFixed(0)}%` : 'Pending'}
+                    </span>
+                  </div>
 
-              <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <span className="text-[11px] font-bold text-[#F36C21] group-hover:translate-x-1 inline-block transition-transform">
-                  View Theory Results →
-                </span>
-                <span className="text-[9.5px] font-mono text-slate-400 font-bold">
-                  4 Subjects
-                </span>
-              </div>
-            </Link>
+                  {/* Dynamic Subject Score Mini Bars Graph */}
+                  {examResults.length > 0 ? (
+                    <div className="mt-2.5 grid grid-cols-4 gap-1.5 items-end h-8 bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                      {examResults.slice(0, 4).map((r, idx) => {
+                        const pct = Math.min(100, Math.max(12, Math.round((Number(r.marks_obtained || 0) / (Number(r.max_marks) || 100)) * 100)));
+                        const subName = (r.subject_name || r.paper_name || `S${idx + 1}`).trim();
+                        const words = subName.split(' ');
+                        const label = words.length > 1
+                          ? words.map(w => w[0]).join('').slice(0, 3).toUpperCase()
+                          : subName.slice(0, 3).toUpperCase();
+                        const barColor = pct >= 75 ? '#00C48C' : pct >= 50 ? '#5B4BFF' : '#F36C21';
+
+                        return (
+                          <div key={r.id || idx} className="flex flex-col items-center gap-0.5 h-full justify-end" title={`${subName}: ${r.marks_obtained}/${r.max_marks || 100} (${pct}%)`}>
+                            <div
+                              className="w-full rounded-t-sm transition-all duration-500"
+                              style={{ height: `${pct}%`, backgroundColor: barColor }}
+                            />
+                            <span className="text-[7.5px] font-bold text-slate-400 font-mono truncate max-w-[28px]">{label}</span>
+                          </div>
+                        );
+                      })}
+                      {Array.from({ length: Math.max(0, 4 - examResults.length) }).map((_, idx) => (
+                        <div key={`empty-${idx}`} className="flex flex-col items-center gap-0.5 h-full justify-end opacity-25">
+                          <div className="w-full bg-slate-300 dark:bg-slate-700 rounded-t-sm h-1" />
+                          <span className="text-[7.5px] font-mono text-slate-400">-</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2.5 h-8 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-center">
+                      <span className="text-[10px] text-slate-400 font-medium">0 evaluations recorded</span>
+                    </div>
+                  )}
+
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#F36C21] group-hover:translate-x-1 inline-block transition-transform">
+                      View Theory Results →
+                    </span>
+                    <span className="text-[9.5px] font-mono text-slate-400 font-bold">
+                      {examResults.length} {examResults.length === 1 ? 'Subject' : 'Subjects'}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })()}
 
             {/* Card 4: Academic Timetable & Schedule */}
-            <Link 
-              href="/dashboard/student/timetable" 
+            <Link
+              href="/dashboard/student/timetable"
               className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft hover:shadow-md transition-all duration-200 block group"
             >
               <div className="flex items-center justify-between">
@@ -693,16 +839,22 @@ export default function StudentDashboard() {
                   Timetable Schedule
                 </span>
                 <span className="p-2 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 font-black text-xs">
-                  Active
+                  {timetableSummary.distinctSubjects.length > 0
+                    ? `${timetableSummary.distinctSubjects.length} Subject${timetableSummary.distinctSubjects.length === 1 ? '' : 's'}`
+                    : 'Active'}
                 </span>
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <p className="text-3xl font-black text-[#1B1E28] dark:text-white group-hover:text-purple-600 transition-colors">
-                  7 Classes
+                  {timetableSummary.loading
+                    ? '...'
+                    : `${timetableSummary.totalClasses} ${timetableSummary.totalClasses === 1 ? 'Class' : 'Classes'}`}
                 </p>
               </div>
-              <p className="mt-3 text-xs text-[#4E5969] dark:text-slate-400 font-medium">
-                Scheduled Weekly Sessions
+              <p className="mt-3 text-xs text-[#4E5969] dark:text-slate-400 font-medium truncate">
+                {timetableSummary.distinctSubjects.length > 0
+                  ? `Scheduled: ${timetableSummary.distinctSubjects.slice(0, 2).join(', ')}${timetableSummary.distinctSubjects.length > 2 ? ` +${timetableSummary.distinctSubjects.length - 2} more` : ''}`
+                  : 'Scheduled Weekly Sessions'}
               </p>
               <span className="mt-3 text-[11px] font-bold text-purple-600 dark:text-purple-400 group-hover:translate-x-1 inline-block transition-transform">
                 View Weekly Timetable →
@@ -710,8 +862,8 @@ export default function StudentDashboard() {
             </Link>
 
             {/* Card 5: Skill Internships & Certification Tracks */}
-            <Link 
-              href="/dashboard/student/internships" 
+            <Link
+              href="/dashboard/student/internships"
               className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft hover:shadow-md hover:border-[#5B4BFF] transition-all duration-200 block group"
             >
               <div className="flex items-center justify-between">
@@ -767,7 +919,7 @@ export default function StudentDashboard() {
 
           {/* TWO COLUMN CONTENT SECTION */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
+
             {/* Column 1 & 2: Recent Examination Results */}
             <div className="lg:col-span-2 p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
               <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
@@ -820,11 +972,10 @@ export default function StudentDashboard() {
                             <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-400">{maxM}</td>
                             <td className="py-3.5 px-4 text-center">
                               <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                                  r.is_pass
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${r.is_pass
                                     ? 'bg-[#00C48C]/15 text-[#00C48C] border-[#00C48C]/30'
                                     : 'bg-rose-500/15 text-rose-500 border-rose-500/30'
-                                }`}
+                                  }`}
                               >
                                 {r.is_pass ? 'PASSED' : 'FAILED'}
                               </span>
@@ -840,37 +991,117 @@ export default function StudentDashboard() {
 
             {/* Column 3: Quick Shortcuts & Today's Schedule */}
             <div className="space-y-6">
-              
+
               {/* Today's Timetable Snippet */}
               <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
                 <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-                  <h3 className="text-sm font-black text-[#1B1E28] dark:text-white uppercase tracking-tight">
-                    📅 Today's Live Schedule
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black text-[#1B1E28] dark:text-white uppercase tracking-tight">
+                      📅 Today&apos;s Live Schedule
+                    </h3>
+                    {timetableSummary.todaysSlots.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-extrabold text-[10px]">
+                        {timetableSummary.todaysSlots.length} {timetableSummary.todaysSlots.length === 1 ? 'Slot' : 'Slots'}
+                      </span>
+                    )}
+                  </div>
                   <Link href="/dashboard/student/timetable" className="text-xs font-bold text-[#5B4BFF] hover:underline">
                     View Timetable →
                   </Link>
                 </div>
 
-                <div className="space-y-3 text-xs">
-                  <div className="p-3.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700/60 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[#5B4BFF]">Data Structures Lecture</span>
-                      <span className="font-mono text-[10px] font-bold bg-[#5B4BFF]/10 text-[#5B4BFF] px-2 py-0.5 rounded">09:00 - 10:00</span>
-                    </div>
-                    <p className="text-[#1B1E28] dark:text-white font-semibold">Binary Search Trees & AVL Balancing</p>
-                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400">Faculty: Dr. Anuj Kumar | Room: CS-Lab 102</p>
+                {timetableSummary.loading ? (
+                  <div className="py-6 text-center space-y-2">
+                    <div className="w-5 h-5 border-2 border-[#5B4BFF] border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-xs text-[#4E5969] dark:text-slate-400 font-medium">Loading live schedule...</p>
                   </div>
+                ) : timetableSummary.todaysSlots.length > 0 ? (
+                  <div className="space-y-3 text-xs">
+                    {timetableSummary.todaysSlots.map((slot: any, idx: number) => {
+                      const startTime = (slot.start_time || '').slice(0, 5) || '09:00';
+                      const endTime = (slot.end_time || '').slice(0, 5) || '10:00';
+                      const isLab = String(slot.slot_type || slot.subject_name || '').toLowerCase().includes('lab') || String(slot.room || '').toLowerCase().includes('lab');
 
-                  <div className="p-3.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700/60 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-purple-600 dark:text-purple-400">DBMS Practical Lab</span>
-                      <span className="font-mono text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded">10:00 - 12:00</span>
-                    </div>
-                    <p className="text-[#1B1E28] dark:text-white font-semibold">SQL Indexing & Complex Joins</p>
-                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400">Faculty: Er. Shailesh Saxena | Room: Server Lab 3</p>
+                      return (
+                        <div
+                          key={slot.id || idx}
+                          className="p-3.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700/60 space-y-1 hover:border-[#5B4BFF]/50 transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`font-bold ${isLab ? 'text-purple-600 dark:text-purple-400' : 'text-[#5B4BFF]'}`}>
+                              {slot.subject_name || slot.slot_type || 'Lecture'}
+                            </span>
+                            <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded ${
+                              isLab
+                                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                                : 'bg-[#5B4BFF]/10 text-[#5B4BFF]'
+                            }`}>
+                              {startTime} - {endTime}
+                            </span>
+                          </div>
+                          <p className="text-[#1B1E28] dark:text-white font-semibold line-clamp-1">
+                            {slot.topic || slot.unit_name || slot.sub_topics || slot.subject_name || 'Regular Academic Session'}
+                          </p>
+                          <p className="text-[11px] text-[#4E5969] dark:text-slate-400">
+                            Faculty: {slot.faculty_name || 'Faculty Incharge'} | Room: {slot.room || 'Classroom'}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
+                ) : timetableSummary.weeklySlots.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs">
+                      <p className="font-bold flex items-center gap-1.5">
+                        <span>☀️</span>
+                        <span>No classes scheduled for today</span>
+                      </p>
+                      <p className="text-[11px] text-[#4E5969] dark:text-slate-300 mt-1">
+                        Upcoming cohort sessions:
+                      </p>
+                    </div>
+                    <div className="space-y-2.5 text-xs">
+                      {timetableSummary.weeklySlots.slice(0, 2).map((slot: any, idx: number) => {
+                        const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                        const dayStr = dayNames[Number(slot.day_of_week)] || 'Upcoming';
+                        const startTime = (slot.start_time || '').slice(0, 5) || '09:00';
+                        const endTime = (slot.end_time || '').slice(0, 5) || '10:00';
+
+                        return (
+                          <div
+                            key={slot.id || idx}
+                            className="p-3 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700/60 space-y-1"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-[#5B4BFF]">
+                                {slot.subject_name || 'Lecture'}
+                              </span>
+                              <span className="font-mono text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded">
+                                {dayStr} {startTime} - {endTime}
+                              </span>
+                            </div>
+                            <p className="text-[#1B1E28] dark:text-white font-semibold text-[11px] line-clamp-1">
+                              {slot.topic || slot.unit_name || slot.subject_name}
+                            </p>
+                            <p className="text-[10px] text-[#4E5969] dark:text-slate-400">
+                              Faculty: {slot.faculty_name || 'Faculty Incharge'} | Room: {slot.room || 'Classroom'}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 text-center space-y-1">
+                    <p className="text-sm">📅</p>
+                    <p className="text-xs font-bold text-[#1B1E28] dark:text-white">
+                      0 Scheduled Classes
+                    </p>
+                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400">
+                      No active timetable slots published for your cohort yet.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Schedule Quick View Button */}
@@ -892,6 +1123,8 @@ export default function StudentDashboard() {
             </div>
 
           </div>
+            </>
+          )}
 
         </main>
       </div>
@@ -908,6 +1141,101 @@ export default function StudentDashboard() {
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
       />
+    </div>
+  );
+}
+
+function StudentDashboardSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      {/* Hero Welcome Banner Skeleton */}
+      <div className="p-6 rounded-[22px] bg-gradient-to-r from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft flex flex-col md:flex-row justify-between items-start md:items-center gap-6 min-h-[160px]">
+        <div className="space-y-3 flex-1">
+          <div className="flex gap-2">
+            <div className="w-28 h-5 bg-slate-300 dark:bg-slate-700 rounded-full" />
+            <div className="w-16 h-5 bg-slate-300 dark:bg-slate-700 rounded-full" />
+          </div>
+          <div className="w-3/4 max-w-md h-8 bg-slate-300 dark:bg-slate-700 rounded-xl" />
+          <div className="w-full max-w-lg h-4 bg-slate-300 dark:bg-slate-700 rounded-lg" />
+          <div className="flex flex-wrap gap-3 pt-1">
+            <div className="w-32 h-6 bg-slate-300 dark:bg-slate-700 rounded-xl" />
+            <div className="w-28 h-6 bg-slate-300 dark:bg-slate-700 rounded-xl" />
+            <div className="w-40 h-6 bg-slate-300 dark:bg-slate-700 rounded-xl" />
+          </div>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <div className="w-28 h-10 bg-slate-300 dark:bg-slate-700 rounded-xl" />
+          <div className="w-28 h-10 bg-slate-300 dark:bg-slate-700 rounded-xl" />
+        </div>
+      </div>
+
+      {/* 5 KPI Cards Grid Skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div
+            key={i}
+            className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4 h-48"
+          >
+            <div className="flex justify-between items-center">
+              <div className="w-24 h-4 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="w-14 h-4 bg-slate-200 dark:bg-slate-800 rounded-full" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0" />
+              <div className="space-y-2 flex-1">
+                <div className="w-16 h-6 bg-slate-200 dark:bg-slate-800 rounded" />
+                <div className="w-20 h-3 bg-slate-200 dark:bg-slate-800 rounded" />
+              </div>
+            </div>
+            <div className="w-full h-3 bg-slate-200 dark:bg-slate-800 rounded pt-2" />
+          </div>
+        ))}
+      </div>
+
+      {/* 3 Main Columns Content Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Col 1 */}
+        <div className="space-y-6">
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft h-64 space-y-4">
+            <div className="w-40 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="space-y-2">
+              <div className="w-full h-12 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+              <div className="w-full h-12 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+            </div>
+          </div>
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft h-64 space-y-3">
+            <div className="w-36 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="w-full h-44 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+          </div>
+        </div>
+
+        {/* Col 2 */}
+        <div className="space-y-6">
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft h-72 space-y-3">
+            <div className="w-48 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="w-full h-44 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+          </div>
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft h-64 space-y-3">
+            <div className="w-44 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="space-y-2">
+              <div className="w-full h-10 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+              <div className="w-full h-10 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+            </div>
+          </div>
+        </div>
+
+        {/* Col 3 */}
+        <div className="space-y-6">
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft h-80 space-y-3">
+            <div className="w-44 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="space-y-2.5">
+              <div className="w-full h-16 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+              <div className="w-full h-16 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+            </div>
+          </div>
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft h-36 rounded-xl" />
+        </div>
+      </div>
     </div>
   );
 }

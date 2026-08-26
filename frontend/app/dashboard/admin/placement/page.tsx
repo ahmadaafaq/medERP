@@ -11,6 +11,7 @@ import {
   Building2, 
   UploadCloud, 
   Download, 
+  FileSpreadsheet,
   Filter, 
   Search, 
   Users, 
@@ -19,6 +20,7 @@ import {
   Loader2,
   CheckCircle2,
   Briefcase,
+  Plus,
   X
 } from 'lucide-react';
 
@@ -32,18 +34,49 @@ export default function AdminPlacementPage() {
 
   const [selectedCompany, setSelectedCompany] = useState<PlacementCompany | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [creatingDrive, setCreatingDrive] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createSuccess, setCreateSuccess] = useState(false);
+
+  const [createFormData, setCreateFormData] = useState({
+    company_name: '',
+    role: '',
+    package_ctc: '',
+    eligibility_course_cd: '13',
+    eligibility_branch_cd: 'CSE',
+    eligibility_batch_cd: '2025',
+    min_score_required: 60,
+    drive_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    deadline_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    description: '',
+  });
+
   const [applicantsModalCompany, setApplicantsModalCompany] = useState<PlacementCompany | null>(null);
   const [applicantsList, setApplicantsList] = useState<any[]>([]);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
 
   const getTenantSlug = () => {
     if (typeof window === 'undefined') return 'srms-cet-bareilly';
-    return (
+    const slug =
       localStorage.getItem('tenantSlug') ||
       localStorage.getItem('selectedTenant') ||
       localStorage.getItem('colg_slug') ||
-      'srms-cet-bareilly'
-    ).replace(/^tenant_/, '');
+      'srms-cet-bareilly';
+    return (slug || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '');
+  };
+
+  const getAuthHeaders = () => {
+    if (typeof window === 'undefined') return {};
+    const tenant = getTenantSlug();
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token') || localStorage.getItem('accessToken');
+    const headers: Record<string, string> = {
+      'x-tenant-id': tenant,
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
   };
 
   useEffect(() => {
@@ -54,11 +87,13 @@ export default function AdminPlacementPage() {
     setLoading(true);
     try {
       const tenant = getTenantSlug();
-      const res = await axios.get(`/api/placement-drive/list?tenant=${tenant}`).catch(async () => {
-        return axios.get(`http://localhost:3001/api/v1/placement-drive/list?tenant=${tenant}`);
+      const headers = getAuthHeaders();
+      const res = await axios.get(`/api/placement-drive/list?tenant=${tenant}`, { headers }).catch(async () => {
+        return axios.get(`http://localhost:3001/api/v1/placement-drive/list?tenant=${tenant}`, { headers });
       });
-      const list = res.data?.data?.data || res.data?.data || res.data || [];
-      setCompanies(Array.isArray(list) ? list : []);
+      const dataObj = res.data?.data || res.data;
+      const list = Array.isArray(dataObj?.data) ? dataObj.data : Array.isArray(dataObj) ? dataObj : [];
+      setCompanies(list);
     } catch (e) {
       console.error('Error fetching placement drives:', e);
     } finally {
@@ -71,11 +106,13 @@ export default function AdminPlacementPage() {
     setLoadingApplicants(true);
     try {
       const tenant = getTenantSlug();
-      const res = await axios.get(`/api/placement-drive/${company.drive_id}?tenant=${tenant}`).catch(async () => {
-        return axios.get(`http://localhost:3001/api/v1/placement-drive/${company.drive_id}?tenant=${tenant}`);
+      const headers = getAuthHeaders();
+      const res = await axios.get(`/api/placement-drive/${company.drive_id}?tenant=${tenant}`, { headers }).catch(async () => {
+        return axios.get(`http://localhost:3001/api/v1/placement-drive/${company.drive_id}?tenant=${tenant}`, { headers });
       });
-      const apps = res.data?.data?.applicants || res.data?.applicants || [];
-      setApplicantsList(Array.isArray(apps) ? apps : []);
+      const dataObj = res.data?.data || res.data;
+      const apps = Array.isArray(dataObj?.applicants) ? dataObj.applicants : Array.isArray(dataObj) ? dataObj : [];
+      setApplicantsList(apps);
     } catch (e) {
       console.error('Error fetching applicants:', e);
     } finally {
@@ -83,35 +120,85 @@ export default function AdminPlacementPage() {
     }
   };
 
-  const handleUpdateStatus = async (appId: number, status: string) => {
+  const handleUpdateStatus = async (appId: string, newStatus: string) => {
     try {
       const tenant = getTenantSlug();
-      await axios.patch(`/api/placement-drive/shortlist?tenant=${tenant}`, { application_id: appId, status }).catch(async () => {
-        return axios.patch(`http://localhost:3001/api/v1/placement-drive/shortlist?tenant=${tenant}`, { application_id: appId, status });
+      const headers = getAuthHeaders();
+      await axios.patch(`/api/placement-drive/applicant/${appId}/status?tenant=${tenant}`, { status: newStatus }, { headers }).catch(async () => {
+        return axios.patch(`http://localhost:3001/api/v1/placement-drive/applicant/${appId}/status?tenant=${tenant}`, { status: newStatus }, { headers });
       });
-      if (applicantsModalCompany) {
-        handleOpenApplicants(applicantsModalCompany);
-      }
-      fetchDrives();
-    } catch (e) {
-      console.error('Error updating status:', e);
+      setApplicantsList((prev) =>
+        prev.map((a) => (a.application_id === appId ? { ...a, status: newStatus } : a))
+      );
+    } catch (err) {
+      console.error('Failed to update status:', err);
+    }
+  };
+
+  const handleCreateDriveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createFormData.company_name.trim() || !createFormData.role.trim()) {
+      setCreateError('Company Name and Role are required.');
+      return;
+    }
+
+    setCreatingDrive(true);
+    setCreateError(null);
+
+    try {
+      const tenant = getTenantSlug();
+      const headers = getAuthHeaders();
+      const payload = {
+        ...createFormData,
+        min_score_required: Number(createFormData.min_score_required) || 0,
+        eligible_branches: [createFormData.eligibility_branch_cd],
+        eligible_batches: [createFormData.eligibility_batch_cd],
+      };
+
+      await axios.post(`/api/placement-drive/create?tenant=${tenant}`, payload, { headers }).catch(async () => {
+        return axios.post(`http://localhost:3001/api/v1/placement-drive/create?tenant=${tenant}`, payload, { headers });
+      });
+
+      setCreateSuccess(true);
+      setTimeout(() => {
+        setCreateSuccess(false);
+        setIsCreateModalOpen(false);
+        setCreateFormData({
+          company_name: '',
+          role: '',
+          package_ctc: '',
+          eligibility_course_cd: '13',
+          eligibility_branch_cd: 'CSE',
+          eligibility_batch_cd: '2025',
+          min_score_required: 60,
+          drive_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          deadline_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          description: '',
+        });
+        fetchDrives();
+      }, 1200);
+    } catch (err: any) {
+      setCreateError(err?.response?.data?.message || err?.message || 'Failed to create placement drive.');
+    } finally {
+      setCreatingDrive(false);
     }
   };
 
   const handleExportAll = async () => {
     try {
       const tenant = getTenantSlug();
-      const res = await axios.get(`/api/placement-drive/export?tenant=${tenant}`).catch(async () => {
-        return axios.get(`http://localhost:3001/api/v1/placement-drive/export?tenant=${tenant}`);
+      const headers = getAuthHeaders();
+      const res = await axios.get(`/api/placement-drive/export?tenant=${tenant}`, { headers }).catch(async () => {
+        return axios.get(`http://localhost:3001/api/v1/placement-drive/export?tenant=${tenant}`, { headers });
       });
       const rows = res.data?.data || res.data || [];
-      if (rows.length === 0) {
+      if (!Array.isArray(rows) || rows.length === 0) {
         alert('No placement records to export.');
         return;
       }
-      const headers = ['Student Name', 'Reg No', 'Course', 'Batch', 'Company', 'Role', 'Package', 'Status', 'Offer Status', 'Applied Date'];
+      const fileHeaders = ['Student Name', 'Reg No', 'Course', 'Batch', 'Company', 'Role', 'Package', 'Status', 'Offer Status', 'Applied Date'];
       const csvContent = 'data:text/csv;charset=utf-8,' +
-        [headers.join(','), ...rows.map((r: any) => [
+        [fileHeaders.join(','), ...rows.map((r: any) => [
           `"${r.student_name || ''}"`,
           `"${r.registration_no || ''}"`,
           `"${r.course_cd || ''}"`,
@@ -139,20 +226,21 @@ export default function AdminPlacementPage() {
   const handleExportCompany = async (driveId: number, companyName: string, status?: string) => {
     try {
       const tenant = getTenantSlug();
+      const headers = getAuthHeaders();
       const url = status
         ? `/api/placement-drive/export?tenant=${tenant}&drive_id=${driveId}&status=${status}`
         : `/api/placement-drive/export?tenant=${tenant}&drive_id=${driveId}`;
-      const res = await axios.get(url).catch(async () => {
-        return axios.get(`http://localhost:3001/api/v1/placement-drive/export?tenant=${tenant}&drive_id=${driveId}${status ? `&status=${status}` : ''}`);
+      const res = await axios.get(url, { headers }).catch(async () => {
+        return axios.get(`http://localhost:3001/api/v1/placement-drive/export?tenant=${tenant}&drive_id=${driveId}${status ? `&status=${status}` : ''}`, { headers });
       });
       const rows = res.data?.data || res.data || [];
-      if (rows.length === 0) {
+      if (!Array.isArray(rows) || rows.length === 0) {
         alert(`No ${status || ''} applicant records found for ${companyName}.`);
         return;
       }
-      const headers = ['Student Name', 'Reg No', 'Course', 'Batch', 'Company', 'Role', 'Package', 'Status', 'Offer Status', 'Applied Date'];
+      const fileHeaders = ['Student Name', 'Reg No', 'Course', 'Batch', 'Company', 'Role', 'Package', 'Status', 'Offer Status', 'Applied Date'];
       const csvContent = 'data:text/csv;charset=utf-8,' +
-        [headers.join(','), ...rows.map((r: any) => [
+        [fileHeaders.join(','), ...rows.map((r: any) => [
           `"${r.student_name || ''}"`,
           `"${r.registration_no || ''}"`,
           `"${r.course_cd || ''}"`,
@@ -178,25 +266,32 @@ export default function AdminPlacementPage() {
   };
 
   const filteredCompanies = companies.filter((c) => {
+    const s = (search || '').toLowerCase().trim();
     const matchSearch =
-      c.company_name?.toLowerCase().includes(search.toLowerCase()) ||
-      c.role?.toLowerCase().includes(search.toLowerCase()) ||
-      c.package_ctc?.toLowerCase().includes(search.toLowerCase());
+      !s ||
+      (c.company_name || '').toLowerCase().includes(s) ||
+      (c.role || '').toLowerCase().includes(s) ||
+      (c.package_ctc || '').toLowerCase().includes(s) ||
+      (c.description || '').toLowerCase().includes(s);
 
     const matchBranch =
       branchFilter === 'ALL' ||
+      !c.eligible_branches ||
+      (Array.isArray(c.eligible_branches) && c.eligible_branches.length === 0) ||
       (Array.isArray(c.eligible_branches)
         ? c.eligible_branches.includes(branchFilter)
         : String(c.eligible_branches).includes(branchFilter));
 
     const matchBatch =
       batchFilter === 'ALL' ||
+      !c.eligible_batches ||
+      (Array.isArray(c.eligible_batches) && c.eligible_batches.length === 0) ||
       (Array.isArray(c.eligible_batches)
         ? c.eligible_batches.includes(batchFilter)
         : String(c.eligible_batches).includes(batchFilter));
 
     const matchStatus =
-      statusFilter === 'ALL' || c.status?.toUpperCase() === statusFilter.toUpperCase();
+      statusFilter === 'ALL' || (c.status || '').toUpperCase() === statusFilter.toUpperCase();
 
     return matchSearch && matchBranch && matchBatch && matchStatus;
   });
@@ -225,7 +320,16 @@ export default function AdminPlacementPage() {
             </div>
 
             {/* Quick Action Buttons */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <a
+                href="/templates/placement-drive-import-template.xlsx"
+                download="placement-drive-import-template.xlsx"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                Download Format
+              </a>
+
               <button
                 onClick={handleExportAll}
                 className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 shadow-sm"
@@ -236,10 +340,21 @@ export default function AdminPlacementPage() {
 
               <button
                 onClick={() => setIsImportModalOpen(true)}
-                className="px-5 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all flex items-center gap-2 active:scale-95"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-[#5B4BFF]/30 text-[#5B4BFF] hover:bg-[#5B4BFF]/10 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
               >
                 <UploadCloud className="w-4 h-4" />
                 Import Excel Drives
+              </button>
+
+              <button
+                onClick={() => {
+                  setCreateError(null);
+                  setIsCreateModalOpen(true);
+                }}
+                className="px-5 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all flex items-center gap-2 active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                Post Placement Drive
               </button>
             </div>
           </div>
@@ -500,6 +615,200 @@ export default function AdminPlacementPage() {
                   </tbody>
                 </table>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Post New Placement Drive Modal */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-[28px] max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#2D2575] to-[#5B4BFF] text-white font-black text-lg flex items-center justify-center shrink-0">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
+                    Post New Campus Placement Drive
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Immediately announces to students and triggers dashboard highlight alerts.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {createSuccess ? (
+              <div className="py-8 text-center space-y-2 text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="w-12 h-12 mx-auto animate-bounce" />
+                <h4 className="font-extrabold text-base">Placement Drive Announced Successfully!</h4>
+                <p className="text-xs text-slate-500">
+                  Live notice posted and highlighted alerts activated on student dashboards.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleCreateDriveSubmit} className="space-y-4">
+                {createError && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300">
+                    {createError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Company Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={createFormData.company_name}
+                      onChange={(e) => setCreateFormData({ ...createFormData, company_name: e.target.value })}
+                      placeholder="e.g. Google Cloud, TCS, Infosys"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Job Role / Designation *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={createFormData.role}
+                      onChange={(e) => setCreateFormData({ ...createFormData, role: e.target.value })}
+                      placeholder="e.g. Cloud Engineer, SDE-1"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Offered Package (CTC)
+                    </label>
+                    <input
+                      type="text"
+                      value={createFormData.package_ctc}
+                      onChange={(e) => setCreateFormData({ ...createFormData, package_ctc: e.target.value })}
+                      placeholder="e.g. ₹8.5 - ₹12 LPA"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Eligible Branch
+                    </label>
+                    <select
+                      value={createFormData.eligibility_branch_cd}
+                      onChange={(e) => setCreateFormData({ ...createFormData, eligibility_branch_cd: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    >
+                      <option value="CSE">Computer Science (CSE)</option>
+                      <option value="IT">Information Tech (IT)</option>
+                      <option value="ECE">Electronics (ECE)</option>
+                      <option value="ME">Mechanical (ME)</option>
+                      <option value="EE">Electrical (EE)</option>
+                      <option value="ALL">All Engineering Branches</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Eligible Batch
+                    </label>
+                    <select
+                      value={createFormData.eligibility_batch_cd}
+                      onChange={(e) => setCreateFormData({ ...createFormData, eligibility_batch_cd: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    >
+                      <option value="2025">Batch 2025</option>
+                      <option value="2026">Batch 2026</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Drive Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={createFormData.drive_date}
+                      onChange={(e) => setCreateFormData({ ...createFormData, drive_date: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Application Deadline *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={createFormData.deadline_date}
+                      onChange={(e) => setCreateFormData({ ...createFormData, deadline_date: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Job Description &amp; Technical Requirements
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={createFormData.description}
+                    onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
+                    placeholder="Describe interview stages, coding assessments, skills required..."
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                  />
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={creatingDrive}
+                    className="px-5 py-2 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {creatingDrive ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Announcing...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-3.5 h-3.5" />
+                        Announce Placement Drive
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         </div>

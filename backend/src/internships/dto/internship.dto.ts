@@ -23,13 +23,53 @@ export class CreateInternshipProgramDto {
   duration: string;
 
   @IsString()
-  @IsIn(['PAID', 'FREE'])
-  fee_type: 'PAID' | 'FREE';
+  @IsIn(['PAID', 'FREE', 'STIPEND'])
+  fee_type: 'PAID' | 'FREE' | 'STIPEND';
 
   @IsOptional()
   @IsNumber()
   @Min(0)
   fee_amount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  stipend_amount?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['ON_CAMPUS', 'OFF_CAMPUS'])
+  campus_type?: 'ON_CAMPUS' | 'OFF_CAMPUS';
+
+  @IsOptional()
+  @IsString()
+  organization_name?: string;
+
+  @IsOptional()
+  @IsString()
+  organization_type?: string; // 'Companies' | 'Hospitals' | 'Factories' | 'Research Center' | 'Industry' | 'College Firm'
+
+  @IsOptional()
+  @IsString()
+  off_campus_title?: string;
+
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @IsOptional()
+  @IsString()
+  working_conditions?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['ON_SITE', 'REMOTE', 'HYBRID'])
+  work_mode?: 'ON_SITE' | 'REMOTE' | 'HYBRID';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['IN_HOUSE_AUTO', 'OFF_CAMPUS_UPLOAD', 'DUAL'])
+  certification_mode?: 'IN_HOUSE_AUTO' | 'OFF_CAMPUS_UPLOAD' | 'DUAL';
 
   @IsOptional()
   @IsString()
@@ -90,6 +130,28 @@ export class UpdateApplicantStatusDto {
   @IsOptional()
   @IsString()
   payment_status?: 'not_required' | 'pending' | 'paid';
+
+  @IsOptional()
+  @IsString()
+  external_cert_url?: string;
+
+  @IsOptional()
+  @IsString()
+  cert_source?: 'in_house' | 'uploaded' | 'both';
+}
+
+export class UploadExternalCertificateDto {
+  @IsString()
+  @IsNotEmpty()
+  application_id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  external_cert_url: string;
+
+  @IsOptional()
+  @IsString()
+  remarks?: string;
 }
 
 export class LockApplicantsDto {

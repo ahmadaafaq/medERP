@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   X,
   Clock,
@@ -72,6 +72,13 @@ export default function MedicalScheduleModal({
   const [loading, setLoading] = useState(false);
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const scrollBodyRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (conflictError && scrollBodyRef.current) {
+      scrollBodyRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [conflictError]);
 
   // Sync initialData when modal opens
   useEffect(() => {
@@ -321,7 +328,7 @@ export default function MedicalScheduleModal({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
+        <form ref={scrollBodyRef} onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Conflict Alert Banner */}
           {conflictError && (
             <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-start gap-3 animate-in shake">
@@ -652,6 +659,14 @@ export default function MedicalScheduleModal({
             </div>
           </div>
         </form>
+
+        {/* Bottom Conflict Alert if error */}
+        {conflictError && (
+          <div className="px-6 py-2.5 bg-rose-50 dark:bg-rose-950/80 border-t border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs font-bold text-rose-800 dark:text-rose-200 animate-in fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            <span className="truncate">Conflict: {conflictError}</span>
+          </div>
+        )}
 
         {/* Modal Footer */}
         <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">

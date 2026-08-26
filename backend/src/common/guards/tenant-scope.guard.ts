@@ -34,7 +34,9 @@ export class TenantScopeGuard implements CanActivate {
       return true;
     }
 
-    const verifiedSlug = user.tenantSlug;
+    let verifiedSlug = user.tenantSlug;
+    if (verifiedSlug === 'srms-cet' || verifiedSlug === 'tenant_srms-cet') verifiedSlug = 'srms-cet-bareilly';
+    if (verifiedSlug === 'srms-cetr' || verifiedSlug === 'tenant_srms-cetr') verifiedSlug = 'srms-cetr-bareilly';
     if (!verifiedSlug) {
       this.logger.warn(`User ${user.email} has no tenantSlug in verified JWT token.`);
       throw new ForbiddenException('Invalid tenant context in user session.');

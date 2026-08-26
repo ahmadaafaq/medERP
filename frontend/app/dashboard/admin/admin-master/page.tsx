@@ -194,7 +194,7 @@ interface Competency {
 }
 
 
-export const MEDICAL_LEARNING_METHODS = [
+const MEDICAL_LEARNING_METHODS = [
   "LGT",
   "SGT",
   "LGT SGT",
@@ -252,7 +252,7 @@ export const MEDICAL_LEARNING_METHODS = [
   "Other"
 ];
 
-export const MEDICAL_ASSESSMENT_METHODS = [
+const MEDICAL_ASSESSMENT_METHODS = [
   "Written Assessment",
   "Written Examination",
   "Written Test",
@@ -310,7 +310,7 @@ export const MEDICAL_ASSESSMENT_METHODS = [
   "Other"
 ];
 
-export const ENGINEERING_LEARNING_METHODS = [
+const ENGINEERING_LEARNING_METHODS = [
   "LGT",
   "SGT",
   "LGT SGT",
@@ -368,7 +368,7 @@ export const ENGINEERING_LEARNING_METHODS = [
   "Other"
 ];
 
-export const ENGINEERING_ASSESSMENT_METHODS = [
+const ENGINEERING_ASSESSMENT_METHODS = [
   "Written Assessment",
   "Written Examination",
   "Written Test",
@@ -4439,43 +4439,63 @@ export default function AdminMasterPage() {
 
                         
                         {/* Row: Learning Method & Assessment Method */}
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                              Learning Method
-                            </label>
-                            <select
-                              value={formData.learning_method || ''}
-                              onChange={e => setFormData({ ...formData, learning_method: e.target.value })}
-                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                            >
-                              <option value="">-- Select Learning Method --</option>
-                              {(isMedicalTopic ? MEDICAL_LEARNING_METHODS : ENGINEERING_LEARNING_METHODS).map(opt => (
-                                <option key={opt} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                        {(() => {
+                          const selectedCourseCd = formData.course_cd || '13';
+                          const selectedCourseObj = availableCourses.find((c: any) => c.course_cd === selectedCourseCd || c.code === selectedCourseCd || c.id === selectedCourseCd);
+                          const isMedicalTopic = Boolean(
+                            selectedCourseObj?.academic_system === 'professional' ||
+                            selectedCourseObj?.academicSystem === 'professional' ||
+                            selectedCourseObj?.name?.toUpperCase().includes('MBBS') ||
+                            selectedCourseObj?.name?.toUpperCase().includes('BAMS') ||
+                            selectedCourseObj?.name?.toUpperCase().includes('MD') ||
+                            selectedCourseObj?.name?.toUpperCase().includes('MS') ||
+                            selectedCourseObj?.name?.toUpperCase().includes('BDS') ||
+                            selectedCourseObj?.code === '100' ||
+                            selectedCourseObj?.course_cd === '100' ||
+                            currentCollege?.slug === 'srms-ims' ||
+                            currentCollege?.slug === 'rmribar'
+                          );
 
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                              Assessment Method
-                            </label>
-                            <select
-                              value={formData.assessment_method || ''}
-                              onChange={e => setFormData({ ...formData, assessment_method: e.target.value })}
-                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                            >
-                              <option value="">-- Select Assessment Method --</option>
-                              {(isMedicalTopic ? MEDICAL_ASSESSMENT_METHODS : ENGINEERING_ASSESSMENT_METHODS).map(opt => (
-                                <option key={opt} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
+                          return (
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Learning Method
+                                </label>
+                                <select
+                                  value={formData.learning_method || ''}
+                                  onChange={e => setFormData({ ...formData, learning_method: e.target.value })}
+                                  className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                >
+                                  <option value="">-- Select Learning Method --</option>
+                                  {(isMedicalTopic ? MEDICAL_LEARNING_METHODS : ENGINEERING_LEARNING_METHODS).map(opt => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Assessment Method
+                                </label>
+                                <select
+                                  value={formData.assessment_method || ''}
+                                  onChange={e => setFormData({ ...formData, assessment_method: e.target.value })}
+                                  className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                >
+                                  <option value="">-- Select Assessment Method --</option>
+                                  {(isMedicalTopic ? MEDICAL_ASSESSMENT_METHODS : ENGINEERING_ASSESSMENT_METHODS).map(opt => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Row 4: Topic Description (col-span-2), Linked Guideline (col-span-1) */}
                         <div className="grid grid-cols-3 gap-2.5">

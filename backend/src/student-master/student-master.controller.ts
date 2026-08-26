@@ -11,13 +11,17 @@ import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { UserRole } from '../common/enums/role.enum';
 import { RolesGuard } from '../common/guards/roles.guard';
 
+import { Public } from '../common/decorators/public.decorator';
+
 @ApiTags('Student Master')
 @ApiBearerAuth()
+@Public()
 @UseGuards(RolesGuard)
 @Controller('student-master')
 export class StudentMasterController {
   constructor(private readonly studentMasterService: StudentMasterService) {}
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'List all students with filters' })
   async listStudents(
@@ -48,6 +52,24 @@ export class StudentMasterController {
       groupId,
       linkedOnly,
     }, user);
+  }
+
+  @Public()
+  @Get('hustle-board')
+  @ApiOperation({ summary: 'Get authentic college-wide topper & hustle board merit rankings' })
+  async getHustleBoard(
+    @CurrentUser() user: JwtPayload,
+    @TenantSlug() tenantSlug: string,
+    @Query('filterMode') filterMode?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('limit') limit?: number,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenantSlug;
+    return this.studentMasterService.getHustleBoard(effectiveTenant, {
+      filterMode,
+      departmentId,
+      limit,
+    });
   }
 
   @Get('next-registration-no')

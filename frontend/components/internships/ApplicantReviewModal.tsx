@@ -19,7 +19,11 @@ import {
   Square,
   MinusSquare,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  UploadCloud,
+  Download,
+  Building2,
+  ExternalLink
 } from 'lucide-react';
 import { InternshipProgram } from './ProgramCard';
 import DigitalCertificateModal, { CertificateData } from './DigitalCertificateModal';
@@ -48,6 +52,12 @@ export default function ApplicantReviewModal({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [certificateData, setCertificateData] = useState<CertificateData | null>(null);
   const [loadingCertId, setLoadingCertId] = useState<string | null>(null);
+
+  // Upload External Certificate Modal State
+  const [uploadModalApp, setUploadModalApp] = useState<any | null>(null);
+  const [uploadCertUrl, setUploadCertUrl] = useState('');
+  const [uploadRemarks, setUploadRemarks] = useState('');
+  const [uploadingCert, setUploadingCert] = useState(false);
 
   useEffect(() => {
     if (!program) return;
@@ -98,166 +108,175 @@ export default function ApplicantReviewModal({
       await axios.patch(`/api/internships/${program.id}/lock?tenant=${tenantSlug}`, { locked: newLockState }, { headers: getHeaders() });
       setIsLocked(newLockState);
       onRefresh();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Could not update applicant lock state.');
+    } catch (e) {
+      console.error('Error locking program:', e);
     }
   };
 
-  const handleStatusChange = async (appId: string, status: string) => {
+  const handleStatusChange = async (appId: string, newStatus: string, externalCertUrl?: string) => {
     setUpdatingId(appId);
+    setError(null);
     try {
       const tenantSlug = getTenantSlug();
-      await axios.patch(`/api/internships/applications/${appId}/status?tenant=${tenantSlug}`, { status }, { headers: getHeaders() });
+      await axios.patch(`/api/internships/applications/${appId}/status?tenant=${tenantSlug}`, {
+        status: newStatus,
+        external_cert_url: externalCertUrl,
+        cert_source: externalCertUrl ? 'uploaded' : undefined,
+      }, { headers: getHeaders() });
+
       await fetchApplicants();
       onRefresh();
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to update applicant status.');
+      setError(err?.response?.data?.message || err?.message || 'Failed to update applicant status');
     } finally {
       setUpdatingId(null);
     }
   };
 
-  // Bulk Status Update (e.g. Bulk Certify, Bulk Select, Bulk Reject)
-  const handleBulkStatusChange = async (status: string) => {
-    if (selectedIds.length === 0) return;
-    const actionLabel = status === 'completed' ? 'Certify & Mark Complete' : status === 'selected' ? 'Select / Shortlist' : 'Reject';
-    const confirm = window.confirm(`Are you sure you want to ${actionLabel} for all ${selectedIds.length} selected student(s)?`);
-    if (!confirm) return;
+  const handleSaveExternalCert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadModalApp || !uploadCertUrl.trim()) return;
 
+    setUploadingCert(true);
+    try {
+      const tenantSlug = getTenantSlug();
+      await axios.post(`/api/internships/applications/upload-certificate?tenant=${tenantSlug}`, {
+        application_id: uploadModalApp.id,
+        external_cert_url: uploadCertUrl.trim(),
+        remarks: uploadRemarks || 'External Off-Campus certificate uploaded by administrator.',
+      }, { headers: getHeaders() });
+
+      setUploadModalApp(null);
+      setUploadCertUrl('');
+      setUploadRemarks('');
+      await fetchApplicants();
+      onRefresh();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Failed to attach external certificate');
+    } finally {
+      setUploadingCert(false);
+    }
+  };
+
+  const handleBulkStatusChange = async (newStatus: string) => {
+    if (selectedIds.length === 0) return;
     setBulkLoading(true);
+    setError(null);
     try {
       const tenantSlug = getTenantSlug();
       await Promise.all(
-        selectedIds.map(appId =>
-          axios.patch(`/api/internships/applications/${appId}/status?tenant=${tenantSlug}`, { status }, { headers: getHeaders() })
+        selectedIds.map((id) =>
+          axios.patch(`/api/internships/applications/${id}/status?tenant=${tenantSlug}`, { status: newStatus }, { headers: getHeaders() })
         )
       );
+
       setSelectedIds([]);
       await fetchApplicants();
       onRefresh();
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to process bulk status change.');
+      setError(err?.response?.data?.message || err?.message || 'Failed to perform bulk evaluation');
     } finally {
       setBulkLoading(false);
     }
   };
 
-  // View Digital Certificate
   const handleViewCertificate = async (app: any) => {
     setLoadingCertId(app.id);
     try {
       const tenantSlug = getTenantSlug();
-      const res = await axios.get(`/api/certificates/${app.id}?tenant=${tenantSlug}`, { headers: getHeaders() }).catch(() => null);
-      let data = res?.data?.data || res?.data;
-      if (!data || !data.certificate_no) {
-        data = {
-          certificate_no: app.certificate_no || `SRMS-CERT-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
-          internship_name: program?.title || 'Institutional Certification',
-          applicant_name: app.display_name || app.student_name || 'Candidate',
-          course: app.display_course || app.course_cd || 'BCA',
-          batch: app.display_batch || app.batch_cd || 'Batch 2025',
-          duration: program?.duration || '3 Months',
-          category: program?.category || 'IT',
-          issued_date: app.issued_date || app.completed_at || new Date().toISOString(),
-          approved_by: app.approved_by || 'Dean Academics',
-          approver_title: 'Dean Academics & Head Skill Development',
-        };
+      const res = await axios.get(`/api/internships/applications/${app.id}/certificate?tenant=${tenantSlug}`, { headers: getHeaders() });
+      if (res.data) {
+        setCertificateData(res.data);
       }
-      setCertificateData(data);
-    } catch (e) {
-      setError('Could not retrieve certificate data.');
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'Certificate is not available.');
     } finally {
       setLoadingCertId(null);
     }
   };
 
-  // Counts per status
-  const counts = useMemo(() => {
-    return {
-      all: applicants.length,
-      applied: applicants.filter(a => a.status === 'applied' || a.status === 'under_review').length,
-      selected: applicants.filter(a => a.status === 'selected').length,
-      completed: applicants.filter(a => a.status === 'completed').length,
-      rejected: applicants.filter(a => a.status === 'rejected').length,
-    };
-  }, [applicants]);
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
 
-  // Filtered applicants based on activeTab and searchQuery
   const filteredApplicants = useMemo(() => {
-    return applicants.filter(app => {
-      // Tab filter
-      if (activeTab === 'applied' && app.status !== 'applied' && app.status !== 'under_review') return false;
-      if (activeTab === 'selected' && app.status !== 'selected') return false;
-      if (activeTab === 'completed' && app.status !== 'completed') return false;
-      if (activeTab === 'rejected' && app.status !== 'rejected') return false;
+    return applicants.filter((app) => {
+      const matchTab = activeTab === 'ALL' || app.status === activeTab;
+      const q = searchQuery.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        app.student_name?.toLowerCase().includes(q) ||
+        app.student_full_name?.toLowerCase().includes(q) ||
+        app.student_reg_no?.toLowerCase().includes(q) ||
+        app.rollno?.toLowerCase().includes(q) ||
+        app.course_name?.toLowerCase().includes(q) ||
+        app.batch_name?.toLowerCase().includes(q);
 
-      // Search filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchName = String(app.display_name || app.student_name || '').toLowerCase().includes(query);
-        const matchReg = String(app.student_reg_no || app.rollno || '').toLowerCase().includes(query);
-        const matchCourse = String(app.display_course || '').toLowerCase().includes(query);
-        return matchName || matchReg || matchCourse;
-      }
-      return true;
+      return matchTab && matchSearch;
     });
   }, [applicants, activeTab, searchQuery]);
 
-  // Checkbox selection logic
-  const isAllSelected = filteredApplicants.length > 0 && filteredApplicants.every(a => selectedIds.includes(a.id));
-  const isSomeSelected = filteredApplicants.some(a => selectedIds.includes(a.id)) && !isAllSelected;
+  const isAllSelected = filteredApplicants.length > 0 && selectedIds.length === filteredApplicants.length;
+  const isSomeSelected = selectedIds.length > 0 && selectedIds.length < filteredApplicants.length;
 
   const handleSelectAll = () => {
     if (isAllSelected) {
-      // Deselect all in current view
-      const currentIds = new Set(filteredApplicants.map(a => a.id));
-      setSelectedIds(prev => prev.filter(id => !currentIds.has(id)));
+      setSelectedIds([]);
     } else {
-      // Select all in current view
-      const currentIds = filteredApplicants.map(a => a.id);
-      setSelectedIds(prev => Array.from(new Set([...prev, ...currentIds])));
+      setSelectedIds(filteredApplicants.map((a) => a.id));
     }
   };
 
-  const handleToggleSelect = (id: string) => {
-    setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
-  };
+  const counts = useMemo(() => {
+    return {
+      all: applicants.length,
+      applied: applicants.filter((a) => a.status === 'applied').length,
+      selected: applicants.filter((a) => a.status === 'selected').length,
+      completed: applicants.filter((a) => a.status === 'completed').length,
+      rejected: applicants.filter((a) => a.status === 'rejected').length,
+    };
+  }, [applicants]);
 
   if (!program) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-[28px] max-w-5xl w-full p-5 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+      <div className="bg-white dark:bg-slate-900 rounded-[28px] max-w-5xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-6 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-[#5B4BFF] shadow-xs">
-              <Users className="w-6 h-6" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B4BFF] uppercase tracking-wider mb-1 flex-wrap">
+              <span>Candidate Intake & Evaluation</span>
+              <span>•</span>
+              <span className="flex items-center gap-1 font-black">
+                <Building2 className="w-3.5 h-3.5" />
+                {program.organization_name || (program.campus_type === 'OFF_CAMPUS' ? 'Partner Organization' : 'SRMS Internal')}
+              </span>
+              <span>•</span>
+              <span className="text-slate-500">{program.campus_type === 'OFF_CAMPUS' ? '🏢 Off-Campus' : '🏛️ On-Campus'}</span>
             </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                <span>Applicant Evaluation & Certification</span>
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                {program.title} • <span className="font-bold text-[#5B4BFF]">{program.category}</span>
-              </p>
-            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              {program.title}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Review enrolled students, shortlist candidates, evaluate capstones, and issue verifiable digital or external certificates.
+            </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
             <button
               onClick={handleToggleLock}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
                 isLocked
-                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  ? 'bg-rose-50 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                  : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
               }`}
             >
               {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-              <span>{isLocked ? 'Locked (Stop Applications)' : 'Active (Lock Applications)'}</span>
+              <span>{isLocked ? 'Intake Locked' : 'Intake Open'}</span>
             </button>
 
             <button
@@ -270,27 +289,28 @@ export default function ApplicantReviewModal({
         </div>
 
         {error && (
-          <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span className="flex-1">{error}</span>
-            <button onClick={() => setError(null)} className="text-rose-500 hover:text-rose-700 text-xs font-bold">✕</button>
+          <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="text-xs font-bold px-2">✕</button>
           </div>
         )}
 
-        {/* Dynamic Status Tabs & Search Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-          {/* Tabs */}
+        {/* Filter Tabs & Search Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
             <button
               onClick={() => setActiveTab('ALL')}
               className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                 activeTab === 'ALL'
-                  ? 'bg-[#5B4BFF] text-white shadow-sm'
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
-              <span>All Applicants</span>
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${activeTab === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+              <span>All Candidates</span>
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${activeTab === 'ALL' ? 'bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 {counts.all}
               </span>
             </button>
@@ -317,7 +337,7 @@ export default function ApplicantReviewModal({
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
-              <span>🟢 Selected / Enrolled</span>
+              <span>🟢 Selected</span>
               <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${activeTab === 'selected' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 {counts.selected}
               </span>
@@ -365,7 +385,7 @@ export default function ApplicantReviewModal({
           </div>
         </div>
 
-        {/* Bulk Action Bar (When 1 or more candidates are checked) */}
+        {/* Bulk Action Bar */}
         {selectedIds.length > 0 && (
           <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 flex flex-wrap items-center justify-between gap-2.5 animate-in fade-in slide-in-from-top-2 duration-150 shadow-sm">
             <div className="flex items-center gap-2">
@@ -378,7 +398,6 @@ export default function ApplicantReviewModal({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Bulk Mark Complete & Certify */}
               <button
                 onClick={() => handleBulkStatusChange('completed')}
                 disabled={bulkLoading}
@@ -388,7 +407,6 @@ export default function ApplicantReviewModal({
                 <span>Certify Selected ({selectedIds.length}) 🏆</span>
               </button>
 
-              {/* Bulk Select */}
               <button
                 onClick={() => handleBulkStatusChange('selected')}
                 disabled={bulkLoading}
@@ -397,7 +415,6 @@ export default function ApplicantReviewModal({
                 <span>🟢 Select ({selectedIds.length})</span>
               </button>
 
-              {/* Bulk Reject */}
               <button
                 onClick={() => handleBulkStatusChange('rejected')}
                 disabled={bulkLoading}
@@ -406,10 +423,9 @@ export default function ApplicantReviewModal({
                 <span>Reject ({selectedIds.length})</span>
               </button>
 
-              {/* Clear */}
               <button
                 onClick={() => setSelectedIds([])}
-                className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
+                className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer"
               >
                 Clear
               </button>
@@ -456,14 +472,16 @@ export default function ApplicantReviewModal({
                   <th className="p-3.5">Student / Candidate</th>
                   <th className="p-3.5">Reg No / Roll</th>
                   <th className="p-3.5">Applied Date</th>
-                  <th className="p-3.5">Fee Status</th>
+                  <th className="p-3.5">Fee / Stipend</th>
                   <th className="p-3.5">Current Status</th>
-                  <th className="p-3.5 text-right">Evaluation Action</th>
+                  <th className="p-3.5 text-right">Evaluation & Certificate Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900">
                 {filteredApplicants.map((app) => {
                   const isSelected = selectedIds.includes(app.id);
+                  const hasExternalCert = !!(app.cert_external_url || app.external_cert_url);
+
                   return (
                     <tr
                       key={app.id}
@@ -488,14 +506,14 @@ export default function ApplicantReviewModal({
                         <div className="font-extrabold text-slate-900 dark:text-white text-[12.5px]">
                           {app.display_name || app.student_name || 'Enrolled Student'}
                         </div>
-                        {(app.display_course || app.display_batch) && (
+                        {(app.course_name || app.batch_name) && (
                           <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
-                            {[app.display_course, app.display_batch].filter(Boolean).join(' • ')}
+                            {[app.course_name, app.batch_name].filter(Boolean).join(' • ')}
                           </div>
                         )}
                       </td>
                       <td className="p-3.5 font-mono text-slate-600 dark:text-slate-400 font-bold">
-                        {app.student_reg_no || app.rollno || app.student_id || '-'}
+                        {app.student_reg_no || app.student_rollno || app.student_id || '-'}
                       </td>
                       <td className="p-3.5 font-medium">
                         {new Date(app.applied_at).toLocaleDateString('en-IN', {
@@ -505,13 +523,17 @@ export default function ApplicantReviewModal({
                         })}
                       </td>
                       <td className="p-3.5">
-                        {app.payment_status === 'paid' ? (
+                        {program.fee_type === 'STIPEND' ? (
+                          <span className="px-2.5 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            Stipend Eligible
+                          </span>
+                        ) : app.payment_status === 'paid' ? (
                           <span className="px-2.5 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                             Paid
                           </span>
                         ) : app.payment_status === 'pending' ? (
                           <span className="px-2.5 py-0.5 rounded-md font-bold text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                            Pending
+                            Pending Fee
                           </span>
                         ) : (
                           <span className="px-2.5 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
@@ -540,16 +562,46 @@ export default function ApplicantReviewModal({
                       </td>
                       <td className="p-3.5 text-right space-x-1.5">
                         {app.status === 'completed' ? (
-                          <button
-                            onClick={() => handleViewCertificate(app)}
-                            disabled={loadingCertId === app.id}
-                            className="px-3 py-1.5 rounded-xl font-black text-[11px] bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all inline-flex items-center gap-1 active:scale-95 cursor-pointer"
-                          >
-                            {loadingCertId === app.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />}
-                            <span>View Certificate 🏆</span>
-                          </button>
+                          <div className="inline-flex items-center gap-1.5 flex-wrap justify-end">
+                            {/* Uploaded Certificate Link */}
+                            {hasExternalCert && (
+                              <a
+                                href={app.cert_external_url || app.external_cert_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 border border-teal-300 dark:border-teal-700 inline-flex items-center gap-1"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span>External Doc</span>
+                              </a>
+                            )}
+
+                            {/* Upload / Re-upload button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUploadModalApp(app);
+                                setUploadCertUrl(app.cert_external_url || app.external_cert_url || '');
+                              }}
+                              className="px-2.5 py-1 rounded-xl font-bold text-[11px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition-all inline-flex items-center gap-1 cursor-pointer"
+                              title="Upload or update external company completion certificate"
+                            >
+                              <UploadCloud className="w-3 h-3" />
+                              <span>{hasExternalCert ? 'Update Doc' : 'Upload Doc'}</span>
+                            </button>
+
+                            {/* In-House Certificate View */}
+                            <button
+                              onClick={() => handleViewCertificate(app)}
+                              disabled={loadingCertId === app.id}
+                              className="px-3 py-1.5 rounded-xl font-black text-[11px] bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all inline-flex items-center gap-1 active:scale-95 cursor-pointer"
+                            >
+                              {loadingCertId === app.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />}
+                              <span>In-House Cert 🏆</span>
+                            </button>
+                          </div>
                         ) : (
-                          <>
+                          <div className="inline-flex items-center gap-1 flex-wrap justify-end">
                             {app.status !== 'selected' && (
                               <button
                                 onClick={() => handleStatusChange(app.id, 'selected')}
@@ -570,15 +622,30 @@ export default function ApplicantReviewModal({
                               </button>
                             )}
 
+                            {/* Upload External Certificate & Certify */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUploadModalApp(app);
+                                setUploadCertUrl('');
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl font-bold text-[11px] bg-orange-50 text-orange-700 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300 transition-all inline-flex items-center gap-1 cursor-pointer"
+                              title="Upload external company certificate directly"
+                            >
+                              <UploadCloud className="w-3.5 h-3.5" />
+                              <span>Upload & Certify</span>
+                            </button>
+
+                            {/* In-House Auto Complete */}
                             <button
                               onClick={() => handleStatusChange(app.id, 'completed')}
                               disabled={updatingId === app.id}
                               className="px-3 py-1.5 rounded-xl font-black text-[11px] bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all inline-flex items-center gap-1 active:scale-95 cursor-pointer"
                             >
                               <Award className="w-3.5 h-3.5" />
-                              <span>Mark Complete & Certify 🏆</span>
+                              <span>Auto Certify 🏆</span>
                             </button>
-                          </>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -589,6 +656,81 @@ export default function ApplicantReviewModal({
           </div>
         )}
       </div>
+
+      {/* Upload External Certificate Dialog */}
+      {uploadModalApp && (
+        <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-[24px] max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <UploadCloud className="w-5 h-5 text-[#F36C21]" />
+                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                  Upload Off-Campus Certificate
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUploadModalApp(null)}
+                className="text-slate-400 hover:text-slate-600 font-black"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 dark:text-slate-400">
+              Attach company/hospital completion certificate PDF for candidate{' '}
+              <strong className="text-slate-900 dark:text-white">{uploadModalApp.student_name}</strong> ({uploadModalApp.student_reg_no}).
+            </div>
+
+            <form onSubmit={handleSaveExternalCert} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">
+                  Certificate Document URL / File Link (PDF/Image)
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={uploadCertUrl}
+                  onChange={(e) => setUploadCertUrl(e.target.value)}
+                  placeholder="https://.../certificates/completion-doc.pdf"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">
+                  Evaluator Remarks / Verification Note
+                </label>
+                <textarea
+                  rows={2}
+                  value={uploadRemarks}
+                  onChange={(e) => setUploadRemarks(e.target.value)}
+                  placeholder="Verified by Industry Coordinator..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setUploadModalApp(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingCert}
+                  className="px-5 py-2 rounded-xl text-xs font-black bg-[#F36C21] hover:bg-[#d95b16] text-white shadow-md transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {uploadingCert ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+                  <span>Save & Issue to Student</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Digital Certificate Modal Preview inside Admin Review */}
       {certificateData && (

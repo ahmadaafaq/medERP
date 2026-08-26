@@ -147,7 +147,7 @@ export class AuthController {
 
   @Public()
   @Patch('profile')
-  @ApiOperation({ summary: 'Update student social profile and bio' })
+  @ApiOperation({ summary: 'Update student or faculty profile and bio' })
   async updateProfilePatch(
     @TenantSlug() tenantSlug: string,
     @Body() dto: any,
@@ -155,16 +155,18 @@ export class AuthController {
   ) {
     const slug = tenantSlug || dto?.tenant || '';
     const user = {
-      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || '',
-      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || '',
-      role: req.headers?.['x-user-role'] || 'STUDENT',
+      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || dto?.userId || '',
+      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || dto?.registration_no || '',
+      emp_id: req.headers?.['x-user-id'] || dto?.emp_id || dto?.empId || '',
+      role: req.headers?.['x-user-role'] || dto?.role || 'FACULTY',
+      email: dto?.email || req.headers?.['x-user-email'] || '',
     };
-    return this.authService.updateStudentSocialProfile(slug, user, dto);
+    return this.authService.updateProfile(slug, user, dto);
   }
 
   @Public()
   @Put('profile')
-  @ApiOperation({ summary: 'Update student social profile and bio' })
+  @ApiOperation({ summary: 'Update student or faculty profile and bio' })
   async updateProfilePut(
     @TenantSlug() tenantSlug: string,
     @Body() dto: any,
@@ -172,11 +174,13 @@ export class AuthController {
   ) {
     const slug = tenantSlug || dto?.tenant || '';
     const user = {
-      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || '',
-      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || '',
-      role: req.headers?.['x-user-role'] || 'STUDENT',
+      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || dto?.userId || '',
+      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || dto?.registration_no || '',
+      emp_id: req.headers?.['x-user-id'] || dto?.emp_id || dto?.empId || '',
+      role: req.headers?.['x-user-role'] || dto?.role || 'FACULTY',
+      email: dto?.email || req.headers?.['x-user-email'] || '',
     };
-    return this.authService.updateStudentSocialProfile(slug, user, dto);
+    return this.authService.updateProfile(slug, user, dto);
   }
 
   @ApiBearerAuth()

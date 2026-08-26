@@ -122,19 +122,14 @@ export default function FacultyStudentsPage() {
         const json = await res.json();
         const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
         if (list.length > 0) {
-          setBatches(list.map((b: any) => ({ id: b.id, code: b.code || b.batch_cd, name: b.name || b.code })));
+          setBatches(list.map((b: any) => ({ id: b.id, code: b.batch_cd || b.code, name: b.name || `Batch ${b.year || b.code}` })));
           return;
         }
       }
     } catch (err) {
       console.error('Failed to fetch batches:', err);
     }
-
-    setBatches([
-      { id: 'b1', code: '2025-MBBS', name: 'Batch 2025-MBBS (Phase I)' },
-      { id: 'b2', code: '2025-BCA', name: 'Batch 2025 (BCA)' },
-      { id: 'b3', code: '2024-BTECH', name: 'Batch 2024 (B.Tech CSE)' },
-    ]);
+    setBatches([]);
   };
 
   const fetchStudents = async () => {

@@ -45,11 +45,74 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 
 export default function FacultySchedulePage() {
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay() === 0 ? 7 : new Date().getDay());
+  const [selectedType, setSelectedType] = useState<string>('ALL');
   const [weeklySlots, setWeeklySlots] = useState<TimetableSlot[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null);
   const [facultyDeptName, setFacultyDeptName] = useState<string>('');
+  const [tenantSlug, setTenantSlug] = useState<string>('srms-cet-bareilly');
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isMedical = tenantSlug.includes('ims') || tenantSlug.includes('medical') || tenantSlug.includes('med');
+
+  const cleanBatch = (slot: TimetableSlot) => {
+    const b = (slot as any).batch_name || slot.batch_code || (slot as any).batch_year || (slot as any).batch_cd;
+    if (!b) return '';
+    const str = String(b).trim();
+    if (str.startsWith('B') && str.includes('-')) {
+      const yearMatch = str.match(/B(\d{4})/);
+      if (yearMatch) return `Batch ${yearMatch[1]}`;
+    }
+    return str.startsWith('Batch') ? str : `Batch ${str}`;
+  };
+
+  const getNormalizedSlotType = (slot: TimetableSlot): string => {
+    const subType = ((slot as any).subject_type || '').trim().toUpperCase();
+    const type = (slot.slot_type || '').trim().toUpperCase();
+    const subName = (slot.subject_name || '').toUpperCase();
+    const topic = (slot.topic || '').toUpperCase();
+
+    // 1. Check authentic database subject type first
+    if (subType === 'PRACTICAL' || subType.includes('PRACT')) return 'PRACTICAL';
+    if (subType === 'VALUE ADDITION' || subType.includes('VALUE')) return 'VALUE_ADDITION';
+    if (subType === 'TUTORIAL' || subType.includes('TUT')) return 'OFFSPRING';
+    if (subType === 'THEORY' || subType.includes('THEOR')) return 'THEORY';
+
+    // 2. Explicit Practical check from slot_type or subject name
+    if (
+      type === 'PRACTICAL' ||
+      type.includes('PRACT') ||
+      type.includes('LAB') ||
+      subName.includes(' LAB') ||
+      subName.endsWith('LAB') ||
+      subName.includes('PRACTICAL')
+    ) {
+      return 'PRACTICAL';
+    }
+
+    // 3. Explicit Value Addition check
+    if (
+      type.includes('VALUE') ||
+      type.includes('VAC') ||
+      subName.includes('VALUE ADD') ||
+      topic.includes('VALUE ADD')
+    ) {
+      return 'VALUE_ADDITION';
+    }
+
+    // 4. Explicit Offspring / Tutorial check
+    if (
+      type.includes('OFFSPRING') ||
+      type.includes('TUTORIAL') ||
+      type.includes('TUT') ||
+      subName.includes('TUTORIAL')
+    ) {
+      return 'OFFSPRING';
+    }
+
+    // 5. Default strictly to Theory
+    return 'THEORY';
+  };
 
   const handleSlotMouseEnter = (id: string) => {
     if (hoverTimeoutRef.current) {
@@ -73,6 +136,7 @@ export default function FacultySchedulePage() {
   const fetchFacultySchedule = async () => {
     setLoading(true);
     const slug = getStorageItem('tenantSlug') || getStorageItem('selectedTenant') || 'srms-cet-bareilly';
+    setTenantSlug(slug);
     const token = getStorageItem('token') || '';
 
     try {
@@ -112,34 +176,23 @@ export default function FacultySchedulePage() {
         },
       }).catch(() => null);
 
+      const cleanAndDedupe = (raw: any[]) => {
+        const seen = new Set<string>();
+        return raw.filter(s => {
+          const normSub = (s.subject_name || s.subject_code || s.topic || '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
+          const key = `${s.day_of_week}_${s.start_time?.slice(0, 5)}_${normSub}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      };
+
       if (res && res.ok) {
         const json = await res.json();
         const slots = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
-        if (slots.length > 0) {
-          setWeeklySlots(slots);
-        } else {
-          // Fallback fetch all slots for tenant if strict filter was empty
-          const fallbackRes = await fetch(`${API_BASE}/timetable?tenant=${slug}`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug },
-          }).catch(() => null);
-          if (fallbackRes && fallbackRes.ok) {
-            const fbJson = await fallbackRes.json();
-            setWeeklySlots(Array.isArray(fbJson.data) ? fbJson.data : []);
-          } else {
-            setWeeklySlots([]);
-          }
-        }
+        setWeeklySlots(cleanAndDedupe(slots));
       } else {
-        // Fallback fetch without strict filters
-        const fallbackRes = await fetch(`${API_BASE}/timetable?tenant=${slug}`, {
-          headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug },
-        }).catch(() => null);
-        if (fallbackRes && fallbackRes.ok) {
-          const fbJson = await fallbackRes.json();
-          setWeeklySlots(Array.isArray(fbJson.data) ? fbJson.data : []);
-        } else {
-          setWeeklySlots([]);
-        }
+        setWeeklySlots([]);
       }
     } catch (err) {
       console.error('Failed to fetch faculty schedule:', err);
@@ -149,8 +202,19 @@ export default function FacultySchedulePage() {
     }
   };
 
-  const filteredSlots = weeklySlots.filter(s => {
-    return matchSlotDay(s.day_of_week, selectedDay);
+  const daySlots = weeklySlots.filter(s => matchSlotDay(s.day_of_week, selectedDay));
+
+  const counts = {
+    ALL: daySlots.length,
+    THEORY: daySlots.filter(s => getNormalizedSlotType(s) === 'THEORY').length,
+    PRACTICAL: daySlots.filter(s => getNormalizedSlotType(s) === 'PRACTICAL').length,
+    VALUE_ADDITION: daySlots.filter(s => getNormalizedSlotType(s) === 'VALUE_ADDITION').length,
+    OFFSPRING: daySlots.filter(s => getNormalizedSlotType(s) === 'OFFSPRING').length,
+  };
+
+  const filteredSlots = daySlots.filter(s => {
+    if (selectedType === 'ALL') return true;
+    return getNormalizedSlotType(s) === selectedType;
   });
 
   return (
@@ -220,6 +284,42 @@ export default function FacultySchedulePage() {
               </div>
             </div>
 
+            {/* Dynamic Session Delivery Type Filters (All, Theory, Practical, Value Addition, Offspring) */}
+            <div className="flex items-center gap-2 flex-wrap pt-3 border-t border-[#E7EAF3] dark:border-slate-800">
+              <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider mr-1">
+                Delivery Mode:
+              </span>
+              {[
+                { key: 'ALL', label: 'All Sessions', count: counts.ALL, icon: '📋' },
+                { key: 'THEORY', label: 'Theory', count: counts.THEORY, icon: '📖' },
+                { key: 'PRACTICAL', label: 'Practical', count: counts.PRACTICAL, icon: '🧪' },
+                { key: 'VALUE_ADDITION', label: 'Value Addition', count: counts.VALUE_ADDITION, icon: '⭐' },
+                { key: 'OFFSPRING', label: 'Offspring', count: counts.OFFSPRING, icon: '🌱' },
+              ].map(tab => {
+                const isTabActive = selectedType === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setSelectedType(tab.key)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                      isTabActive
+                        ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/25 scale-[1.02]'
+                        : 'bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-[#EEECFF] dark:hover:bg-slate-700 hover:text-[#5B4BFF] border border-[#E7EAF3] dark:border-slate-700'
+                    }`}
+                  >
+                    <span>{tab.icon}</span>
+                    <span>{tab.label}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                      isTabActive ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Schedule Slot Cards List */}
             {loading ? (
               <div className="py-16 text-center text-[#4E5969] dark:text-slate-400 text-xs animate-pulse font-bold">
@@ -227,8 +327,10 @@ export default function FacultySchedulePage() {
               </div>
             ) : filteredSlots.length === 0 ? (
               <div className="py-16 text-center text-[#4E5969] dark:text-slate-400 text-xs border border-dashed border-[#E7EAF3] dark:border-slate-800 rounded-[22px] space-y-2">
-                <p className="text-base font-black text-[#1B1E28] dark:text-white">No {facultyDeptName} classes scheduled for {DAY_NAMES[selectedDay - 1]}</p>
-                <p className="text-[#7B8794] font-medium">Only relevant department timetable slots appear in this schedule view.</p>
+                <p className="text-base font-black text-[#1B1E28] dark:text-white">
+                  No {selectedType !== 'ALL' ? selectedType.replace('_', ' ').toLowerCase() : ''} {facultyDeptName} classes scheduled for {DAY_NAMES[selectedDay - 1]}
+                </p>
+                <p className="text-[#7B8794] font-medium">Try selecting another day or delivery mode filter tab.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -236,6 +338,21 @@ export default function FacultySchedulePage() {
                   const isHovered = hoveredSlotId === slot.id;
                   const compList = filterCompetenciesForSlot(slot.competencies_detail || [], slot.subject_code, slot.subject_name, slot.topic);
                   const displayCompCodes = filterCompetencyCodesString(slot.competency_codes, slot.subject_code, slot.subject_name, slot.topic);
+                  const slotType = getNormalizedSlotType(slot);
+
+                  const typeBadgeStyles: Record<string, string> = {
+                    PRACTICAL: 'bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/70 dark:text-[#F36C21] border-[#F36C21]/50',
+                    THEORY: 'bg-indigo-50 text-[#5B4BFF] dark:bg-indigo-950/70 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+                    VALUE_ADDITION: 'bg-emerald-50 text-[#00C48C] dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+                    OFFSPRING: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800',
+                  };
+
+                  const typeLabels: Record<string, string> = {
+                    PRACTICAL: 'Practical',
+                    THEORY: 'Theory',
+                    VALUE_ADDITION: 'Value Addition',
+                    OFFSPRING: 'Offspring / Tutorial',
+                  };
 
                   return (
                     <div
@@ -267,12 +384,12 @@ export default function FacultySchedulePage() {
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs">
-                              {slot.subject_code || 'MBBS'} • {slot.slot_type || 'LECTURE'}
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black font-mono border shadow-2xs ${typeBadgeStyles[slotType] || typeBadgeStyles.THEORY}`}>
+                              {slot.subject_code || 'BCA'} • {typeLabels[slotType] || slot.slot_type || 'Theory'}
                             </span>
-                            {slot.batch_code && (
+                            {cleanBatch(slot) && (
                               <span className="text-[10px] font-bold text-[#7B8794] truncate">
-                                Batch: {slot.batch_code}
+                                {cleanBatch(slot)}
                               </span>
                             )}
                           </div>
@@ -287,7 +404,7 @@ export default function FacultySchedulePage() {
                       {displayCompCodes && (
                         <div className="text-xs text-purple-700 dark:text-purple-300 bg-purple-50/80 dark:bg-purple-950/40 p-2.5 rounded-2xl border border-purple-200/80 dark:border-purple-900/30 flex items-center justify-between font-semibold">
                           <span className="flex items-center gap-1.5">
-                            <span>🎯</span> NMC Competency:
+                            <span>🎯</span> {isMedical ? 'NMC Competency:' : 'Sub Topics:'}
                           </span>
                           <span className="font-mono font-black text-[#1B1E28] dark:text-white">{displayCompCodes}</span>
                         </div>
@@ -308,7 +425,7 @@ export default function FacultySchedulePage() {
                           {/* Top Deep Purple Ribbon Header */}
                           <div className="flex items-center justify-between gap-1.5 border-b border-white/10 pb-1.5">
                             <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#F36C21] text-white shadow-xs uppercase">
-                              {slot.subject_code || 'MBBS'} • {slot.slot_type || 'LECTURE'}
+                              {slot.subject_code || 'BCA'} • {slot.slot_type || 'LECTURE'}
                             </span>
                             <span className="font-mono text-indigo-200 text-[10px] font-bold">
                               🕒 {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
@@ -333,7 +450,7 @@ export default function FacultySchedulePage() {
                             {/* Scheduled Sub Topics & Competencies */}
                             <div className="p-2 rounded-lg bg-white/10 border border-white/15 space-y-1">
                               <div className="text-[9px] font-black uppercase text-indigo-200 tracking-wider flex items-center justify-between">
-                                <span>🎯 SUB TOPICS/TEACHING TOPICS</span>
+                                <span>🎯 {isMedical ? 'NMC COMPETENCY LOGBOOK' : 'SUB TOPICS / TEACHING SYLLABUS'}</span>
                                 {compList.length > 0 && (
                                   <span className="px-1.5 py-0.2 rounded-full bg-[#5B4BFF] text-white text-[8.5px] font-mono font-bold">
                                     {compList.length}

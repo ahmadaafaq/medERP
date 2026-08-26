@@ -258,160 +258,197 @@ export default function AdminDashboard() {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      // Fetch live biometric attendance punches from SRMS GetEmpInOutTime
-      fetchLiveAttendancePunches();
+      const [
+        collegeRes,
+        papersRes,
+        placementRes,
+        repoRes,
+        internshipRes,
+        licenseStatusRes,
+        licenseTxRes,
+      ] = await Promise.allSettled([
+        fetch(`${API_BASE}/analytics/dashboard/college?tenant=${activeSlug}`, { headers }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`${API_BASE}/exams/papers?tenant=${activeSlug}`, { headers }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`${API_BASE}/placement-drive/list${activeSlug ? `?tenant=${activeSlug}` : ''}`, { headers }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`${API_BASE}/repository/list${activeSlug ? `?tenant=${activeSlug}` : ''}`, { headers }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/internships/list`, {
+          headers: {
+            'x-tenant-id': `tenant_${activeSlug}`,
+            'x-tenant': activeSlug,
+            ...headers,
+          },
+        }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/firms/status?slug=${activeSlug}`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/firms/${activeSlug}/transactions`).then((r) => (r.ok ? r.json() : null)),
+      ]);
 
-      const res = await fetch(`${API_BASE}/analytics/dashboard/college?tenant=${activeSlug}`, { headers });
-      if (res.ok) {
-        const json = await res.json();
+      // Calculate real exam papers count
+      let livePapersCount = 0;
+      if (papersRes.status === 'fulfilled' && papersRes.value) {
+        const pData = papersRes.value.data !== undefined ? papersRes.value.data : papersRes.value;
+        livePapersCount = Array.isArray(pData) ? pData.length : 0;
+      }
+
+      // Apply College KPIs & Analytics
+      if (collegeRes.status === 'fulfilled' && collegeRes.value) {
+        const json = collegeRes.value;
         if (json.college) setCollegeInfo(json.college);
-        if (json.kpis) setKpis(json.kpis);
+        if (json.kpis) {
+          setKpis({
+            ...json.kpis,
+            totalExams: Math.max(Number(json.kpis.totalExams) || 0, livePapersCount),
+          });
+        }
         if (json.adminPunch && !json.adminPunch.punchIn) setPunch(json.adminPunch);
         if (json.marksResults) setMarksSummary(json.marksResults);
         if (json.timetable) setTimetable(json.timetable);
+      } else if (livePapersCount > 0) {
+        setKpis((prev) => ({ ...prev, totalExams: livePapersCount }));
       }
 
-      // Fetch Placement Drives
-      fetch(`${API_BASE}/placement-drive/list${activeSlug ? `?tenant=${activeSlug}` : ''}`, { headers })
-        .then(async (r) => {
-          if (r.ok) {
-            const j = await r.json();
-            const list = Array.isArray(j.data) ? j.data : Array.isArray(j.data?.data) ? j.data.data : [];
-            if (list.length > 0) {
-              const firstComp = list[0]?.company_name || '';
-              const totalApps = list.reduce((acc: number, d: any) => acc + (Number(d.total_applicants || d.applicants_count) || 0), 0);
-              setPlacementStats({
-                totalDrives: list.length,
-                latestCompany: firstComp,
-                latestRole: list[0]?.job_title || list[0]?.role || '',
-                packageDetails: list[0]?.package_details || list[0]?.ctc_range || '',
-                totalApplicants: totalApps,
-                applicantList: [],
-                loading: false,
-              });
-            } else {
-              setPlacementStats({
-                totalDrives: 0,
-                latestCompany: '',
-                latestRole: '',
-                packageDetails: '',
-                totalApplicants: 0,
-                applicantList: [],
-                loading: false,
-              });
-            }
-          }
-        })
-        .catch(() => setPlacementStats((prev) => ({ ...prev, loading: false })));
+      // Apply Placement Stats
+      if (placementRes.status === 'fulfilled' && placementRes.value) {
+        const j = placementRes.value;
+        const list = Array.isArray(j.data) ? j.data : Array.isArray(j.data?.data) ? j.data.data : [];
+        if (list.length > 0) {
+          const firstComp = list[0]?.company_name || '';
+          const totalApps = list.reduce((acc: number, d: any) => acc + (Number(d.total_applicants || d.applicants_count) || 0), 0);
+          setPlacementStats({
+            totalDrives: list.length,
+            latestCompany: firstComp,
+            latestRole: list[0]?.job_title || list[0]?.role || '',
+            packageDetails: list[0]?.package_details || list[0]?.ctc_range || '',
+            totalApplicants: totalApps,
+            applicantList: [],
+            loading: false,
+          });
+        } else {
+          setPlacementStats({
+            totalDrives: 0,
+            latestCompany: '',
+            latestRole: '',
+            packageDetails: '',
+            totalApplicants: 0,
+            applicantList: [],
+            loading: false,
+          });
+        }
+      } else {
+        setPlacementStats((prev) => ({ ...prev, loading: false }));
+      }
 
-      // Fetch Repositories with Student Details
-      fetch(`${API_BASE}/repository/list${activeSlug ? `?tenant=${activeSlug}` : ''}`, { headers })
-        .then(async (r) => {
-          if (r.ok) {
-            const j = await r.json();
-            const list = Array.isArray(j.data) ? j.data : Array.isArray(j.data?.data) ? j.data.data : [];
-            if (list.length > 0) {
-              const first = list[0] || {};
-              const firstTitle = first.title || '';
-              const reviewedList = list.filter((x: any) => x.score !== null && x.score !== undefined);
-              const pendingList = list.filter((x: any) => !x.score || x.status === 'Pending Review');
-              const avg = reviewedList.length > 0
-                ? (reviewedList.reduce((acc: number, x: any) => acc + Number(x.score), 0) / reviewedList.length).toFixed(1)
-                : '0.0';
-              const latestGrade = first.grade || reviewedList[0]?.grade || '-';
+      // Apply Repository Stats
+      if (repoRes.status === 'fulfilled' && repoRes.value) {
+        const j = repoRes.value;
+        const list = Array.isArray(j.data) ? j.data : Array.isArray(j.data?.data) ? j.data.data : [];
+        if (list.length > 0) {
+          const first = list[0] || {};
+          const firstTitle = first.title || '';
+          const reviewedList = list.filter((x: any) => x.score !== null && x.score !== undefined);
+          const pendingList = list.filter((x: any) => !x.score || x.status === 'Pending Review');
+          const avg = reviewedList.length > 0
+            ? (reviewedList.reduce((acc: number, x: any) => acc + Number(x.score), 0) / reviewedList.length).toFixed(1)
+            : '0.0';
+          const latestGrade = first.grade || reviewedList[0]?.grade || '-';
 
-              setRepoStats({
-                totalRepos: list.length,
-                latestTitle: firstTitle,
-                latestScore: `${avg}%`,
-                latestGrade,
-                pendingReviews: pendingList.length,
-                avgScore: avg,
-                studentName: first.student_name || '',
-                studentPhoto: first.student_photo || '',
-                studentRoll: first.rollno || first.student_reg_no || '',
-                courseName: first.course_name || '',
-                batchName: first.batch_name ? `Batch ${first.batch_name}` : '',
-                loading: false,
-              });
-            } else {
-              setRepoStats({
-                totalRepos: 0,
-                latestTitle: '',
-                latestScore: '0.0%',
-                latestGrade: '-',
-                pendingReviews: 0,
-                avgScore: '0.0',
-                studentName: '',
-                studentPhoto: '',
-                studentRoll: '',
-                courseName: '',
-                batchName: '',
-                loading: false,
-              });
-            }
-          }
-        })
-        .catch(() => setRepoStats((prev) => ({ ...prev, loading: false })));
+          setRepoStats({
+            totalRepos: list.length,
+            latestTitle: firstTitle,
+            latestScore: `${avg}%`,
+            latestGrade,
+            pendingReviews: pendingList.length,
+            avgScore: avg,
+            studentName: first.student_name || '',
+            studentPhoto: first.student_photo || '',
+            studentRoll: first.rollno || first.student_reg_no || '',
+            courseName: first.course_name || '',
+            batchName: first.batch_name ? `Batch ${first.batch_name}` : '',
+            loading: false,
+          });
+        } else {
+          setRepoStats({
+            totalRepos: 0,
+            latestTitle: '',
+            latestScore: '0.0%',
+            latestGrade: '-',
+            pendingReviews: 0,
+            avgScore: '0.0',
+            studentName: '',
+            studentPhoto: '',
+            studentRoll: '',
+            courseName: '',
+            batchName: '',
+            loading: false,
+          });
+        }
+      } else {
+        setRepoStats((prev) => ({ ...prev, loading: false }));
+      }
 
-      // Fetch live internship stats & applicants progress with real photos
-      fetch(`/api/internships/list`, {
-        headers: {
-          'x-tenant-id': `tenant_${activeSlug}`,
-          'x-tenant': activeSlug,
-          ...headers,
-        },
-      })
-        .then(async (r) => {
-          if (r.ok) {
-            const j = await r.json();
-            const list = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
-            if (list.length > 0) {
-              const totalProg = list.length;
-              const totalApps = list.reduce((acc: number, p: any) => acc + (Number(p.total_applicants) || 0), 0);
-              const totalSeats = list.reduce((acc: number, p: any) => acc + (Number(p.seats_available) || 50), 0);
-              const pct = totalSeats > 0 ? Math.min(100, Math.round((totalApps / totalSeats) * 100)) : 0;
+      // Apply Internship Stats
+      if (internshipRes.status === 'fulfilled' && internshipRes.value) {
+        const j = internshipRes.value;
+        const list = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
+        if (list.length > 0) {
+          const totalProg = list.length;
+          const totalApps = list.reduce((acc: number, p: any) => acc + (Number(p.total_applicants) || 0), 0);
+          const totalSeats = list.reduce((acc: number, p: any) => acc + (Number(p.seats_available) || 50), 0);
+          const pct = totalSeats > 0 ? Math.min(100, Math.round((totalApps / totalSeats) * 100)) : 0;
 
-              const sortedByReach = [...list].sort((a, b) => (Number(b.total_applicants) || 0) - (Number(a.total_applicants) || 0));
-              const topTrack = sortedByReach[0] || {};
-              const maxTrackTitle = topTrack.title || '';
-              const maxReachCount = Number(topTrack.total_applicants) || 0;
+          const sortedByReach = [...list].sort((a, b) => (Number(b.total_applicants) || 0) - (Number(a.total_applicants) || 0));
+          const topTrack = sortedByReach[0] || {};
+          const maxTrackTitle = topTrack.title || '';
+          const maxReachCount = Number(topTrack.total_applicants) || 0;
 
-              const paidCount = list.filter((x: any) => x.is_paid || (x.price && Number(x.price) > 0)).length;
-              const freeCount = totalProg - paidCount;
+          const paidCount = list.filter((x: any) => x.is_paid || (x.price && Number(x.price) > 0)).length;
+          const freeCount = totalProg - paidCount;
 
-              setInternshipStats({
-                totalPrograms: totalProg,
-                totalApplicants: totalApps,
-                totalSeats,
-                percentageFilled: pct,
-                maxReachTrack: maxTrackTitle,
-                maxReachApplicants: maxReachCount,
-                paidTracks: paidCount,
-                freeTracks: freeCount,
-                applicantList: [],
-                loading: false,
-              });
-            } else {
-              setInternshipStats({
-                totalPrograms: 0,
-                totalApplicants: 0,
-                totalSeats: 0,
-                percentageFilled: 0,
-                maxReachTrack: '',
-                maxReachApplicants: 0,
-                paidTracks: 0,
-                freeTracks: 0,
-                applicantList: [],
-                loading: false,
-              });
-            }
-          }
-        })
-        .catch(() => setInternshipStats((prev) => ({ ...prev, loading: false })));
+          setInternshipStats({
+            totalPrograms: totalProg,
+            totalApplicants: totalApps,
+            totalSeats,
+            percentageFilled: pct,
+            maxReachTrack: maxTrackTitle,
+            maxReachApplicants: maxReachCount,
+            paidTracks: paidCount,
+            freeTracks: freeCount,
+            applicantList: [],
+            loading: false,
+          });
+        } else {
+          setInternshipStats({
+            totalPrograms: 0,
+            totalApplicants: 0,
+            totalSeats: 0,
+            percentageFilled: 0,
+            maxReachTrack: '',
+            maxReachApplicants: 0,
+            paidTracks: 0,
+            freeTracks: 0,
+            applicantList: [],
+            loading: false,
+          });
+        }
+      } else {
+        setInternshipStats((prev) => ({ ...prev, loading: false }));
+      }
 
-      // Fetch firm status & transactions for license receipts
-      fetchFirmLicenseData(activeSlug);
+      // Apply License Data
+      if (licenseStatusRes.status === 'fulfilled' && licenseStatusRes.value) {
+        const statusJson = licenseStatusRes.value;
+        setLicenseInfo({
+          status: statusJson.status || 'ACTIVE',
+          trial_ends_at: statusJson.trial_ends_at,
+          firm_mode: statusJson.firm_mode || 'NONMED',
+        });
+      }
+      if (licenseTxRes.status === 'fulfilled' && licenseTxRes.value) {
+        const txJson = licenseTxRes.value;
+        const list = Array.isArray(txJson) ? txJson : txJson.data || [];
+        setLicenseReceipts(list);
+      }
+
+      fetchLiveAttendancePunches();
     } catch (err) {
       console.error('[Dashboard] Error fetching analytics:', err);
     } finally {
@@ -455,8 +492,12 @@ export default function AdminDashboard() {
         <Header title="College Administration & Analytics KPI" />
 
         <main className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 flex-1 max-w-[1600px] w-full mx-auto overflow-x-hidden">
-          {/* Top College Banner Header */}
-          <div className="bg-gradient-to-r from-[#11141A] via-[#1E2638] to-[#11141A] border border-slate-800 rounded-[22px] p-6 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          {loading ? (
+            <AdminDashboardSkeleton />
+          ) : (
+            <>
+              {/* Top College Banner Header */}
+              <div className="bg-gradient-to-r from-[#11141A] via-[#1E2638] to-[#11141A] border border-slate-800 rounded-[22px] p-6 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="space-y-1.5 z-10">
               <div className="flex items-center gap-2">
                 <span className="bg-[#F36C21] text-white text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full tracking-wider shadow-sm">
@@ -954,7 +995,9 @@ export default function AdminDashboard() {
                   {loading ? '...' : kpis.totalExams}
                 </p>
                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  <span className="truncate max-w-[150px]">Mid Term BCA & Web Tech</span>
+                  <span className="truncate max-w-[150px]">
+                    {kpis.totalExams > 0 ? `${kpis.totalExams} Published Papers` : 'No papers created'}
+                  </span>
                   <span className="text-amber-600 dark:text-amber-400 font-bold group-hover:underline">Q-Bank ➔</span>
                 </div>
               </div>
@@ -1006,11 +1049,6 @@ export default function AdminDashboard() {
             <ChatDashboardWidget role="ADMIN" chatUrl="/dashboard/admin/chat" />
             <NoticeDashboardWidget role="admin" />
             <RecentLessonsWidget role="ADMIN" />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6">
-            <FacultyDailyPunchWidget />
-            <FacultyLeaveLedgerWidget />
           </div>
 
           {/* Digital Library & Academic Catalog Card */}
@@ -1171,6 +1209,11 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 gap-6">
+            <FacultyDailyPunchWidget />
+            <FacultyLeaveLedgerWidget />
+          </div>
+
           {/* 7. Bottom System Health & Isolation Card */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-6 shadow-sm space-y-4">
             <h3 className="text-xs font-extrabold text-slate-900 dark:text-white tracking-tight uppercase flex items-center gap-2">
@@ -1203,7 +1246,7 @@ export default function AdminDashboard() {
               <div className="p-4 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 shadow-sm">
                 <span className="font-bold text-slate-900 dark:text-white block">AWS S3 Document & Q-Bank Bucket</span>
                 <p className="text-slate-600 dark:text-slate-400">
-                  Bucket: <code className="text-[#5B4BFF] font-mono font-bold">mederp-files/srms-cet</code>
+                  Bucket: <code className="text-[#5B4BFF] font-mono font-bold">mederp-files/{collegeInfo.slug || 'srms-cet'}</code>
                 </p>
                 <p className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5">
                   <span>✔</span>
@@ -1212,6 +1255,8 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+            </>
+          )}
         </main>
       </div>
 
@@ -1220,6 +1265,69 @@ export default function AdminDashboard() {
         receipt={selectedReceiptModal}
         onClose={() => setSelectedReceiptModal(null)}
       />
+    </div>
+  );
+}
+
+function AdminDashboardSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      {/* Top Banner Skeleton */}
+      <div className="h-40 rounded-[22px] bg-slate-200 dark:bg-slate-800 shadow-soft p-6 flex justify-between items-center">
+        <div className="space-y-3">
+          <div className="w-28 h-5 bg-slate-300 dark:bg-slate-700 rounded-full" />
+          <div className="w-80 h-7 bg-slate-300 dark:bg-slate-700 rounded-xl" />
+          <div className="w-96 h-4 bg-slate-300 dark:bg-slate-700 rounded-lg" />
+        </div>
+        <div className="w-28 h-10 bg-slate-300 dark:bg-slate-700 rounded-xl" />
+      </div>
+
+      {/* License Bar Skeleton */}
+      <div className="h-20 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-4 flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+          <div className="space-y-2">
+            <div className="w-48 h-4 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="w-64 h-3 bg-slate-200 dark:bg-slate-800 rounded" />
+          </div>
+        </div>
+        <div className="w-36 h-9 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+      </div>
+
+      {/* Top 3 Innovation Cards Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-48 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5 space-y-3">
+            <div className="flex justify-between items-center">
+              <div className="w-32 h-4 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+            </div>
+            <div className="w-24 h-7 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="w-full h-12 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+          </div>
+        ))}
+      </div>
+
+      {/* 5 KPI Cards Grid Skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="h-36 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5 space-y-3">
+            <div className="flex justify-between items-center">
+              <div className="w-24 h-3 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="w-8 h-8 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+            </div>
+            <div className="w-16 h-7 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="w-full h-3 bg-slate-200 dark:bg-slate-800 rounded" />
+          </div>
+        ))}
+      </div>
+
+      {/* 3 Widgets Grid Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-64 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5" />
+        ))}
+      </div>
     </div>
   );
 }

@@ -41,6 +41,9 @@ interface Subject {
   branch_cd?: string;
   course_cd?: string;
   course_name?: string;
+  batch_cd?: string;
+  sem_cd?: string;
+  semester?: string;
   college_id?: string;
   college_name?: string;
   college_code?: string;
@@ -57,6 +60,31 @@ interface Department {
   course_name?: string;
   college_id?: string;
   college_name?: string;
+  college_code?: string;
+  college_slug?: string;
+  colg_cd?: string;
+}
+
+interface Course {
+  id: string;
+  code: string;
+  name: string;
+  course_cd?: string;
+  college_id?: string;
+  college_code?: string;
+  college_slug?: string;
+  colg_cd?: string;
+}
+
+interface Batch {
+  id: string;
+  code: string;
+  name: string;
+  year?: number | string;
+  course_id?: string;
+  course_cd?: string;
+  batch_cd?: string;
+  college_id?: string;
   college_code?: string;
   college_slug?: string;
   colg_cd?: string;
@@ -87,15 +115,20 @@ const API_BASE = 'http://localhost:3001/api/v1';
 
 export default function SubjectLinkerPage() {
   const [colleges, setColleges] = useState<College[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
   const [links, setLinks] = useState<FacultySubjectLink[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
 
-  // Step-by-Step Form states (College -> Department -> Subject -> Faculty Auto-Complete)
+  // Step-by-Step Cascading Form states (College -> Course -> Branch/Department -> Batch/Semester -> Subject -> Faculty)
   const [selectedCollegeId, setSelectedCollegeId] = useState('');
   const [selectedCollegeSlug, setSelectedCollegeSlug] = useState('');
+  const [selectedCourseCd, setSelectedCourseCd] = useState('all');
   const [selectedDeptId, setSelectedDeptId] = useState('');
+  const [selectedBatchCd, setSelectedBatchCd] = useState('all');
+  const [selectedSemCd, setSelectedSemCd] = useState('all');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
   const [facultySearchTerm, setFacultySearchTerm] = useState('');
@@ -117,21 +150,25 @@ export default function SubjectLinkerPage() {
     setTimeout(() => setAlert(null), 4500);
   };
 
-  // 1. Initial Metadata Fetch (Colleges, All Depts, All Subjects, All Links)
+  // 1. Initial Metadata Fetch (Colleges, Courses, Batches, All Depts, All Subjects, All Links)
   const fetchMetadata = async () => {
     setMetadataLoading(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const [colRes, deptRes, subRes, linkRes] = await Promise.all([
+      const [colRes, crsRes, bchRes, deptRes, subRes, linkRes] = await Promise.all([
         fetch(`${API_BASE}/college-master/colleges`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/college-master/courses?tenant=all`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/college-master/batches?tenant=all`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/departments?tenant=all`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/subjects?tenant=all`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=all`, { headers }).catch(() => null),
       ]);
 
       let loadedColleges: College[] = [];
+      let loadedCourses: Course[] = [];
+      let loadedBatches: Batch[] = [];
       let loadedDepts: Department[] = [];
       let loadedSubs: Subject[] = [];
 
@@ -141,6 +178,24 @@ export default function SubjectLinkerPage() {
         if (Array.isArray(colList)) {
           loadedColleges = colList;
           setColleges(colList);
+        }
+      }
+
+      if (crsRes && crsRes.ok) {
+        const crsJson = await crsRes.json();
+        const crsList = crsJson.data || crsJson;
+        if (Array.isArray(crsList)) {
+          loadedCourses = crsList;
+          setCourses(crsList);
+        }
+      }
+
+      if (bchRes && bchRes.ok) {
+        const bchJson = await bchRes.json();
+        const bchList = bchJson.data || bchJson;
+        if (Array.isArray(bchList)) {
+          loadedBatches = bchList;
+          setBatches(bchList);
         }
       }
 
@@ -277,9 +332,9 @@ export default function SubjectLinkerPage() {
   }, [selectedCollegeFilter, colleges.length]);
 
   // ─── Cascading Filters for Form ──────────────────────────────────────────
-  // Departments available in form for selected college
-  const formAvailableDepartments = useMemo(() => {
-    if (!selectedCollegeId && !selectedCollegeSlug) return departments;
+  // Courses available in form for selected college
+  const formAvailableCourses = useMemo(() => {
+    if (!selectedCollegeId && !selectedCollegeSlug) return courses;
     const currentCol = colleges.find(c =>
       String(c.code) === String(selectedCollegeId) ||
       String(c.id) === String(selectedCollegeId) ||
@@ -289,16 +344,95 @@ export default function SubjectLinkerPage() {
     const colSlug = currentCol?.slug || selectedCollegeSlug;
     const colId = currentCol?.id || selectedCollegeId;
 
-    return departments.filter(d => {
+    return courses.filter(c => {
+      if (!c.college_id && !c.colg_cd && !c.college_code) return true;
       return (
-        (colCode && (String(d.colg_cd) === String(colCode) || String(d.college_code) === String(colCode))) ||
-        (colSlug && d.college_slug === colSlug) ||
-        (colId && (d.college_id === colId || String(d.colg_cd) === String(colId)))
+        (colCode && (String(c.colg_cd) === String(colCode) || String(c.college_code) === String(colCode))) ||
+        (colSlug && c.college_slug === colSlug) ||
+        (colId && (c.college_id === colId || String(c.colg_cd) === String(colId)))
       );
     });
-  }, [departments, selectedCollegeId, selectedCollegeSlug, colleges]);
+  }, [courses, selectedCollegeId, selectedCollegeSlug, colleges]);
 
-  // Subjects available in form for selected college & selected department
+  // Departments/Branches available in form for selected college & course
+  const formAvailableDepartments = useMemo(() => {
+    let list = departments;
+    const currentCol = colleges.find(c =>
+      String(c.code) === String(selectedCollegeId) ||
+      String(c.id) === String(selectedCollegeId) ||
+      c.slug === selectedCollegeSlug
+    );
+    const colCode = currentCol?.code || selectedCollegeId;
+    const colSlug = currentCol?.slug || selectedCollegeSlug;
+    const colId = currentCol?.id || selectedCollegeId;
+
+    // 1. College Match
+    if (selectedCollegeId || selectedCollegeSlug) {
+      list = list.filter(d => {
+        const hasColInfo = !!(d.college_id || d.colg_cd || d.college_code || d.college_slug);
+        if (!hasColInfo) return true;
+        return (
+          (colCode && (String(d.colg_cd) === String(colCode) || String(d.college_code) === String(colCode) || (d.code && d.code.endsWith(`-${colCode}`)))) ||
+          (colSlug && d.college_slug === colSlug) ||
+          (colId && (d.college_id === colId || String(d.colg_cd) === String(colId)))
+        );
+      });
+    }
+
+    // 2. Course Match (Strict Filter — e.g. B.Tech only shows B.Tech branches like CSE, IT, ME, not BCA/BBA/MCA)
+    if (selectedCourseCd && selectedCourseCd !== 'all') {
+      const chosenCourse = courses.find(c => 
+        String(c.code) === String(selectedCourseCd) || 
+        String(c.course_cd) === String(selectedCourseCd) || 
+        String(c.id) === String(selectedCourseCd)
+      );
+      const targetCourseCd = chosenCourse?.course_cd || chosenCourse?.code || selectedCourseCd;
+      const courseName = chosenCourse?.name?.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      list = list.filter(d => {
+        const matchCode = String(d.course_cd) === String(targetCourseCd);
+        const matchInCode = d.code && (d.code.includes(`-C${targetCourseCd}-`) || d.code.startsWith(`-C${targetCourseCd}-`));
+        const deptCourseName = d.course_name?.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const matchName = deptCourseName && courseName && (deptCourseName === courseName || deptCourseName.includes(courseName));
+        return matchCode || matchInCode || matchName;
+      });
+    }
+
+    // Deduplicate by name and code
+    const seen = new Set<string>();
+    const uniqueDepts: Department[] = [];
+    for (const d of list) {
+      const key = `${d.name.trim().toLowerCase()}-${d.code?.trim().toLowerCase() || ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueDepts.push(d);
+      }
+    }
+
+    return uniqueDepts;
+  }, [departments, selectedCollegeId, selectedCollegeSlug, selectedCourseCd, colleges, courses]);
+
+  // Batches available in form for selected course
+  const formAvailableBatches = useMemo(() => {
+    let list = batches;
+    if (selectedCourseCd && selectedCourseCd !== 'all') {
+      const chosenCourse = courses.find(c => 
+        String(c.code) === String(selectedCourseCd) || 
+        String(c.course_cd) === String(selectedCourseCd) || 
+        String(c.id) === String(selectedCourseCd)
+      );
+      const targetCourseCd = chosenCourse?.course_cd || chosenCourse?.code || selectedCourseCd;
+
+      list = list.filter(b => 
+        String(b.course_cd) === String(targetCourseCd) || 
+        String(b.course_id) === String(targetCourseCd) ||
+        String(b.course_id) === String(chosenCourse?.id)
+      );
+    }
+    return list;
+  }, [batches, selectedCourseCd, courses]);
+
+  // Subjects available in form for selected college, course, department, batch & semester
   const formAvailableSubjects = useMemo(() => {
     const currentCol = colleges.find(c =>
       String(c.code) === String(selectedCollegeId) ||
@@ -315,6 +449,14 @@ export default function SubjectLinkerPage() {
       d.branch_cd === selectedDeptId
     );
 
+    const chosenCourse = courses.find(c => 
+      String(c.code) === String(selectedCourseCd) || 
+      String(c.course_cd) === String(selectedCourseCd) || 
+      String(c.id) === String(selectedCourseCd)
+    );
+    const targetCourseCd = chosenCourse?.course_cd || chosenCourse?.code || selectedCourseCd;
+    const courseName = chosenCourse?.name?.toLowerCase().replace(/[^a-z0-9]/g, '');
+
     return subjects.filter(s => {
       // 1. College Match
       if (currentCol || colCode || colSlug || colId) {
@@ -325,7 +467,18 @@ export default function SubjectLinkerPage() {
           (colId && s.college_id === colId);
         if (!isColMatch) return false;
       }
-      // 2. Department Match
+
+      // 2. Course Match (Strict Filter)
+      if (selectedCourseCd && selectedCourseCd !== 'all') {
+        const subCourseName = s.course_name?.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const isCourseMatch =
+          String(s.course_cd) === String(targetCourseCd) ||
+          (subCourseName && courseName && (subCourseName === courseName || subCourseName.includes(courseName))) ||
+          (chosenDept && (String(chosenDept.course_cd) === String(targetCourseCd) || chosenDept.code?.includes(`-C${targetCourseCd}-`)));
+        if (!isCourseMatch && s.course_cd) return false;
+      }
+
+      // 3. Department / Branch Match
       if (selectedDeptId) {
         const isDeptMatch =
           s.department_id === selectedDeptId ||
@@ -340,9 +493,29 @@ export default function SubjectLinkerPage() {
           ));
         if (!isDeptMatch) return false;
       }
+
+      // 4. Batch Match
+      if (selectedBatchCd && selectedBatchCd !== 'all') {
+        const isBatchMatch =
+          String(s.batch_cd) === String(selectedBatchCd) ||
+          String((s as any).batch_code) === String(selectedBatchCd) ||
+          String((s as any).batch_id) === String(selectedBatchCd);
+        if (!isBatchMatch && s.batch_cd) return false;
+      }
+
+      // 5. Semester Match
+      if (selectedSemCd && selectedSemCd !== 'all') {
+        const isSemMatch =
+          String(s.sem_cd) === String(selectedSemCd) ||
+          String(s.semester) === String(selectedSemCd) ||
+          s.semester === `Semester ${selectedSemCd}` ||
+          s.semester?.includes(selectedSemCd);
+        if (!isSemMatch && s.sem_cd) return false;
+      }
+
       return true;
     });
-  }, [subjects, departments, selectedCollegeId, selectedCollegeSlug, selectedDeptId, colleges]);
+  }, [subjects, departments, selectedCollegeId, selectedCollegeSlug, selectedCourseCd, selectedDeptId, selectedBatchCd, selectedSemCd, colleges, courses]);
 
   // Faculties available in form for selected college & selected department
   const formAvailableFaculties = useMemo(() => {
@@ -395,6 +568,9 @@ export default function SubjectLinkerPage() {
 
     setSelectedCollegeId(targetCode);
     setSelectedCollegeSlug(targetSlug);
+    setSelectedCourseCd('all');
+    setSelectedBatchCd('all');
+    setSelectedSemCd('all');
 
     // Auto-select first matching department
     const matchingDepts = departments.filter(d =>
@@ -418,21 +594,45 @@ export default function SubjectLinkerPage() {
     setEditingLinkId(null);
   };
 
-  // Step 2: Change Department
+  // Step 2: Change Course
+  const handleCourseChange = (courseCd: string) => {
+    setSelectedCourseCd(courseCd);
+    setSelectedBatchCd('all');
+    setSelectedSemCd('all');
+    setEditingLinkId(null);
+
+    const matchingDepts = departments.filter(d =>
+      courseCd === 'all' ||
+      d.course_cd === courseCd ||
+      (d.code && d.code.includes(`-C${courseCd}-`))
+    );
+    const firstDept = matchingDepts[0];
+    setSelectedDeptId(firstDept?.id || firstDept?.code || '');
+
+    const matchingSubs = subjects.filter(s =>
+      (courseCd === 'all' || s.course_cd === courseCd) &&
+      (!firstDept || s.department_id === firstDept.id || s.department_code === firstDept.code || s.branch_cd === firstDept.branch_cd)
+    );
+    setSelectedSubjectId(matchingSubs[0]?.id || matchingSubs[0]?.code || '');
+  };
+
+  // Step 3: Change Department / Branch
   const handleDepartmentChange = (deptId: string) => {
     setSelectedDeptId(deptId);
     setEditingLinkId(null);
 
     const chosenDept = departments.find(d => d.id === deptId || d.code === deptId || d.branch_cd === deptId);
 
-    // Filter available subjects for this department
-    const matchingSubs = subjects.filter(s =>
-      !deptId ||
-      s.department_id === deptId ||
-      s.department_code === deptId ||
-      s.branch_cd === deptId ||
-      (chosenDept && (s.department_id === chosenDept.id || s.department_code === chosenDept.code || s.branch_cd === chosenDept.branch_cd))
-    );
+    // Filter available subjects for this department & course
+    const matchingSubs = subjects.filter(s => {
+      const matchDept = !deptId ||
+        s.department_id === deptId ||
+        s.department_code === deptId ||
+        s.branch_cd === deptId ||
+        (chosenDept && (s.department_id === chosenDept.id || s.department_code === chosenDept.code || s.branch_cd === chosenDept.branch_cd));
+      const matchCrs = selectedCourseCd === 'all' || s.course_cd === selectedCourseCd;
+      return matchDept && matchCrs;
+    });
 
     const firstSub = matchingSubs[0];
     setSelectedSubjectId(firstSub?.id || firstSub?.code || '');
@@ -452,7 +652,17 @@ export default function SubjectLinkerPage() {
     }
   };
 
-  // Step 3: Change Subject
+  // Step 4: Change Batch
+  const handleBatchChange = (batchCd: string) => {
+    setSelectedBatchCd(batchCd);
+  };
+
+  // Step 5: Change Semester
+  const handleSemesterChange = (semCd: string) => {
+    setSelectedSemCd(semCd);
+  };
+
+  // Step 6: Change Subject
   const handleSubjectChange = (subId: string) => {
     setSelectedSubjectId(subId);
 
@@ -498,6 +708,9 @@ export default function SubjectLinkerPage() {
   const resetForm = () => {
     setEditingLinkId(null);
     setFacultySearchTerm('');
+    setSelectedCourseCd('all');
+    setSelectedBatchCd('all');
+    setSelectedSemCd('all');
     if (formAvailableDepartments.length > 0) {
       const firstDept = formAvailableDepartments[0];
       setSelectedDeptId(firstDept.id || firstDept.code);
@@ -523,8 +736,17 @@ export default function SubjectLinkerPage() {
     setSelectedSubjectId(link.subject_id || link.subject_code);
 
     const sub = subjects.find(s => s.id === link.subject_id || s.code === link.subject_code);
+    if (sub?.course_cd) {
+      setSelectedCourseCd(sub.course_cd);
+    }
     if (sub?.department_id || sub?.department_code) {
       setSelectedDeptId(sub.department_id || sub.department_code || '');
+    }
+    if (sub?.batch_cd) {
+      setSelectedBatchCd(sub.batch_cd);
+    }
+    if (sub?.sem_cd) {
+      setSelectedSemCd(sub.sem_cd);
     }
   };
 
@@ -792,7 +1014,7 @@ export default function SubjectLinkerPage() {
                       <span>{editingLinkId ? 'Edit Subject Linkage' : 'Link Faculty & Subject'}</span>
                     </h3>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                      Choose College &rarr; Department &rarr; Subject &rarr; Faculty.
+                      Choose College &rarr; Course &rarr; Branch &rarr; Subject &rarr; Faculty.
                     </p>
                   </div>
                   {editingLinkId && (
@@ -805,11 +1027,11 @@ export default function SubjectLinkerPage() {
                   )}
                 </div>
 
-                <form onSubmit={handleSave} className="space-y-4">
+                <form onSubmit={handleSave} className="space-y-3.5">
 
                   {/* STEP 1: Select College */}
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-extrabold uppercase text-[#5B4BFF] tracking-wider flex items-center gap-1">
+                    <label className="text-[11px] font-extrabold uppercase text-[#F36C21] tracking-wider flex items-center gap-1">
                       <span>1.</span> Choose College First *
                     </label>
                     <select
@@ -826,10 +1048,34 @@ export default function SubjectLinkerPage() {
                     </select>
                   </div>
 
-                  {/* STEP 2: Select Department */}
+                  {/* STEP 2: Select Course */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-extrabold uppercase text-[#5B4BFF] tracking-wider flex items-center justify-between">
+                      <span><span>2.</span> Choose Course ({formAvailableCourses.length}) *</span>
+                      <span className="text-[10px] text-slate-400 lowercase font-normal">filters branch & subjects</span>
+                    </label>
+                    {metadataLoading ? (
+                      <div className="h-10 w-full bg-slate-200 dark:bg-slate-800 animate-pulse rounded-xl"></div>
+                    ) : (
+                      <select
+                        value={selectedCourseCd}
+                        onChange={(e) => handleCourseChange(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-xs text-slate-900 dark:text-white font-bold transition-all"
+                      >
+                        <option value="all">-- All Courses --</option>
+                        {formAvailableCourses.map((crs) => (
+                          <option key={crs.id} value={crs.code || crs.course_cd || crs.id}>
+                            🎓 [{crs.code || crs.course_cd || '#'}] {crs.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* STEP 3: Select Branch / Department */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-extrabold uppercase text-[#5B4BFF] tracking-wider flex items-center gap-1">
-                      <span>2.</span> Choose Department ({formAvailableDepartments.length}) *
+                      <span>3.</span> Choose Branch / Department ({formAvailableDepartments.length}) *
                     </label>
                     {metadataLoading ? (
                       <div className="h-10 w-full bg-slate-200 dark:bg-slate-800 animate-pulse rounded-xl"></div>
@@ -840,7 +1086,7 @@ export default function SubjectLinkerPage() {
                         onChange={(e) => handleDepartmentChange(e.target.value)}
                         className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-xs text-slate-900 dark:text-white font-bold transition-all"
                       >
-                        <option value="">-- Select Department --</option>
+                        <option value="">-- Select Department / Branch --</option>
                         {formAvailableDepartments.map((dept) => (
                           <option key={dept.id} value={dept.id || dept.code}>
                             🏢 {dept.name} ({dept.code || dept.branch_cd || 'N/A'})
@@ -850,11 +1096,55 @@ export default function SubjectLinkerPage() {
                     )}
                   </div>
 
-                  {/* STEP 3: Select Subject */}
+                  {/* STEP 4: Batch & Semester Filters (Precision Filters) */}
+                  <div className="grid grid-cols-2 gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-extrabold uppercase text-slate-600 dark:text-slate-400 tracking-wider">
+                        Batch
+                      </label>
+                      <select
+                        value={selectedBatchCd}
+                        onChange={(e) => handleBatchChange(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[11px] text-slate-900 dark:text-white font-semibold focus:outline-none"
+                      >
+                        <option value="all">All Batches</option>
+                        {formAvailableBatches.map((b) => (
+                          <option key={b.id} value={b.code || b.batch_cd || b.id}>
+                            {b.name || `Batch ${b.year || b.code}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-extrabold uppercase text-slate-600 dark:text-slate-400 tracking-wider">
+                        Semester
+                      </label>
+                      <select
+                        value={selectedSemCd}
+                        onChange={(e) => handleSemesterChange(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[11px] text-slate-900 dark:text-white font-semibold focus:outline-none"
+                      >
+                        <option value="all">All Semesters</option>
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                          <option key={s} value={String(s)}>
+                            Sem {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* STEP 5: Select Subject */}
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-extrabold uppercase text-[#5B4BFF] tracking-wider flex items-center gap-1">
-                      <span>3.</span> Choose Department Subject ({formAvailableSubjects.length}) *
-                    </label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[11px] font-extrabold uppercase text-[#5B4BFF] tracking-wider flex items-center gap-1">
+                        <span>5.</span> Choose Subject ({formAvailableSubjects.length}) *
+                      </label>
+                      <span className="text-[10px] font-black text-[#00C48C] bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                        {formAvailableSubjects.length} exact matches
+                      </span>
+                    </div>
                     {metadataLoading ? (
                       <div className="h-10 w-full bg-slate-200 dark:bg-slate-800 animate-pulse rounded-xl"></div>
                     ) : (
@@ -864,21 +1154,21 @@ export default function SubjectLinkerPage() {
                         onChange={(e) => handleSubjectChange(e.target.value)}
                         className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-xs text-slate-900 dark:text-white font-bold transition-all"
                       >
-                        <option value="">-- Choose Subject --</option>
+                        <option value="">-- Choose Subject ({formAvailableSubjects.length} available) --</option>
                         {formAvailableSubjects.map((sub) => (
                           <option key={sub.id} value={sub.id || sub.code}>
-                            📚 {sub.name} ({sub.code})
+                            📚 {sub.name} ({sub.code}) {sub.semester ? `[${sub.semester}]` : ''}
                           </option>
                         ))}
                       </select>
                     )}
                   </div>
 
-                  {/* STEP 4: Search & Select Faculty Member */}
+                  {/* STEP 6: Search & Select Faculty Member */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
                       <label className="text-[11px] font-extrabold uppercase text-[#5B4BFF] tracking-wider flex items-center gap-1">
-                        <span>4.</span> Faculty Member ({formAvailableFaculties.length}) *
+                        <span>6.</span> Faculty Member ({formAvailableFaculties.length}) *
                       </label>
                       {activeFaculty && (
                         <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">

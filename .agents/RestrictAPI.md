@@ -89,17 +89,38 @@ Before generating any code (API endpoint, dropdown component, database query, DT
 
 ---
 
+## Rule 6: Batch Display & Mapping — Human-Readable / Year Format Only
+
+- Batches must **always** be referenced and displayed using the academic year or numeric batch code (e.g., `"Batch 2025"`, `"2025"`, `batch_cd=2`, `batch_year=2025`).
+- **Never display internal synthetic codes** like `B2021-C1-1` or `B2021-C3-1` anywhere in the UI, schedule cards, timetable print views, or reports.
+- If legacy batch strings starting with `B{YYYY}-...` are encountered, clean them automatically to `"Batch {YYYY}"` or map them to the live batch year.
+
+---
+
+## Rule 7: Tenant-Aware Curriculum Terminology (NONMED vs MED)
+
+- **NONMED Tenants (SRMS CET, Engineering, BCA, MCA, MBA, B.Pharm, Technical Colleges):**
+  - **Strictly forbid showing `"NMC Competency"` or `"NMC Status"`** (NMC is National Medical Commission, which applies only to medical colleges).
+  - Always display **`"Sub Topics"`** or **`"Sub Topics / Teaching Topics"`** and **`"Attendance Status"`**.
+- **MED Tenants (SRMS IMS, MBBS, Medical College & Hospital):**
+  - Display **`"NMC Competency"`** and CBME Logbook standards per National Medical Commission guidelines.
+- **Rule of Thumb:** Any UI badge, table column, or modal referencing curriculum competencies must check `isMedical` / `tenantSlug` and dynamically render `"Sub Topics"` for NONMED tenants and `"NMC Competency"` for MED tenants.
+
+---
+
 ## Quick Reference Table
 
-| Field | Format | Example |
-|---|---|---|
-| `colg_cd` | Numeric | `1` |
-| `course_cd` | Numeric | `13` |
-| `batch_cd` | Numeric | `2024` |
-| `branch_cd` | Numeric | `5` |
-| `dept_cd` | Numeric | `3` |
-| `sem_cd` | Numeric (1–10) | `4` |
-| `subject_cd` | Numeric | `101` |
-| `empid` | Alphanumeric (Staff Code) | `"202516224"` |
+| Field / Context | NONMED Standard | MED Standard | Example / Format |
+|---|---|---|---|
+| `colg_cd` | Numeric | Numeric | `1` (CET), `2` (IMS) |
+| `course_cd` | Numeric | Numeric | `13` (BCA), `4` (MCA) |
+| `batch_cd` | Numeric / Year (`Batch 2025`) | Numeric / Year (`Batch 2023`) | `2` or `"Batch 2025"` (No `B2021-C1-1`) |
+| `branch_cd` | Numeric | Numeric | `1` (CSE / General) |
+| `dept_cd` | Numeric | Numeric | `3` |
+| `sem_cd` | Numeric (1–10) | Numeric / Phase | `4` |
+| `subject_cd` | Numeric | Numeric / Code | `101` |
+| `empid` | Alphanumeric (Staff Code) | Alphanumeric (Staff Code) | `"202516224"` |
+| Curriculum Unit Badge | **🎯 Sub Topics:** | **🎯 NMC Competency:** | Dynamic per tenant |
+| Attendance Compliance | **Eligible (≥75%)** | **NMC Eligible (≥75%)** | Dynamic per tenant |
 
-**No GUIDs in any of the above, anywhere in the application, ever.**
+**No GUIDs in application keys, no raw synthetic batch codes like `B2021-C1-1`, and no NMC labels in NONMED tenants.**

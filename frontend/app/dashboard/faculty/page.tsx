@@ -12,14 +12,17 @@ import FacultyBatchAttendanceAnalytics from '../../../components/faculty/Faculty
 import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperHustleBoard';
 import IncubationCellCard from '../../../components/incubation/IncubationCellCard';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+
 export default function FacultyDashboard() {
-  // 1. Lectures state
-  const [lectureStats] = useState({
-    todaySessions: 3,
-    nextTime: '02:00 PM',
-    nextBatch: '',
+  // 1. Dynamic Lectures state
+  const [lectureStats, setLectureStats] = useState({
+    todaySessions: 0,
+    nextTime: '--',
+    nextBatch: 'No classes today',
     completedCount: 0,
     upcomingCount: 0,
+    loading: true,
   });
 
   // 2. Placement Drives state
@@ -65,13 +68,82 @@ export default function FacultyDashboard() {
 
   useEffect(() => {
     const slug = typeof window !== 'undefined'
-      ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '').replace(/^tenant_/, '').replace(/^tenant-/, '')
-      : '';
+      ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '').replace(/^tenant_/, '').replace(/^tenant-/, '') || 'srms-cet-bareilly'
+      : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const headers: Record<string, string> = {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(slug ? { 'x-tenant-slug': slug, 'x-tenant': slug } : {}),
     };
+
+    // 0. Fetch Dynamic Lectures for Logged-In Faculty
+    const facEmpId = typeof window !== 'undefined' ? localStorage.getItem('empid') || localStorage.getItem('emp_id') || '' : '';
+
+    fetch(`${API_BASE}/auth/me`, { headers })
+      .then(async (r) => {
+        let facId = '';
+        let targetEmpId = facEmpId;
+        if (r && r.ok) {
+          const j = await r.json();
+          const me = j.data || j;
+          const profile = me.profile || {};
+          facId = profile.id || me.id || '';
+          targetEmpId = profile.emp_id || me.emp_id || targetEmpId;
+        }
+
+        let ttUrl = `${API_BASE}/timetable?tenant=${slug}`;
+        if (facId) ttUrl += `&facultyId=${encodeURIComponent(facId)}`;
+        else if (targetEmpId) ttUrl += `&facultyId=${encodeURIComponent(targetEmpId)}`;
+
+        const ttRes = await fetch(ttUrl, { headers }).catch(() => null);
+        if (ttRes && ttRes.ok) {
+          const ttJson = await ttRes.json();
+          const slots = Array.isArray(ttJson.data) ? ttJson.data : Array.isArray(ttJson) ? ttJson : [];
+
+          const now = new Date();
+          const jsDay = now.getDay();
+          const currentDay = jsDay === 0 ? 7 : jsDay; // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
+          const currentTimeStr = now.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+
+          const todaySlots = slots.filter((s: any) => Number(s.day_of_week) === currentDay);
+
+          if (todaySlots.length > 0) {
+            const completed = todaySlots.filter((s: any) => (s.end_time || '').slice(0, 5) < currentTimeStr);
+            const upcoming = todaySlots.filter((s: any) => (s.end_time || '').slice(0, 5) >= currentTimeStr);
+            const nextSlot = upcoming[0] || todaySlots[todaySlots.length - 1];
+
+            const startTimeRaw = (nextSlot.start_time || '09:00').slice(0, 5);
+            const [hh, mm] = startTimeRaw.split(':').map(Number);
+            const ampm = hh >= 12 ? 'PM' : 'AM';
+            const hh12 = hh % 12 || 12;
+            const formattedNext = `${String(hh12).padStart(2, '0')}:${String(mm || 0).padStart(2, '0')} ${ampm}`;
+            const batchLabel = nextSlot.subject_name || nextSlot.topic || nextSlot.batch_code || 'Lecture';
+
+            setLectureStats({
+              todaySessions: todaySlots.length,
+              nextTime: formattedNext,
+              nextBatch: batchLabel,
+              completedCount: completed.length,
+              upcomingCount: upcoming.length,
+              loading: false,
+            });
+          } else {
+            setLectureStats({
+              todaySessions: 0,
+              nextTime: '--',
+              nextBatch: 'No classes today',
+              completedCount: 0,
+              upcomingCount: 0,
+              loading: false,
+            });
+          }
+        } else {
+          setLectureStats((prev) => ({ ...prev, loading: false }));
+        }
+      })
+      .catch(() => {
+        setLectureStats((prev) => ({ ...prev, loading: false }));
+      });
 
     // 1. Fetch Placements
     fetch(`http://localhost:3001/api/v1/placement-drive/list${slug ? `?tenant=${slug}` : ''}`, { headers })
@@ -224,7 +296,7 @@ export default function FacultyDashboard() {
             
             {/* Card 1: Today's Lectures */}
             <Link
-              href="/dashboard/faculty/attendance"
+              href="/dashboard/faculty/schedule"
               className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md hover:border-[#5B4BFF]/40 transition-all block group relative overflow-hidden"
             >
               <div className="flex items-center justify-between">

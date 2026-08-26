@@ -13,7 +13,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { 
   CreateInternshipProgramDto, 
   ApplyInternshipDto, 
-  UpdateApplicantStatusDto 
+  UpdateApplicantStatusDto,
+  UploadExternalCertificateDto
 } from './dto/internship.dto';
 
 @Injectable()
@@ -44,6 +45,15 @@ export class InternshipsService {
           duration VARCHAR(50) NOT NULL DEFAULT '3_MONTH',
           fee_type VARCHAR(20) NOT NULL DEFAULT 'FREE',
           fee_amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+          stipend_amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+          campus_type VARCHAR(50) NOT NULL DEFAULT 'ON_CAMPUS',
+          organization_name VARCHAR(255),
+          organization_type VARCHAR(100),
+          off_campus_title VARCHAR(255),
+          location VARCHAR(255),
+          working_conditions TEXT,
+          work_mode VARCHAR(50) NOT NULL DEFAULT 'ON_SITE',
+          certification_mode VARCHAR(50) NOT NULL DEFAULT 'IN_HOUSE_AUTO',
           description TEXT,
           seats_available INT NOT NULL DEFAULT 50,
           application_deadline DATE,
@@ -53,6 +63,23 @@ export class InternshipsService {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`
       );
+
+      // Safe schema migrations
+      const progColumns = [
+        `ALTER TABLE "${schema}".internship_programs ADD COLUMN IF NOT EXISTS stipend_amount NUMERIC(10, 2) DEFAULT 0`,
+        `ALTER TABLE "${schema}".internship_programs ADD COLUMN IF NOT EXISTS campus_type VARCHAR(50) DEFAULT 'ON_CAMPUS'`,
+        `ALTER TABLE "${schema}".internship_programs ADD COLUMN IF NOT EXISTS organization_name VARCHAR(255)`,
+        `ALTER TABLE "${schema}".internship_programs ADD COLUMN IF NOT EXISTS organization_type VARCHAR(100)`,
+        `ALTER TABLE "${schema}".internship_programs ADD COLUMN IF NOT EXISTS off_campus_title VARCHAR(255)`,
+        `ALTER TABLE "${schema}".internship_programs ADD COLUMN IF NOT EXISTS location VARCHAR(255)`,
+        `ALTER TABLE "${schema}".internship_programs ADD COLUMN IF NOT EXISTS working_conditions TEXT`,
+        `ALTER TABLE "${schema}".internship_programs ADD COLUMN IF NOT EXISTS work_mode VARCHAR(50) DEFAULT 'ON_SITE'`,
+        `ALTER TABLE "${schema}".internship_programs ADD COLUMN IF NOT EXISTS certification_mode VARCHAR(50) DEFAULT 'IN_HOUSE_AUTO'`,
+      ];
+
+      for (const colSql of progColumns) {
+        await this.tenantSchemaService.queryInTenant(resolved, colSql).catch(() => {});
+      }
 
       await this.tenantSchemaService.queryInTenant(
         resolved,
@@ -69,24 +96,25 @@ export class InternshipsService {
           locked BOOLEAN NOT NULL DEFAULT FALSE,
           payment_status VARCHAR(50) NOT NULL DEFAULT 'not_required',
           completed_at TIMESTAMPTZ,
+          external_cert_url TEXT,
+          cert_source VARCHAR(50) DEFAULT 'in_house',
           remarks TEXT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`
       );
 
-      await this.tenantSchemaService.queryInTenant(
-        resolved,
-        `ALTER TABLE "${schema}".internship_applications ADD COLUMN IF NOT EXISTS course_cd VARCHAR(100)`
-      ).catch(() => {});
-      await this.tenantSchemaService.queryInTenant(
-        resolved,
-        `ALTER TABLE "${schema}".internship_applications ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(100)`
-      ).catch(() => {});
-      await this.tenantSchemaService.queryInTenant(
-        resolved,
-        `ALTER TABLE "${schema}".internship_applications ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`
-      ).catch(() => {});
+      const appColumns = [
+        `ALTER TABLE "${schema}".internship_applications ADD COLUMN IF NOT EXISTS course_cd VARCHAR(100)`,
+        `ALTER TABLE "${schema}".internship_applications ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(100)`,
+        `ALTER TABLE "${schema}".internship_applications ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`,
+        `ALTER TABLE "${schema}".internship_applications ADD COLUMN IF NOT EXISTS external_cert_url TEXT`,
+        `ALTER TABLE "${schema}".internship_applications ADD COLUMN IF NOT EXISTS cert_source VARCHAR(50) DEFAULT 'in_house'`,
+      ];
+
+      for (const colSql of appColumns) {
+        await this.tenantSchemaService.queryInTenant(resolved, colSql).catch(() => {});
+      }
 
       await this.tenantSchemaService.queryInTenant(
         resolved,
@@ -99,37 +127,34 @@ export class InternshipsService {
           applicant_name VARCHAR(255),
           internship_name VARCHAR(255),
           program_title VARCHAR(255),
+          organization_name VARCHAR(255),
           course VARCHAR(100),
           batch VARCHAR(100),
           duration VARCHAR(50),
           issued_date DATE DEFAULT CURRENT_DATE,
           approved_by VARCHAR(100) DEFAULT 'Prof. (Dr.) Prabhakar Gupta',
           pdf_url TEXT,
+          external_cert_url TEXT,
+          cert_source VARCHAR(50) DEFAULT 'in_house',
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`
       );
 
-      await this.tenantSchemaService.queryInTenant(
-        resolved,
-        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS applicant_name VARCHAR(255)`
-      ).catch(() => {});
-      await this.tenantSchemaService.queryInTenant(
-        resolved,
-        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS internship_name VARCHAR(255)`
-      ).catch(() => {});
-      await this.tenantSchemaService.queryInTenant(
-        resolved,
-        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS course VARCHAR(100)`
-      ).catch(() => {});
-      await this.tenantSchemaService.queryInTenant(
-        resolved,
-        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS batch VARCHAR(100)`
-      ).catch(() => {});
-      await this.tenantSchemaService.queryInTenant(
-        resolved,
-        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS pdf_url TEXT`
-      ).catch(() => {});
+      const certColumns = [
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS applicant_name VARCHAR(255)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS internship_name VARCHAR(255)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS organization_name VARCHAR(255)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS course VARCHAR(100)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS batch VARCHAR(100)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS pdf_url TEXT`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS external_cert_url TEXT`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS cert_source VARCHAR(50) DEFAULT 'in_house'`,
+      ];
+
+      for (const colSql of certColumns) {
+        await this.tenantSchemaService.queryInTenant(resolved, colSql).catch(() => {});
+      }
     } catch (e: any) {
       this.logger.warn(`Could not ensure internship tables in ${schema}: ${e.message}`);
     }
@@ -148,15 +173,25 @@ export class InternshipsService {
       throw new BadRequestException('A valid fee amount is required for paid internship programs.');
     }
 
+    const isOffCampus = dto.campus_type === 'OFF_CAMPUS';
+    const orgName = dto.organization_name || (isOffCampus ? 'Partner Organization' : 'SRMS In-house Innovation & Research Cell');
+    const orgType = dto.organization_type || (isOffCampus ? 'Industry / Company' : 'College Firm');
+    const certMode = dto.certification_mode || (isOffCampus ? 'OFF_CAMPUS_UPLOAD' : 'IN_HOUSE_AUTO');
+    const workMode = dto.work_mode || (isOffCampus ? 'ON_SITE' : 'ON_SITE');
+
     const inserted = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO "${schema}".internship_programs (
-        title, category, duration, fee_type, fee_amount, description,
-        seats_available, application_deadline, published_by, status,
+        title, category, duration, fee_type, fee_amount, stipend_amount,
+        campus_type, organization_name, organization_type, off_campus_title,
+        location, working_conditions, work_mode, certification_mode,
+        description, seats_available, application_deadline, published_by, status,
         created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, 'published',
+        $7, $8, $9, $10,
+        $11, $12, $13, $14,
+        $15, $16, $17, $18, 'published',
         NOW(), NOW()
       ) RETURNING *`,
       [
@@ -165,7 +200,16 @@ export class InternshipsService {
         dto.duration,
         dto.fee_type,
         dto.fee_type === 'PAID' ? dto.fee_amount : 0,
-        dto.description || `${dto.title} - Comprehensive industrial hands-on internship & certification.`,
+        dto.fee_type === 'STIPEND' ? (dto.stipend_amount || 0) : (dto.stipend_amount || 0),
+        dto.campus_type || 'ON_CAMPUS',
+        orgName,
+        orgType,
+        dto.off_campus_title || dto.title,
+        dto.location || (isOffCampus ? 'Corporate Location' : 'SRMS Bareilly Campus'),
+        dto.working_conditions || (isOffCampus ? 'Standard Industry Protocols & Working Hours' : 'Standard College Lab Guidelines'),
+        workMode,
+        certMode,
+        dto.description || `${dto.title} - ${isOffCampus ? `Off-Campus Industry Internship at ${orgName}` : 'On-Campus In-house Hands-on Internship & Certification'}.`,
         dto.seats_available || 50,
         dto.application_deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         user?.registration_no || user?.emp_id || user?.id || 'ADMIN',
@@ -176,14 +220,17 @@ export class InternshipsService {
 
     // Publish announcement notice
     try {
+      const typeLabel = isOffCampus ? `🏢 Off-Campus (${orgName})` : '🏛️ On-Campus (In-House)';
+      const compLabel = dto.fee_type === 'STIPEND' ? `Stipend: ₹${dto.stipend_amount || 0}/mo` : (dto.fee_type === 'PAID' ? `Fee: ₹${dto.fee_amount}` : '100% Free');
+
       await this.tenantSchemaService.queryInTenant(
         slug,
         `INSERT INTO "${schema}".notices (
           title, body, priority, category, author_name, author_role, status, is_pinned, publish_date, created_at
         ) VALUES ($1, $2, 'normal', 'career', 'Academic & Training Cell', 'Dean Academics', 'sent', false, NOW(), NOW())`,
         [
-          `🎓 New Internship Program: ${dto.title} (${dto.category})`,
-          `Applications are now open for "${dto.title}".\n\nCategory: ${dto.category}\nDuration: ${dto.duration.replace('_', ' ')}\nType: ${dto.fee_type}${dto.fee_type === 'PAID' ? ` (₹${dto.fee_amount})` : ''}\n\nEligible students can apply directly under the Internships section in the portal.`,
+          `🎓 New Internship Opportunity: ${dto.title} [${typeLabel}]`,
+          `Applications are now open for "${dto.title}".\n\nType: ${typeLabel}\nSector: ${orgType}\nDuration: ${dto.duration.replace('_', ' ')}\nCompensation: ${compLabel}\nMode: ${workMode}\nCertification: ${certMode === 'IN_HOUSE_AUTO' ? 'Verifiable In-house E-Certificate' : 'External Organization Completion Certificate'}\n\nEligible students can apply directly under the Internships section in the portal.`,
         ],
       );
     } catch (e) {
@@ -200,7 +247,7 @@ export class InternshipsService {
   /**
    * List all programs (visible to Student, Faculty, Admin, Clerk)
    */
-  async listPrograms(tenantSlug: string, user: any, category?: string, feeType?: string) {
+  async listPrograms(tenantSlug: string, user: any, category?: string, feeType?: string, campusType?: string) {
     const slug = await this.ensureTables(tenantSlug);
     const schema = `tenant_${slug}`;
 
@@ -215,13 +262,17 @@ export class InternshipsService {
     `;
 
     const params: any[] = [];
-    if (category) {
+    if (category && category !== 'ALL') {
       params.push(category);
       sql += ` AND p.category = $${params.length}`;
     }
-    if (feeType) {
+    if (feeType && feeType !== 'ALL') {
       params.push(feeType);
       sql += ` AND p.fee_type = $${params.length}`;
+    }
+    if (campusType && campusType !== 'ALL') {
+      params.push(campusType);
+      sql += ` AND p.campus_type = $${params.length}`;
     }
 
     sql += ` GROUP BY p.id ORDER BY p.created_at DESC`;
@@ -233,7 +284,7 @@ export class InternshipsService {
     if (regNo) {
       const myApps = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT a.*, c.certificate_no, c.issued_date, c.approved_by 
+        `SELECT a.*, c.certificate_no, c.issued_date, c.approved_by, c.external_cert_url AS cert_external_url, c.cert_source AS certificate_source
          FROM "${schema}".internship_applications a
          LEFT JOIN "${schema}".certificates c ON a.id = c.application_id
          WHERE a.student_reg_no = $1 OR a.student_id = $1 OR a.student_id = $2 OR a.student_reg_no = $2`,
@@ -301,6 +352,15 @@ export class InternshipsService {
       throw new BadRequestException('Applications for this internship program are currently locked.');
     }
 
+    if (program.application_deadline) {
+      const deadlineDate = new Date(program.application_deadline);
+      const endOfDay = new Date(deadlineDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      if (endOfDay.getTime() < Date.now()) {
+        throw new BadRequestException('Applications for this internship program are closed as the deadline has passed.');
+      }
+    }
+
     // Check if already applied (prevent duplicate applications)
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -340,18 +400,20 @@ export class InternshipsService {
         if (studentRows[0].batch_cd) batchCd = studentRows[0].batch_cd;
         if (studentRows[0].registration_no) studentId = studentRows[0].registration_no;
       }
-    } catch (e) {}
+    } catch (e: any) {
+      this.logger.warn(`Could not fetch student record: ${e.message}`);
+    }
 
     const inserted = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO "${schema}".internship_applications (
         program_id, student_id, student_reg_no, student_name,
-        course_cd, batch_cd, applied_at, status, locked,
-        payment_status, remarks, created_at, updated_at
+        course_cd, batch_cd, applied_at, status, locked, payment_status, remarks,
+        created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4,
-        $5, $6, NOW(), 'applied', false,
-        $7, $8, NOW(), NOW()
+        $5, $6, NOW(), 'applied', FALSE, $7, $8,
+        NOW(), NOW()
       ) RETURNING *`,
       [
         dto.program_id,
@@ -361,50 +423,51 @@ export class InternshipsService {
         courseCd,
         batchCd,
         paymentStatus,
-        dto.remarks || null,
+        dto.remarks || (program.campus_type === 'OFF_CAMPUS' ? `Applied for Off-Campus Internship at ${program.organization_name}` : 'Applied for In-house Training Program'),
       ],
     );
 
+    // Send confirmation notification
+    try {
+      await this.notificationsService.sendNotification(slug, {
+        recipient_id: regNo,
+        title: `✅ Application Submitted: ${program.title}`,
+        message: `Your application for "${program.title}" (${program.campus_type === 'OFF_CAMPUS' ? `Off-Campus: ${program.organization_name}` : 'On-Campus'}) has been registered. Track review status in your portal.`,
+        type: 'info',
+        category: 'announcements',
+      });
+    } catch (e) {}
+
     return {
       success: true,
-      message: program.fee_type === 'PAID' 
-        ? 'Application submitted! Please proceed to complete the internship enrollment fee.'
-        : 'Application submitted successfully!',
+      message: 'Application submitted successfully',
       application: inserted[0],
-      requires_payment: program.fee_type === 'PAID',
-      fee_amount: program.fee_amount,
     };
   }
 
   /**
-   * Student: Complete payment for a paid internship program
+   * Process simulated payment for paid certification programs
    */
   async processPayment(tenantSlug: string, applicationId: string, user: any) {
     const slug = this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${slug}`;
-    const regNo = user?.registration_no || user?.rollno || user?.username;
 
     const apps = await this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT a.*, p.title, p.fee_amount, p.fee_type 
+      `SELECT a.*, p.fee_amount, p.title AS program_title
        FROM "${schema}".internship_applications a
        JOIN "${schema}".internship_programs p ON a.program_id = p.id
-       WHERE a.id = $1 AND (a.student_reg_no = $2 OR a.student_id = $2)`,
-      [applicationId, regNo],
+       WHERE a.id = $1`,
+      [applicationId],
     );
 
     if (!apps[0]) {
-      throw new NotFoundException('Application not found.');
-    }
-
-    const app = apps[0];
-    if (app.payment_status === 'paid') {
-      return { success: true, message: 'Fee already paid.', application: app };
+      throw new NotFoundException(`Application #${applicationId} not found`);
     }
 
     const updated = await this.tenantSchemaService.queryInTenant(
       slug,
-      `UPDATE "${schema}".internship_applications 
+      `UPDATE "${schema}".internship_applications
        SET payment_status = 'paid', updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
@@ -413,13 +476,13 @@ export class InternshipsService {
 
     return {
       success: true,
-      message: `Payment of ₹${app.fee_amount} completed successfully for ${app.title}.`,
+      message: 'Payment confirmed successfully. Enrollment is complete.',
       application: updated[0],
     };
   }
 
   /**
-   * Faculty / Admin: List applicants for a program
+   * Faculty / Admin: List applicants for a specific program
    */
   async getApplicants(tenantSlug: string, programId: string) {
     const slug = this.resolveTenantSlug(tenantSlug);
@@ -427,14 +490,18 @@ export class InternshipsService {
 
     return this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT DISTINCT ON (a.id) a.*, 
-              COALESCE(s.photo_url, '') AS student_photo,
-              COALESCE(a.student_name, s.name, c.applicant_name, 'Enrolled Student') AS display_name,
-              COALESCE(crs.name, a.course_cd, s.course_cd, c.course, 'BCA') AS display_course,
-              COALESCE(bth.name, a.batch_cd, s.batch_cd, c.batch, '2024-2027') AS display_batch,
-              COALESCE(a.student_reg_no, s.registration_no, s.rollno, a.student_id, 'REG-2026') AS student_reg_no,
-              COALESCE(s.rollno, a.student_reg_no, '2025107666') AS rollno,
-              c.certificate_no, c.issued_date, c.approved_by
+      `SELECT a.*,
+              s.name AS student_full_name,
+              s.rollno AS student_rollno,
+              s.course_cd AS student_course_cd,
+              s.batch_cd AS student_batch_cd,
+              crs.name AS course_name,
+              bth.name AS batch_name,
+              c.certificate_no,
+              c.issued_date,
+              c.approved_by,
+              c.external_cert_url AS cert_external_url,
+              c.cert_source AS cert_origin
        FROM "${schema}".internship_applications a
        LEFT JOIN "${schema}".students s ON (
          a.student_reg_no = s.registration_no 
@@ -442,29 +509,28 @@ export class InternshipsService {
          OR a.student_id = s.registration_no 
          OR a.student_id = s.rollno
          OR a.student_id = s.user_id::text
-         OR a.student_id = s.id::text
        )
        LEFT JOIN "${schema}".courses crs ON (
-         crs.code = COALESCE(s.course_cd, a.course_cd)
-         OR crs.name = COALESCE(s.course_cd, a.course_cd)
-         OR crs.id::text = COALESCE(s.course_cd, a.course_cd)
+         s.course_cd = crs.code 
+         OR s.course_cd = crs.course_cd 
+         OR s.course_cd = crs.id::text 
+         OR a.course_cd = crs.code
        )
        LEFT JOIN "${schema}".batches bth ON (
-         bth.code = COALESCE(s.batch_cd, a.batch_cd)
-         OR bth.name = COALESCE(s.batch_cd, a.batch_cd)
-         OR bth.id::text = COALESCE(s.batch_cd, a.batch_cd)
-         OR bth.batch_cd = COALESCE(s.batch_cd, a.batch_cd)
-         OR bth.name ILIKE '%' || COALESCE(s.batch_cd, a.batch_cd) || '%'
+         s.batch_cd = bth.batch_cd 
+         OR s.batch_cd = bth.code 
+         OR s.batch_id = bth.id 
+         OR a.batch_cd = bth.batch_cd
        )
        LEFT JOIN "${schema}".certificates c ON a.id = c.application_id
        WHERE a.program_id = $1
-       ORDER BY a.id, a.applied_at DESC`,
+       ORDER BY a.applied_at ASC`,
       [programId],
     );
   }
 
   /**
-   * Faculty / Admin: Lock or unlock applicants for an internship program
+   * Lock / Unlock applicant intake for a program
    */
   async toggleLockApplicants(tenantSlug: string, programId: string, locked: boolean) {
     const slug = this.resolveTenantSlug(tenantSlug);
@@ -474,17 +540,13 @@ export class InternshipsService {
 
     await this.tenantSchemaService.queryInTenant(
       slug,
-      `UPDATE "${schema}".internship_programs
-       SET status = $1, updated_at = NOW()
-       WHERE id = $2`,
+      `UPDATE "${schema}".internship_programs SET status = $1, updated_at = NOW() WHERE id = $2`,
       [newStatus, programId],
     );
 
     await this.tenantSchemaService.queryInTenant(
       slug,
-      `UPDATE "${schema}".internship_applications
-       SET locked = $1, updated_at = NOW()
-       WHERE program_id = $2`,
+      `UPDATE "${schema}".internship_applications SET locked = $1, updated_at = NOW() WHERE program_id = $2`,
       [locked, programId],
     );
 
@@ -498,7 +560,7 @@ export class InternshipsService {
 
   /**
    * Faculty / Admin: Update applicant status (selected, rejected, completed)
-   * Marking 'completed' automatically provisions the digital e-certificate!
+   * Supports auto-generated in-house certificate or external uploaded certificate!
    */
   async updateApplicationStatus(tenantSlug: string, applicationId: string, dto: UpdateApplicantStatusDto) {
     const slug = this.resolveTenantSlug(tenantSlug);
@@ -506,7 +568,8 @@ export class InternshipsService {
 
     const apps = await this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT a.*, p.title AS internship_title, p.fee_type, p.fee_amount,
+      `SELECT a.*, p.title AS internship_title, p.category, p.duration, p.fee_type, p.fee_amount,
+              p.campus_type, p.organization_name, p.organization_type, p.certification_mode,
               s.name AS student_full_name, s.course_cd AS student_course_cd, s.batch_cd AS student_batch_cd,
               crs.name AS course_full_name,
               bth.name AS batch_full_name
@@ -542,6 +605,8 @@ export class InternshipsService {
     const app = apps[0];
     const isCompleted = dto.status === 'completed';
     const completedAt = isCompleted ? new Date().toISOString() : app.completed_at;
+    const certUrl = dto.external_cert_url || app.external_cert_url || null;
+    const certSource = dto.cert_source || (certUrl ? 'uploaded' : (app.certification_mode === 'OFF_CAMPUS_UPLOAD' ? 'uploaded' : 'in_house'));
 
     const updated = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -550,37 +615,44 @@ export class InternshipsService {
            payment_status = COALESCE($2, payment_status),
            remarks = COALESCE($3, remarks),
            completed_at = $4,
+           external_cert_url = COALESCE($5, external_cert_url),
+           cert_source = COALESCE($6, cert_source),
            updated_at = NOW()
-       WHERE id = $5
+       WHERE id = $7
        RETURNING *`,
-      [dto.status, dto.payment_status || null, dto.remarks || null, completedAt, applicationId],
+      [dto.status, dto.payment_status || null, dto.remarks || null, completedAt, certUrl, certSource, applicationId],
     );
 
     let cert = null;
-    if (isCompleted) {
-      // Generate or retrieve digital certificate
+    if (isCompleted || certUrl) {
+      // Generate or retrieve digital certificate record
       const certNo = `SRMS-CERT-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
       const applicantName = app.student_full_name || app.student_name || 'Candidate';
       const course = app.course_full_name || app.student_course_cd || app.course_cd || 'General Program';
       const batch = app.batch_full_name || app.student_batch_cd || app.batch_cd || '2022-2026';
       const internshipName = app.internship_title || 'Certification Program';
+      const organizationName = app.organization_name || (app.campus_type === 'OFF_CAMPUS' ? 'Partner Organization' : 'SRMS CET In-House Cell');
 
       const certRes = await this.tenantSchemaService.queryInTenant(
         slug,
         `INSERT INTO "${schema}".certificates (
-          application_id, certificate_no, internship_name, applicant_name,
-          course, batch, issued_date, approved_by, pdf_url, created_at
+          application_id, certificate_no, internship_name, applicant_name, organization_name,
+          course, batch, duration, issued_date, approved_by, pdf_url, external_cert_url, cert_source, created_at
         ) VALUES (
-          $1, $2, $3, $4,
-          $5, $6, CURRENT_DATE, 'Prof. (Dr.) Prabhakar Gupta',
-          '/certificates/sample-cert.pdf', NOW()
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, CURRENT_DATE, 'Prof. (Dr.) Prabhakar Gupta',
+          '/certificates/sample-cert.pdf', $9, $10, NOW()
         ) ON CONFLICT (application_id) DO UPDATE 
           SET internship_name = EXCLUDED.internship_name,
               applicant_name = EXCLUDED.applicant_name,
+              organization_name = EXCLUDED.organization_name,
               course = EXCLUDED.course,
-              batch = EXCLUDED.batch
+              batch = EXCLUDED.batch,
+              duration = EXCLUDED.duration,
+              external_cert_url = COALESCE(EXCLUDED.external_cert_url, "${schema}".certificates.external_cert_url),
+              cert_source = COALESCE(EXCLUDED.cert_source, "${schema}".certificates.cert_source)
         RETURNING *`,
-        [applicationId, certNo, internshipName, applicantName, course, batch],
+        [applicationId, certNo, internshipName, applicantName, organizationName, course, batch, app.duration || '3_MONTH', certUrl, certSource],
       );
 
       cert = certRes[0];
@@ -596,9 +668,9 @@ export class InternshipsService {
         : `Internship Status: ${dto.status?.toUpperCase()}`;
 
       const notifMessage = isCompleted
-        ? `Congratulations! Your verified certificate for "${app.internship_title}" is ready on your dashboard.`
+        ? `Congratulations! Your certificate for "${app.internship_title}" (${app.organization_name || 'Internship'}) is ready on your dashboard.`
         : dto.status === 'selected'
-        ? `You have been selected for "${app.internship_title}".`
+        ? `You have been selected for "${app.internship_title}" at ${app.organization_name || 'the assigned facility'}.`
         : `Your application status for "${app.internship_title}" has been updated to ${dto.status}.`;
 
       await this.notificationsService.sendNotification(slug, {
@@ -621,8 +693,20 @@ export class InternshipsService {
   }
 
   /**
+   * Upload / Attach external certificate directly to an applicant
+   */
+  async uploadExternalCertificate(tenantSlug: string, dto: UploadExternalCertificateDto) {
+    return this.updateApplicationStatus(tenantSlug, dto.application_id, {
+      status: 'completed',
+      external_cert_url: dto.external_cert_url,
+      cert_source: 'uploaded',
+      remarks: dto.remarks || 'External Off-Campus certificate uploaded by administrator.',
+    });
+  }
+
+  /**
    * Certificate Eligibility & Download Gating
-   * GATED: Requires status = 'completed' AND (fee_type = 'FREE' OR payment_status = 'paid')
+   * GATED: Requires status = 'completed' AND (fee_type = 'FREE' OR payment_status = 'paid' OR fee_type = 'STIPEND')
    */
   async getCertificate(tenantSlug: string, applicationId: string, user: any) {
     const slug = this.resolveTenantSlug(tenantSlug);
@@ -631,10 +715,13 @@ export class InternshipsService {
 
     const apps = await this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT a.*, p.title AS internship_title, p.category, p.duration, p.fee_type,
+      `SELECT a.*, p.title AS internship_title, p.category, p.duration, p.fee_type, p.campus_type,
+              p.organization_name, p.organization_type, p.off_campus_title, p.certification_mode,
               c.certificate_no, c.issued_date, c.approved_by, c.pdf_url,
+              c.external_cert_url AS cert_external_url, c.cert_source AS cert_origin,
               c.applicant_name AS cert_applicant_name,
               c.internship_name AS cert_internship_name,
+              c.organization_name AS cert_org_name,
               c.course AS cert_course, c.batch AS cert_batch
        FROM "${schema}".internship_applications a
        JOIN "${schema}".internship_programs p ON a.program_id = p.id
@@ -732,6 +819,11 @@ export class InternshipsService {
       app.internship_title || 
       'Full-Stack Cloud & AI Engineering Internship';
 
+    const organizationName = 
+      app.cert_org_name ||
+      app.organization_name || 
+      (app.campus_type === 'OFF_CAMPUS' ? 'Partner Organization' : 'SRMS CET In-House Cell');
+
     const courseName = 
       sm.course_full_name || 
       sm.adm_course_code || 
@@ -762,6 +854,11 @@ export class InternshipsService {
       eligible: true,
       certificate_no: app.certificate_no || `SRMS-CERT-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
       internship_name: internshipName,
+      organization_name: organizationName,
+      campus_type: app.campus_type || 'ON_CAMPUS',
+      certification_mode: app.certification_mode || 'IN_HOUSE_AUTO',
+      external_cert_url: app.cert_external_url || app.external_cert_url || null,
+      cert_source: app.cert_origin || app.cert_source || 'in_house',
       applicant_name: studentName,
       course: courseName,
       batch: batchName,

@@ -213,14 +213,21 @@ export class UsersService {
 
   private async resolveTenantSlug(tenantSlugOrCollege?: string): Promise<string> {
     if (!tenantSlugOrCollege || tenantSlugOrCollege === 'all') return 'all';
+    const cleaned = tenantSlugOrCollege.replace(/^tenant_/, '').replace(/^tenant-/, '').trim().toLowerCase();
+    if (cleaned === 'srms-cet' || cleaned === 'srms_cet' || cleaned === 'cet' || cleaned === '7' || cleaned === '1') {
+      return 'srms-cet-bareilly';
+    }
+    if (cleaned === 'srms-cetr' || cleaned === 'srms_cetr' || cleaned === 'cetr' || cleaned === '8' || cleaned === '2') {
+      return 'srms-cetr-bareilly';
+    }
     try {
       const rows = await this.ds.query(
-        `SELECT slug, code, id FROM public.tenants WHERE slug = $1 OR code = $1 OR id::text = $1 LIMIT 1`,
-        [tenantSlugOrCollege],
+        `SELECT slug, code, id FROM public.tenants WHERE LOWER(slug) = $1 OR code = $1 OR id::text = $1 LIMIT 1`,
+        [cleaned],
       );
       if (rows.length > 0) return rows[0].slug;
     } catch (e) {}
-    return tenantSlugOrCollege.replace(/^tenant_/, '');
+    return cleaned;
   }
 
   async getFaculty(tenantSlug: string, pagination: PaginationDto, filters: {
@@ -237,7 +244,7 @@ export class UsersService {
         try {
           const rows = await this.ds.query(
             `SELECT f.id, f.emp_id, f.name, f.designation,
-                    COALESCE(f.photo_url, CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
+                    COALESCE(NULLIF(f.photo_url, ''), CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
                     f.phone, f.department_id, f.subject_id, f.gender, f.experience, f.staff_type, f.is_active,
                     f.qualification, f.date_of_joining, f.date_of_birth, f.date_of_leaving, f.blood_group,
                     f.caste, f.pan_no, f.aadhaar_no, f.uan, f.bank_ac_no, f.current_basic, f.device_cd,
@@ -304,7 +311,7 @@ export class UsersService {
     const [rows, countRows] = await Promise.all([
       this.ds.query(
         `SELECT DISTINCT ON (f.id) f.id, f.emp_id, f.name, f.designation,
-                COALESCE(f.photo_url, CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
+                COALESCE(NULLIF(f.photo_url, ''), CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
                 f.phone, f.department_id, f.subject_id, f.gender, f.experience, f.staff_type, f.is_active,
                 f.qualification, f.date_of_joining, f.date_of_birth, f.date_of_leaving, f.blood_group,
                 f.caste, f.pan_no, f.aadhaar_no, f.uan, f.bank_ac_no, f.current_basic, f.device_cd,
@@ -346,22 +353,39 @@ export class UsersService {
 
   async getFacultyById(tenantSlug: string, id: string) {
     const resolvedSlug = await this.resolveTenantSlug(tenantSlug);
-    const schema = `tenant_${resolvedSlug}`;
-    const rows = await this.ds.query(
-      `SELECT f.*,
-              COALESCE(f.photo_url, CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
-              u.email, u.role, u.is_active as user_active, u.last_login_at,
-              d.name AS department_name, d.code AS department_code,
-              s.name AS subject_name, s.code AS subject_code
-       FROM "${schema}".faculty f
-       LEFT JOIN "${schema}".users u ON u.id = f.user_id
-       LEFT JOIN "${schema}".departments d ON (d.id = f.department_id OR d.code = f.department_id::text)
-       LEFT JOIN "${schema}".subjects s ON (s.id = f.subject_id OR s.code = f.subject_id::text)
-       WHERE f.id = $1`,
-      [id],
-    );
-    if (!rows[0]) throw new NotFoundException('Faculty not found');
-    return rows[0];
+    const colleges = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+
+    const fetchFromSchema = async (s: string) => {
+      return this.ds.query(
+        `SELECT f.*,
+                COALESCE(NULLIF(f.photo_url, ''), CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
+                u.email, u.role, u.is_active as user_active, u.last_login_at,
+                d.name AS department_name, d.code AS department_code,
+                s.name AS subject_name, s.code AS subject_code
+         FROM "${s}".faculty f
+         LEFT JOIN "${s}".users u ON u.id = f.user_id
+         LEFT JOIN "${s}".departments d ON (d.id = f.department_id OR d.code = f.department_id::text)
+         LEFT JOIN "${s}".subjects s ON (s.id = f.subject_id OR s.code = f.subject_id::text)
+         WHERE f.id = $1`,
+        [id],
+      ).catch(() => []);
+    };
+
+    if (resolvedSlug && resolvedSlug !== 'all') {
+      const primarySchema = `tenant_${resolvedSlug}`;
+      const rows = await fetchFromSchema(primarySchema);
+      if (rows && rows[0]) return { ...rows[0], _schema: primarySchema, _tenantSlug: resolvedSlug };
+    }
+
+    // Fallback across all schemas if not found in primary
+    for (const col of colleges) {
+      if (!col.slug || col.slug === resolvedSlug) continue;
+      const s = `tenant_${col.slug}`;
+      const rows = await fetchFromSchema(s);
+      if (rows && rows[0]) return { ...rows[0], _schema: s, _tenantSlug: col.slug };
+    }
+
+    throw new NotFoundException('Faculty not found');
   }
 
   private isUUID(str?: string | null): boolean {
@@ -418,8 +442,8 @@ export class UsersService {
 
     const facultyRows = await this.ds.query(
       `INSERT INTO "${schema}".faculty
-         (user_id, emp_id, name, department_id, subject_id, designation, qualification, phone, gender, experience, staff_type, photo_url, is_active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, true))
+         (user_id, emp_id, name, department_id, subject_id, designation, qualification, phone, gender, experience, staff_type, photo_url, is_active, email)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, true),$14)
        RETURNING id, emp_id, name`,
       [
         userId, dto.empId, dto.name,
@@ -428,6 +452,7 @@ export class UsersService {
         dto.gender || null, dto.experience || null,
         dto.staffType || 'Faculty', dto.photoUrl || null,
         dto.isActive ?? true,
+        dto.email ? dto.email.toLowerCase().trim() : null,
       ],
     );
 
@@ -436,9 +461,9 @@ export class UsersService {
   }
 
   async updateFaculty(tenantSlug: string, id: string, dto: UpdateFacultyDto) {
-    const resolvedSlug = await this.resolveTenantSlug(dto.college_slug || dto.college_id || tenantSlug);
+    const faculty = await this.getFacultyById(dto.college_slug || dto.college_id || tenantSlug, id);
+    const resolvedSlug = faculty._tenantSlug || await this.resolveTenantSlug(dto.college_slug || dto.college_id || tenantSlug);
     const schema = `tenant_${resolvedSlug}`;
-    const faculty = await this.getFacultyById(resolvedSlug, id);
 
     // Update user record if email, role or password provided
     if (dto.email || dto.role) {
@@ -457,12 +482,12 @@ export class UsersService {
         userParams.push(roleVal);
       }
 
-      if (userUpdates.length) {
+      if (userUpdates.length && faculty.user_id) {
         userParams.push(faculty.user_id);
         await this.ds.query(
           `UPDATE "${schema}".users SET ${userUpdates.join(', ')} WHERE id = $${uIdx}`,
           userParams,
-        );
+        ).catch(() => {});
       }
     }
 
@@ -510,7 +535,14 @@ export class UsersService {
       qualification: dto.qualification, phone: dto.phone,
       departmentId: validDeptId, subjectId: validSubjectId,
       gender: dto.gender, experience: dto.experience,
-      staffType: dto.staffType, photoUrl: dto.photoUrl,
+      staffType: dto.staffType,
+      photoUrl: dto.photoUrl !== undefined ? dto.photoUrl : (dto as any).photo_url,
+      coverUrl: (dto as any).cover_url || (dto as any).coverUrl,
+      bio: (dto as any).bio,
+      linkedinUrl: (dto as any).linkedin_url || (dto as any).linkedinUrl,
+      linkedinConnections: (dto as any).linkedin_connections || (dto as any).linkedinConnections,
+      repositoryEvaluatedCount: (dto as any).repository_evaluated_count || (dto as any).repositoryEvaluatedCount,
+      followersCount: (dto as any).followers_count || (dto as any).followersCount,
       bloodGroup: dto.bloodGroup, fatherName: dto.fatherName,
       spouseName: dto.spouseName, address: dto.address,
       city: dto.city, state: dto.state,
@@ -541,6 +573,9 @@ export class UsersService {
       departmentId: 'department_id', subjectId: 'subject_id',
       gender: 'gender', experience: 'experience',
       staffType: 'staff_type', photoUrl: 'photo_url',
+      coverUrl: 'cover_url', bio: 'bio',
+      linkedinUrl: 'linkedin_url', linkedinConnections: 'linkedin_connections',
+      repositoryEvaluatedCount: 'repository_evaluated_count', followersCount: 'followers_count',
       bloodGroup: 'blood_group', fatherName: 'father_name',
       spouseName: 'spouse_name', address: 'address',
       city: 'city', state: 'state',
@@ -579,7 +614,7 @@ export class UsersService {
         `UPDATE "${schema}".users u SET is_active = $1
          FROM "${schema}".faculty f WHERE f.user_id = u.id AND f.id = $2`,
         [dto.isActive, id],
-      );
+      ).catch(() => {});
     }
 
     if (!sets.length && dto.isActive === undefined && !dto.email && !dto.role) {

@@ -185,22 +185,22 @@ export default function CompanyDetailDrawer({
             Close Details
           </button>
 
-          {role === 'student' && !company.has_applied && (
+          {role === 'student' && !(company.has_applied || (company as any).my_application || company.application_status) && (
             <button
               onClick={() => {
                 onApply?.(company);
                 onClose();
               }}
-              className="px-6 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all active:scale-95 flex items-center gap-2"
+              className="px-6 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
             >
               Submit Application
             </button>
           )}
 
-          {role === 'student' && company.has_applied && (
-            <span className="px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4" />
-              Already Applied ({company.application_status || 'Under Review'})
+          {role === 'student' && (company.has_applied || (company as any).my_application || company.application_status) && (
+            <span className="px-4 py-2.5 rounded-xl text-xs font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 shadow-sm">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>Already Applied ({company.application_status || (company as any).my_application?.status || 'Under Review'})</span>
             </span>
           )}
         </div>
