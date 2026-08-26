@@ -161,11 +161,11 @@ export default function FacultyLogbookPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#F6F8FC] dark:bg-slate-950 font-sans">
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans">
       <Sidebar role="faculty" />
-      <div className="flex-1 flex flex-col md:pl-64">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header title="Faculty Logbook & Activity Evaluation" />
-        <main className="p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 flex-1 max-w-[1600px] w-full mx-auto overflow-x-hidden">
           {/* Top Banner Header */}
           <div className="bg-gradient-to-r from-[#2D2575] via-[#3B328C] to-[#5B4BFF] rounded-[22px] p-6 md:p-8 text-white shadow-soft relative overflow-hidden">
             <div className="absolute right-0 top-0 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none" />
