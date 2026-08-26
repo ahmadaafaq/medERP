@@ -21,7 +21,7 @@ export default function DashboardRootLayout({
       if (!token) {
         // If not logged in -> redirect immediately
         if (pathname?.startsWith('/dashboard/owner') || pathname?.startsWith('/dashboard/superadmin')) {
-          router.replace('/access/owner');
+          router.replace('/access/superadmin');
         } else {
           router.replace('/login');
         }
@@ -30,7 +30,7 @@ export default function DashboardRootLayout({
 
       // Check owner route permission
       if (pathname?.startsWith('/dashboard/owner') && role !== 'owner' && role !== 'superadmin' && role !== 'SUPER_ADMIN' && !isOwner) {
-        router.replace('/access/owner');
+        router.replace('/access/superadmin');
         return;
       }
 

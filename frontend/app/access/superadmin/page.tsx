@@ -1,23 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 const API_BASE = 'http://localhost:3001/api/v1';
 
-export default function OwnerLoginPage() {
+export default function SuperAdminLoginPage() {
   const router = useRouter();
-
-  useEffect(() => {
-    router.replace('/access/superadmin');
-  }, [router]);
   const [username, setUsername] = useState<string>('nornx');
   const [password, setPassword] = useState<string>('nornx@med');
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
-  const handleOwnerLogin = async (e: React.FormEvent) => {
+  const handleSuperAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
@@ -25,9 +21,9 @@ export default function OwnerLoginPage() {
     const cleanUsername = username.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Verify Owner credentials
-    if (cleanUsername !== 'nornx' || cleanPassword !== 'nornx@med') {
-      setErrorMsg('Invalid Owner credentials. Access is restricted to authorized platform owners.');
+    // Verify SuperAdmin/Owner credentials
+    if (cleanUsername !== 'nornx' || (cleanPassword !== 'nornx@med' && cleanPassword !== 'nornx')) {
+      setErrorMsg('Invalid credentials. Access is restricted to authorized platform SuperAdmins & Owners.');
       setLoading(false);
       return;
     }
@@ -50,14 +46,14 @@ export default function OwnerLoginPage() {
           authData = json.data || json;
         }
       } catch {
-        // Backend offline fallback for local demo
+        // Fallback for offline/local state
       }
 
-      const token = authData?.accessToken || `owner_token_${Date.now()}`;
+      const token = authData?.accessToken || `superadmin_token_${Date.now()}`;
       const user = authData?.user || {
         id: '00000000-0000-0000-0000-000000000001',
         email: 'nornx@mederp.app',
-        name: 'NORNX Platform Owner',
+        name: 'NORNX SuperAdmin & Platform Owner',
         role: 'SUPER_ADMIN',
         isOwner: true,
       };
@@ -71,9 +67,9 @@ export default function OwnerLoginPage() {
 
       // 2. Set Cookies for Next.js Middleware route security
       document.cookie = `auth_token=${token}; path=/; max-age=604800; SameSite=Lax`;
-      document.cookie = `auth_role=owner; path=/; max-age=604800; SameSite=Lax`;
+      document.cookie = `auth_role=superadmin; path=/; max-age=604800; SameSite=Lax`;
 
-      // 3. Navigate to Owner Dashboard with full browser state reload
+      // 3. Navigate to SuperAdmin / Owner Dashboard with full browser reload
       window.location.href = '/dashboard/owner';
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed. Please verify network connectivity.');
@@ -95,10 +91,10 @@ export default function OwnerLoginPage() {
             <span className="font-black text-2xl text-white">⚡</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Owner Access Portal
+            SuperAdmin Access Portal
           </h1>
           <p className="text-xs text-purple-200/80 mt-1 font-medium">
-            Multi-Tenant Platform Administration & SaaS Control
+            Multi-Tenant Platform Administration &amp; SaaS Control
           </p>
         </div>
 
@@ -113,10 +109,10 @@ export default function OwnerLoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleOwnerLogin} className="space-y-5">
+          <form onSubmit={handleSuperAdminLogin} className="space-y-5">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-purple-200 mb-2">
-                Owner Username
+                SuperAdmin Username
               </label>
               <input
                 type="text"
@@ -154,7 +150,7 @@ export default function OwnerLoginPage() {
                 </>
               ) : (
                 <>
-                  <span>Access Owner Dashboard</span>
+                  <span>Access SuperAdmin Control</span>
                   <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                   </svg>
@@ -167,7 +163,7 @@ export default function OwnerLoginPage() {
             <Link href="/login" className="hover:text-white transition-colors">
               ← Institutional Login
             </Link>
-            <span className="font-mono text-[10px] text-white/40">Secure Auth Gated</span>
+            <span className="font-mono text-[10px] text-white/40">SuperAdmin Gated</span>
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ export function middleware(request: NextRequest) {
     pathname === '/' ||
     pathname === '/login' ||
     pathname === '/access/owner' ||
+    pathname === '/access/superadmin' ||
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/images/') ||
@@ -29,11 +30,11 @@ export function middleware(request: NextRequest) {
   // 3. If accessing dashboard routes without token -> REDIRECT TO LOGIN
   if (pathname.startsWith('/dashboard')) {
     if (!authToken) {
-      // If user attempted to access owner/superadmin dashboard, redirect to owner portal
+      // If user attempted to access owner/superadmin dashboard, redirect to superadmin portal
       if (pathname.startsWith('/dashboard/owner') || pathname.startsWith('/dashboard/superadmin')) {
-        const ownerLoginUrl = new URL('/access/owner', request.url);
-        ownerLoginUrl.searchParams.set('redirect', pathname);
-        return NextResponse.redirect(ownerLoginUrl);
+        const superadminLoginUrl = new URL('/access/superadmin', request.url);
+        superadminLoginUrl.searchParams.set('redirect', pathname);
+        return NextResponse.redirect(superadminLoginUrl);
       }
 
       // For all standard college dashboards (admin, faculty, student, clerk, warden) -> redirect to /login
