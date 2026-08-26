@@ -106,7 +106,7 @@ export default function Header({ title }: HeaderProps) {
   useEffect(() => {
     setMounted(true);
     fetchChatUnread();
-    const interval = setInterval(fetchChatUnread, 5000);
+    const interval = setInterval(fetchChatUnread, 30000);
 
     // 1. Theme initialization — Light mode active by default
     const savedTheme = localStorage.getItem('mederp_theme') as 'dark' | 'light' | null;

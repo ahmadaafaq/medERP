@@ -110,7 +110,7 @@ export function useNoticeGroups() {
 
   useEffect(() => {
     fetchGroups();
-  }, [fetchGroups]);
+  }, []); // Run on initial mount only, avoid continuous re-render loop
 
   return {
     groups,

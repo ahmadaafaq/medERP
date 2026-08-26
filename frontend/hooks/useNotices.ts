@@ -201,7 +201,7 @@ export function useNotices() {
   useEffect(() => {
     fetchNotices();
     fetchUnreadCount();
-  }, [fetchNotices, fetchUnreadCount]);
+  }, []); // Run on initial mount only, avoid continuous re-render loop
 
   return {
     notices,

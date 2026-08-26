@@ -388,7 +388,7 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
   // Initial group fetch
   useEffect(() => {
     fetchGroups();
-  }, [fetchGroups]);
+  }, []);
 
   // Polling for live updates every 4 seconds
   useEffect(() => {
