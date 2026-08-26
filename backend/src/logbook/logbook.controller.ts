@@ -81,9 +81,8 @@ export class LogbookController {
     @Query('search') search?: string,
     @Query('studentView') studentView?: string,
   ) {
-    const studentId = studentView === 'true' || user?.role === 'STUDENT'
-      ? (user?.profile?.id || user?.userId)
-      : undefined;
+    const studentUserId = user?.sub || user?.id || user?.userId;
+    const studentId = user?.profile?.id;
 
     return this.logbookService.getTopics(tenantSlug, {
       facultyId,
@@ -94,6 +93,7 @@ export class LogbookController {
       categoryId,
       search,
       studentId,
+      studentUserId: studentView === 'true' || user?.role === 'STUDENT' ? studentUserId : undefined,
     });
   }
 

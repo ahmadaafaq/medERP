@@ -95,10 +95,10 @@ export default function PublishTopicModal({ isOpen, onClose, onSuccess }: Publis
           description: description.trim() || undefined,
           maxMarks: Number(maxMarks) || 100,
           submissionDeadline: submissionDeadline ? new Date(submissionDeadline).toISOString() : undefined,
-          courseId: courseId || undefined,
-          branchId: branchId || undefined,
-          batchId: batchId || undefined,
-          semesterId: semesterId || undefined,
+          courseId: courseId === 'all' ? null : (courseId || null),
+          branchId: branchId === 'all' ? null : (branchId || null),
+          batchId: batchId === 'all' ? null : (batchId || null),
+          semesterId: semesterId === 'all' ? null : (semesterId || null),
         }),
       });
 

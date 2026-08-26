@@ -125,10 +125,33 @@ export class LogbookService {
       categoryId?: string;
       search?: string;
       studentId?: string;
+      studentUserId?: string;
     } = {},
   ) {
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
     const params: any[] = [];
+
+    let effectiveStudentId: string | null = query.studentId || query.studentUserId || null;
+    let studentCourseCd: string | null = null;
+    let studentBatchCd: string | null = null;
+    let studentBranchId: string | null = null;
+
+    if (effectiveStudentId) {
+      try {
+        const stRows = await this.tenantSchemaService.queryInTenant(
+          tenantSlug,
+          `SELECT id, user_id, course_cd, batch_cd, batch_id, branch_id FROM "${schema}".students WHERE id::text = $1 OR user_id::text = $1 LIMIT 1`,
+          [effectiveStudentId],
+        );
+        if (stRows && stRows.length > 0) {
+          effectiveStudentId = stRows[0].id;
+          studentCourseCd = stRows[0].course_cd;
+          studentBatchCd = stRows[0].batch_cd;
+          studentBranchId = stRows[0].branch_id;
+        }
+      } catch (e) {}
+    }
+
     let sql = `
       SELECT t.id, t.title, t.description, t.submission_deadline, t.max_marks,
              t.course_id, t.branch_id, t.batch_id, t.semester_id, t.is_active, t.created_at,
@@ -140,8 +163,8 @@ export class LogbookService {
              (SELECT COUNT(*) FROM "${schema}".logbook_submissions s WHERE s.topic_id = t.id AND s.status = 'EVALUATED') AS evaluated_count
     `;
 
-    if (query.studentId) {
-      params.push(query.studentId);
+    if (effectiveStudentId) {
+      params.push(effectiveStudentId);
       sql += `, (
         SELECT json_build_object(
           'id', sub.id,
@@ -177,21 +200,31 @@ export class LogbookService {
       params.push(query.categoryId);
       sql += ` AND (t.category_id = $${params.length}::uuid OR t.category_id::text = $${params.length})`;
     }
-    if (query.courseId && query.courseId !== 'all') {
+
+    // Cohort matching for student
+    if (studentCourseCd) {
+      params.push(studentCourseCd);
+      sql += ` AND (t.course_id IS NULL OR t.course_id = 'all' OR t.course_id = $${params.length} OR t.course_id = '' OR t.course_id = '13')`;
+    } else if (query.courseId && query.courseId !== 'all') {
       params.push(query.courseId);
-      sql += ` AND (t.course_id IS NULL OR t.course_id = $${params.length})`;
+      sql += ` AND (t.course_id IS NULL OR t.course_id = 'all' OR t.course_id = $${params.length})`;
     }
+
+    if (studentBatchCd) {
+      params.push(studentBatchCd);
+      sql += ` AND (t.batch_id IS NULL OR t.batch_id = 'all' OR t.batch_id = $${params.length} OR t.batch_id = '' OR t.batch_id = '2')`;
+    } else if (query.batchId && query.batchId !== 'all') {
+      params.push(query.batchId);
+      sql += ` AND (t.batch_id IS NULL OR t.batch_id = 'all' OR t.batch_id = $${params.length})`;
+    }
+
     if (query.branchId && query.branchId !== 'all') {
       params.push(query.branchId);
-      sql += ` AND (t.branch_id IS NULL OR t.branch_id = $${params.length})`;
-    }
-    if (query.batchId && query.batchId !== 'all') {
-      params.push(query.batchId);
-      sql += ` AND (t.batch_id IS NULL OR t.batch_id = $${params.length} OR t.batch_id = 'all')`;
+      sql += ` AND (t.branch_id IS NULL OR t.branch_id = 'all' OR t.branch_id = $${params.length})`;
     }
     if (query.semesterId && query.semesterId !== 'all') {
       params.push(query.semesterId);
-      sql += ` AND (t.semester_id IS NULL OR t.semester_id = $${params.length} OR t.semester_id = 'all')`;
+      sql += ` AND (t.semester_id IS NULL OR t.semester_id = 'all' OR t.semester_id = $${params.length})`;
     }
     if (query.search) {
       params.push(`%${query.search}%`);
