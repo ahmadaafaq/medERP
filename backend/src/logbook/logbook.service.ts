@@ -471,13 +471,15 @@ export class LogbookService {
 
     return this.tenantSchemaService.queryInTenant(
       tenantSlug,
-      `SELECT p.*, f.name as guide_name, f.emp_id as faculty_code,
+      `SELECT DISTINCT ON (COALESCE(p.id::text, p.title))
+              p.*, f.name as guide_name, f.emp_id as faculty_code,
               cr.name as course_name,
-              (SELECT COUNT(*) FROM "${schema}".logbook_weekly_logs WHERE project_id = p.id OR (project_id IS NULL AND student_id = p.student_id)) as logs_count
+              (SELECT COUNT(*) FROM "${schema}".logbook_weekly_logs WHERE project_id = p.id OR (project_id IS NULL AND student_id = p.student_id)) as logs_count,
+              (SELECT COUNT(DISTINCT student_id) FROM "${schema}".logbook_weekly_logs WHERE project_id = p.id OR project_id IS NULL) as students_count
        FROM "${schema}".logbook_mini_projects p
        LEFT JOIN "${schema}".faculty f ON f.id::text = p.faculty_id::text
        LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = p.course_id::text OR cr.id::text = p.course_id::text)
-       ORDER BY p.created_at DESC`,
+       ORDER BY COALESCE(p.id::text, p.title), p.created_at DESC`,
     );
   }
 
@@ -498,12 +500,19 @@ export class LogbookService {
        FROM "${schema}".students st
        LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = st.course_cd::text)
        LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR (b.batch_cd::text = st.batch_cd::text AND b.course_cd::text = st.course_cd::text))
-       LEFT JOIN "${schema}".logbook_mini_projects p ON (p.student_id = st.id OR p.student_id IS NULL)
-       LEFT JOIN "${schema}".logbook_weekly_logs w ON w.student_id = st.id
+       LEFT JOIN "${schema}".logbook_mini_projects p ON (
+         (p.student_id = st.id OR p.student_id IS NULL)
+         AND ($1::text IS NULL OR p.id::text = $1 OR p.title ILIKE $1)
+       )
+       LEFT JOIN "${schema}".logbook_weekly_logs w ON (
+         w.student_id = st.id
+         AND ($1::text IS NULL OR w.project_id::text = $1 OR w.project_id IS NULL)
+       )
        GROUP BY st.id, st.name, st.rollno, st.registration_no, cr.name, b.name,
                 p.id, p.title, p.repository_url, p.live_demo_url, p.zip_submission_url,
                 p.is_locked, p.project_status, p.final_grade, p.final_percentage, p.guide_remarks, p.locked_at
        ORDER BY total_weeks_logged DESC, st.name ASC`,
+      [projectId || null],
     );
 
     const allLogs = await this.tenantSchemaService.queryInTenant(
@@ -511,7 +520,9 @@ export class LogbookService {
       `SELECT w.*, st.name as student_name, st.rollno
        FROM "${schema}".logbook_weekly_logs w
        LEFT JOIN "${schema}".students st ON st.id = w.student_id
+       WHERE ($1::text IS NULL OR w.project_id::text = $1 OR w.project_id IS NULL)
        ORDER BY w.week_number ASC, w.created_at ASC`,
+      [projectId || null],
     );
 
     const logsByStudent = new Map<string, any[]>();
@@ -521,12 +532,16 @@ export class LogbookService {
       logsByStudent.get(sId)!.push(log);
     }
 
-    return (students || []).map((s: any) => ({
-      ...s,
-      total_hours_spent: Number(s.total_hours_spent || 0),
-      total_weeks_logged: Number(s.total_weeks_logged || 0),
-      weekly_logs: logsByStudent.get(String(s.student_id)) || [],
-    }));
+    return (students || []).map((s: any) => {
+      const userLogs = logsByStudent.get(String(s.student_id)) || [];
+      const totalHours = userLogs.reduce((sum, l) => sum + Number(l.hours_spent || 0), 0);
+      return {
+        ...s,
+        total_hours_spent: totalHours > 0 ? totalHours : Number(s.total_hours_spent || 0),
+        total_weeks_logged: userLogs.length,
+        weekly_logs: userLogs,
+      };
+    });
   }
 
   async evaluateWeeklyLog(tenantSlug: string, logId: string, facultyId: string, dto: EvaluateWeeklyLogDto) {
@@ -726,8 +741,8 @@ export class LogbookService {
       `INSERT INTO "${schema}".logbook_weekly_logs (
         student_id, week_number, start_date, end_date, hours_spent,
         tasks_planned, tasks_accomplished, challenges_faced, next_week_goals,
-        attachment_url, attachment_name, status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'SUBMITTED') RETURNING *`,
+        attachment_url, attachment_name, project_id, status
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'SUBMITTED') RETURNING *`,
       [
         studentId,
         dto.weekNumber,
@@ -740,6 +755,7 @@ export class LogbookService {
         dto.nextWeekGoals || null,
         dto.attachmentUrl || null,
         dto.attachmentName || null,
+        dto.projectId || null,
       ],
     );
     return res[0];

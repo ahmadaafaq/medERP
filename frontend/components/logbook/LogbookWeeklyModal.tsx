@@ -23,9 +23,10 @@ interface Props {
   onSuccess: () => void;
   editItem?: WeeklyLogItem | null;
   defaultWeekNumber?: number;
+  projectId?: string;
 }
 
-export default function LogbookWeeklyModal({ isOpen, onClose, onSuccess, editItem, defaultWeekNumber = 1 }: Props) {
+export default function LogbookWeeklyModal({ isOpen, onClose, onSuccess, editItem, defaultWeekNumber = 1, projectId }: Props) {
   const [weekNumber, setWeekNumber] = useState<number>(defaultWeekNumber);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -94,6 +95,7 @@ export default function LogbookWeeklyModal({ isOpen, onClose, onSuccess, editIte
 
     const payload = {
       studentId: studentId || undefined,
+      projectId: projectId || undefined,
       weekNumber: Number(weekNumber),
       startDate: startDate || null,
       endDate: endDate || null,

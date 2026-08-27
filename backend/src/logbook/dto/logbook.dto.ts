@@ -235,6 +235,10 @@ export class CreateWeeklyLogDto {
   @IsOptional()
   studentId?: string;
 
+  @IsString()
+  @IsOptional()
+  projectId?: string;
+
   @IsNumber()
   @IsNotEmpty()
   weekNumber: number;
@@ -277,6 +281,9 @@ export class CreateWeeklyLogDto {
 }
 
 export class UpdateWeeklyLogDto {
+  @IsString()
+  @IsOptional()
+  projectId?: string;
   @IsNumber()
   @IsOptional()
   weekNumber?: number;

@@ -1578,6 +1578,7 @@ export default function StudentLogbookPage() {
         onSuccess={fetchAllData}
         editItem={editingWeekly}
         defaultWeekNumber={weeklyLogs.length + 1}
+        projectId={miniProject?.id}
       />
 
       <LogbookSeminarModal

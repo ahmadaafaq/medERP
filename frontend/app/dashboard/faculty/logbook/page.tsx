@@ -81,6 +81,8 @@ export default function FacultyLogbookPage() {
   const [topics, setTopics] = useState<TopicItem[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
   const [miniProject, setMiniProject] = useState<any | null>(null);
+  const [miniProjectsList, setMiniProjectsList] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [weeklyLogs, setWeeklyLogs] = useState<any[]>([]);
   const [applicants, setApplicants] = useState<ApplicantStudent[]>([]);
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantStudent | null>(null);
@@ -105,7 +107,7 @@ export default function FacultyLogbookPage() {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (targetProjId?: string) => {
     setLoading(true);
     const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
     const token = localStorage.getItem('token') || '';
@@ -130,12 +132,37 @@ export default function FacultyLogbookPage() {
         setSubmissions(Array.isArray(subJson.data) ? subJson.data : Array.isArray(subJson) ? subJson : []);
       }
 
-      // 3. Fetch mini project
+      // 3. Fetch mini project & all mini projects
+      let activeProjId = targetProjId || selectedProjectId;
+      let projectsArray: any[] = [];
+
+      const allProjRes = await fetch(`/api/v1/logbook/mini-projects/all?tenant=${slug}`, { headers });
+      if (allProjRes.ok) {
+        const allProjJson = await allProjRes.json();
+        const rawList = Array.isArray(allProjJson.data) ? allProjJson.data : Array.isArray(allProjJson) ? allProjJson : [];
+        projectsArray = rawList;
+        setMiniProjectsList(rawList);
+      }
+
       const projRes = await fetch(`/api/v1/logbook/mini-project?tenant=${slug}`, { headers });
       if (projRes.ok) {
         const projJson = await projRes.json();
         const rawProj = projJson?.data !== undefined ? projJson.data : projJson;
-        setMiniProject(rawProj && rawProj.title ? rawProj : null);
+        if (rawProj && rawProj.title) {
+          if (projectsArray.length === 0 || !projectsArray.some((p) => String(p.id) === String(rawProj.id))) {
+            projectsArray = [rawProj, ...projectsArray];
+            setMiniProjectsList(projectsArray);
+          }
+        }
+      }
+
+      const currentProj = activeProjId
+        ? projectsArray.find((p) => String(p.id) === String(activeProjId) || p.title === activeProjId) || projectsArray[0] || null
+        : projectsArray[0] || null;
+
+      setMiniProject(currentProj);
+      if (currentProj?.id && !activeProjId) {
+        setSelectedProjectId(currentProj.id);
       }
 
       // 4. Fetch all weekly logs
@@ -146,8 +173,9 @@ export default function FacultyLogbookPage() {
         setWeeklyLogs(Array.isArray(rawWeek) ? rawWeek : []);
       }
 
-      // 5. Fetch enrolled applicants & tracking
-      const appRes = await fetch(`/api/v1/logbook/mini-projects/applicants?tenant=${slug}`, { headers });
+      // 5. Fetch enrolled applicants & tracking for selected project
+      const projFilterParam = currentProj?.id ? `&projectId=${encodeURIComponent(currentProj.id)}` : '';
+      const appRes = await fetch(`/api/v1/logbook/mini-projects/applicants?tenant=${slug}${projFilterParam}`, { headers });
       if (appRes.ok) {
         const appJson = await appRes.json();
         const rawApp = appJson?.data !== undefined ? appJson.data : appJson;
@@ -164,6 +192,12 @@ export default function FacultyLogbookPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSelectProject = (proj: any) => {
+    setSelectedProjectId(proj.id);
+    setMiniProject(proj);
+    fetchData(proj.id);
   };
 
   const handleOpenEvaluate = (sub: SubmissionItem) => {
@@ -657,6 +691,58 @@ export default function FacultyLogbookPage() {
                 </div>
 
                 <div className="space-y-4">
+                  {/* Available Assigned Mini Projects Cards Grid */}
+                  {miniProjectsList.length > 0 && (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          Assigned Project Topics ({miniProjectsList.length}) — Select Card to View Students &amp; Evaluate Logs
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {miniProjectsList.map((proj) => {
+                          const isSelected = miniProject?.id === proj.id || (!miniProject && miniProjectsList[0]?.id === proj.id);
+                          return (
+                            <div
+                              key={proj.id || proj.title}
+                              onClick={() => handleSelectProject(proj)}
+                              className={`p-4 rounded-2xl cursor-pointer transition-all border ${
+                                isSelected
+                                  ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-[#5B4BFF] shadow-sm ring-2 ring-[#5B4BFF]/20'
+                                  : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700 hover:border-indigo-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <div className="flex items-center gap-2">
+                                  <FolderGit2 className={`w-4 h-4 ${isSelected ? 'text-[#5B4BFF]' : 'text-slate-400'}`} />
+                                  <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white line-clamp-1">
+                                    {proj.title}
+                                  </h4>
+                                </div>
+                                {isSelected && (
+                                  <span className="px-2 py-0.5 rounded-full bg-[#5B4BFF] text-white text-[10px] font-bold">
+                                    Active Card
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-500 line-clamp-2 mb-3">
+                                {proj.description || 'No description provided.'}
+                              </p>
+                              <div className="flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                  Max: {proj.max_marks || 100} Marks
+                                </span>
+                                <span className="font-bold text-[#2D2575] dark:text-indigo-300">
+                                  {proj.students_count !== undefined ? `${proj.students_count} Active Candidates` : 'Track Logs →'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {miniProject ? (
                     <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700 space-y-3">
                       <div className="flex items-center justify-between">
