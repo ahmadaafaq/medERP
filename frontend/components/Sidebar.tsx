@@ -5,11 +5,22 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 interface SidebarProps {
-  role: 'student' | 'faculty' | 'admin' | 'warden' | 'clerk' | 'superadmin' | 'owner';
+  role?: 'student' | 'faculty' | 'admin' | 'warden' | 'clerk' | 'superadmin' | 'owner';
 }
 
-export default function Sidebar({ role }: SidebarProps) {
+export default function Sidebar({ role: propRole }: SidebarProps) {
   const pathname = usePathname();
+  const role =
+    propRole ||
+    (pathname?.includes('/faculty')
+      ? 'faculty'
+      : pathname?.includes('/admin')
+      ? 'admin'
+      : pathname?.includes('/warden')
+      ? 'warden'
+      : pathname?.includes('/owner') || pathname?.includes('/superadmin')
+      ? 'owner'
+      : 'student');
   const [misReportsOpen, setMisReportsOpen] = useState(true);
   const [collegeDisplayName, setCollegeDisplayName] = useState<string>('SRMS CET, BAREILLY');
   const [enabledKeys, setEnabledKeys] = useState<string[] | null>(null);
@@ -122,7 +133,7 @@ export default function Sidebar({ role }: SidebarProps) {
       const tenantSlug = cleanSlug || 'srms-cet-bareilly';
 
       // Fetch enabled keys for this firm + role
-      fetch(`/api/firms/${tenantSlug}/role-permissions?role=${role.toUpperCase()}`)
+      fetch(`/api/firms/${tenantSlug}/role-permissions?role=${(role || 'student').toUpperCase()}`)
         .then(async (res) => {
           if (res.ok) {
             const json = await res.json();
@@ -191,6 +202,9 @@ export default function Sidebar({ role }: SidebarProps) {
 
   const isAllowed = (menuKey: string, routePath?: string) => {
     if (role === 'owner' || !enabledKeys || enabledKeys.length === 0) return true;
+    
+    // Always allow core logbook modules by default
+    if (menuKey.includes('logbook') || (routePath && routePath.includes('logbook'))) return true;
     
     // Normalize target menuKey
     const norm = menuKey.toLowerCase().trim().replace(/[\/\-\.]+/g, '_');
@@ -763,14 +777,12 @@ export default function Sidebar({ role }: SidebarProps) {
                 </Link>
               )}
 
-              {(isAllowed('faculty_logbook', '/dashboard/faculty/logbook') || isAllowed('logbook')) && (
-                <Link href="/dashboard/faculty/logbook" data-active={isLinkActive('/dashboard/faculty/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/logbook')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                  <span>LogBook Entry & Evaluation</span>
-                </Link>
-              )}
+              <Link href="/dashboard/faculty/logbook" data-active={isLinkActive('/dashboard/faculty/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/logbook')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>LogBook Entry &amp; Evaluation</span>
+              </Link>
 
               {isAllowed('faculty_lessons') && (
                 <Link href="/dashboard/faculty/lessons" className={getLinkClass('/dashboard/faculty/lessons')}>
@@ -1096,14 +1108,12 @@ export default function Sidebar({ role }: SidebarProps) {
                 </Link>
               )}
 
-              {(isAllowed('student_logbook', '/dashboard/student/logbook') || isAllowed('logbook')) && (
-                <Link href="/dashboard/student/logbook" data-active={isLinkActive('/dashboard/student/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/student/logbook')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                  <span>LogBook & Submissions</span>
-                </Link>
-              )}
+              <Link href="/dashboard/student/logbook" data-active={isLinkActive('/dashboard/student/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/student/logbook')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>LogBook &amp; Submissions</span>
+              </Link>
 
               {isAllowed('student_lessons') && (
                 <Link href="/dashboard/student/lessons" data-active={isLinkActive('/dashboard/student/lessons') ? 'true' : undefined} className={getLinkClass('/dashboard/student/lessons')}>

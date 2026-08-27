@@ -234,6 +234,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
         CREATE INDEX IF NOT EXISTS idx_license_keys_firm_id ON public.license_keys (firm_id);
         CREATE INDEX IF NOT EXISTS idx_license_keys_status ON public.license_keys (status);
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'uq_license_keys_firm_prefix'
+          ) THEN
+            ALTER TABLE public.license_keys ADD CONSTRAINT uq_license_keys_firm_prefix UNIQUE (firm_id, key_prefix);
+          END IF;
+        END $$;
       `);
 
       // 5. Create public.transactions
@@ -256,6 +263,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
         CREATE INDEX IF NOT EXISTS idx_transactions_firm_id ON public.transactions (firm_id);
         CREATE INDEX IF NOT EXISTS idx_transactions_ref ON public.transactions (transaction_ref);
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'uq_transactions_firm_ref'
+          ) THEN
+            ALTER TABLE public.transactions ADD CONSTRAINT uq_transactions_firm_ref UNIQUE (firm_id, transaction_ref);
+          END IF;
+        END $$;
       `);
 
       // 6. Create public.super_admins

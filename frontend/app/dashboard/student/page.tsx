@@ -470,11 +470,18 @@ export default function StudentDashboard() {
             {/* Quick Refresh / Action Buttons */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 z-10 w-full md:w-auto">
               <Link
+                href="/dashboard/student/logbook"
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md text-center transition-all flex items-center justify-center gap-1.5"
+              >
+                <span>📖</span>
+                <span>LogBook &amp; Tasks</span>
+              </Link>
+              <Link
                 href="/dashboard/student/library"
                 className="px-4 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/20 text-white text-xs font-bold shadow-md text-center transition-all flex items-center justify-center gap-1.5"
               >
                 <span>📚</span>
-                <span>E-Library (8,687 Books)</span>
+                <span>E-Library</span>
               </Link>
               <Link
                 href="/dashboard/student/attendance"

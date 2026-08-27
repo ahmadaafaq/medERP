@@ -5,8 +5,12 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: '/api/v1/:path*',
+        destination: 'http://127.0.0.1:3001/api/v1/:path*',
+      },
+      {
         source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001/api/v1'}/:path*`,
+        destination: 'http://127.0.0.1:3001/api/v1/:path*',
       },
     ];
   },
