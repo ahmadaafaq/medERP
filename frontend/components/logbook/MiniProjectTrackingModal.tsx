@@ -101,13 +101,16 @@ export default function MiniProjectTrackingModal({
       // Initialize weekly evaluation forms
       const initialEvals: any = {};
       applicant.weekly_logs.forEach((log) => {
+        const isAlreadySaved =
+          log.status === 'VERIFIED' ||
+          (log.guide_marks !== undefined && log.guide_marks !== null && Number(log.guide_marks) > 0);
         initialEvals[log.id] = {
-          marks: Number(log.guide_marks) || 20,
+          marks: log.guide_marks !== undefined && log.guide_marks !== null ? Number(log.guide_marks) : 20,
           remarks: log.guide_remarks || 'Milestone verified successfully. Code architecture meets specifications.',
           status: log.status || 'VERIFIED',
           signature: log.guide_signature || 'Dr. Vinay Kumar',
           saving: false,
-          saved: false,
+          saved: isAlreadySaved,
         };
       });
       setWeeklyEvaluations(initialEvals);
@@ -156,6 +159,16 @@ export default function MiniProjectTrackingModal({
       });
 
       if (!res.ok) throw new Error('Failed to save weekly evaluation');
+
+      // Update in-memory applicant object so the week tab mark badge and UI immediately update
+      const targetLog = applicant.weekly_logs.find((l) => l.id === logId);
+      if (targetLog) {
+        targetLog.guide_marks = Number(current.marks);
+        targetLog.guide_remarks = current.remarks;
+        targetLog.guide_signature = current.signature;
+        targetLog.status = current.status || 'VERIFIED';
+        targetLog.verified_at = new Date().toISOString();
+      }
 
       setWeeklyEvaluations((prev) => ({
         ...prev,
@@ -324,25 +337,35 @@ export default function MiniProjectTrackingModal({
         {/* Tab Navigation: Week 1, Week 2, ... and Final Grade */}
         <div className="px-6 pt-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2">
-            {applicant.weekly_logs.map((log) => (
-              <button
-                key={log.id}
-                onClick={() => setSelectedWeekTab(log.week_number)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                  selectedWeekTab === log.week_number
-                    ? 'bg-[#2D2575] text-white shadow-md shadow-[#2D2575]/20'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5 text-[#F36C21]" />
-                <span>Week {log.week_number}</span>
-                {log.guide_marks ? (
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px]">
-                    {log.guide_marks}m
-                  </span>
-                ) : null}
-              </button>
-            ))}
+            {applicant.weekly_logs.map((log) => {
+              const isVerified =
+                log.status === 'VERIFIED' ||
+                (log.guide_marks !== undefined && log.guide_marks !== null && Number(log.guide_marks) > 0) ||
+                weeklyEvaluations[log.id]?.saved;
+              return (
+                <button
+                  key={log.id}
+                  onClick={() => setSelectedWeekTab(log.week_number)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                    selectedWeekTab === log.week_number
+                      ? 'bg-[#2D2575] text-white shadow-md shadow-[#2D2575]/20'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  {isVerified ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Clock className="w-3.5 h-3.5 text-[#F36C21]" />
+                  )}
+                  <span>Week {log.week_number}</span>
+                  {log.guide_marks ? (
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                      {log.guide_marks}m
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
 
             <button
               onClick={() => setSelectedWeekTab('FINAL')}

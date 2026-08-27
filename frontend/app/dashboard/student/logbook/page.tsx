@@ -811,8 +811,27 @@ export default function StudentLogbookPage() {
                         </h2>
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        <span className="px-3.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        {/* Weekly milestones evaluated score badge */}
+                        {(() => {
+                          const evalLogs = weeklyLogs.filter((w) => w.status === 'VERIFIED' || (w.guide_marks !== undefined && w.guide_marks !== null && Number(w.guide_marks) > 0));
+                          const totalEvalMarks = evalLogs.reduce((acc, w) => acc + Number(w.guide_marks || 0), 0);
+                          if (evalLogs.length > 0) {
+                            return (
+                              <span className="px-3.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 shadow-sm">
+                                <Award className="w-4 h-4 text-[#F36C21]" />
+                                <span>Evaluated Score: {totalEvalMarks} Marks ({evalLogs.length}/{weeklyLogs.length} Wks)</span>
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="px-3.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold text-xs border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
+                              <Clock className="w-4 h-4 text-amber-500" />
+                              <span>Milestones In Progress</span>
+                            </span>
+                          );
+                        })()}
+                        <span className="px-3.5 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950 text-[#5B4BFF] font-bold text-xs border border-purple-200 dark:border-purple-800 flex items-center gap-1.5">
                           <CheckCircle2 className="w-4 h-4" /> Max Marks: {miniProject?.max_marks || 100}
                         </span>
                       </div>
@@ -940,46 +959,142 @@ export default function StudentLogbookPage() {
                         <p className="text-[11px] text-slate-500">Record your weekly progress so faculty can mentor and evaluate your milestones.</p>
                       </div>
                     ) : (
-                      <div className="space-y-3">
-                        {weeklyLogs.map((log) => (
-                          <div
-                            key={log.id}
-                            className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700 space-y-2"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="px-2.5 py-0.5 rounded-lg bg-[#2D2575] text-white font-bold text-xs">
-                                  Week {log.week_number}
-                                </span>
-                                <span className="text-xs text-slate-500">
-                                  {log.start_date ? new Date(log.start_date).toLocaleDateString() : 'Start'} –{' '}
-                                  {log.end_date ? new Date(log.end_date).toLocaleDateString() : 'End'}
-                                </span>
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-[#5B4BFF] font-bold">
-                                  {log.hours_spent}h Logged
-                                </span>
+                      <div className="space-y-4">
+                        {weeklyLogs.map((log) => {
+                          const isVerified =
+                            log.status === 'VERIFIED' ||
+                            (log.guide_marks !== undefined && log.guide_marks !== null && Number(log.guide_marks) > 0);
+
+                          return (
+                            <div
+                              key={log.id}
+                              className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3"
+                            >
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="px-3 py-1 rounded-xl bg-[#2D2575] text-white font-bold text-xs">
+                                    Week {log.week_number} Milestone
+                                  </span>
+                                  <span className="text-xs text-slate-500 font-medium">
+                                    {log.start_date ? new Date(log.start_date).toLocaleDateString() : 'Start'} –{' '}
+                                    {log.end_date ? new Date(log.end_date).toLocaleDateString() : 'End'}
+                                  </span>
+                                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-[#5B4BFF] font-bold border border-indigo-200/60 dark:border-indigo-800/60">
+                                    {log.hours_spent}h Logged
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {!isProjectLocked && (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          setEditingWeekly(log);
+                                          setIsWeeklyModalOpen(true);
+                                        }}
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-[#5B4BFF] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        title="Edit Log"
+                                      >
+                                        <Edit3 className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteItem('weekly-logs', log.id)}
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                                        title="Delete Log"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-1">
-                                <button onClick={() => { setEditingWeekly(log); setIsWeeklyModalOpen(true); }} className="p-1 text-slate-400 hover:text-[#5B4BFF]">
-                                  <Edit3 className="w-4 h-4" />
-                                </button>
-                                <button onClick={() => handleDeleteItem('weekly-logs', log.id)} className="p-1 text-slate-400 hover:text-red-500">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 space-y-1">
+                                  <span className="font-bold text-slate-700 dark:text-slate-300 block uppercase text-[10px] tracking-wider">
+                                    Planned Engineering Tasks:
+                                  </span>
+                                  <span className="text-slate-600 dark:text-slate-300 leading-relaxed block whitespace-pre-wrap">
+                                    {log.tasks_planned}
+                                  </span>
+                                </div>
+                                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 space-y-1">
+                                  <span className="font-bold text-emerald-700 dark:text-emerald-400 block uppercase text-[10px] tracking-wider">
+                                    Actual Accomplishments & Deliverables:
+                                  </span>
+                                  <span className="text-slate-600 dark:text-slate-300 leading-relaxed block whitespace-pre-wrap">
+                                    {log.tasks_accomplished}
+                                  </span>
+                                </div>
                               </div>
+
+                              {(log.challenges_faced || log.next_week_goals) && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                                  {log.challenges_faced && (
+                                    <div className="p-2.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/60 text-amber-900 dark:text-amber-200 space-y-0.5">
+                                      <span className="font-bold text-[10px] uppercase text-amber-700 block">Blockers / Challenges:</span>
+                                      <span>{log.challenges_faced}</span>
+                                    </div>
+                                  )}
+                                  {log.next_week_goals && (
+                                    <div className="p-2.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/60 text-indigo-900 dark:text-indigo-200 space-y-0.5">
+                                      <span className="font-bold text-[10px] uppercase text-indigo-700 block">Next Week Targets:</span>
+                                      <span>{log.next_week_goals}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Prominent Faculty Guide Evaluation & Remarks Ledger */}
+                              {isVerified ? (
+                                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50/90 via-teal-50/80 to-emerald-50/90 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-emerald-950/40 border border-emerald-300 dark:border-emerald-700/80 space-y-2.5 shadow-sm">
+                                  <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-emerald-200/70 dark:border-emerald-800/70">
+                                    <div className="flex items-center gap-2 text-xs font-black text-emerald-900 dark:text-emerald-200 uppercase tracking-wider">
+                                      <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                      <span>Faculty Milestone Evaluation &amp; Marks Entry</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="px-3 py-1 rounded-full bg-emerald-600 text-white font-black text-xs shadow-sm">
+                                        Marks: {log.guide_marks ?? 20} / 25 Awarded
+                                      </span>
+                                      <span className="px-2.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 font-bold text-[11px] border border-emerald-300 dark:border-emerald-700">
+                                        ✓ {log.status || 'VERIFIED'}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed bg-white/70 dark:bg-slate-900/60 p-3 rounded-lg border border-emerald-200/50 dark:border-emerald-800/50">
+                                    <span className="font-bold text-emerald-900 dark:text-emerald-300">Faculty Guide Feedback: </span>
+                                    <span className="italic text-slate-700 dark:text-slate-300">
+                                      &ldquo;{log.guide_remarks || 'Milestone verified successfully. Code architecture meets specifications.'}&rdquo;
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+                                    <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                                      <Award className="w-3.5 h-3.5 text-[#F36C21]" />
+                                      <span>Evaluator: {log.guide_signature || 'Dr. Vinay Kumar (Faculty Guide)'}</span>
+                                    </div>
+                                    {log.verified_at && (
+                                      <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                                        Verified on {new Date(log.verified_at).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="px-3.5 py-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/60 flex items-center justify-between text-xs text-amber-800 dark:text-amber-300">
+                                  <div className="flex items-center gap-2 font-semibold">
+                                    <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                                    <span>Milestone Submitted • Awaiting Faculty Review &amp; Marks Entry</span>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[10px] font-bold">
+                                    PENDING FACULTY REVIEW
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                              <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-                                <span className="font-bold text-slate-700 dark:text-slate-300">Planned: </span>
-                                <span className="text-slate-600 dark:text-slate-400">{log.tasks_planned}</span>
-                              </div>
-                              <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-                                <span className="font-bold text-slate-700 dark:text-slate-300">Accomplished: </span>
-                                <span className="text-slate-600 dark:text-slate-400">{log.tasks_accomplished}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                     </div>

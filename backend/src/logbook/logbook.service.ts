@@ -392,7 +392,7 @@ export class LogbookService {
        FROM "${schema}".logbook_mini_projects p
        LEFT JOIN "${schema}".faculty f ON f.id::text = p.faculty_id::text
        WHERE ($1::text IS NULL OR p.student_id::text = $1 OR p.student_id IS NULL)
-       ORDER BY p.updated_at DESC LIMIT 1`,
+       ORDER BY (CASE WHEN p.student_id::text = $1 THEN 0 ELSE 1 END), p.updated_at DESC LIMIT 1`,
       [studentId],
     );
 
@@ -589,17 +589,16 @@ export class LogbookService {
     await this.tenantSchemaService.queryInTenant(
       tenantSlug,
       `UPDATE "${schema}".logbook_mini_projects
-       SET final_grade = $2,
-           final_percentage = $3,
-           guide_remarks = $4,
-           guide_signature = $5,
+       SET final_grade = $1,
+           final_percentage = $2,
+           guide_remarks = $3,
+           guide_signature = $4,
            is_locked = TRUE,
            project_status = 'CLOSED',
            locked_at = NOW(),
            updated_at = NOW()
        WHERE student_id IS NULL`,
       [
-        studentId,
         dto.finalGrade,
         dto.finalPercentage,
         dto.finalRemarks,
