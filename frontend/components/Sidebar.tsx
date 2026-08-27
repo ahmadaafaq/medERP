@@ -292,9 +292,9 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       <aside 
         ref={asideRef}
         className={`
-          fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] text-[#11141A] dark:text-slate-100 p-4 h-full overflow-y-auto flex flex-col justify-between shrink-0 transition-transform duration-300 ease-in-out shadow-2xl border-r border-[#E5E8ED] dark:border-slate-800
+          fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] text-[#11141A] dark:text-slate-100 p-4 h-screen overflow-y-auto flex flex-col justify-between shrink-0 transition-transform duration-300 ease-in-out shadow-2xl border-r border-[#E5E8ED] dark:border-slate-800
           pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1rem+env(safe-area-inset-bottom))] pl-[calc(1rem+env(safe-area-inset-left))]
-          md:static md:translate-x-0 md:w-64 md:h-screen md:sticky md:top-0 md:z-20 md:shadow-sm md:rounded-r-none md:p-4
+          md:translate-x-0 md:w-64 md:h-screen md:sticky md:top-0 md:z-30 md:shadow-sm md:rounded-r-none md:p-4 md:shrink-0
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
       >

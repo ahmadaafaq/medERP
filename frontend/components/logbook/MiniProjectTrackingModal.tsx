@@ -16,9 +16,12 @@ import {
   ShieldCheck,
   FileCode2,
   FileArchive,
+  FileText,
+  Eye,
   ChevronRight,
   Save,
 } from 'lucide-react';
+import DocumentPreviewModal from './DocumentPreviewModal';
 
 export interface ApplicantStudent {
   student_id: string;
@@ -32,6 +35,8 @@ export interface ApplicantStudent {
   repository_url?: string;
   live_demo_url?: string;
   zip_submission_url?: string;
+  documentation_url?: string;
+  documentation_name?: string;
   is_locked?: boolean;
   project_status?: string;
   final_grade?: string;
@@ -105,6 +110,7 @@ export default function MiniProjectTrackingModal({
   const [lockingProject, setLockingProject] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
   const [lockSuccess, setLockSuccess] = useState(false);
+  const [isPreviewDocModalOpen, setIsPreviewDocModalOpen] = useState(false);
 
   useEffect(() => {
     if (applicant) {
@@ -332,7 +338,17 @@ export default function MiniProjectTrackingModal({
               </a>
             )}
 
-            {applicant.zip_submission_url && (
+            {applicant.documentation_url ? (
+              <button
+                type="button"
+                onClick={() => setIsPreviewDocModalOpen(true)}
+                className="px-3 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-[#5B4BFF] hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 font-bold flex items-center gap-1.5 transition-all shadow-sm"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Preview Documentation ({applicant.documentation_name || 'Report'})</span>
+                <Eye className="w-3 h-3 ml-0.5" />
+              </button>
+            ) : applicant.zip_submission_url ? (
               <a
                 href={applicant.zip_submission_url}
                 target="_blank"
@@ -342,7 +358,7 @@ export default function MiniProjectTrackingModal({
                 <FileArchive className="w-3.5 h-3.5" />
                 <span>Code Zip Archive</span>
               </a>
-            )}
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2">
@@ -749,6 +765,17 @@ export default function MiniProjectTrackingModal({
           )}
         </div>
       </div>
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={isPreviewDocModalOpen}
+        onClose={() => setIsPreviewDocModalOpen(false)}
+        title="Project Documentation & Architecture Report"
+        documentUrl={applicant.documentation_url || applicant.zip_submission_url}
+        documentName={applicant.documentation_name}
+        studentName={applicant.student_name}
+        projectTitle={applicant.project_title || projectTitle}
+      />
     </div>
   );
 }

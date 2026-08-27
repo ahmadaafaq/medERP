@@ -201,6 +201,53 @@ interface Branch {
   course_cd?: string;
 }
 
+const SRMS_STUDENT_COLLEGE_OPTIONS = [
+  { colg_cd: '1', label: '[Loc / Colg 1] SRMS CET, Bareilly (Engineering & Pharmacy)' },
+  { colg_cd: '2', label: '[Loc / Colg 2] SRMS CETR, Bareilly (Engineering & Tech)' },
+  { colg_cd: '3', label: '[Loc / Colg 3] SRMS CET, Lucknow / Unnao' },
+  { colg_cd: '4', label: '[Loc / Colg 4] SRMS College of Pharmacy, Bareilly' },
+  { colg_cd: '5', label: '[Loc / Colg 5] SRMS IBS, Lucknow (Management & Business)' },
+  { colg_cd: '6', label: '[Loc / Colg 6] SRMS College of Nursing & Paramedical' },
+  { colg_cd: '11', label: '[Loc / Colg 11] SRMS Institute of Medical Sciences (IMS)' },
+];
+
+const SRMS_STUDENT_COURSE_OPTIONS = [
+  { course_cd: '2', label: '[Course 2] B.Tech / B.Pharm' },
+  { course_cd: '1', label: '[Course 1] B.Tech (Core Branches)' },
+  { course_cd: '13', label: '[Course 13] BCA (Computer Applications)' },
+  { course_cd: '31', label: '[Course 31] BBA (Business Administration)' },
+  { course_cd: '3', label: '[Course 3] MCA (Master of Computer Applications)' },
+  { course_cd: '4', label: '[Course 4] MBA (Management Studies)' },
+  { course_cd: '5', label: '[Course 5] M.Tech' },
+  { course_cd: '6', label: '[Course 6] M.Pharm' },
+  { course_cd: '21', label: '[Course 21] M.Pharm (Specialized Pharmaceutics)' },
+];
+
+const SRMS_STUDENT_BATCH_OPTIONS = [
+  { batch_cd: "'18'", label: "Batch 2025 (Code '18')" },
+  { batch_cd: "'17'", label: "Batch 2024 (Code '17')" },
+  { batch_cd: "'16'", label: "Batch 2023 (Code '16')" },
+  { batch_cd: "'15'", label: "Batch 2022 (Code '15')" },
+  { batch_cd: "'14'", label: "Batch 2021 (Code '14')" },
+];
+
+const SRMS_STUDENT_BRANCH_OPTIONS = [
+  { branch_cd: "'1'", label: "Branch 1 (CS / Core / Pharmaceutics)" },
+  { branch_cd: "'2'", label: "Branch 2 (IT / Pharmacology)" },
+  { branch_cd: "'3'", label: "Branch 3 (EC / Chemistry)" },
+  { branch_cd: "'4'", label: "Branch 4 (EE / Pharmacognosy)" },
+  { branch_cd: "'5'", label: "Branch 5 (EN / QA)" },
+  { branch_cd: "'6'", label: "Branch 6 (ME)" },
+  { branch_cd: "'7'", label: "Branch 7 (AI & ML)" },
+];
+
+const SRMS_STUDENT_SESSION_OPTIONS = [
+  { session_cd: '16', label: 'Session 2026-2027 (Code 16)' },
+  { session_cd: '15', label: 'Session 2025-2026 (Code 15)' },
+  { session_cd: '14', label: 'Session 2024-2025 (Code 14)' },
+  { session_cd: '13', label: 'Session 2023-2024 (Code 13)' },
+];
+
 const API_BASE = 'http://localhost:3001/api/v1';
 
 
@@ -244,6 +291,27 @@ export default function StudentMasterPage() {
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // SRMS Live Student Sync Modal States
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncColgCd, setSyncColgCd] = useState('1');
+  const [syncCourseCd, setSyncCourseCd] = useState('2');
+  const [syncBatchCd, setSyncBatchCd] = useState("'18'");
+  const [syncBranchCd, setSyncBranchCd] = useState("'1'");
+  const [syncSessionCd, setSyncSessionCd] = useState('16');
+  const [syncType, setSyncType] = useState('');
+  const [syncArrstdsts, setSyncArrstdsts] = useState('0');
+  const [syncEndpointUrl, setSyncEndpointUrl] = useState('https://myportal.srms.ac.in/SRMSERP/FeeAdmin/GetColgWiseStudDt2');
+  const [isEditingEndpoint, setIsEditingEndpoint] = useState(false);
+  const [customPayloadText, setCustomPayloadText] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    success: boolean;
+    count: number;
+    message: string;
+    data?: any[];
+  } | null>(null);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [editModeId, setEditModeId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1232,6 +1300,113 @@ export default function StudentMasterPage() {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
+  const buildCurrentPayload = (
+    colg = syncColgCd,
+    crs = syncCourseCd,
+    bat = syncBatchCd,
+    br = syncBranchCd,
+    sess = syncSessionCd,
+    typ = syncType,
+    arr = syncArrstdsts
+  ) => {
+    return {
+      colgcd: colg,
+      coursecd: crs,
+      batchcd: bat.startsWith("'") ? bat : `'${bat}'`,
+      branchcd: br.startsWith("'") ? br : `'${br}'`,
+      type: typ,
+      sessioncd: sess,
+      arrstdsts: arr,
+    };
+  };
+
+  const handleOpenSyncModal = () => {
+    setIsSyncModalOpen(true);
+    setSyncResult(null);
+    const payloadObj = buildCurrentPayload(syncColgCd, syncCourseCd, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
+    const formatted = JSON.stringify(payloadObj, null, 2);
+    setCustomPayloadText(formatted);
+
+    // Sync data from SRMS on popup load
+    setTimeout(() => {
+      handleExecuteStudentSync(syncColgCd, syncCourseCd, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts, syncEndpointUrl, formatted);
+    }, 120);
+  };
+
+  const handleExecuteStudentSync = async (
+    colg = syncColgCd,
+    crs = syncCourseCd,
+    bat = syncBatchCd,
+    br = syncBranchCd,
+    sess = syncSessionCd,
+    typ = syncType,
+    arr = syncArrstdsts,
+    endpoint = syncEndpointUrl,
+    customPayloadStr = customPayloadText
+  ) => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const activeCollege = colleges.find(c => c.code === colg || c.colg_cd === colg || c.id === colg);
+      const tenantSlug = activeCollege?.slug || getActiveTenantSlug() || 'srms-cet-bareilly';
+
+      let parsedPayload: any = null;
+      if (isEditingEndpoint && customPayloadStr.trim()) {
+        try {
+          parsedPayload = JSON.parse(customPayloadStr);
+        } catch (e: any) {
+          alert('Invalid JSON syntax in custom payload. Please check your JSON format.');
+          setSyncing(false);
+          return;
+        }
+      } else {
+        parsedPayload = buildCurrentPayload(colg, crs, bat, br, sess, typ, arr);
+      }
+
+      const res = await fetch('/api/srms/students/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpointUrl: endpoint,
+          customPayload: parsedPayload,
+          colgcd: colg,
+          coursecd: crs,
+          batchcd: bat,
+          branchcd: br,
+          sessioncd: sess,
+          type: typ,
+          arrstdsts: arr,
+          tenant: tenantSlug,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setSyncResult({
+          success: true,
+          count: json.count || 0,
+          message: json.message || `Successfully synchronized ${json.count || 0} student records from SRMS ERP portal.`,
+          data: json.data || [],
+        });
+        await fetchStudents();
+      } else {
+        setSyncResult({
+          success: false,
+          count: 0,
+          message: json.error || json.message || 'No records returned from SRMS portal for the selected criteria.',
+        });
+      }
+    } catch (err: any) {
+      setSyncResult({
+        success: false,
+        count: 0,
+        message: err?.message || 'Network communication failure with SRMS sync proxy.',
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleBulkLink = async () => {
     if (selectedStudentIds.length === 0) {
       alert('Please select at least one student from the table.');
@@ -1449,15 +1624,15 @@ export default function StudentMasterPage() {
   const paginatedStudents = filteredStudents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
-    <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200">
+    <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200 overflow-x-hidden">
       <Sidebar role="admin" />
-      <main className="flex-1 overflow-y-auto pb-10">
+      <main className="flex-1 min-w-0 max-w-full overflow-y-auto overflow-x-hidden pb-10">
         <Header title="Student Directory & Enrolled Records" />
 
-        <div className="w-full px-4 sm:px-6 lg:px-8 mt-6">
+        <div className="w-full max-w-full px-3 sm:px-6 lg:px-8 mt-4 sm:mt-6">
           {/* Filtering Console */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all mb-8">
-            <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--color-ink-500)] mb-4 flex items-center justify-between">
+          <div className="p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all mb-6 sm:mb-8">
+            <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--color-ink-500)] mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <span>Search & Query Console</span>
               <span className="text-[10px] font-bold text-[var(--color-primary-700)] normal-case">
                 Showing {filteredStudents.length} of {students.length} Total Loaded Students
@@ -1764,6 +1939,15 @@ export default function StudentMasterPage() {
                   className="py-1.5 px-3 rounded-lg font-bold text-[11px] bg-[#F36C21] hover:bg-[#E05B10] text-white border border-[#F36C21] shadow-sm transition-all cursor-pointer"
                 >
                   Apply Filters
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenSyncModal}
+                  className="py-1.5 px-3.5 rounded-lg font-extrabold text-[11px] bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white border border-[#F36C21] shadow-md shadow-orange-500/20 flex items-center gap-1.5 shrink-0 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                  title="Live sync student enrollment from SRMS ERP Portal"
+                >
+                  <span className="text-sm">⚡</span>
+                  <span>Sync SRMS Portal</span>
                 </button>
                 <button
                   type="button"
@@ -3371,6 +3555,348 @@ export default function StudentMasterPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ─── MODAL FOR LIVE SYNC WITH SRMS ERP PORTAL ─── */}
+      {isSyncModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-3xl overflow-hidden shadow-2xl rounded-3xl bg-white dark:bg-[#1B1E28] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 flex flex-col max-h-[92vh]">
+
+            {/* Header Ribbon */}
+            <div className="bg-[#11141A] dark:bg-slate-900 text-white px-6 py-4.5 flex items-center justify-between border-b border-slate-800 shadow-md shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/20 text-[#F36C21] flex items-center justify-center text-xl border border-orange-500/30">
+                  ⚡
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-extrabold tracking-wide uppercase">
+                    SYNC STUDENTS WITH SRMS ERP PORTAL API
+                  </h2>
+                  <p className="text-[11px] text-white/80 font-medium">
+                    Fetch live student records from GetColgWiseStudDt2, auto-link photo URLs, and sync to PostgreSQL.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSyncModalOpen(false)}
+                className="p-2 rounded-xl bg-white/10 text-white/80 hover:text-white hover:bg-rose-500/80 transition-all cursor-pointer"
+                title="Close Sync Modal"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 overflow-y-auto">
+
+              {/* Endpoint Information & Editable Box */}
+              <div className="p-4 rounded-2xl bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200/80 dark:border-orange-900/50 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-orange-950 dark:text-orange-300 uppercase text-[10px] tracking-wider">
+                      API Endpoint Specifications
+                    </span>
+                    <span className="px-2 py-0.5 rounded font-mono text-[9px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold">
+                      POST Live Proxy
+                    </span>
+                  </div>
+
+                  {/* Pencil Edit Button on Corner */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isEditingEndpoint;
+                      setIsEditingEndpoint(next);
+                      if (next && !customPayloadText) {
+                        setCustomPayloadText(JSON.stringify(buildCurrentPayload(), null, 2));
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      isEditingEndpoint
+                        ? 'bg-[#F36C21] text-white shadow-sm'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:border-[#F36C21] hover:text-[#F36C21]'
+                    }`}
+                    title="Edit URL & Payload directly"
+                  >
+                    <span>✏️</span>
+                    <span>{isEditingEndpoint ? 'Lock / Done' : 'Edit URL & Payload'}</span>
+                  </button>
+                </div>
+
+                {/* URL and Payload display or edit mode */}
+                {isEditingEndpoint ? (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                        Endpoint URL
+                      </label>
+                      <input
+                        type="text"
+                        value={syncEndpointUrl}
+                        onChange={(e) => setSyncEndpointUrl(e.target.value)}
+                        className="w-full h-9 px-3 text-[11px] font-mono rounded-xl bg-white dark:bg-slate-900 border border-[#F36C21]/60 text-slate-900 dark:text-white focus:outline-none focus:border-[#F36C21]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                          Custom JSON Payload
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const standard = JSON.stringify(buildCurrentPayload(), null, 2);
+                            setCustomPayloadText(standard);
+                          }}
+                          className="text-[9px] text-[#F36C21] font-bold underline hover:text-[#E05C12]"
+                        >
+                          Reset to Standard Payload
+                        </button>
+                      </div>
+                      <textarea
+                        rows={5}
+                        value={customPayloadText}
+                        onChange={(e) => setCustomPayloadText(e.target.value)}
+                        className="w-full p-2.5 text-[11px] font-mono rounded-xl bg-white dark:bg-slate-900 border border-[#F36C21]/60 text-slate-900 dark:text-white focus:outline-none focus:border-[#F36C21]"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="font-mono text-[11px] text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
+                    <p className="text-orange-600 dark:text-orange-400 font-bold truncate">
+                      URL: <span className="text-slate-700 dark:text-slate-300 font-medium">{syncEndpointUrl}</span>
+                    </p>
+                    <p className="text-orange-600 dark:text-orange-400 font-bold break-all">
+                      Payload:{' '}
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        &#123; colgcd:&quot;{syncColgCd}&quot;, coursecd:&quot;{syncCourseCd}&quot;, batchcd:&quot;{syncBatchCd}&quot;, branchcd:&quot;{syncBranchCd}&quot;, type:&quot;{syncType}&quot;, sessioncd:&quot;{syncSessionCd}&quot;, arrstdsts:&quot;{syncArrstdsts}&quot; &#125;
+                      </span>
+                    </p>
+                  </div>
+                )}
+
+                {/* 4 Feature Badges */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
+                  <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
+                    <span className="block text-[9px] text-slate-400 uppercase font-black">Target API</span>
+                    <span className="font-bold text-[#5B4BFF] font-mono text-[10px]">GetColgWiseStudDt2</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
+                    <span className="block text-[9px] text-slate-400 uppercase font-black">Photo URLs</span>
+                    <span className="font-bold text-emerald-600">Auto Linked (.JPG)</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
+                    <span className="block text-[9px] text-slate-400 uppercase font-black">Name Casing</span>
+                    <span className="font-bold text-[#F36C21]">Title Case</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
+                    <span className="block text-[9px] text-slate-400 uppercase font-black">Storage</span>
+                    <span className="font-bold text-indigo-600">PostgreSQL</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Parameters Selection Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                {/* 1. Target College */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center justify-between">
+                    <span>1. Target Institution / College (colgcd) *</span>
+                    <span className="text-[9px] text-[#F36C21] font-bold">Live DB Schema Switch</span>
+                  </label>
+                  <select
+                    value={syncColgCd}
+                    onChange={(e) => {
+                      const nextColg = e.target.value;
+                      setSyncColgCd(nextColg);
+                      const updated = buildCurrentPayload(nextColg, syncCourseCd, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
+                      setCustomPayloadText(JSON.stringify(updated, null, 2));
+                      // Re-run sync on change
+                      handleExecuteStudentSync(nextColg, syncCourseCd, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts, syncEndpointUrl);
+                    }}
+                    disabled={syncing}
+                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    {SRMS_STUDENT_COLLEGE_OPTIONS.map((opt) => (
+                      <option key={opt.colg_cd} value={opt.colg_cd}>
+                        🏛️ {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Course */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                    2. Course Program (coursecd) *
+                  </label>
+                  <select
+                    value={syncCourseCd}
+                    onChange={(e) => {
+                      const nextCrs = e.target.value;
+                      setSyncCourseCd(nextCrs);
+                      const updated = buildCurrentPayload(syncColgCd, nextCrs, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
+                      setCustomPayloadText(JSON.stringify(updated, null, 2));
+                    }}
+                    disabled={syncing}
+                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    {SRMS_STUDENT_COURSE_OPTIONS.map((opt) => (
+                      <option key={opt.course_cd} value={opt.course_cd}>
+                        🎓 {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Batch */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                    3. Academic Batch (batchcd) *
+                  </label>
+                  <select
+                    value={syncBatchCd}
+                    onChange={(e) => {
+                      const nextBat = e.target.value;
+                      setSyncBatchCd(nextBat);
+                      const updated = buildCurrentPayload(syncColgCd, syncCourseCd, nextBat, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
+                      setCustomPayloadText(JSON.stringify(updated, null, 2));
+                    }}
+                    disabled={syncing}
+                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    {SRMS_STUDENT_BATCH_OPTIONS.map((opt) => (
+                      <option key={opt.batch_cd} value={opt.batch_cd}>
+                        📅 {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 4. Branch */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                    4. Department Branch (branchcd) *
+                  </label>
+                  <select
+                    value={syncBranchCd}
+                    onChange={(e) => {
+                      const nextBr = e.target.value;
+                      setSyncBranchCd(nextBr);
+                      const updated = buildCurrentPayload(syncColgCd, syncCourseCd, syncBatchCd, nextBr, syncSessionCd, syncType, syncArrstdsts);
+                      setCustomPayloadText(JSON.stringify(updated, null, 2));
+                    }}
+                    disabled={syncing}
+                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    {SRMS_STUDENT_BRANCH_OPTIONS.map((opt) => (
+                      <option key={opt.branch_cd} value={opt.branch_cd}>
+                        🏢 {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 5. Session */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                    5. Academic Session (sessioncd) *
+                  </label>
+                  <select
+                    value={syncSessionCd}
+                    onChange={(e) => {
+                      const nextSess = e.target.value;
+                      setSyncSessionCd(nextSess);
+                      const updated = buildCurrentPayload(syncColgCd, syncCourseCd, syncBatchCd, syncBranchCd, nextSess, syncType, syncArrstdsts);
+                      setCustomPayloadText(JSON.stringify(updated, null, 2));
+                    }}
+                    disabled={syncing}
+                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    {SRMS_STUDENT_SESSION_OPTIONS.map((opt) => (
+                      <option key={opt.session_cd} value={opt.session_cd}>
+                        ⏳ {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+              </div>
+
+              {/* Sync Result Summary Banner if completed */}
+              {syncResult && (
+                <div
+                  className={`p-4.5 rounded-2xl border ${
+                    syncResult.success ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-rose-500/10 border-rose-500/30'
+                  } space-y-2 animate-fade-in`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{syncResult.success ? '🎉' : '❌'}</span>
+                    <h4
+                      className={`text-xs font-black ${
+                        syncResult.success ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                      }`}
+                    >
+                      {syncResult.message}
+                    </h4>
+                  </div>
+                  {syncResult.success && (
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
+                      <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+                        <span className="block text-[9px] text-slate-400 uppercase font-black">Students Synced</span>
+                        <span className="font-black text-slate-900 dark:text-white text-sm">{syncResult.count}</span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+                        <span className="block text-[9px] text-slate-400 uppercase font-black">Photo URLs Linked</span>
+                        <span className="font-black text-emerald-600 text-sm">{syncResult.count}</span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+                        <span className="block text-[9px] text-slate-400 uppercase font-black">Database Target</span>
+                        <span className="font-black text-[#F36C21] text-sm">PostgreSQL</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Footer Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E7EAF3] dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsSyncModalOpen(false)}
+                  disabled={syncing}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs border border-slate-300 dark:border-slate-700 transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExecuteStudentSync()}
+                  disabled={syncing}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white font-extrabold text-xs shadow-lg shadow-orange-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {syncing ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-1 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Syncing from SRMS Portal...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>⚡</span>
+                      <span>Start Sync Process</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Slide-in animation */}

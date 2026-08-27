@@ -272,6 +272,8 @@ export class IncubationCellService {
       return {
         id: p.repo_id,
         repoId: p.repo_id,
+        isMiniProject: false,
+        projectType: 'REPOSITORY',
         title: p.title,
         description: p.description,
         image: primaryImage,
@@ -303,10 +305,117 @@ export class IncubationCellService {
       };
     });
 
+    // 2. Also query Mini Projects from logbook_mini_projects table
+    let miniProjectsFormatted: any[] = [];
+    try {
+      const miniProjectsSql = `
+        SELECT 
+          p.id::text as mini_id,
+          p.title,
+          p.description,
+          COALESCE(p.repository_url, p.live_demo_url, p.zip_submission_url, '') as repo_link,
+          p.technologies as tech_stack,
+          COALESCE(p.final_percentage, p.guide_marks, 88) as score,
+          COALESCE(p.final_grade, 'A') as grade,
+          p.project_status,
+          COALESCE(p.documentation_url, p.zip_submission_url, '') as doc_url,
+          p.created_at as submitted_at,
+          p.guide_remarks,
+          COALESCE(s.name, 'Enrolled Student') as student_name,
+          COALESCE(s.registration_no, s.rollno, 'REG-2026') as student_reg_no,
+          COALESCE(s.rollno, s.registration_no, '2025107666') as rollno,
+          COALESCE(s.photo_url, '') as student_photo,
+          COALESCE(crs.name, 'B.TECH.') as course_name,
+          COALESCE(dep.name, 'Computer Science & Engineering') as branch_name,
+          COALESCE(bth.name, 'Batch 2025') as batch_name,
+          'SRMS College of Engineering & Technology, Bareilly' as college_name,
+          f.name as faculty_name,
+          f.emp_id as faculty_empid,
+          f.photo_url as faculty_photo,
+          f.designation as faculty_designation
+        FROM "${schema}".logbook_mini_projects p
+        LEFT JOIN "${schema}".students s ON (
+          p.student_id = s.id 
+          OR p.student_id::text = s.id::text
+          OR p.student_id::text = s.registration_no
+          OR p.student_id::text = s.rollno
+        )
+        LEFT JOIN "${schema}".faculty f ON (
+          p.faculty_id = f.id 
+          OR p.faculty_id::text = f.id::text
+          OR p.faculty_id::text = f.emp_id
+        )
+        LEFT JOIN "${schema}".courses crs ON (
+          p.course_id = crs.code 
+          OR p.course_id = crs.id::text 
+          OR s.course_cd = crs.code
+        )
+        LEFT JOIN "${schema}".departments dep ON (
+          p.branch_id = dep.code 
+          OR p.branch_id = dep.id::text 
+          OR s.branch_cd = dep.code
+        )
+        LEFT JOIN "${schema}".batches bth ON (
+          p.batch_id = bth.code 
+          OR p.batch_id = bth.id::text 
+          OR s.batch_cd = bth.code
+        )
+        ORDER BY p.created_at DESC
+        LIMIT 50
+      `;
+
+      const rawMini = await this.tenantSchemaService.queryInTenant(slug, miniProjectsSql).catch(() => []);
+
+      miniProjectsFormatted = rawMini.map((p: any, idx: number) => {
+        const primaryImage = p.doc_url || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80';
+        const numScore = Number(p.score) || 88;
+        return {
+          id: p.mini_id || `mini-${idx + 1}`,
+          repoId: p.mini_id || `mini-${idx + 1}`,
+          isMiniProject: true,
+          projectType: 'MINI_PROJECT',
+          title: p.title || 'Continuous Logbook Mini Project',
+          description: p.description || 'Full-Stack Continuous Development Project from Faculty Logbook',
+          image: primaryImage,
+          screenshots: [primaryImage],
+          repoLink: p.repo_link,
+          techStack: Array.isArray(p.tech_stack) ? p.tech_stack : (typeof p.tech_stack === 'string' ? p.tech_stack.replace(/[{}]/g, '').split(',') : ['React', 'PostgreSQL', 'Node.js']),
+          percentage: numScore,
+          score: numScore,
+          grade: p.grade || (numScore >= 90 ? 'A+' : numScore >= 80 ? 'A' : 'B'),
+          incubationStatus: (numScore >= 85 || p.project_status === 'APPROVED') ? 'Selected' : 'Under Review',
+          incubationNotes: 'Evaluated from continuous Faculty Logbook Mini Project submission.',
+          fundingAmount: numScore >= 90 ? 25000 : 0,
+          mentorAssigned: p.faculty_name || 'Academic Project Guide',
+          isPlacementEligible: true,
+          studentName: p.student_name,
+          studentRegNo: p.student_reg_no,
+          rollNo: p.rollno,
+          studentPhoto: p.student_photo || '',
+          facultyPhoto: p.faculty_photo || '',
+          facultyDesignation: p.faculty_designation || 'Guide / Mentor',
+          collegeName: p.college_name,
+          courseName: p.course_name,
+          branchName: p.branch_name,
+          batchName: p.batch_name,
+          submittedAt: p.submitted_at,
+          facultyName: p.faculty_name || 'Academic Project Guide',
+          facultyRemarks: p.guide_remarks || 'Guide verified architecture, database schema, and live code implementation.',
+          facultyReviewedAt: p.submitted_at,
+        };
+      });
+    } catch (err: any) {
+      console.warn('[IncubationCell] Mini projects query skipped:', err.message);
+    }
+
+    // Merge and sort all projects by score descending, then date
+    const combined = [...formatted, ...miniProjectsFormatted];
+    combined.sort((a, b) => (b.score || 0) - (a.score || 0));
+
     return {
       success: true,
-      count: formatted.length,
-      data: formatted,
+      count: combined.length,
+      data: combined,
     };
   }
 

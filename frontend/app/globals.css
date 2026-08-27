@@ -596,3 +596,58 @@ html.dark .text-\[\#1E1B4B\] {
   box-shadow: 0 4px 14px rgba(243, 108, 33, 0.25) !important;
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVENESS & TOUCH OPTIMIZATIONS
+   ══════════════════════════════════════════════════════════════════ */
+html {
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+  overflow-x: clip;
+}
+
+body {
+  overflow-x: clip;
+  width: 100%;
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Responsive Table Scroll & Momentum Touch */
+.table-responsive,
+.responsive-table-scroll,
+.datatable-wrapper,
+.premium-table-wrapper {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 768px) {
+  button, a, input, select, textarea {
+    touch-action: manipulation;
+  }
+  
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Compact padding for cards and tables on small devices */
+  .mobile-card-compact {
+    padding: 1rem !important;
+    border-radius: 1rem !important;
+  }
+
+  /* Responsive Modal Constraints */
+  .modal-dialog-responsive {
+    max-width: 95vw !important;
+    max-height: 92vh !important;
+    margin: 0.5rem auto !important;
+    border-radius: 1.25rem !important;
+  }
+}
+

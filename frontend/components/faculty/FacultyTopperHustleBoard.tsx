@@ -22,6 +22,13 @@ interface TopperStudent {
   isIncubationSelected: boolean;
   incubationStatus?: string;
   fundingAmount?: number;
+  hasMiniProject?: boolean;
+  miniProjectsCovered?: number;
+  miniProjectTitle?: string;
+  miniProjectStatus?: string;
+  miniProjectGrade?: string;
+  miniProjectScore?: number;
+  miniProjectProgress?: string;
   isChatActive: boolean;
   compositeScore: number;
   tier: string;
@@ -30,7 +37,7 @@ interface TopperStudent {
 }
 
 export default function FacultyTopperHustleBoard() {
-  const [filterMode, setFilterMode] = useState<'all' | 'incubation' | 'project'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'incubation' | 'project' | 'mini_project'>('all');
   const [students, setStudents] = useState<TopperStudent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -51,7 +58,17 @@ export default function FacultyTopperHustleBoard() {
         if (res && res.ok) {
           const json = await res.json();
           const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
-          setStudents(list);
+          const seen = new Set<string>();
+          const uniqueToppers: TopperStudent[] = [];
+          for (const s of list) {
+            const key = s.rollNo || s.regNo || s.id || s.name;
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueToppers.push(s);
+            }
+          }
+          // Re-rank 1..N
+          setStudents(uniqueToppers.map((s, idx) => ({ ...s, rank: idx + 1 })));
         } else {
           setStudents([]);
         }
@@ -68,73 +85,90 @@ export default function FacultyTopperHustleBoard() {
   const filteredStudents = students.filter((s) => {
     if (filterMode === 'incubation') return s.isIncubationSelected;
     if (filterMode === 'project') return s.projectScorePct >= 80;
+    if (filterMode === 'mini_project') return Boolean(s.hasMiniProject && (s.miniProjectsCovered ?? 0) > 0);
     return true;
   });
+
+  const miniProjectsActiveCount = students.filter(s => s.hasMiniProject && (s.miniProjectsCovered ?? 0) > 0).length;
 
   return (
     <div className="h-full flex flex-col justify-between bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md transition-all">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#E7EAF3] dark:border-slate-800 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F36C21] to-amber-500 flex items-center justify-center text-white text-lg shadow-md shadow-orange-500/20 shrink-0">
-            <Trophy className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-black text-[#F36C21] uppercase tracking-wide font-sans">
-                TOPPER & HUSTLE BOARD
-              </h3>
-              <span className="px-2 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/60 text-[#F36C21] text-[10px] font-black border border-orange-200 dark:border-orange-800 flex items-center gap-1">
-                <Flame className="w-3 h-3 text-[#F36C21]" />
-                <span>AI Merit Ranking</span>
-              </span>
+      <div className="pb-4 border-b border-[#E7EAF3] dark:border-slate-800 shrink-0 space-y-3">
+        {/* Title & Brand Row */}
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#F36C21] to-amber-500 flex items-center justify-center text-white text-lg shadow-md shadow-orange-500/20 shrink-0">
+              <Trophy className="w-5 h-5" />
             </div>
-            <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-semibold mt-0.5">
-              Attendance + Actual Theory Exam + Project Repo + Incubation + Chat Activity
-            </p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-black text-[#F36C21] uppercase tracking-wide font-sans truncate">
+                  TOPPER & HUSTLE BOARD
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/60 text-[#F36C21] text-[10px] font-black border border-orange-200 dark:border-orange-800 flex items-center gap-1 shrink-0">
+                  <Flame className="w-3 h-3 text-[#F36C21]" />
+                  <span>AI Merit</span>
+                </span>
+              </div>
+              <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-semibold mt-0.5 truncate">
+                Attendance + Theory Exam + Logbook Mini Project + Repos + Incubation
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Filter Pills Row - Fully Contained */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin w-full">
           <button
             onClick={() => setFilterMode('all')}
-            className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
               filterMode === 'all'
                 ? 'bg-[#5B4BFF] text-white shadow-xs'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
             }`}
           >
-            All Hustlers
+            All Hustlers ({students.length})
           </button>
           <button
-            onClick={() => setFilterMode('incubation')}
-            className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer flex items-center gap-1 ${
-              filterMode === 'incubation'
+            onClick={() => setFilterMode('mini_project')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
+              filterMode === 'mini_project'
                 ? 'bg-[#F36C21] text-white shadow-xs'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
             }`}
           >
-            <Rocket className="w-3 h-3" />
-            <span>Incubation</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Mini Project ({miniProjectsActiveCount})</span>
+          </button>
+          <button
+            onClick={() => setFilterMode('incubation')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
+              filterMode === 'incubation'
+                ? 'bg-amber-500 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            <Rocket className="w-3.5 h-3.5" />
+            <span>Incubation ({students.filter(s => s.isIncubationSelected).length})</span>
           </button>
           <button
             onClick={() => setFilterMode('project')}
-            className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
               filterMode === 'project'
                 ? 'bg-[#00C48C] text-white shadow-xs'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
             }`}
           >
-            <FolderGit2 className="w-3 h-3" />
-            <span>Projects</span>
+            <FolderGit2 className="w-3.5 h-3.5" />
+            <span>Repos ({students.filter(s => s.projectScorePct >= 80).length})</span>
           </button>
         </div>
       </div>
 
       {/* Formula Explainer Tag */}
       <div className="mt-3 px-3.5 py-1.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between text-[10px] text-indigo-900 dark:text-indigo-300 font-bold shrink-0">
-        <span>⚡ Metric: 25% Attd (Sync) + 30% Theory (Exam DB) + 20% Repo + 15% Incubation + 10% Discussion</span>
+        <span>⚡ Metric: 35% Theory + 15% Mini Project Logbook + 35% Repo + 10% Attd + Incubation</span>
         <span className="font-extrabold text-[#5B4BFF]">{students.length} Evaluated</span>
       </div>
 
@@ -148,10 +182,10 @@ export default function FacultyTopperHustleBoard() {
           <div className="flex flex-col items-center justify-center p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/60 dark:border-slate-800 my-auto">
             <span className="text-2xl mb-1.5">🎓</span>
             <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              No evaluated students found in this department yet
+              No evaluated students found in this category yet
             </p>
             <p className="text-[10px] text-slate-400 mt-0.5">
-              Rankings will populate automatically as marks and attendance are recorded.
+              Rankings will populate automatically as marks, logbook logs, and attendance are recorded.
             </p>
           </div>
         ) : (
@@ -248,6 +282,23 @@ export default function FacultyTopperHustleBoard() {
                   <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
                     📝 Theory Exam: {student.theoryScore !== null ? `${student.theoryScore}%` : 'Pending'}
                   </span>
+                  
+                  {/* Mini Project Logbook Status & Progress */}
+                  {student.hasMiniProject ? (
+                    <span 
+                      className="px-2 py-0.5 rounded-md bg-orange-500/10 text-orange-700 dark:text-orange-300 border border-orange-500/20 flex items-center gap-1 font-bold" 
+                      title={`${student.miniProjectTitle ? student.miniProjectTitle + ' — ' : ''}Logbook: ${student.miniProjectProgress || 'Active'}`}
+                    >
+                      🚀 Mini Project: <strong className="text-[#F36C21] font-black">{student.miniProjectStatus === 'APPROVED' ? 'Approved' : student.miniProjectStatus === 'COMPLETED' ? 'Completed' : 'In Progress'}</strong>
+                      {(student.miniProjectScore ?? 0) > 0 ? ` (${student.miniProjectScore}%)` : ''}
+                      {student.miniProjectProgress ? ` • ${student.miniProjectProgress}` : ''}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                      📖 Mini Project: In Progress (Logbook Active)
+                    </span>
+                  )}
+
                   {student.projectScorePct > 0 ? (
                     <span className="px-2 py-0.5 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20 truncate max-w-[240px]" title={student.projectTitle || ''}>
                       📂 Repo: Grade {student.projectGrade} ({student.projectScorePct}%)

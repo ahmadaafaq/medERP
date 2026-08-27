@@ -21,8 +21,10 @@ import {
 } from 'lucide-react';
 
 export interface IncubationItem {
-  id: number;
-  repoId?: number;
+  id: number | string;
+  repoId?: number | string;
+  isMiniProject?: boolean;
+  projectType?: 'MINI_PROJECT' | 'REPOSITORY' | string;
   title: string;
   description: string;
   image?: string;
@@ -64,7 +66,7 @@ export default function IncubationHustleBoardModal({
   projects,
 }: IncubationHustleBoardModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'TOP_3' | 'FUNDED' | 'INCUBATED' | 'SELECTED'>('ALL');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'TOP_3' | 'MINI_PROJECTS' | 'FUNDED' | 'INCUBATED' | 'SELECTED'>('ALL');
 
   // Aggregate by student to calculate total projects and highest score rank
   const rankedStudents = useMemo(() => {
@@ -79,11 +81,14 @@ export default function IncubationHustleBoardModal({
       projects: IncubationItem[];
       highestScore: number;
       totalProjects: number;
+      miniProjectsCount: number;
+      hasMiniProjects: boolean;
       totalFunding: number;
       topStatus: string;
       topGrade: string;
       topTitle: string;
       topDescription: string;
+      topIsMiniProject: boolean;
       mentorAssigned?: string;
       techStack: string[];
     }>();
@@ -102,11 +107,14 @@ export default function IncubationHustleBoardModal({
           projects: [],
           highestScore: p.score || p.percentage || 0,
           totalProjects: 0,
+          miniProjectsCount: 0,
+          hasMiniProjects: false,
           totalFunding: p.fundingAmount || 0,
           topStatus: p.incubationStatus || 'Selected',
           topGrade: p.grade || 'A',
           topTitle: p.title,
           topDescription: p.description,
+          topIsMiniProject: Boolean(p.isMiniProject || p.projectType === 'MINI_PROJECT'),
           mentorAssigned: p.mentorAssigned || p.facultyName,
           techStack: p.techStack || [],
         });
@@ -115,6 +123,10 @@ export default function IncubationHustleBoardModal({
       const entry = studentMap.get(key)!;
       entry.projects.push(p);
       entry.totalProjects += 1;
+      if (p.isMiniProject || p.projectType === 'MINI_PROJECT') {
+        entry.miniProjectsCount += 1;
+        entry.hasMiniProjects = true;
+      }
       if (p.fundingAmount) entry.totalFunding += p.fundingAmount;
       if ((p.score || p.percentage || 0) > entry.highestScore) {
         entry.highestScore = p.score || p.percentage || 0;
@@ -122,6 +134,7 @@ export default function IncubationHustleBoardModal({
         entry.topDescription = p.description;
         entry.topStatus = p.incubationStatus;
         entry.topGrade = p.grade || 'A';
+        entry.topIsMiniProject = Boolean(p.isMiniProject || p.projectType === 'MINI_PROJECT');
       }
       if (p.techStack && p.techStack.length > 0) {
         p.techStack.forEach((t) => {
@@ -157,6 +170,7 @@ export default function IncubationHustleBoardModal({
       if (!matchesSearch) return false;
 
       if (activeFilter === 'TOP_3') return st.rank <= 3;
+      if (activeFilter === 'MINI_PROJECTS') return st.hasMiniProjects;
       if (activeFilter === 'FUNDED') return st.topStatus === 'Funded' || st.totalFunding > 0;
       if (activeFilter === 'INCUBATED') return st.topStatus === 'Incubated';
       if (activeFilter === 'SELECTED') return st.topStatus === 'Selected' || st.topStatus === 'Incubated' || st.topStatus === 'Funded';
@@ -234,7 +248,7 @@ export default function IncubationHustleBoardModal({
         {/* Filter & Search Bar */}
         <div className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800">
           {/* Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-thin">
             <button
               type="button"
               onClick={() => setActiveFilter('ALL')}
@@ -256,6 +270,17 @@ export default function IncubationHustleBoardModal({
               }`}
             >
               👑 Top 3 Podium
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveFilter('MINI_PROJECTS')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                activeFilter === 'MINI_PROJECTS'
+                  ? 'bg-[#F36C21] text-white shadow-md shadow-orange-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              🚀 Mini Projects ({rankedStudents.filter(s => s.hasMiniProjects).length})
             </button>
             <button
               type="button"
@@ -372,13 +397,23 @@ export default function IncubationHustleBoardModal({
                           <span className="text-[9px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-[#4E5969] dark:text-slate-300 font-bold">
                             {st.courseName} • {st.batchName}
                           </span>
+                          {st.hasMiniProjects && (
+                            <span className="text-[9px] px-2 py-0.5 rounded-md bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold border border-orange-500/20">
+                              🚀 {st.miniProjectsCount} Mini Project{st.miniProjectsCount > 1 ? 's' : ''}
+                            </span>
+                          )}
                         </div>
 
                         {/* Top Venture Description */}
                         <div className="mt-1">
-                          <p className="text-xs font-black text-indigo-600 dark:text-indigo-300 flex items-center gap-1 truncate">
-                            <span>🚀</span>
+                          <p className="text-xs font-black text-indigo-600 dark:text-indigo-300 flex items-center gap-1.5 truncate">
+                            <span>{st.topIsMiniProject ? '🚀' : '💻'}</span>
                             <span className="truncate">{st.topTitle}</span>
+                            {st.topIsMiniProject && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] bg-[#F36C21]/15 text-[#F36C21] font-black border border-[#F36C21]/30">
+                                Mini Project
+                              </span>
+                            )}
                           </p>
                           <p className="text-[11px] text-[#4E5969] dark:text-slate-400 line-clamp-1 mt-0.5">
                             {st.topDescription}

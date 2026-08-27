@@ -9,6 +9,7 @@ import LogbookSeminarModal from '../../../../components/logbook/LogbookSeminarMo
 import LogbookTutorialModal from '../../../../components/logbook/LogbookTutorialModal';
 import LogbookTechActivityModal from '../../../../components/logbook/LogbookTechActivityModal';
 import LogbookSubmitWorkModal from '../../../../components/logbook/LogbookSubmitWorkModal';
+import DocumentPreviewModal from '../../../../components/logbook/DocumentPreviewModal';
 import {
   BookOpen,
   Calendar,
@@ -45,6 +46,7 @@ import {
   Tag,
   Download,
   Lock,
+  Eye,
 } from 'lucide-react';
 
 export default function StudentLogbookPage() {
@@ -64,9 +66,13 @@ export default function StudentLogbookPage() {
   const [finalEval, setFinalEval] = useState<any>(null);
   const [topics, setTopics] = useState<any[]>([]);
 
-  // Mini project edit state
+  // Mini project link editing state
   const [repoUrl, setRepoUrl] = useState('');
   const [liveUrl, setLiveUrl] = useState('');
+  const [docUrl, setDocUrl] = useState('');
+  const [docName, setDocName] = useState('');
+  const [docFileSize, setDocFileSize] = useState('');
+  const [isDocPreviewModalOpen, setIsDocPreviewModalOpen] = useState(false);
   const [savingProjectLinks, setSavingProjectLinks] = useState(false);
   const [projectLinksSaved, setProjectLinksSaved] = useState(false);
 
@@ -158,6 +164,8 @@ export default function StudentLogbookPage() {
         setMiniProject(projectData);
         setRepoUrl(projectData?.repository_url || '');
         setLiveUrl(projectData?.live_demo_url || '');
+        setDocUrl(projectData?.documentation_url || projectData?.zip_submission_url || '');
+        setDocName(projectData?.documentation_name || '');
       }
 
       // 4. Weekly Logs
@@ -222,6 +230,20 @@ export default function StudentLogbookPage() {
     }
   };
 
+  const handleDocFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      setDocName(selectedFile.name);
+      setDocFileSize(`${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`);
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        setDocUrl(reader.result as string);
+      };
+      reader.readAsDataURL(selectedFile);
+    }
+  };
+
   const handleSaveProjectLinks = async () => {
     if (!miniProject?.id) return;
     setSavingProjectLinks(true);
@@ -239,6 +261,8 @@ export default function StudentLogbookPage() {
         body: JSON.stringify({
           repositoryUrl: repoUrl,
           liveDemoUrl: liveUrl,
+          documentationUrl: docUrl || null,
+          documentationName: docName || null,
         }),
       });
       if (res.ok) {
@@ -872,9 +896,13 @@ export default function StudentLogbookPage() {
                       </div>
                     )}
 
-                    {/* Deliverable Repository & Live Demo URLs */}
+                    {/* Deliverable Repository, Live Demo & Project Documentation */}
                     <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
-                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Candidate Project Deliverable URLs</h4>
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Candidate Project Deliverable URLs &amp; Documentation</h4>
+                        <span className="text-[11px] text-slate-400">Documentation report is optional</span>
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
@@ -905,11 +933,99 @@ export default function StudentLogbookPage() {
                         </div>
                       </div>
 
+                      {/* Optional Project Documentation Upload / URL */}
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                              <FileText className="w-4 h-4 text-[#5B4BFF]" />
+                              <span>Project Documentation &amp; Architecture Report</span>
+                              <span className="text-[10px] font-normal text-slate-400 bg-slate-200/60 dark:bg-slate-700/60 px-2 py-0.5 rounded-md">Optional</span>
+                            </label>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              Attach your project report, SRS document, or architecture PDF for faculty review and evaluation.
+                            </p>
+                          </div>
+
+                          {docUrl && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsDocPreviewModalOpen(true)}
+                                className="px-3 py-1.5 rounded-xl bg-[#5B4BFF]/10 text-[#5B4BFF] hover:bg-[#5B4BFF]/20 font-bold text-xs flex items-center gap-1.5 border border-[#5B4BFF]/30 transition-all shadow-sm"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Preview Document</span>
+                              </button>
+                              {!isProjectLocked && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setDocUrl(''); setDocName(''); setDocFileSize(''); }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                                  title="Remove Document"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {docUrl ? (
+                          <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700/70 text-xs">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                                <FileCheck className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-slate-900 dark:text-white truncate">
+                                  {docName || 'Project_Documentation.pdf'}
+                                </div>
+                                <div className="text-[10px] text-slate-400 flex items-center gap-2">
+                                  {docFileSize && <span>Size: {docFileSize}</span>}
+                                  <span className="text-emerald-600 font-medium">✓ Document attached and ready to save</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : !isProjectLocked ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                            <label className="flex flex-col items-center justify-center p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 cursor-pointer transition-colors text-center space-y-1">
+                              <UploadCloud className="w-6 h-6 text-[#5B4BFF]" />
+                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Upload PDF / Word Report</span>
+                              <span className="text-[10px] text-slate-400">PDF, DOCX, ZIP or PNG up to 10MB</span>
+                              <input
+                                type="file"
+                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.zip"
+                                onChange={handleDocFileUpload}
+                                className="hidden"
+                              />
+                            </label>
+
+                            <div className="flex flex-col justify-center p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
+                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Or Paste Document URL</span>
+                              <input
+                                type="url"
+                                value={docUrl}
+                                onChange={(e) => {
+                                  setDocUrl(e.target.value);
+                                  if (e.target.value && !docName) setDocName('Online Project Document');
+                                }}
+                                placeholder="https://drive.google.com/... or https://docs.google.com/..."
+                                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-[#5B4BFF]"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-400 italic">No document attached before project lockdown.</div>
+                        )}
+                      </div>
+
                       <div className="flex items-center justify-between pt-2">
                         <div className="flex items-center gap-2">
                           {projectLinksSaved && (
                             <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
-                              <Check className="w-4 h-4" /> Links updated successfully!
+                              <Check className="w-4 h-4" /> Deliverables &amp; Documentation saved successfully!
                             </span>
                           )}
                         </div>
@@ -919,7 +1035,7 @@ export default function StudentLogbookPage() {
                             disabled={savingProjectLinks}
                             className="px-5 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white font-semibold text-xs shadow-md shadow-[#5B4BFF]/20 transition-all flex items-center gap-2 disabled:opacity-50"
                           >
-                            {savingProjectLinks ? 'Updating...' : <><CheckCircle2 className="w-4 h-4" /><span>Update Project Deliverables</span></>}
+                            {savingProjectLinks ? 'Updating...' : <><CheckCircle2 className="w-4 h-4" /><span>Update Project Deliverables &amp; Documentation</span></>}
                           </button>
                         )}
                       </div>
@@ -1607,6 +1723,17 @@ export default function StudentLogbookPage() {
         onClose={() => setIsSubmitModalOpen(false)}
         onSuccess={fetchAllData}
         topic={selectedTopic || topics[0]}
+      />
+
+      {/* Mini Project Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={isDocPreviewModalOpen}
+        onClose={() => setIsDocPreviewModalOpen(false)}
+        title="My Project Documentation & Report"
+        documentUrl={docUrl}
+        documentName={docName}
+        studentName={student.name}
+        projectTitle={miniProject?.title}
       />
     </div>
   );

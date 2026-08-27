@@ -13,6 +13,8 @@ import LibraryDashboardCard from '../../../components/library/LibraryDashboardCa
 import FacultyDailyPunchWidget from '../../../components/FacultyDailyPunchWidget';
 import FacultyLeaveLedgerWidget from '../../../components/FacultyLeaveLedgerWidget';
 import IncubationCellCard from '../../../components/incubation/IncubationCellCard';
+import FacultyBatchAttendanceAnalytics from '../../../components/faculty/FacultyBatchAttendanceAnalytics';
+import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperHustleBoard';
 
 interface CollegeKPIs {
   totalStudents: number;
@@ -874,11 +876,11 @@ export default function AdminDashboard() {
           </div>
 
           {/* 1–5. Top KPI Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 sm:gap-5">
             {/* Card 1: Total Enrolled Students */}
             <Link
               href="/dashboard/admin/student-master"
-              className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-5 shadow-sm hover:shadow-md hover:border-indigo-400 dark:hover:border-indigo-600 transition-all group cursor-pointer block"
+              className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-4 sm:p-5 shadow-sm hover:shadow-md hover:border-indigo-400 dark:hover:border-indigo-600 transition-all group cursor-pointer block"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
@@ -1053,6 +1055,12 @@ export default function AdminDashboard() {
 
           {/* Digital Library & Academic Catalog Card */}
           <LibraryDashboardCard role="admin" />
+
+          {/* Real-time Student Attendance Cohort Analysis & Topper Hustle Leaderboard */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            <FacultyBatchAttendanceAnalytics />
+            <FacultyTopperHustleBoard />
+          </div>
 
           {/* 5 & 6. Mid Section: Marks Results & Department Timetable Schedule */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

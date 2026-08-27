@@ -960,7 +960,7 @@ export default function StaffMasterPage() {
       <Sidebar role="admin" />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Faculty & Staff Directory" />
-        <main className="p-6 space-y-6 flex-1 bg-[#F6F8FC] dark:bg-[#0F172A]">
+        <main className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 flex-1 min-w-0 max-w-full overflow-x-hidden bg-[#F6F8FC] dark:bg-[#0F172A]">
 
           {/* Flash Alert */}
           {alert && (
@@ -977,42 +977,42 @@ export default function StaffMasterPage() {
           )}
 
           {/* Top Banner Stats adhering to Theme.md */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex items-center justify-between">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="p-4 sm:p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex items-center justify-between">
               <div>
                 <p className="text-[11px] font-extrabold uppercase text-[#7867FF] tracking-wider">Total Staff Registered</p>
-                <h3 className="text-3xl font-black text-[#1B1E28] dark:text-white mt-1">{faculties.length}</h3>
+                <h3 className="text-2xl sm:text-3xl font-black text-[#1B1E28] dark:text-white mt-1">{faculties.length}</h3>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-[#5B4BFF]/10 text-[#5B4BFF] flex items-center justify-center text-xl font-bold">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#5B4BFF]/10 text-[#5B4BFF] flex items-center justify-center text-lg sm:text-xl font-bold">
                 👥
               </div>
             </div>
 
-            <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex items-center justify-between">
+            <div className="p-4 sm:p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex items-center justify-between">
               <div>
                 <p className="text-[11px] font-extrabold uppercase text-emerald-600 tracking-wider">Active Faculty</p>
-                <h3 className="text-3xl font-black text-[#1B1E28] dark:text-white mt-1">
+                <h3 className="text-2xl sm:text-3xl font-black text-[#1B1E28] dark:text-white mt-1">
                   {faculties.filter(f => f.is_active && (f.staff_type || '').toLowerCase() === 'faculty').length}
                 </h3>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-xl font-bold">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-lg sm:text-xl font-bold">
                 🎓
               </div>
             </div>
 
-            <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex items-center justify-between">
+            <div className="p-4 sm:p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex items-center justify-between">
               <div>
                 <p className="text-[11px] font-extrabold uppercase text-[#F36C21] tracking-wider">Non-Teaching & Staff</p>
-                <h3 className="text-3xl font-black text-[#1B1E28] dark:text-white mt-1">
+                <h3 className="text-2xl sm:text-3xl font-black text-[#1B1E28] dark:text-white mt-1">
                   {faculties.filter(f => (f.staff_type || '').toLowerCase() !== 'faculty').length}
                 </h3>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-[#F36C21]/10 text-[#F36C21] flex items-center justify-center text-xl font-bold">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#F36C21]/10 text-[#F36C21] flex items-center justify-center text-lg sm:text-xl font-bold">
                 🏢
               </div>
             </div>
 
-            <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex items-center justify-between">
+            <div className="p-4 sm:p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex items-center justify-between">
               <div>
                 <p className="text-[11px] font-extrabold uppercase text-indigo-600 tracking-wider">SRMS HR Sync Status</p>
                 <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5">
@@ -1020,17 +1020,17 @@ export default function StaffMasterPage() {
                   Connected API
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center text-xl font-bold">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center text-lg sm:text-xl font-bold">
                 ⚡
               </div>
             </div>
           </div>
 
           {/* ─── PREMIUM UNIFIED FILTER & ACTION CONTROL BAR ─── */}
-          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_25px_rgba(0,0,0,0.03)] space-y-4">
+          <div className="p-4 sm:p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_25px_rgba(0,0,0,0.03)] space-y-4">
             
             {/* Top Tier: Search Bar + Primary Action Buttons */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
               
               {/* Search Box */}
               <div className="relative flex-1 max-w-2xl">
@@ -1055,12 +1055,12 @@ export default function StaffMasterPage() {
               </div>
 
               {/* Action Buttons: Sync HR + Register New Staff */}
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 shrink-0 w-full lg:w-auto">
                 
                 {/* Sync from SRMS HR Button */}
                 <button
                   onClick={() => { setIsSyncModalOpen(true); setSyncResult(null); }}
-                  className="h-11 px-5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                  className="flex-1 sm:flex-none h-11 px-4 sm:px-5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
                   title="Synchronize employee records from live SRMS HR API"
                 >
                   <svg className="w-4 h-4 animate-spin-reverse" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
@@ -1072,7 +1072,7 @@ export default function StaffMasterPage() {
                 {/* Register New Staff Button */}
                 <button
                   onClick={handleOpenAddModal}
-                  className="h-11 px-5 rounded-xl bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-[#5B4BFF]/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                  className="flex-1 sm:flex-none h-11 px-4 sm:px-5 rounded-xl bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-[#5B4BFF]/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

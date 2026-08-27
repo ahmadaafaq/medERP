@@ -9,6 +9,7 @@ import LogbookAssignProjectModal from '../../../../components/logbook/LogbookAss
 import LogbookFacultyReviewModal from '../../../../components/logbook/LogbookFacultyReviewModal';
 import PostSeminarTutorialModal from '../../../../components/logbook/PostSeminarTutorialModal';
 import MiniProjectTrackingModal, { ApplicantStudent } from '../../../../components/logbook/MiniProjectTrackingModal';
+import DocumentPreviewModal from '../../../../components/logbook/DocumentPreviewModal';
 import {
   BookOpen,
   Plus,
@@ -35,6 +36,7 @@ import {
   Tag,
   Code2,
   Lock,
+  Eye,
 } from 'lucide-react';
 
 interface TopicItem {
@@ -49,6 +51,7 @@ interface TopicItem {
   category_id?: string;
   category_name?: string;
   category_code?: string;
+  created_at: string;
   submission_count: number;
   evaluated_count: number;
 }
@@ -63,6 +66,7 @@ interface SubmissionItem {
   course_name?: string;
   batch_name?: string;
   topic_title: string;
+  topic_type?: string;
   topic_description?: string;
   max_marks: number;
   category_name?: string;
@@ -88,10 +92,15 @@ export default function FacultyLogbookPage() {
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantStudent | null>(null);
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'QUEUE' | 'SEMINARS_TUTORIALS' | 'MINI_PROJECTS' | 'TOPICS'>('QUEUE');
+  const [applicantFilter, setApplicantFilter] = useState<'ALL' | 'PENDING' | 'EVALUATED'>('ALL');
   const [topicTypeFilter, setTopicTypeFilter] = useState<'ALL' | 'SEMINAR' | 'TUTORIAL'>('ALL');
   const [submissionFilter, setSubmissionFilter] = useState<'ALL' | 'SUBMITTED' | 'EVALUATED' | 'LATE'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState(true);
+
+  // Document preview state
+  const [isDocPreviewOpen, setIsDocPreviewOpen] = useState(false);
+  const [docPreviewTarget, setDocPreviewTarget] = useState<{ url: string; name?: string; studentName?: string; projectTitle?: string } | null>(null);
 
   // Modals
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -227,6 +236,26 @@ export default function FacultyLogbookPage() {
   const pendingEvaluation = submissions.filter((s) => s.status === 'SUBMITTED' || s.status === 'LATE').length;
   const evaluatedCount = submissions.filter((s) => s.status === 'EVALUATED').length;
 
+  // Applicant status & filter calculation
+  const isApplicantEvaluated = (app: ApplicantStudent) => {
+    const isLocked = app.is_locked || app.project_status === 'CLOSED';
+    if (isLocked) return true;
+    const verifiedLogs = app.weekly_logs?.filter(
+      (w) => w.status === 'VERIFIED' || (w.guide_marks !== undefined && w.guide_marks !== null && Number(w.guide_marks) > 0)
+    ) || [];
+    const totalLogs = app.weekly_logs?.length || 0;
+    return totalLogs > 0 && verifiedLogs.length === totalLogs;
+  };
+
+  const pendingApplicantsCount = applicants.filter((a) => !isApplicantEvaluated(a)).length;
+  const evaluatedApplicantsCount = applicants.filter((a) => isApplicantEvaluated(a)).length;
+
+  const filteredApplicants = applicants.filter((app) => {
+    if (applicantFilter === 'PENDING') return !isApplicantEvaluated(app);
+    if (applicantFilter === 'EVALUATED') return isApplicantEvaluated(app);
+    return true;
+  });
+
   // Filter submissions
   const filteredSubmissions = submissions.filter((sub) => {
     const matchesStatus =
@@ -341,18 +370,18 @@ export default function FacultyLogbookPage() {
             </div>
 
             {/* Navigation Tabs Bar */}
-            <div className="bg-white dark:bg-slate-900 rounded-[22px] p-2 shadow-sm border border-slate-200/80 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
+            <div className="bg-white dark:bg-slate-900 rounded-[22px] p-2 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-thin">
                 <button
                   onClick={() => setActiveTab('QUEUE')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all ${
                     activeTab === 'QUEUE'
                       ? 'bg-[#2D2575] text-white shadow-md'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
                 >
                   <FileText className="w-4 h-4" />
-                  <span>Incoming Submissions Queue</span>
+                  <span>Incoming Submissions</span>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F36C21] text-white font-black">
                     {submissions.length}
                   </span>
@@ -360,7 +389,7 @@ export default function FacultyLogbookPage() {
 
                 <button
                   onClick={() => setActiveTab('SEMINARS_TUTORIALS')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all ${
                     activeTab === 'SEMINARS_TUTORIALS'
                       ? 'bg-[#2D2575] text-white shadow-md'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -375,26 +404,31 @@ export default function FacultyLogbookPage() {
 
                 <button
                   onClick={() => setActiveTab('MINI_PROJECTS')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all ${
                     activeTab === 'MINI_PROJECTS'
                       ? 'bg-[#2D2575] text-white shadow-md'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
                 >
-                  <FolderGit2 className="w-4 h-4" />
-                  <span>Assigned Mini Project & Tech Stack</span>
+                  <FolderGit2 className="w-4 h-4 text-[#F36C21]" />
+                  <span>Assigned Mini Project</span>
+                  {miniProjectsList.length > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F36C21] text-white font-black">
+                      {miniProjectsList.length}
+                    </span>
+                  )}
                 </button>
 
                 <button
                   onClick={() => setActiveTab('TOPICS')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all ${
                     activeTab === 'TOPICS'
                       ? 'bg-[#2D2575] text-white shadow-md'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
                 >
                   <Layers className="w-4 h-4" />
-                  <span>All Activity Topics ({topics.length})</span>
+                  <span>Activity Topics ({topics.length})</span>
                 </button>
               </div>
 
@@ -411,6 +445,37 @@ export default function FacultyLogbookPage() {
                       }`}
                     >
                       {filter === 'ALL' ? 'All' : filter === 'SUBMITTED' ? 'Pending' : 'Evaluated'}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {activeTab === 'MINI_PROJECTS' && (
+                <div className="flex items-center gap-2">
+                  {(['ALL', 'PENDING', 'EVALUATED'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => setApplicantFilter(filter)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                        applicantFilter === filter
+                          ? 'bg-[#5B4BFF] text-white shadow-sm'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>{filter === 'ALL' ? 'All' : filter === 'PENDING' ? 'Pending' : 'Evaluated'}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          applicantFilter === filter
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        {filter === 'ALL'
+                          ? applicants.length
+                          : filter === 'PENDING'
+                          ? pendingApplicantsCount
+                          : evaluatedApplicantsCount}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -803,24 +868,94 @@ export default function FacultyLogbookPage() {
                         <h3 className="font-bold text-lg text-slate-900 dark:text-white">Project Applicants & Weekly Submissions</h3>
                         <p className="text-xs text-slate-500">Track candidate progress week-by-week, evaluate deliverables, and grant final grade with lock</p>
                       </div>
+                      
+                      {/* Filter Badges: All, Pending, Evaluated */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-purple-50 dark:bg-purple-950 text-[#5B4BFF] border border-purple-200 dark:border-purple-800">
-                          {applicants.length} Candidates Enrolled
-                        </span>
-                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 border border-emerald-200 dark:border-emerald-800">
-                          {applicants.filter((a) => a.is_locked || a.project_status === 'CLOSED').length} Finalized & Locked
-                        </span>
-                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-600 border border-blue-200 dark:border-blue-800">
-                          {applicants.reduce((acc, a) => acc + (a.weekly_logs?.filter((w) => w.status === 'VERIFIED' || Number(w.guide_marks) > 0).length || 0), 0)} Milestones Evaluated
-                        </span>
+                        <button
+                          onClick={() => setApplicantFilter('ALL')}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            applicantFilter === 'ALL'
+                              ? 'bg-[#2D2575] text-white shadow-sm ring-2 ring-[#2D2575]/20'
+                              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>All Candidates</span>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                              applicantFilter === 'ALL'
+                                ? 'bg-[#F36C21] text-white'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            {applicants.length}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => setApplicantFilter('PENDING')}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            applicantFilter === 'PENDING'
+                              ? 'bg-amber-500 text-white shadow-sm ring-2 ring-amber-500/20'
+                              : 'bg-amber-50/80 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100'
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Pending Evaluation</span>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                              applicantFilter === 'PENDING'
+                                ? 'bg-white text-amber-700'
+                                : 'bg-amber-200/80 dark:bg-amber-900 text-amber-800 dark:text-amber-200'
+                            }`}
+                          >
+                            {pendingApplicantsCount}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => setApplicantFilter('EVALUATED')}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            applicantFilter === 'EVALUATED'
+                              ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-600/20'
+                              : 'bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Evaluated & Locked</span>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                              applicantFilter === 'EVALUATED'
+                                ? 'bg-white text-emerald-700'
+                                : 'bg-emerald-200/80 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
+                            }`}
+                          >
+                            {evaluatedApplicantsCount}
+                          </span>
+                        </button>
                       </div>
                     </div>
 
-                    {applicants.length === 0 ? (
+                    {filteredApplicants.length === 0 ? (
                       <div className="p-8 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
                         <CalendarDays className="w-8 h-8 text-slate-400 mx-auto" />
-                        <div className="text-sm font-bold text-slate-700 dark:text-slate-300">No Enrolled Candidates Yet</div>
-                        <p className="text-xs text-slate-500">When students work on this mini project and submit weekly logs, their progress tracking ledger will populate here.</p>
+                        <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                          {applicants.length === 0
+                            ? 'No Enrolled Candidates Yet'
+                            : `No candidates match "${applicantFilter === 'PENDING' ? 'Pending Evaluation' : 'Evaluated & Locked'}"`}
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          {applicants.length === 0
+                            ? 'When students work on this mini project and submit weekly logs, their progress tracking ledger will populate here.'
+                            : 'Try selecting "All Candidates" to see all enrolled students.'}
+                        </p>
+                        {applicants.length > 0 && applicantFilter !== 'ALL' && (
+                          <button
+                            onClick={() => setApplicantFilter('ALL')}
+                            className="px-3.5 py-1.5 rounded-xl bg-[#5B4BFF] text-white text-xs font-bold mt-2"
+                          >
+                            View All Candidates ({applicants.length})
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
@@ -837,7 +972,7 @@ export default function FacultyLogbookPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {applicants.map((app) => {
+                            {filteredApplicants.map((app) => {
                               const isLocked = app.is_locked || app.project_status === 'CLOSED';
                               const verifiedLogs = app.weekly_logs?.filter(
                                 (w) => w.status === 'VERIFIED' || (w.guide_marks !== undefined && w.guide_marks !== null && Number(w.guide_marks) > 0)
@@ -872,13 +1007,13 @@ export default function FacultyLogbookPage() {
                                     <div className="text-xs font-black text-[#5B4BFF]">{app.total_hours_spent}h Devoted</div>
                                   </td>
                                   <td className="py-3.5 px-4">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5">
                                       {app.repository_url ? (
                                         <a
                                           href={app.repository_url}
                                           target="_blank"
                                           rel="noreferrer"
-                                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:text-[#5B4BFF] text-slate-600 transition-colors"
+                                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:text-[#5B4BFF] text-slate-600 dark:text-slate-300 transition-colors"
                                           title="Git Repository"
                                         >
                                           <FolderGit2 className="w-3.5 h-3.5" />
@@ -889,13 +1024,31 @@ export default function FacultyLogbookPage() {
                                           href={app.live_demo_url}
                                           target="_blank"
                                           rel="noreferrer"
-                                          className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:text-emerald-600 text-emerald-700 transition-colors"
+                                          className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:text-emerald-600 text-emerald-700 dark:text-emerald-400 transition-colors"
                                           title="Live Demo"
                                         >
                                           <ExternalLink className="w-3.5 h-3.5" />
                                         </a>
                                       ) : null}
-                                      {!app.repository_url && !app.live_demo_url && (
+                                      {app.documentation_url ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setDocPreviewTarget({
+                                              url: app.documentation_url || '',
+                                              name: app.documentation_name || 'Project_Documentation.pdf',
+                                              studentName: app.student_name,
+                                              projectTitle: app.project_title || miniProject?.title,
+                                            });
+                                            setIsDocPreviewOpen(true);
+                                          }}
+                                          className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-[#5B4BFF] transition-colors border border-indigo-200/60 dark:border-indigo-800/60"
+                                          title={`Preview Documentation Report (${app.documentation_name || 'Report'})`}
+                                        >
+                                          <FileText className="w-3.5 h-3.5" />
+                                        </button>
+                                      ) : null}
+                                      {!app.repository_url && !app.live_demo_url && !app.documentation_url && (
                                         <span className="text-slate-400 text-[11px]">Pending Links</span>
                                       )}
                                     </div>
@@ -1049,6 +1202,17 @@ export default function FacultyLogbookPage() {
         applicant={selectedApplicant}
         projectTitle={miniProject?.title || 'Mini Project'}
         onSuccess={fetchData}
+      />
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={isDocPreviewOpen}
+        onClose={() => setIsDocPreviewOpen(false)}
+        title="Candidate Project Documentation Report"
+        documentUrl={docPreviewTarget?.url}
+        documentName={docPreviewTarget?.name}
+        studentName={docPreviewTarget?.studentName}
+        projectTitle={docPreviewTarget?.projectTitle}
       />
     </div>
   );

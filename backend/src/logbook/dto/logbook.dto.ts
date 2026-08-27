@@ -160,6 +160,14 @@ export class CreateMiniProjectDto {
 
   @IsString()
   @IsOptional()
+  collegeId?: string;
+
+  @IsString()
+  @IsOptional()
+  disciplineType?: string;
+
+  @IsString()
+  @IsOptional()
   courseId?: string;
 
   @IsString()
@@ -219,6 +227,18 @@ export class UpdateMiniProjectDto {
   @IsString()
   @IsOptional()
   liveDemoUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  documentationUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  documentationName?: string;
+
+  @IsString()
+  @IsOptional()
+  zipSubmissionUrl?: string;
 
   @IsString()
   @IsOptional()

@@ -640,12 +640,12 @@ export default function StudentDashboard() {
           )}
 
           {/* 5 MAIN KPI CARDS GRID */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 sm:gap-5">
 
             {/* Card 1: Live Current Semester Attendance (Circular Graph) */}
             <Link
               href="/dashboard/student/attendance"
-              className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft hover:shadow-md transition-all duration-200 block group relative overflow-hidden"
+              className="p-4 sm:p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft hover:shadow-md transition-all duration-200 block group relative overflow-hidden"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">

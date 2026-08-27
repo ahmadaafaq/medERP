@@ -39,15 +39,15 @@ const DEFAULT_COLLEGES: College[] = [
     slug: 'srms-cet-bareilly',
     domain: 'srms-cet.mederp.app',
     plan: 'enterprise',
-    primary_color: '#5B4BFF',
+    primary_color: '#F36C21',
     theme_config: {
-      primary_color: '#5B4BFF',
-      secondary_color: '#7867FF',
+      primary_color: '#F36C21',
+      secondary_color: '#E05A10',
       accent_color: '#F36C21',
-      sidebar_bg: '#2D2575',
-      header_bg: '#2D2575',
-      page_bg: '#F6F8FC',
-      card_bg: '#FFFFFF',
+      sidebar_bg: '#1A1D2D',
+      header_bg: '#1A1D2D',
+      page_bg: '#0F121C',
+      card_bg: '#161926',
       card_radius: '22px',
     },
   },
@@ -209,13 +209,13 @@ export default function LoginPage() {
   const currentTheme = useMemo(() => {
     const cfg = ownerThemeOverride || selectedCollege?.theme_config || {};
     return {
-      primary: cfg.primary_color || selectedCollege?.primary_color || '#5B4BFF',
-      secondary: cfg.secondary_color || '#7867FF',
+      primary: cfg.primary_color || selectedCollege?.primary_color || '#F36C21',
+      secondary: cfg.secondary_color || '#E05A10',
       accent: cfg.accent_color || '#F36C21',
-      sidebarBg: cfg.sidebar_bg || '#2D2575',
-      headerBg: cfg.header_bg || cfg.sidebar_bg || '#2D2575',
-      pageBg: cfg.page_bg || '#0E0A24',
-      cardBg: cfg.card_bg || '#1E1945',
+      sidebarBg: cfg.sidebar_bg || '#1A1D2D',
+      headerBg: cfg.header_bg || cfg.sidebar_bg || '#1A1D2D',
+      pageBg: cfg.page_bg || '#0F121C',
+      cardBg: cfg.card_bg || '#161926',
       cardRadius: cfg.card_radius || '24px',
     };
   }, [selectedCollege, ownerThemeOverride]);
@@ -555,8 +555,7 @@ export default function LoginPage() {
 
   return (
     <div 
-      className="min-h-screen relative flex flex-col justify-center items-center p-3 sm:p-4 text-white font-sans overflow-hidden transition-colors duration-500"
-      style={{ backgroundColor: currentTheme.pageBg || '#0E0A24' }}
+      className="min-h-screen relative flex flex-col justify-center items-center p-3 sm:p-4 text-white font-sans overflow-hidden transition-colors duration-500 bg-[#0F121C]"
     >
       
       {/* ─── BLURRED CAMPUS BACKGROUND OVERLAY ──────────────────────────────── */}
@@ -566,24 +565,19 @@ export default function LoginPage() {
           alt="SRMS Campus"
           fill
           priority
-          className="object-cover object-center opacity-25 filter blur-sm scale-105"
+          className="object-cover object-center opacity-15 filter blur-xs scale-105"
         />
         <div 
-          className="absolute inset-0 opacity-90 transition-all duration-500"
-          style={{
-            background: `linear-gradient(to bottom, ${currentTheme.sidebarBg}E6, ${currentTheme.pageBg}F2, ${currentTheme.pageBg})`
-          }}
+          className="absolute inset-0 opacity-95 transition-all duration-500 bg-gradient-to-b from-[#1A1D2D]/95 via-[#0F121C]/98 to-[#0F121C]"
         />
       </div>
 
       {/* Floating Accent Glows */}
       <div 
-        className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full blur-3xl pointer-events-none opacity-30 transition-all duration-500"
-        style={{ backgroundColor: currentTheme.primary }}
+        className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full blur-3xl pointer-events-none opacity-20 transition-all duration-500 bg-[#F36C21]"
       />
       <div 
-        className="absolute bottom-10 right-10 w-72 h-72 rounded-full blur-3xl pointer-events-none opacity-20 transition-all duration-500"
-        style={{ backgroundColor: currentTheme.accent }}
+        className="absolute bottom-10 right-10 w-72 h-72 rounded-full blur-3xl pointer-events-none opacity-15 transition-all duration-500 bg-[#F36C21]"
       />
 
       {/* ─── TOP HEADER BAR ─────────────────────────────────────────────────── */}
@@ -597,25 +591,20 @@ export default function LoginPage() {
         </Link>
 
         <span className="text-[11px] text-white/80 font-mono flex items-center gap-1.5 bg-black/20 px-2 py-0.5 rounded-full border border-white/10">
-          <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: currentTheme.accent }} />
+          <span className="w-2 h-2 rounded-full animate-pulse bg-[#F36C21]" />
           ERP Secure v2.4
         </span>
       </div>
 
       {/* ─── COMPACT PREMIUM LOGIN CARD (SMALL FORM, SMALL PADDING) ─────────── */}
       <div 
-        className="relative z-10 w-full max-w-[440px] backdrop-blur-xl border border-white/20 p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] space-y-4 transition-all duration-500"
-        style={{ 
-          backgroundColor: `${currentTheme.sidebarBg}D9`,
-          borderRadius: currentTheme.cardRadius || '24px'
-        }}
+        className="relative z-10 w-full max-w-[440px] backdrop-blur-xl border border-white/15 p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.6)] space-y-4 transition-all duration-500 bg-[#161926]/95 rounded-[24px]"
       >
         
         {/* Brand Header */}
         <div className="text-center space-y-1">
           <div 
-            className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white font-black text-lg shadow-md mb-1 transition-colors"
-            style={{ color: currentTheme.primary }}
+            className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#F36C21] text-white font-black text-lg shadow-md mb-1 transition-colors"
           >
             M
           </div>
@@ -720,7 +709,7 @@ export default function LoginPage() {
                       ? 'text-white font-extrabold shadow-sm'
                       : 'text-white/70 hover:text-white hover:bg-white/5'
                   }`}
-                  style={isActive ? { backgroundColor: currentTheme.primary, boxShadow: `0 2px 8px ${currentTheme.primary}60` } : {}}
+                  style={isActive ? { backgroundColor: '#F36C21', boxShadow: '0 2px 8px rgba(243, 108, 33, 0.45)' } : {}}
                 >
                   {labelMap[r]}
                 </button>
@@ -802,10 +791,13 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 rounded-xl text-white font-black text-xs transition-all transform active:scale-98 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2 shadow-lg hover:brightness-110"
+            className="w-full py-2.5 rounded-xl font-black text-xs transition-all transform active:scale-98 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2 shadow-lg hover:brightness-110 !bg-[#F36C21] !bg-none !border-transparent !text-white"
             style={{
-              background: `linear-gradient(to right, ${currentTheme.primary}, ${currentTheme.secondary})`,
-              boxShadow: `0 8px 24px ${currentTheme.primary}45`
+              backgroundColor: '#F36C21',
+              backgroundImage: 'none',
+              borderColor: 'transparent',
+              color: '#FFFFFF',
+              boxShadow: '0 8px 24px rgba(243, 108, 33, 0.45)'
             }}
           >
             {loading ? (

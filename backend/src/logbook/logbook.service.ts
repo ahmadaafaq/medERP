@@ -198,7 +198,11 @@ export class LogbookService {
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS final_percentage NUMERIC;
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE;
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS zip_submission_url TEXT;
+        ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS documentation_url TEXT;
+        ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS documentation_name TEXT;
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
+        ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS college_id VARCHAR(100);
+        ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS discipline_type VARCHAR(100);
         ALTER TABLE "${schema}".logbook_weekly_logs ADD COLUMN IF NOT EXISTS project_id UUID;
         `,
       );
@@ -418,15 +422,17 @@ export class LogbookService {
       tenantSlug,
       `INSERT INTO "${schema}".logbook_mini_projects (
         faculty_id, title, description, prompt_instructions, technologies,
-        course_id, batch_id, branch_id, semester_id, submission_deadline,
+        college_id, discipline_type, course_id, batch_id, branch_id, semester_id, submission_deadline,
         max_marks, repository_url, live_demo_url, team_members, project_status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'IN_PROGRESS') RETURNING *`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'IN_PROGRESS') RETURNING *`,
       [
         facultyId,
         dto.title,
         dto.description || null,
         dto.promptInstructions || 'Implement full CRUD, RESTful endpoints, proper UI layout, and clear documentation.',
         dto.technologies || ['React', 'TypeScript', 'TailwindCSS', 'PostgreSQL'],
+        dto.collegeId || null,
+        dto.disciplineType || null,
         dto.courseId || null,
         dto.batchId || null,
         dto.branchId || null,
@@ -452,8 +458,13 @@ export class LogbookService {
     if (dto.description !== undefined) { params.push(dto.description); sets.push(`description = $${params.length}`); }
     if (dto.promptInstructions !== undefined) { params.push(dto.promptInstructions); sets.push(`prompt_instructions = $${params.length}`); }
     if (dto.technologies !== undefined) { params.push(dto.technologies); sets.push(`technologies = $${params.length}`); }
+    if ((dto as any).collegeId !== undefined) { params.push((dto as any).collegeId); sets.push(`college_id = $${params.length}`); }
+    if ((dto as any).disciplineType !== undefined) { params.push((dto as any).disciplineType); sets.push(`discipline_type = $${params.length}`); }
     if (dto.repositoryUrl !== undefined) { params.push(dto.repositoryUrl); sets.push(`repository_url = $${params.length}`); }
     if (dto.liveDemoUrl !== undefined) { params.push(dto.liveDemoUrl); sets.push(`live_demo_url = $${params.length}`); }
+    if (dto.documentationUrl !== undefined) { params.push(dto.documentationUrl); sets.push(`documentation_url = $${params.length}`); }
+    if (dto.documentationName !== undefined) { params.push(dto.documentationName); sets.push(`documentation_name = $${params.length}`); }
+    if (dto.zipSubmissionUrl !== undefined) { params.push(dto.zipSubmissionUrl); sets.push(`zip_submission_url = $${params.length}`); }
     if (dto.teamMembers !== undefined) { params.push(dto.teamMembers); sets.push(`team_members = $${params.length}`); }
     if (dto.projectStatus !== undefined) { params.push(dto.projectStatus); sets.push(`project_status = $${params.length}`); }
 
@@ -492,6 +503,7 @@ export class LogbookService {
       `SELECT st.id as student_id, st.name as student_name, st.rollno, st.registration_no,
               cr.name as course_name, b.name as batch_name,
               p.id as project_id, p.title as project_title, p.repository_url, p.live_demo_url, p.zip_submission_url,
+              p.documentation_url, p.documentation_name,
               p.is_locked, p.project_status, p.final_grade, p.final_percentage, p.guide_remarks, p.locked_at,
               COALESCE(SUM(w.hours_spent), 0) as total_hours_spent,
               COUNT(w.id) as total_weeks_logged,
@@ -510,6 +522,7 @@ export class LogbookService {
        )
        GROUP BY st.id, st.name, st.rollno, st.registration_no, cr.name, b.name,
                 p.id, p.title, p.repository_url, p.live_demo_url, p.zip_submission_url,
+                p.documentation_url, p.documentation_name,
                 p.is_locked, p.project_status, p.final_grade, p.final_percentage, p.guide_remarks, p.locked_at
        ORDER BY total_weeks_logged DESC, st.name ASC`,
       [projectId || null],

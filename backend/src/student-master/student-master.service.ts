@@ -1070,6 +1070,8 @@ export class StudentMasterService {
         const rollNo = String(s.rollno || '').trim();
         const name = String(s.name || '').trim();
         const photoUrl = s.photo_url || null;
+        const gender = String(s.gender || 'Male').toUpperCase();
+        const mobile = String(s.mobile_number || s.mobile || '').trim();
         if (!regNo && !rollNo && !name) continue;
 
         const check = await this.tenantSchemaService.queryInTenant(
@@ -1084,21 +1086,24 @@ export class StudentMasterService {
           await this.tenantSchemaService.queryInTenant(
             slug,
             `UPDATE "${schema}".students 
-             SET name = $1, photo_url = COALESCE($2, photo_url), rollno = $3, registration_no = $4, course_cd = $5, batch_cd = $6, updated_at = NOW() 
-             WHERE id = $7`,
-            [name, photoUrl, rollNo, regNo, s.course_cd || '13', s.batch_name || s.batch_id || '2025', studentId],
+             SET name = $1, photo_url = COALESCE($2, photo_url), rollno = $3, registration_no = $4, 
+                 gender = COALESCE($5, gender), mobile_number = COALESCE($6, mobile_number),
+                 course_cd = $7, batch_cd = $8, is_active = true, updated_at = NOW() 
+             WHERE id = $9`,
+            [name, photoUrl, rollNo, regNo, gender, mobile || null, s.course_cd || '2', s.batch_name || s.batch_id || '2025', studentId],
           ).catch(() => null);
         } else {
           const ins = await this.tenantSchemaService.queryInTenant(
             slug,
-            `INSERT INTO "${schema}".students (name, registration_no, rollno, photo_url, course_cd, batch_cd, branch_id, is_active) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, true) RETURNING id`,
-            [name, regNo, rollNo, photoUrl, s.course_cd || '13', s.batch_name || s.batch_id || '2025', s.branch_id || '1'],
+            `INSERT INTO "${schema}".students (name, registration_no, rollno, photo_url, gender, mobile_number, course_cd, batch_cd, branch_id, is_active) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true) RETURNING id`,
+            [name, regNo, rollNo, photoUrl, gender, mobile || null, s.course_cd || '2', s.batch_name || s.batch_id || '2025', s.branch_id || '1'],
           ).catch(() => []);
           studentId = ins[0]?.id;
         }
 
         if (studentId) {
+          // 1. Admissions Table
           const admCheck = await this.tenantSchemaService.queryInTenant(
             slug,
             `SELECT id FROM "${schema}".student_admissions WHERE student_id = $1 LIMIT 1`,
@@ -1109,14 +1114,19 @@ export class StudentMasterService {
             await this.tenantSchemaService.queryInTenant(
               slug,
               `UPDATE "${schema}".student_admissions 
-               SET college_name = $1, course_code = $2, academic_session = $3, batch_code = $4, batch_id = $5 
-               WHERE student_id = $6`,
+               SET college_name = $1, course_code = $2, academic_session = $3, batch_code = $4, batch_id = $5,
+                   branch_id = $6, branch_code = $7, residency_type = COALESCE($8, residency_type), admission_type = COALESCE($9, admission_type)
+               WHERE student_id = $10`,
               [
                 s.college_name || 'SRMS CET, BAREILLY',
-                s.course_code || 'BCA',
+                s.course_code || 'B.Tech',
                 s.academic_session || '2025-2026',
                 s.batch_code || '2025 Batch',
-                s.batch_id || '2',
+                s.batch_id || '18',
+                s.branch_id || '1',
+                s.branch_code || '1',
+                s.residency_type || 'Hosteller',
+                s.admission_type || 'Regular Admission',
                 studentId,
               ],
             ).catch(() => null);
@@ -1129,10 +1139,10 @@ export class StudentMasterService {
               [
                 studentId,
                 s.college_name || 'SRMS CET, BAREILLY',
-                s.course_code || 'BCA',
+                s.course_code || 'B.Tech',
                 s.academic_session || '2025-2026',
                 s.batch_code || '2025 Batch',
-                s.batch_id || '2',
+                s.batch_id || '18',
                 s.residency_type || 'Hosteller',
                 s.admission_type || 'Regular Admission',
                 s.branch_id || '1',
@@ -1140,6 +1150,73 @@ export class StudentMasterService {
               ],
             ).catch(() => null);
           }
+
+          // 2. Parents Table
+          if (s.father_name || s.mother_name) {
+            const pCheck = await this.tenantSchemaService.queryInTenant(
+              slug,
+              `SELECT id FROM "${schema}".student_parents WHERE student_id = $1 LIMIT 1`,
+              [studentId],
+            ).catch(() => []);
+            if (pCheck.length > 0) {
+              await this.tenantSchemaService.queryInTenant(
+                slug,
+                `UPDATE "${schema}".student_parents SET father_name = COALESCE($1, father_name), mother_name = COALESCE($2, mother_name) WHERE student_id = $3`,
+                [s.father_name || null, s.mother_name || null, studentId],
+              ).catch(() => null);
+            } else {
+              await this.tenantSchemaService.queryInTenant(
+                slug,
+                `INSERT INTO "${schema}".student_parents (student_id, father_name, mother_name) VALUES ($1, $2, $3)`,
+                [studentId, s.father_name || null, s.mother_name || null],
+              ).catch(() => null);
+            }
+          }
+
+          // 3. Addresses Table
+          if (s.city || s.state || s.address) {
+            const aCheck = await this.tenantSchemaService.queryInTenant(
+              slug,
+              `SELECT id FROM "${schema}".student_addresses WHERE student_id = $1 LIMIT 1`,
+              [studentId],
+            ).catch(() => []);
+            if (aCheck.length > 0) {
+              await this.tenantSchemaService.queryInTenant(
+                slug,
+                `UPDATE "${schema}".student_addresses SET permanent_city = COALESCE($1, permanent_city), permanent_state = COALESCE($2, permanent_state), permanent_address_1 = COALESCE($3, permanent_address_1) WHERE student_id = $4`,
+                [s.city || 'Bareilly', s.state || 'Uttar Pradesh', s.address || null, studentId],
+              ).catch(() => null);
+            } else {
+              await this.tenantSchemaService.queryInTenant(
+                slug,
+                `INSERT INTO "${schema}".student_addresses (student_id, permanent_city, permanent_state, permanent_address_1) VALUES ($1, $2, $3, $4)`,
+                [studentId, s.city || 'Bareilly', s.state || 'Uttar Pradesh', s.address || null],
+              ).catch(() => null);
+            }
+          }
+
+          // 4. Documents Table (Photo URL)
+          if (photoUrl) {
+            const dCheck = await this.tenantSchemaService.queryInTenant(
+              slug,
+              `SELECT id FROM "${schema}".student_documents WHERE student_id = $1 LIMIT 1`,
+              [studentId],
+            ).catch(() => []);
+            if (dCheck.length > 0) {
+              await this.tenantSchemaService.queryInTenant(
+                slug,
+                `UPDATE "${schema}".student_documents SET passport_photo_url = $1 WHERE student_id = $2`,
+                [photoUrl, studentId],
+              ).catch(() => null);
+            } else {
+              await this.tenantSchemaService.queryInTenant(
+                slug,
+                `INSERT INTO "${schema}".student_documents (student_id, passport_photo_url) VALUES ($1, $2)`,
+                [studentId, photoUrl],
+              ).catch(() => null);
+            }
+          }
+
           syncedCount++;
         }
       } catch (err) {
@@ -1153,21 +1230,24 @@ export class StudentMasterService {
   async getHustleBoard(tenantSlug: string, query: { filterMode?: string; departmentId?: string; limit?: number } = {}) {
     const slug = await this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${slug}`;
-    const limit = Math.min(Number(query.limit) || 10, 50);
+    const limit = Math.min(Number(query.limit) || 50, 200);
 
     try {
       const rawQuery = `
         WITH student_base AS (
-          SELECT s.id, s.name, s.rollno, s.registration_no, s.course_cd, s.batch_cd, s.photo_url, s.user_id::text AS user_id,
+          SELECT DISTINCT ON (COALESCE(s.registration_no, s.rollno, s.id::text))
+                 s.id, s.name, s.rollno, s.registration_no, s.course_cd, s.batch_cd, s.photo_url, s.user_id::text AS user_id,
                  COALESCE(s.attendance_percentage, 0) AS srms_attd_pct,
                  c.name AS course_name,
                  COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, 'Batch ' || s.batch_cd, s.batch_cd) AS batch_name
           FROM "${schema}".students s
           LEFT JOIN "${schema}".courses c ON c.course_cd = s.course_cd
           LEFT JOIN "${schema}".batches b ON (b.id = s.batch_id OR (b.batch_cd = s.batch_cd AND b.course_cd = s.course_cd))
+          ORDER BY COALESCE(s.registration_no, s.rollno, s.id::text), s.id DESC
         ),
         repo_metrics AS (
           SELECT DISTINCT ON (COALESCE(r.student_reg_no, r.student_name))
+                 COALESCE(r.student_reg_no, r.student_name) AS match_key,
                  r.student_reg_no,
                  r.student_name,
                  r.title AS project_title,
@@ -1181,13 +1261,11 @@ export class StudentMasterService {
         ),
         exam_metrics AS (
           SELECT sr.student_id,
-                 sr.marks_obtained,
-                 sr.practical_mark,
-                 ep.max_marks,
-                 ep.name AS exam_name,
-                 ROUND((sr.marks_obtained / NULLIF(ep.max_marks, 0)) * 100, 1) AS theory_pct
+                 MAX(ep.name) AS exam_name,
+                 ROUND(AVG((sr.marks_obtained / NULLIF(ep.max_marks, 0)) * 100), 1) AS theory_pct
           FROM "${schema}".student_results sr
           JOIN "${schema}".examination_papers ep ON ep.id = sr.paper_id
+          GROUP BY sr.student_id
         ),
         att_metrics AS (
           SELECT ar.student_id,
@@ -1201,6 +1279,24 @@ export class StudentMasterService {
           SELECT cm.sender_id::text AS sender_id, COUNT(cm.id) AS chat_count
           FROM "${schema}".chat_messages cm
           GROUP BY cm.sender_id::text
+        ),
+        mini_project_metrics AS (
+          SELECT 
+            p.student_id,
+            COUNT(p.id) AS mini_projects_count,
+            MAX(p.title) AS mini_project_title,
+            MAX(COALESCE(p.final_percentage, p.guide_marks, 0)) AS mini_project_score,
+            MAX(COALESCE(p.final_grade, 'A')) AS mini_project_grade,
+            MAX(COALESCE(p.project_status, 'IN_PROGRESS')) AS mini_project_status,
+            COALESCE(MAX(wl.logs_count), 0) AS mini_project_logs_count,
+            true AS has_mini_project
+          FROM "${schema}".logbook_mini_projects p
+          LEFT JOIN (
+            SELECT student_id, COUNT(*) AS logs_count
+            FROM "${schema}".logbook_weekly_logs
+            GROUP BY student_id
+          ) wl ON (wl.student_id = p.student_id)
+          GROUP BY p.student_id
         )
         SELECT sb.id, sb.name, sb.rollno, sb.registration_no, sb.course_name, sb.batch_name, sb.photo_url,
                rm.project_title,
@@ -1209,6 +1305,13 @@ export class StudentMasterService {
                rm.incubation_status,
                rm.funding_amount,
                COALESCE(rm.is_incubated, false) AS is_incubated,
+               COALESCE(mpm.mini_projects_count, 0) AS mini_projects_covered,
+               mpm.mini_project_title,
+               COALESCE(mpm.mini_project_score, 0) AS mini_project_score,
+               COALESCE(mpm.mini_project_grade, 'N/A') AS mini_project_grade,
+               COALESCE(mpm.mini_project_status, 'IN_PROGRESS') AS mini_project_status,
+               COALESCE(mpm.mini_project_logs_count, 0) AS mini_project_logs_count,
+               COALESCE(mpm.has_mini_project, false) AS has_mini_project,
                em.theory_pct,
                em.exam_name,
                ROUND(COALESCE(am.attendance_pct, sb.srms_attd_pct, 0)::numeric, 1) AS attendance_pct,
@@ -1217,8 +1320,9 @@ export class StudentMasterService {
                (COALESCE(cm.chat_count, 0) > 0) AS is_chat_active,
                ROUND(
                  (
-                   COALESCE(rm.project_score * 0.40, 0) +
-                   COALESCE(em.theory_pct * 0.40, 0) +
+                   COALESCE(rm.project_score * 0.35, 0) +
+                   COALESCE(mpm.mini_project_score * 0.15, 0) +
+                   COALESCE(em.theory_pct * 0.35, 0) +
                    COALESCE(COALESCE(am.attendance_pct, sb.srms_attd_pct, 0) * 0.10, 0) +
                    CASE WHEN rm.incubation_status = 'Incubated' THEN 10
                         WHEN rm.incubation_status IN ('Selected', 'Funded') THEN 8
@@ -1229,10 +1333,11 @@ export class StudentMasterService {
                ) AS composite_score
         FROM student_base sb
         LEFT JOIN repo_metrics rm ON (rm.student_reg_no = sb.registration_no OR rm.student_reg_no = sb.rollno OR rm.student_name ILIKE sb.name)
+        LEFT JOIN mini_project_metrics mpm ON (mpm.student_id = sb.id OR mpm.student_id::text = sb.registration_no OR mpm.student_id::text = sb.rollno)
         LEFT JOIN exam_metrics em ON em.student_id = sb.id
         LEFT JOIN att_metrics am ON am.student_id = sb.id
         LEFT JOIN chat_metrics cm ON cm.sender_id = sb.user_id
-        WHERE (rm.project_score > 0 OR em.theory_pct > 0 OR sb.srms_attd_pct > 0 OR am.total_classes > 0 OR rm.incubation_status IS NOT NULL)
+        WHERE (rm.project_score > 0 OR em.theory_pct > 0 OR sb.srms_attd_pct > 0 OR am.total_classes > 0 OR rm.incubation_status IS NOT NULL OR mpm.has_mini_project = true)
         ORDER BY composite_score DESC, rm.project_score DESC NULLS LAST, em.theory_pct DESC NULLS LAST
         LIMIT $1
       `;
@@ -1241,31 +1346,54 @@ export class StudentMasterService {
 
       return {
         success: true,
-        data: rows.map((r: any, idx: number) => ({
-          rank: idx + 1,
-          id: r.id,
-          name: r.name,
-          rollNo: r.rollno || r.registration_no,
-          regNo: r.registration_no || r.rollno,
-          course: r.course_name || 'College Program',
-          batch: r.batch_name || 'Batch 2025',
-          photoUrl: r.photo_url,
-          attendancePct: Number(r.attendance_pct || 0),
-          totalClasses: Number(r.total_classes || 0),
-          theoryScore: r.theory_pct !== null && r.theory_pct !== undefined ? Number(r.theory_pct) : null,
-          examName: r.exam_name || null,
-          projectTitle: r.project_title || null,
-          projectGrade: r.project_grade || 'N/A',
-          projectScorePct: Number(r.project_score || 0),
-          isIncubationSelected: Boolean(r.is_incubated),
-          incubationStatus: r.incubation_status || null,
-          fundingAmount: Number(r.funding_amount || 0),
-          isChatActive: Boolean(r.is_chat_active),
-          compositeScore: Number(r.composite_score || 0),
-          tier: idx === 0 ? 'Tier S' : idx < 3 ? 'Tier A+' : 'Tier A',
-          tierColor: idx === 0 ? 'from-amber-400 to-yellow-600' : 'from-indigo-500 to-purple-600',
-          hustleTag: idx === 0 ? '👑 High Academic Scorer & Innovator' : '🎖️ Active College Contributor',
-        })),
+        data: rows.map((r: any, idx: number) => {
+          const logsCount = Number(r.mini_project_logs_count || 0);
+          const miniStatus = r.mini_project_status || 'IN_PROGRESS';
+          const miniCoveredCount = Number(r.mini_projects_covered || (r.has_mini_project ? 1 : 0));
+          let miniProgressText = '0 Logs';
+          if (miniStatus === 'APPROVED' || miniStatus === 'COMPLETED' || Number(r.mini_project_score) >= 80) {
+            miniProgressText = 'Approved (100%)';
+          } else if (logsCount > 0) {
+            miniProgressText = `${logsCount}/4 Weekly Logs`;
+          } else if (miniCoveredCount > 0) {
+            miniProgressText = 'Logbook In Progress';
+          } else {
+            miniProgressText = '0 Covered';
+          }
+
+          return {
+            rank: idx + 1,
+            id: r.id,
+            name: r.name,
+            rollNo: r.rollno || r.registration_no,
+            regNo: r.registration_no || r.rollno,
+            course: r.course_name || 'College Program',
+            batch: r.batch_name || 'Batch 2025',
+            photoUrl: r.photo_url,
+            attendancePct: Number(r.attendance_pct || 0),
+            totalClasses: Number(r.total_classes || 0),
+            theoryScore: r.theory_pct !== null && r.theory_pct !== undefined ? Number(r.theory_pct) : null,
+            examName: r.exam_name || null,
+            projectTitle: r.project_title || null,
+            projectGrade: r.project_grade || 'N/A',
+            projectScorePct: Number(r.project_score || 0),
+            isIncubationSelected: Boolean(r.is_incubated),
+            incubationStatus: r.incubation_status || null,
+            fundingAmount: Number(r.funding_amount || 0),
+            hasMiniProject: Boolean(miniCoveredCount > 0 && r.has_mini_project),
+            miniProjectsCovered: miniCoveredCount,
+            miniProjectTitle: r.mini_project_title || null,
+            miniProjectStatus: miniStatus,
+            miniProjectGrade: r.mini_project_grade || 'A',
+            miniProjectScore: Number(r.mini_project_score || 0),
+            miniProjectProgress: miniProgressText,
+            isChatActive: Boolean(r.is_chat_active),
+            compositeScore: Number(r.composite_score || 0),
+            tier: idx === 0 ? 'Tier S' : idx < 3 ? 'Tier A+' : 'Tier A',
+            tierColor: idx === 0 ? 'from-amber-400 to-yellow-600' : 'from-indigo-500 to-purple-600',
+            hustleTag: idx === 0 ? '👑 High Academic Scorer & Innovator' : '🎖️ Active College Contributor',
+          };
+        }),
       };
     } catch (err: any) {
       this.logger.error(`Failed to fetch authentic hustle board: ${err.message}`);
