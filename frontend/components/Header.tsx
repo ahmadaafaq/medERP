@@ -7,7 +7,7 @@ import CampusAlertsDropdown from './notices/CampusAlertsDropdown';
 import NoticeDetailModal from './notices/NoticeDetailModal';
 
 interface HeaderProps {
-  title: string;
+  title?: string;
 }
 
 interface UserProfileData {
@@ -35,7 +35,7 @@ interface UserProfileData {
   created_at?: string;
 }
 
-export default function Header({ title }: HeaderProps) {
+export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
   const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
   const [user, setUser] = useState<UserProfileData | null>(null);
