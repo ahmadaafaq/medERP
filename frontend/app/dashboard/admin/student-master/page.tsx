@@ -81,12 +81,12 @@ const SlideOverSkeleton = () => (
   <div className="animate-pulse space-y-6 py-4 w-full">
     {[...Array(3)].map((_, sIdx) => (
       <div key={sIdx} className="space-y-3">
-        <div className="h-3.5 bg-slate-800/80 rounded w-1/5"></div>
+        <div className="h-3.5 bg-slate-200 dark:bg-slate-800/80 rounded w-1/5"></div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-3 space-y-2">
-              <div className="h-2.5 bg-slate-700/80 rounded w-1/2"></div>
-              <div className="h-3.5 bg-slate-600/60 rounded w-3/4"></div>
+            <div key={i} className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50 rounded-xl p-3 space-y-2">
+              <div className="h-2.5 bg-slate-200 dark:bg-slate-700/80 rounded w-1/2"></div>
+              <div className="h-3.5 bg-slate-300 dark:bg-slate-600/60 rounded w-3/4"></div>
             </div>
           ))}
         </div>
@@ -341,7 +341,11 @@ export default function StudentMasterPage() {
 
   const handleViewStudent = async (studentId: string) => {
     const idx = students.findIndex((s) => s.id === studentId);
+    const selectedStudent = idx >= 0 ? students[idx] : null;
     setViewStudentIdx(idx >= 0 ? idx : 0);
+    if (selectedStudent) {
+      setViewStudent(selectedStudent);
+    }
     setViewLoading(true);
     try {
       const token = localStorage.getItem('token') || '';
@@ -350,7 +354,13 @@ export default function StudentMasterPage() {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const result = await res.json();
-      setViewStudent(result.data || null);
+      if (result.data) {
+        setViewStudent((prev: any) => ({
+          ...(selectedStudent || {}),
+          ...(prev || {}),
+          ...result.data,
+        }));
+      }
     } catch (err) {
       console.error('Failed to fetch student detail', err);
     } finally {
@@ -924,6 +934,27 @@ export default function StudentMasterPage() {
       : colleges.find((c) => c.slug === savedSlug || c.slug === 'srms-cet-bareilly') || colleges[0];
     return activeCollege?.slug || savedSlug || 'srms-cet-bareilly';
   };
+
+  const activeModalCollege = colleges.find((c) => c.code === formData.collegeId || c.colg_cd === formData.collegeId || c.slug === formData.collegeId || c.id === formData.collegeId);
+  const activeModalCourse = filteredCourses.find((c) => c.course_cd === formData.courseId || c.code === formData.courseId || c.id === formData.courseId);
+
+  const isFormMedicalCourse = Boolean(
+    (formData.courseId && formData.courseId.toLowerCase().includes('mbbs')) ||
+    (activeModalCourse?.name && activeModalCourse.name.toLowerCase().includes('mbbs')) ||
+    (activeModalCourse?.name && activeModalCourse.name.toLowerCase().includes('medical')) ||
+    (activeModalCollege?.name && activeModalCollege.name.toLowerCase().includes('ims')) ||
+    (activeModalCollege?.slug && activeModalCollege.slug.toLowerCase().includes('ims'))
+  );
+
+  useEffect(() => {
+    if (isModalOpen) {
+      if (!isFormMedicalCourse && (formData.professionalPhase.includes('MBBS') || formData.professionalPhase.includes('Phase'))) {
+        setFormData(prev => ({ ...prev, professionalPhase: 'Semester 1 (1st Year)' }));
+      } else if (isFormMedicalCourse && formData.professionalPhase.includes('Semester')) {
+        setFormData(prev => ({ ...prev, professionalPhase: '1st Professional MBBS (Phase I)' }));
+      }
+    }
+  }, [isFormMedicalCourse, isModalOpen]);
 
   const fetchStudents = async (overrides?: {
     overrideTenant?: string;
@@ -1834,7 +1865,7 @@ export default function StudentMasterPage() {
                       type="button"
                       onClick={handleBulkLink}
                       disabled={isLinking || selectedStudentIds.length === 0 || !targetProfessionalId}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:pointer-events-none font-black text-xs text-white shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/50 transition-all flex items-center justify-center gap-2 whitespace-nowrap border border-indigo-400/30"
+                      className="px-5 py-2.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] disabled:opacity-50 disabled:pointer-events-none font-black text-xs text-white shadow-lg shadow-orange-600/30 hover:shadow-orange-500/50 transition-all flex items-center justify-center gap-2 whitespace-nowrap border border-orange-500 cursor-pointer"
                     >
                       {isLinking ? (
                         <>
@@ -1895,7 +1926,7 @@ export default function StudentMasterPage() {
                       type="button"
                       onClick={handleBulkLinkGroup}
                       disabled={isGroupLinking || selectedStudentIds.length === 0 || !targetGroupId}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-emerald-600 hover:from-purple-500 hover:to-emerald-500 disabled:opacity-50 disabled:pointer-events-none font-black text-xs text-white shadow-lg shadow-purple-600/30 hover:shadow-purple-500/50 transition-all flex items-center justify-center gap-2 whitespace-nowrap border border-purple-400/30"
+                      className="px-5 py-2.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] disabled:opacity-50 disabled:pointer-events-none font-black text-xs text-white shadow-lg shadow-orange-600/30 hover:shadow-orange-500/50 transition-all flex items-center justify-center gap-2 whitespace-nowrap border border-orange-500 cursor-pointer"
                     >
                       {isGroupLinking ? (
                         <>
@@ -1904,7 +1935,7 @@ export default function StudentMasterPage() {
                         </>
                       ) : (
                         <>
-                          <span>👥</span> Save & Assign Group
+                          <span>💾</span> Save & Assign Group
                         </>
                       )}
                     </button>
@@ -1980,7 +2011,7 @@ export default function StudentMasterPage() {
                               setCurrentStep(1);
                               setIsModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--color-primary-700)] text-white text-xs font-bold shadow hover:bg-[var(--color-primary-800)]"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold shadow-md transition-all cursor-pointer"
                           >
                             + Register Student Under This Selection
                           </button>
@@ -2143,7 +2174,7 @@ export default function StudentMasterPage() {
               <div className="flex justify-between items-center mb-6 border-b border-slate-300 dark:border-slate-800 pb-4">
                 <div>
                   <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                    {editModeId ? 'Edit Student Profile' : 'Engineering Student Registration'}
+                    {editModeId ? 'Edit Student Profile' : (isFormMedicalCourse ? 'Medical Student Registration' : (activeModalCollege?.name ? `${activeModalCollege.name} Student Registration` : 'Student Registration'))}
                   </h3>
                   <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                     Step {currentStep} of 6 — {
@@ -2279,16 +2310,37 @@ export default function StudentMasterPage() {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Professional Phase</label>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
+                          {isFormMedicalCourse ? 'Professional Phase' : 'Academic Semester / Year'}
+                        </label>
                         <select
                           value={formData.professionalPhase}
                           onChange={(e) => setFormData({ ...formData, professionalPhase: e.target.value })}
                           className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
                         >
-                          <option value="1st Professional MBBS (Phase I)">1st Professional MBBS (Phase I)</option>
-                          <option value="2nd Professional MBBS (Phase II)">2nd Professional MBBS (Phase II)</option>
-                          <option value="3rd Professional MBBS Part I (Phase III-1)">3rd Professional MBBS Part I (Phase III-1)</option>
-                          <option value="4th Professional MBBS Part II (Phase III-2)">4th Professional MBBS Part II (Phase III-2)</option>
+                          {allProfessionals && allProfessionals.length > 0 ? (
+                            allProfessionals.map((p) => (
+                              <option key={p.id} value={p.name}>{p.name}</option>
+                            ))
+                          ) : isFormMedicalCourse ? (
+                            <>
+                              <option value="1st Professional MBBS (Phase I)">1st Professional MBBS (Phase I)</option>
+                              <option value="2nd Professional MBBS (Phase II)">2nd Professional MBBS (Phase II)</option>
+                              <option value="3rd Professional MBBS Part I (Phase III-1)">3rd Professional MBBS Part I (Phase III-1)</option>
+                              <option value="4th Professional MBBS Part II (Phase III-2)">4th Professional MBBS Part II (Phase III-2)</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="Semester 1 (1st Year)">Semester 1 (1st Year)</option>
+                              <option value="Semester 2 (1st Year)">Semester 2 (1st Year)</option>
+                              <option value="Semester 3 (2nd Year)">Semester 3 (2nd Year)</option>
+                              <option value="Semester 4 (2nd Year)">Semester 4 (2nd Year)</option>
+                              <option value="Semester 5 (3rd Year)">Semester 5 (3rd Year)</option>
+                              <option value="Semester 6 (3rd Year)">Semester 6 (3rd Year)</option>
+                              <option value="Semester 7 (4th Year)">Semester 7 (4th Year)</option>
+                              <option value="Semester 8 (4th Year)">Semester 8 (4th Year)</option>
+                            </>
+                          )}
                         </select>
                       </div>
 
@@ -2958,16 +3010,16 @@ export default function StudentMasterPage() {
           />
 
           {/* Slide-over panel */}
-          <div className="fixed inset-y-0 right-0 z-[70] w-full max-w-2xl flex flex-col bg-slate-900 border-l border-slate-700 shadow-2xl overflow-hidden animate-slide-in-right">
+          <div className="fixed inset-y-0 right-0 z-[70] w-full max-w-2xl flex flex-col bg-white dark:bg-[#0F172A] border-l border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-slide-in-right text-slate-900 dark:text-white">
 
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-[#0F172A]/90 backdrop-blur-md flex-shrink-0">
               <div className="flex items-center gap-4">
-                {(viewStudent?.photoUrl || (viewStudent as any)?.photo_url) ? (
+                {((viewStudent || students[viewStudentIdx])?.photoUrl || (viewStudent || students[viewStudentIdx] as any)?.photo_url) ? (
                   <img
-                    src={viewStudent?.photoUrl || (viewStudent as any)?.photo_url}
-                    alt={viewStudent?.name}
-                    className="w-12 h-12 rounded-xl object-cover border-2 border-indigo-500 shadow-lg"
+                    src={(viewStudent || students[viewStudentIdx])?.photoUrl || (viewStudent || students[viewStudentIdx] as any)?.photo_url}
+                    alt={viewStudent?.name || students[viewStudentIdx]?.name}
+                    className="w-12 h-12 rounded-xl object-cover border-2 border-[#F36C21] shadow-md"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = 'none';
                       const fb = (e.target as HTMLElement).parentElement?.querySelector('.drawer-avatar-fallback') as HTMLElement;
@@ -2975,12 +3027,16 @@ export default function StudentMasterPage() {
                     }}
                   />
                 ) : null}
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white font-black text-xl drawer-avatar-fallback ${(viewStudent?.photoUrl || (viewStudent as any)?.photo_url) ? 'hidden' : ''}`}>
-                  {viewStudent?.name?.charAt(0) || '?'}
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br from-[#F36C21] to-amber-500 flex items-center justify-center text-white font-black text-xl shadow-md drawer-avatar-fallback ${((viewStudent || students[viewStudentIdx])?.photoUrl || (viewStudent || students[viewStudentIdx] as any)?.photo_url) ? 'hidden' : ''}`}>
+                  {(viewStudent?.name || students[viewStudentIdx]?.name)?.charAt(0) || '?'}
                 </div>
                 <div>
-                  <h2 className="text-base font-black text-white">{viewStudent?.name || 'Loading…'}</h2>
-                  <p className="text-[11px] text-slate-400 font-mono">{viewStudent?.registrationNo || viewStudent?.registration_no}</p>
+                  <h2 className="text-base font-black text-slate-900 dark:text-white">
+                    {viewStudent?.name || (viewStudent as any)?.student_name || students[viewStudentIdx]?.name || 'Student Detail'}
+                  </h2>
+                  <p className="text-[11px] text-[#F36C21] font-mono font-bold">
+                    {viewStudent?.registrationNo || viewStudent?.registration_no || students[viewStudentIdx]?.registration_no || (students[viewStudentIdx] as any)?.registrationNo || ''}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2988,48 +3044,50 @@ export default function StudentMasterPage() {
                 <button
                   disabled={viewStudentIdx <= 0}
                   onClick={() => handleViewNav('prev')}
-                  className="w-8 h-8 rounded-lg border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all text-sm flex items-center justify-center"
+                  className="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-[#F36C21] hover:text-[#F36C21] disabled:opacity-30 disabled:cursor-not-allowed transition-all text-sm flex items-center justify-center cursor-pointer shadow-xs"
                   title="Previous Student"
                 >‹</button>
-                <span className="text-[10px] text-slate-500">{viewStudentIdx + 1}/{students.length}</span>
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 font-mono">{viewStudentIdx + 1}/{students.length}</span>
                 <button
                   disabled={viewStudentIdx >= students.length - 1}
                   onClick={() => handleViewNav('next')}
-                  className="w-8 h-8 rounded-lg border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all text-sm flex items-center justify-center"
+                  className="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-[#F36C21] hover:text-[#F36C21] disabled:opacity-30 disabled:cursor-not-allowed transition-all text-sm flex items-center justify-center cursor-pointer shadow-xs"
                   title="Next Student"
                 >›</button>
                 {/* Print */}
                 <button
                   onClick={() => {
-                    const s = viewStudent;
+                    const s = viewStudent || students[viewStudentIdx];
                     const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Student Profile – ${s?.name}</title>
+  <title>Student Profile – ${s?.name || ''}</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family: 'Segoe UI', sans-serif; color: #0f172a; background:#fff; padding:32px; }
-    .header { display:flex; align-items:flex-start; gap:24px; border-bottom:3px solid #6366f1; padding-bottom:20px; margin-bottom:24px; }
-    .photo { width:100px; height:120px; object-fit:cover; border-radius:8px; border:2px solid #6366f1; }
-    .photo-placeholder { width:100px; height:120px; border-radius:8px; background:#e0e7ff; display:flex; align-items:center; justify-content:center; font-size:48px; font-weight:900; color:#6366f1; border:2px solid #6366f1; }
-    .college-name { font-size:18px; font-weight:900; color:#6366f1; }
-    .student-name { font-size:22px; font-weight:900; margin:4px 0; color:#0f172a; }
-    .reg-no { font-size:13px; color:#475569; font-family:monospace; }
-    .badge { display:inline-block; padding:2px 10px; border-radius:4px; background:#e0e7ff; color:#4338ca; font-size:11px; font-weight:700; margin-top:6px; }
-    h3 { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#6366f1; margin:20px 0 10px; border-bottom:1px solid #e2e8f0; padding-bottom:4px; }
-    .grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px 20px; }
-    .field label { font-size:9px; font-weight:700; text-transform:uppercase; color:#94a3b8; letter-spacing:0.06em; display:block; }
-    .field span { font-size:12px; color:#0f172a; font-weight:600; }
-    .footer { margin-top:32px; border-top:1px solid #e2e8f0; padding-top:12px; display:flex; justify-content:space-between; font-size:9px; color:#94a3b8; }
-    @media print { body { padding:20px; } }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #0f172a; background:#fff; padding:24px 32px; }
+    .header { display:flex; align-items:center; gap:20px; border-bottom:3px solid #F36C21; padding-bottom:16px; margin-bottom:20px; }
+    .photo { width:90px; height:110px; object-fit:cover; border-radius:10px; border:2px solid #F36C21; flex-shrink:0; }
+    .photo-placeholder { width:90px; height:110px; border-radius:10px; background:#FFF4EC; display:flex; align-items:center; justify-content:center; font-size:40px; font-weight:900; color:#F36C21; border:2px solid #F36C21; flex-shrink:0; }
+    .college-name { font-size:16px; font-weight:900; color:#F36C21; text-transform:uppercase; letter-spacing:0.02em; }
+    .student-name { font-size:22px; font-weight:900; margin:2px 0; color:#0f172a; }
+    .reg-no { font-size:12px; color:#475569; font-family:monospace; font-weight:700; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:6px; background:#FFF4EC; color:#D9530F; font-size:11px; font-weight:800; margin-top:6px; border:1px solid #F36C21/30; }
+    h3 { font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.08em; color:#F36C21; margin:18px 0 8px; border-bottom:1.5px solid #e2e8f0; padding-bottom:4px; }
+    .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px 14px; }
+    .grid-2 { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px 14px; }
+    .field { background:#f8fafc; border:1px solid #e2e8f0; padding:6px 10px; border-radius:8px; }
+    .field label { font-size:8.5px; font-weight:800; text-transform:uppercase; color:#64748b; letter-spacing:0.05em; display:block; margin-bottom:2px; }
+    .field span { font-size:11.5px; color:#0f172a; font-weight:700; word-break:break-word; }
+    .footer { margin-top:24px; border-top:1px solid #e2e8f0; padding-top:10px; display:flex; justify-content:space-between; font-size:9px; color:#94a3b8; font-weight:600; }
+    @media print { body { padding:16px 20px; } .field { background:none; } }
   </style>
 </head>
 <body>
 <div class="header">
-  ${s?.photoUrl ? `<img class="photo" src="${s.photoUrl}" alt="photo"/>` : `<div class="photo-placeholder">${s?.name?.charAt(0) || '?'}</div>`}
+  ${(s?.photoUrl || s?.photo_url) ? `<img class="photo" src="${s.photoUrl || s.photo_url}" alt="photo"/>` : `<div class="photo-placeholder">${(s?.name || '?').charAt(0)}</div>`}
   <div>
-    <div class="college-name">${s?.collegeName || s?.college_name || ''}</div>
+    <div class="college-name">${s?.collegeName || s?.college_name || 'SRMS COLLEGE OF ENGINEERING & TECHNOLOGY'}</div>
     <div class="student-name">${s?.name || ''}</div>
     <div class="reg-no">Reg No: ${s?.registrationNo || s?.registration_no || ''} &nbsp;|&nbsp; Roll No: ${s?.rollNo || s?.rollno || '—'}</div>
     <div class="badge">${s?.courseCode || s?.course_code || ''} &bull; ${s?.batchCode || s?.batch_code || ''} &bull; ${s?.academicSession || s?.academic_session || ''}</div>
@@ -3042,18 +3100,27 @@ export default function StudentMasterPage() {
   <div class="field"><label>Date of Birth</label><span>${s?.dob || '—'}</span></div>
   <div class="field"><label>Blood Group</label><span>${s?.bloodGroup || '—'}</span></div>
   <div class="field"><label>Aadhaar No</label><span>${s?.aadhaarNo || '—'}</span></div>
+  <div class="field"><label>PAN No</label><span>${s?.panNo || '—'}</span></div>
   <div class="field"><label>Mobile</label><span>${s?.mobileNo || '—'}</span></div>
+  <div class="field"><label>Alt Mobile</label><span>${s?.alternateMobile || '—'}</span></div>
   <div class="field"><label>Email</label><span>${s?.emailAddress || '—'}</span></div>
+  <div class="field"><label>Nationality</label><span>${s?.nationality || '—'}</span></div>
+  <div class="field"><label>Religion</label><span>${s?.religion || '—'}</span></div>
+  <div class="field"><label>Category</label><span>${s?.categoryCode || '—'}</span></div>
+  <div class="field"><label>Domicile</label><span>${s?.domicileState || '—'}</span></div>
 </div>
 
 <h3>Academic Details</h3>
 <div class="grid">
   <div class="field"><label>College</label><span>${s?.collegeName || s?.college_name || '—'}</span></div>
+  <div class="field"><label>Course</label><span>${s?.courseCode || s?.course_code || '—'}</span></div>
   <div class="field"><label>Branch</label><span>${s?.branchName || '—'}</span></div>
+  <div class="field"><label>Batch</label><span>${s?.batchCode || s?.batch_code || '—'}</span></div>
+  <div class="field"><label>Session</label><span>${s?.academicSession || s?.academic_session || '—'}</span></div>
   <div class="field"><label>Residency</label><span>${s?.residencyType || s?.residency_type || '—'}</span></div>
   <div class="field"><label>Admission Type</label><span>${s?.admissionType || s?.admission_type || '—'}</span></div>
   <div class="field"><label>Admission Status</label><span>${s?.admissionStatus || '—'}</span></div>
-  <div class="field"><label>Category</label><span>${s?.categoryCode || '—'}</span></div>
+  <div class="field"><label>Vaccination</label><span>${s?.vaccinationStatus || '—'}</span></div>
 </div>
 
 <h3>Guardian Information</h3>
@@ -3064,6 +3131,9 @@ export default function StudentMasterPage() {
   <div class="field"><label>Mother's Name</label><span>${s?.motherName || '—'}</span></div>
   <div class="field"><label>Mother's Mobile</label><span>${s?.motherMobile || '—'}</span></div>
   <div class="field"><label>Mother's Occupation</label><span>${s?.motherOccupation || '—'}</span></div>
+  <div class="field"><label>Guardian Name</label><span>${s?.guardianName || '—'}</span></div>
+  <div class="field"><label>Guardian Mobile</label><span>${s?.guardianMobile || '—'}</span></div>
+  <div class="field"><label>Guardian Relation</label><span>${s?.guardianRelation || '—'}</span></div>
 </div>
 
 <h3>NEET & Qualifications</h3>
@@ -3071,9 +3141,31 @@ export default function StudentMasterPage() {
   <div class="field"><label>NEET Roll No</label><span>${s?.neetRollNo || '—'}</span></div>
   <div class="field"><label>NEET Score</label><span>${s?.neetScore || '—'}</span></div>
   <div class="field"><label>NEET Rank</label><span>${s?.neetRank || '—'}</span></div>
+  <div class="field"><label>NEET Percentile</label><span>${s?.neetPercentile || '—'}</span></div>
   <div class="field"><label>10th %</label><span>${s?.tenthPercent || '—'}</span></div>
+  <div class="field"><label>10th Board</label><span>${s?.tenthBoard || '—'}</span></div>
   <div class="field"><label>12th %</label><span>${s?.twelfthPercent || '—'}</span></div>
   <div class="field"><label>12th Board</label><span>${s?.twelfthBoard || '—'}</span></div>
+  <div class="field"><label>12th PCB %</label><span>${s?.twelfthPcbPercent || '—'}</span></div>
+</div>
+
+<h3>Address</h3>
+<div class="grid-2">
+  <div class="field"><label>Permanent Address</label><span>${s?.permanentAddress || '—'}</span></div>
+  <div class="field"><label>Local Address</label><span>${s?.localAddress || '—'}</span></div>
+  <div class="field"><label>City</label><span>${s?.city || '—'}</span></div>
+  <div class="field"><label>State</label><span>${s?.state || '—'}</span></div>
+  <div class="field"><label>PIN Code</label><span>${s?.pincode || '—'}</span></div>
+</div>
+
+<h3>Hostel & Bank Details</h3>
+<div class="grid">
+  <div class="field"><label>Hostel Block</label><span>${s?.hostelBlock || '—'}</span></div>
+  <div class="field"><label>Room No</label><span>${s?.roomNo || '—'}</span></div>
+  <div class="field"><label>Bank Name</label><span>${s?.bankName || '—'}</span></div>
+  <div class="field"><label>Account No</label><span>${s?.accountNo || '—'}</span></div>
+  <div class="field"><label>IFSC Code</label><span>${s?.ifscCode || '—'}</span></div>
+  <div class="field"><label>Transport Route</label><span>${s?.transportRoute || '—'}</span></div>
 </div>
 
 <div class="footer">
@@ -3086,17 +3178,20 @@ export default function StudentMasterPage() {
                     if (win) {
                       win.document.write(html);
                       win.document.close();
-                      win.onload = () => { win.focus(); win.print(); };
+                      setTimeout(() => {
+                        win.focus();
+                        win.print();
+                      }, 250);
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-all shadow"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#F36C21] hover:bg-[#E05B10] text-white text-[11px] font-extrabold rounded-xl transition-all shadow-md cursor-pointer"
                   title="Print A4 Profile Sheet"
                 >
                   🖨 Print
                 </button>
                 <button
                   onClick={() => setViewStudent(null)}
-                  className="w-8 h-8 rounded-lg border border-slate-700 text-slate-400 hover:border-rose-500 hover:text-rose-400 transition-all flex items-center justify-center text-lg"
+                  className="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:border-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-all flex items-center justify-center text-lg cursor-pointer shadow-xs"
                 >✕</button>
               </div>
             </div>
@@ -3109,8 +3204,8 @@ export default function StudentMasterPage() {
                 <>
                   {/* Personal Info Section */}
                   <section>
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
-                      <span className="w-4 h-0.5 bg-indigo-500 rounded" /> Personal Information
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-[#F36C21] mb-3 flex items-center gap-2">
+                      <span className="w-4 h-0.5 bg-[#F36C21] rounded" /> Personal Information
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {[
@@ -3127,9 +3222,9 @@ export default function StudentMasterPage() {
                         ['Category', viewStudent?.categoryCode],
                         ['Domicile', viewStudent?.domicileState],
                       ].map(([label, val]) => (
-                        <div key={label as string} className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">{label}</p>
-                          <p className="text-xs font-semibold text-white truncate">{val || '—'}</p>
+                        <div key={label as string} className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-xl px-3 py-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">{label}</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{val || '—'}</p>
                         </div>
                       ))}
                     </div>
@@ -3137,7 +3232,7 @@ export default function StudentMasterPage() {
 
                   {/* Academic Info Section */}
                   <section>
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-purple-400 mb-3 flex items-center gap-2">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-purple-600 dark:text-purple-400 mb-3 flex items-center gap-2">
                       <span className="w-4 h-0.5 bg-purple-500 rounded" /> Academic Details
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -3152,9 +3247,9 @@ export default function StudentMasterPage() {
                         ['Admission Status', viewStudent?.admissionStatus],
                         ['Vaccination', viewStudent?.vaccinationStatus],
                       ].map(([label, val]) => (
-                        <div key={label as string} className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">{label}</p>
-                          <p className="text-xs font-semibold text-white truncate">{val || '—'}</p>
+                        <div key={label as string} className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-xl px-3 py-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">{label}</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{val || '—'}</p>
                         </div>
                       ))}
                     </div>
@@ -3162,7 +3257,7 @@ export default function StudentMasterPage() {
 
                   {/* Guardian Info */}
                   <section>
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-3 flex items-center gap-2">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-3 flex items-center gap-2">
                       <span className="w-4 h-0.5 bg-amber-500 rounded" /> Guardian Information
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -3177,9 +3272,9 @@ export default function StudentMasterPage() {
                         ["Guardian Mobile", viewStudent?.guardianMobile],
                         ["Guardian Relation", viewStudent?.guardianRelation],
                       ].map(([label, val]) => (
-                        <div key={label as string} className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">{label}</p>
-                          <p className="text-xs font-semibold text-white truncate">{val || '—'}</p>
+                        <div key={label as string} className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-xl px-3 py-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">{label}</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{val || '—'}</p>
                         </div>
                       ))}
                     </div>
@@ -3187,7 +3282,7 @@ export default function StudentMasterPage() {
 
                   {/* NEET & Qualifications */}
                   <section>
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-3 flex items-center gap-2">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-3 flex items-center gap-2">
                       <span className="w-4 h-0.5 bg-emerald-500 rounded" /> NEET & Qualifications
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -3202,9 +3297,9 @@ export default function StudentMasterPage() {
                         ['12th Board', viewStudent?.twelfthBoard],
                         ['12th PCB %', viewStudent?.twelfthPcbPercent],
                       ].map(([label, val]) => (
-                        <div key={label as string} className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">{label}</p>
-                          <p className="text-xs font-semibold text-white">{val || '—'}</p>
+                        <div key={label as string} className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-xl px-3 py-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">{label}</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white">{val || '—'}</p>
                         </div>
                       ))}
                     </div>
@@ -3212,7 +3307,7 @@ export default function StudentMasterPage() {
 
                   {/* Address */}
                   <section>
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-rose-400 mb-3 flex items-center gap-2">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400 mb-3 flex items-center gap-2">
                       <span className="w-4 h-0.5 bg-rose-500 rounded" /> Address
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3223,9 +3318,9 @@ export default function StudentMasterPage() {
                         ['State', viewStudent?.state],
                         ['PIN Code', viewStudent?.pincode],
                       ].map(([label, val]) => (
-                        <div key={label as string} className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">{label}</p>
-                          <p className="text-xs font-semibold text-white">{val || '—'}</p>
+                        <div key={label as string} className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-xl px-3 py-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">{label}</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white">{val || '—'}</p>
                         </div>
                       ))}
                     </div>
@@ -3233,7 +3328,7 @@ export default function StudentMasterPage() {
 
                   {/* Hostel & Bank */}
                   <section>
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-cyan-400 mb-3 flex items-center gap-2">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-cyan-600 dark:text-cyan-400 mb-3 flex items-center gap-2">
                       <span className="w-4 h-0.5 bg-cyan-500 rounded" /> Hostel & Bank Details
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -3245,9 +3340,9 @@ export default function StudentMasterPage() {
                         ['IFSC Code', viewStudent?.ifscCode],
                         ['Transport Route', viewStudent?.transportRoute],
                       ].map(([label, val]) => (
-                        <div key={label as string} className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">{label}</p>
-                          <p className="text-xs font-semibold text-white">{val || '—'}</p>
+                        <div key={label as string} className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-xl px-3 py-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">{label}</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white">{val || '—'}</p>
                         </div>
                       ))}
                     </div>
@@ -3257,20 +3352,20 @@ export default function StudentMasterPage() {
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 px-6 py-3 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between">
-              <span className="text-[10px] text-slate-500">
+            <div className="flex-shrink-0 px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                 Student {viewStudentIdx + 1} of {students.length}
               </span>
               <div className="flex gap-2">
                 <button
                   disabled={viewStudentIdx <= 0}
                   onClick={() => handleViewNav('prev')}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="px-3.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs"
                 >← Previous</button>
                 <button
                   disabled={viewStudentIdx >= students.length - 1}
                   onClick={() => handleViewNav('next')}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="px-3.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs"
                 >Next →</button>
               </div>
             </div>

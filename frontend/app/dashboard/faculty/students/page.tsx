@@ -464,28 +464,28 @@ export default function FacultyStudentsPage() {
 
             {/* Pagination Controls */}
             {!loading && students.length > 0 && (
-              <div className="p-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+              <div className="p-4 border-t border-[#E7EAF3] dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#6F7887] dark:text-slate-400 font-semibold">
                 <div>
-                  Showing <span className="font-bold text-white">{(page - 1) * pageSize + 1}</span> to{' '}
-                  <span className="font-bold text-white">{Math.min(page * pageSize, totalCount)}</span> of{' '}
-                  <span className="font-bold text-white">{totalCount}</span> Students
+                  Showing <span className="font-black text-[#11141A] dark:text-white">{(page - 1) * pageSize + 1}</span> to{' '}
+                  <span className="font-black text-[#11141A] dark:text-white">{Math.min(page * pageSize, totalCount)}</span> of{' '}
+                  <span className="font-black text-[#11141A] dark:text-white">{totalCount}</span> Students
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage(p => Math.max(p - 1, 1))}
                     disabled={page === 1}
-                    className="px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-slate-200 font-semibold border border-slate-800 transition-all"
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-[#11141A] dark:text-slate-200 font-extrabold border border-[#E7EAF3] dark:border-slate-700 transition-all cursor-pointer disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
-                  <span className="px-3 py-1.5 rounded bg-indigo-500/10 border border-indigo-500/20 font-bold text-indigo-400">
+                  <span className="px-3.5 py-1.5 rounded-xl bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-900/60 font-black text-[#F36C21]">
                     Page {page} of {totalPages}
                   </span>
                   <button
                     onClick={() => setPage(p => Math.min(p + 1, totalPages))}
                     disabled={page >= totalPages}
-                    className="px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-slate-200 font-semibold border border-slate-800 transition-all"
+                    className="px-3.5 py-1.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:opacity-40 text-white disabled:text-[#6F7887] dark:disabled:text-slate-400 font-extrabold transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs"
                   >
                     Next
                   </button>
@@ -537,10 +537,10 @@ export default function FacultyStudentsPage() {
                     <button
                       key={t.key}
                       onClick={() => setActiveTab(t.key as ModalTab)}
-                      className={`px-3.5 py-2 rounded-xl transition-all shrink-0 font-extrabold ${
+                      className={`px-3.5 py-2 rounded-xl transition-all shrink-0 font-extrabold cursor-pointer ${
                         activeTab === t.key
-                          ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/20'
-                          : 'bg-[#F8FAFC] dark:bg-slate-800 hover:bg-[#EEECFF] text-[#4E5969] dark:text-slate-300 border border-[#E7EAF3] dark:border-slate-700'
+                          ? 'bg-[#F36C21] text-white shadow-md shadow-[#F36C21]/20'
+                          : 'bg-[#F8FAFC] dark:bg-slate-800 hover:bg-orange-50 dark:hover:bg-slate-700 text-[#4E5969] dark:text-slate-300 border border-[#E7EAF3] dark:border-slate-700'
                       }`}
                     >
                       {t.label}
@@ -553,49 +553,49 @@ export default function FacultyStudentsPage() {
                   {/* TAB 1: Personal Details */}
                   {activeTab === 'PERSONAL' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-3 p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                        <h4 className="font-extrabold text-indigo-400 uppercase tracking-wider border-b border-slate-800 pb-1.5">Academic Profile</h4>
-                        <div className="flex justify-between py-1 border-b border-slate-800/50">
-                          <span className="text-slate-400">Course & Discipline</span>
-                          <span className="font-semibold text-white">{selectedStudent.course_cd} (MBBS)</span>
+                      <div className="space-y-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800">
+                        <h4 className="font-black text-[#F36C21] uppercase tracking-wider border-b border-[#E7EAF3] dark:border-slate-800 pb-1.5">Academic Profile</h4>
+                        <div className="flex justify-between py-1 border-b border-[#E7EAF3] dark:border-slate-800/60">
+                          <span className="text-[#6F7887] dark:text-slate-400 font-semibold">Course &amp; Discipline</span>
+                          <span className="font-bold text-[#11141A] dark:text-white">{selectedStudent.course_cd} (MBBS)</span>
                         </div>
-                        <div className="flex justify-between py-1 border-b border-slate-800/50">
-                          <span className="text-slate-400">Batch Code</span>
-                          <span className="font-semibold text-purple-400">{selectedStudent.batch_cd}</span>
+                        <div className="flex justify-between py-1 border-b border-[#E7EAF3] dark:border-slate-800/60">
+                          <span className="text-[#6F7887] dark:text-slate-400 font-semibold">Batch Code</span>
+                          <span className="font-extrabold text-[#F36C21]">{selectedStudent.batch_cd}</span>
                         </div>
-                        <div className="flex justify-between py-1 border-b border-slate-800/50">
-                          <span className="text-slate-400">Admission Year</span>
-                          <span className="font-semibold text-white">{selectedStudent.admission_year}</span>
+                        <div className="flex justify-between py-1 border-b border-[#E7EAF3] dark:border-slate-800/60">
+                          <span className="text-[#6F7887] dark:text-slate-400 font-semibold">Admission Year</span>
+                          <span className="font-bold text-[#11141A] dark:text-white">{selectedStudent.admission_year}</span>
                         </div>
                         <div className="flex justify-between py-1">
-                          <span className="text-slate-400">Enrolled Department</span>
-                          <span className="font-semibold text-indigo-300">{facultyDept}</span>
+                          <span className="text-[#6F7887] dark:text-slate-400 font-semibold">Enrolled Department</span>
+                          <span className="font-bold text-[#F36C21]">{facultyDept}</span>
                         </div>
                       </div>
 
-                      <div className="space-y-3 p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                        <h4 className="font-extrabold text-indigo-400 uppercase tracking-wider border-b border-slate-800 pb-1.5">Contact & Guardian Info</h4>
-                        <div className="flex justify-between py-1 border-b border-slate-800/50">
-                          <span className="text-slate-400">Email Address</span>
-                          <span className="font-semibold text-slate-200">{selectedStudent.email}</span>
+                      <div className="space-y-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800">
+                        <h4 className="font-black text-[#F36C21] uppercase tracking-wider border-b border-[#E7EAF3] dark:border-slate-800 pb-1.5">Contact &amp; Guardian Info</h4>
+                        <div className="flex justify-between py-1 border-b border-[#E7EAF3] dark:border-slate-800/60">
+                          <span className="text-[#6F7887] dark:text-slate-400 font-semibold">Email Address</span>
+                          <span className="font-bold text-[#11141A] dark:text-slate-200">{selectedStudent.email}</span>
                         </div>
-                        <div className="flex justify-between py-1 border-b border-slate-800/50">
-                          <span className="text-slate-400">Phone Number</span>
-                          <span className="font-semibold text-slate-200">{selectedStudent.phone}</span>
+                        <div className="flex justify-between py-1 border-b border-[#E7EAF3] dark:border-slate-800/60">
+                          <span className="text-[#6F7887] dark:text-slate-400 font-semibold">Phone Number</span>
+                          <span className="font-bold text-[#11141A] dark:text-slate-200">{selectedStudent.phone}</span>
                         </div>
-                        <div className="flex justify-between py-1 border-b border-slate-800/50">
-                          <span className="text-slate-400">Guardian Name</span>
-                          <span className="font-semibold text-slate-200">{selectedStudent.guardian_name}</span>
+                        <div className="flex justify-between py-1 border-b border-[#E7EAF3] dark:border-slate-800/60">
+                          <span className="text-[#6F7887] dark:text-slate-400 font-semibold">Guardian Name</span>
+                          <span className="font-bold text-[#11141A] dark:text-slate-200">{selectedStudent.guardian_name}</span>
                         </div>
                         <div className="flex justify-between py-1">
-                          <span className="text-slate-400">Blood Group</span>
-                          <span className="font-bold text-rose-400">{selectedStudent.blood_group}</span>
+                          <span className="text-[#6F7887] dark:text-slate-400 font-semibold">Blood Group</span>
+                          <span className="font-extrabold text-rose-600 dark:text-rose-400">{selectedStudent.blood_group}</span>
                         </div>
                       </div>
 
-                      <div className="md:col-span-2 p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                        <span className="text-slate-400 font-medium">Permanent Address</span>
-                        <p className="text-slate-200 font-semibold">{selectedStudent.address}</p>
+                      <div className="md:col-span-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 space-y-1">
+                        <span className="text-[#6F7887] dark:text-slate-400 font-bold block text-[11px]">Permanent Address</span>
+                        <p className="text-[#11141A] dark:text-slate-200 font-bold">{selectedStudent.address}</p>
                       </div>
                     </div>
                   )}
@@ -605,151 +605,151 @@ export default function FacultyStudentsPage() {
                     <div className="space-y-4">
                       {/* Overall Summary KPI Cards */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="glass-card p-3 text-center space-y-0.5">
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Total Attendance Rate</span>
-                          <p className="text-xl font-extrabold text-emerald-400">{selectedStudent.attendance_pct}%</p>
-                          <span className="text-[10px] text-emerald-500 font-semibold">Satisfactory (&gt; 75%)</span>
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 text-center space-y-0.5">
+                          <span className="text-[10px] text-[#6F7887] dark:text-slate-400 uppercase font-black">Total Attendance Rate</span>
+                          <p className="text-xl font-black text-[#00C48C]">{selectedStudent.attendance_pct}%</p>
+                          <span className="text-[10px] text-[#00C48C] font-bold">Satisfactory (&gt; 75%)</span>
                         </div>
-                        <div className="glass-card p-3 text-center space-y-0.5">
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Phase I Theory Lectures</span>
-                          <p className="text-xl font-extrabold text-indigo-400">132 / 144</p>
-                          <span className="text-[10px] text-indigo-400 font-semibold">91.6% Attended</span>
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 text-center space-y-0.5">
+                          <span className="text-[10px] text-[#6F7887] dark:text-slate-400 uppercase font-black">Phase I Theory Lectures</span>
+                          <p className="text-xl font-black text-[#F36C21]">132 / 144</p>
+                          <span className="text-[10px] text-[#F36C21] font-bold">91.6% Attended</span>
                         </div>
-                        <div className="glass-card p-3 text-center space-y-0.5">
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Phase I Practical Labs</span>
-                          <p className="text-xl font-extrabold text-purple-400">77 / 84</p>
-                          <span className="text-[10px] text-purple-400 font-semibold">91.6% Attended</span>
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 text-center space-y-0.5">
+                          <span className="text-[10px] text-[#6F7887] dark:text-slate-400 uppercase font-black">Phase I Practical Labs</span>
+                          <p className="text-xl font-black text-purple-600 dark:text-purple-400">77 / 84</p>
+                          <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">91.6% Attended</span>
                         </div>
                       </div>
 
                       {/* PROFESSIONAL I ACCORDION */}
-                      <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+                      <div className="rounded-2xl border border-[#E7EAF3] dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
                         <button
                           onClick={() => toggleAttProf('PROF_1')}
-                          className="w-full px-4 py-3 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between transition-all"
+                          className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between transition-all cursor-pointer"
                         >
                           <div className="flex items-center gap-3">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-orange-100 dark:bg-orange-950/60 text-[#F36C21] border border-[#F36C21]/30">
                               Phase I
                             </span>
-                            <span className="font-extrabold text-white text-xs">Professional I Attendance (Physiology, Anatomy, Biochemistry, Community Med)</span>
+                            <span className="font-black text-[#11141A] dark:text-white text-xs">Professional I Attendance (Physiology, Anatomy, Biochemistry, Community Med)</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-emerald-400">88.5% Avg</span>
-                            <span className="text-slate-400 text-sm font-bold">{openAttProf.includes('PROF_1') ? '▲' : '▼'}</span>
+                            <span className="text-xs font-black text-[#00C48C]">88.5% Avg</span>
+                            <span className="text-[#6F7887] dark:text-slate-400 text-sm font-bold">{openAttProf.includes('PROF_1') ? '▲' : '▼'}</span>
                           </div>
                         </button>
 
                         {openAttProf.includes('PROF_1') && (
-                          <div className="p-4 border-t border-slate-800/80 space-y-3 bg-slate-950/40">
+                          <div className="p-4 border-t border-[#E7EAF3] dark:border-slate-800 space-y-3 bg-slate-50/50 dark:bg-slate-950/40">
                             {/* Physiology */}
-                            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center">
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                               <div>
-                                <p className="font-extrabold text-white">Human Physiology (PHY101)</p>
-                                <p className="text-[11px] text-slate-400">Lectures: 38/42 | Practicals: 26/28</p>
+                                <p className="font-extrabold text-[#11141A] dark:text-white">Human Physiology (PHY101)</p>
+                                <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Lectures: 38/42 | Practicals: 26/28</p>
                               </div>
-                              <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 font-bold">88.5%</span>
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-[#00C48C] font-black">88.5%</span>
                             </div>
                             {/* Anatomy */}
-                            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center">
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                               <div>
-                                <p className="font-extrabold text-white">Human Anatomy & Histology (ANA101)</p>
-                                <p className="text-[11px] text-slate-400">Lectures: 40/42 | Dissection Lab: 27/28</p>
+                                <p className="font-extrabold text-[#11141A] dark:text-white">Human Anatomy &amp; Histology (ANA101)</p>
+                                <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Lectures: 40/42 | Dissection Lab: 27/28</p>
                               </div>
-                              <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 font-bold">91.0%</span>
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-[#00C48C] font-black">91.0%</span>
                             </div>
                             {/* Biochemistry */}
-                            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center">
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                               <div>
-                                <p className="font-extrabold text-white">Biochemistry (BIC101)</p>
-                                <p className="text-[11px] text-slate-400">Lectures: 36/40 | Practical Lab: 25/28</p>
+                                <p className="font-extrabold text-[#11141A] dark:text-white">Biochemistry (BIC101)</p>
+                                <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Lectures: 36/40 | Practical Lab: 25/28</p>
                               </div>
-                              <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 font-bold">86.0%</span>
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-[#00C48C] font-black">86.0%</span>
                             </div>
                             {/* Community Medicine */}
-                            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center">
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                               <div>
-                                <p className="font-extrabold text-white">Community Medicine (Introductory Phase I)</p>
-                                <p className="text-[11px] text-slate-400">Field Visits & Lectures: 18/20</p>
+                                <p className="font-extrabold text-[#11141A] dark:text-white">Community Medicine (Introductory Phase I)</p>
+                                <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Field Visits &amp; Lectures: 18/20</p>
                               </div>
-                              <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 font-bold">89.0%</span>
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-[#00C48C] font-black">89.0%</span>
                             </div>
                           </div>
                         )}
                       </div>
 
                       {/* PROFESSIONAL II ACCORDION */}
-                      <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+                      <div className="rounded-2xl border border-[#E7EAF3] dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
                         <button
                           onClick={() => toggleAttProf('PROF_2')}
-                          className="w-full px-4 py-3 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between transition-all"
+                          className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between transition-all cursor-pointer"
                         >
                           <div className="flex items-center gap-3">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800">
                               Phase II
                             </span>
-                            <span className="font-extrabold text-white text-xs">Professional II Attendance (Pathology, Microbiology, Pharmacology, FMT)</span>
+                            <span className="font-black text-[#11141A] dark:text-white text-xs">Professional II Attendance (Pathology, Microbiology, Pharmacology, FMT)</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-slate-400">Upcoming / Registered</span>
-                            <span className="text-slate-400 text-sm font-bold">{openAttProf.includes('PROF_2') ? '▲' : '▼'}</span>
+                            <span className="text-xs font-bold text-[#6F7887] dark:text-slate-400">Upcoming / Registered</span>
+                            <span className="text-[#6F7887] dark:text-slate-400 text-sm font-bold">{openAttProf.includes('PROF_2') ? '▲' : '▼'}</span>
                           </div>
                         </button>
 
                         {openAttProf.includes('PROF_2') && (
-                          <div className="p-4 border-t border-slate-800/80 space-y-3 bg-slate-950/40">
-                            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center">
+                          <div className="p-4 border-t border-[#E7EAF3] dark:border-slate-800 space-y-3 bg-slate-50/50 dark:bg-slate-950/40">
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                               <div>
-                                <p className="font-extrabold text-white">Pathology (PAT201)</p>
-                                <p className="text-[11px] text-slate-400">Lectures: 34/40 | Practicals: 24/28</p>
+                                <p className="font-extrabold text-[#11141A] dark:text-white">Pathology (PAT201)</p>
+                                <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Lectures: 34/40 | Practicals: 24/28</p>
                               </div>
-                              <span className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 font-bold">85.0%</span>
+                              <span className="px-2.5 py-1 rounded-lg bg-orange-100 dark:bg-orange-950/60 text-[#F36C21] font-black">85.0%</span>
                             </div>
-                            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center">
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                               <div>
-                                <p className="font-extrabold text-white">Microbiology (MIC201)</p>
-                                <p className="text-[11px] text-slate-400">Lectures: 35/40 | Practicals: 25/28</p>
+                                <p className="font-extrabold text-[#11141A] dark:text-white">Microbiology (MIC201)</p>
+                                <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Lectures: 35/40 | Practicals: 25/28</p>
                               </div>
-                              <span className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 font-bold">87.5%</span>
+                              <span className="px-2.5 py-1 rounded-lg bg-orange-100 dark:bg-orange-950/60 text-[#F36C21] font-black">87.5%</span>
                             </div>
-                            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center">
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                               <div>
-                                <p className="font-extrabold text-white">Pharmacology (PHA201)</p>
-                                <p className="text-[11px] text-slate-400">Lectures: 33/40 | Practicals: 23/28</p>
+                                <p className="font-extrabold text-[#11141A] dark:text-white">Pharmacology (PHA201)</p>
+                                <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Lectures: 33/40 | Practicals: 23/28</p>
                               </div>
-                              <span className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 font-bold">84.0%</span>
+                              <span className="px-2.5 py-1 rounded-lg bg-orange-100 dark:bg-orange-950/60 text-[#F36C21] font-black">84.0%</span>
                             </div>
-                            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center">
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                               <div>
-                                <p className="font-extrabold text-white">Forensic Medicine & Toxicology (FMT201)</p>
-                                <p className="text-[11px] text-slate-400">Lectures & Autopsy Demonstrations: 18/20</p>
+                                <p className="font-extrabold text-[#11141A] dark:text-white">Forensic Medicine &amp; Toxicology (FMT201)</p>
+                                <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Lectures &amp; Autopsy Demonstrations: 18/20</p>
                               </div>
-                              <span className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 font-bold">88.0%</span>
+                              <span className="px-2.5 py-1 rounded-lg bg-orange-100 dark:bg-orange-950/60 text-[#F36C21] font-black">88.0%</span>
                             </div>
                           </div>
                         )}
                       </div>
 
                       {/* PROFESSIONAL III ACCORDION */}
-                      <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+                      <div className="rounded-2xl border border-[#E7EAF3] dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
                         <button
                           onClick={() => toggleAttProf('PROF_3')}
-                          className="w-full px-4 py-3 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between transition-all"
+                          className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between transition-all cursor-pointer"
                         >
                           <div className="flex items-center gap-3">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                               Phase III
                             </span>
-                            <span className="font-extrabold text-white text-xs">Professional III Attendance (Clinical Medicine, Surgery, ObGyn, Pediatrics, ENT, Ophth)</span>
+                            <span className="font-black text-[#11141A] dark:text-white text-xs">Professional III Attendance (Clinical Medicine, Surgery, ObGyn, Pediatrics, ENT, Ophth)</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-slate-400">Future Phase</span>
-                            <span className="text-slate-400 text-sm font-bold">{openAttProf.includes('PROF_3') ? '▲' : '▼'}</span>
+                            <span className="text-xs font-bold text-[#6F7887] dark:text-slate-400">Future Phase</span>
+                            <span className="text-[#6F7887] dark:text-slate-400 text-sm font-bold">{openAttProf.includes('PROF_3') ? '▲' : '▼'}</span>
                           </div>
                         </button>
 
                         {openAttProf.includes('PROF_3') && (
-                          <div className="p-4 border-t border-slate-800/80 space-y-2 bg-slate-950/40 text-slate-400">
+                          <div className="p-4 border-t border-[#E7EAF3] dark:border-slate-800 space-y-2 bg-slate-50/50 dark:bg-slate-950/40 text-[#6F7887] dark:text-slate-400 font-semibold">
                             <p>Clinical postings and Phase III subjects will commence upon completion of Phase II curriculum.</p>
                           </div>
                         )}
@@ -761,108 +761,108 @@ export default function FacultyStudentsPage() {
                   {activeTab === 'RESULT' && (
                     <div className="space-y-4">
                       {/* PROFESSIONAL I RESULTS ACCORDION */}
-                      <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+                      <div className="rounded-2xl border border-[#E7EAF3] dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
                         <button
                           onClick={() => toggleResProf('PROF_1')}
-                          className="w-full px-4 py-3 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between transition-all"
+                          className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between transition-all cursor-pointer"
                         >
                           <div className="flex items-center gap-3">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-orange-100 dark:bg-orange-950/60 text-[#F36C21] border border-[#F36C21]/30">
                               Phase I
                             </span>
-                            <span className="font-extrabold text-white text-xs">Professional I Examination Results (Physiology, Anatomy, Biochemistry, Comm Med)</span>
+                            <span className="font-black text-[#11141A] dark:text-white text-xs">Professional I Examination Results (Physiology, Anatomy, Biochemistry, Comm Med)</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-emerald-400">84.2% Avg (Grade A)</span>
-                            <span className="text-slate-400 text-sm font-bold">{openResProf.includes('PROF_1') ? '▲' : '▼'}</span>
+                            <span className="text-xs font-black text-[#00C48C]">84.2% Avg (Grade A)</span>
+                            <span className="text-[#6F7887] dark:text-slate-400 text-sm font-bold">{openResProf.includes('PROF_1') ? '▲' : '▼'}</span>
                           </div>
                         </button>
 
                         {openResProf.includes('PROF_1') && (
-                          <div className="p-4 border-t border-slate-800/80 space-y-3 bg-slate-950/40">
+                          <div className="p-4 border-t border-[#E7EAF3] dark:border-slate-800 space-y-3 bg-slate-50/50 dark:bg-slate-950/40">
                             {/* Physiology Result */}
-                            <div className="p-3.5 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                              <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-2">
+                              <div className="flex justify-between items-center border-b border-[#E7EAF3] dark:border-slate-800 pb-1.5">
                                 <div>
-                                  <p className="font-extrabold text-white">Human Physiology (PHY101)</p>
-                                  <p className="text-[11px] text-slate-400">Faculty Examiner: Department Faculty Member</p>
+                                  <p className="font-extrabold text-[#11141A] dark:text-white">Human Physiology (PHY101)</p>
+                                  <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Faculty Examiner: Department Faculty Member</p>
                                 </div>
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">PASSED</span>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-[#00C48C]">PASSED</span>
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Internal Assmt 1</span>
-                                  <span className="font-bold text-indigo-400">82 / 100</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Internal Assmt 1</span>
+                                  <span className="font-black text-[#F36C21]">82 / 100</span>
                                 </div>
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Internal Assmt 2</span>
-                                  <span className="font-bold text-indigo-400">86 / 100</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Internal Assmt 2</span>
+                                  <span className="font-black text-[#F36C21]">86 / 100</span>
                                 </div>
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Practical Viva</span>
-                                  <span className="font-bold text-purple-400">44 / 50</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Practical Viva</span>
+                                  <span className="font-black text-purple-600 dark:text-purple-400">44 / 50</span>
                                 </div>
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Grade & Rank</span>
-                                  <span className="font-extrabold text-emerald-400">A (Rank #4)</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Grade &amp; Rank</span>
+                                  <span className="font-black text-[#00C48C]">A (Rank #4)</span>
                                 </div>
                               </div>
                             </div>
 
                             {/* Anatomy Result */}
-                            <div className="p-3.5 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                              <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-2">
+                              <div className="flex justify-between items-center border-b border-[#E7EAF3] dark:border-slate-800 pb-1.5">
                                 <div>
-                                  <p className="font-extrabold text-white">Human Anatomy & Histology (ANA101)</p>
-                                  <p className="text-[11px] text-slate-400">Faculty Examiner: Dr. Aparna Tyagi</p>
+                                  <p className="font-extrabold text-[#11141A] dark:text-white">Human Anatomy &amp; Histology (ANA101)</p>
+                                  <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Faculty Examiner: Dr. Aparna Tyagi</p>
                                 </div>
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">PASSED</span>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-[#00C48C]">PASSED</span>
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Internal Assmt 1</span>
-                                  <span className="font-bold text-indigo-400">85 / 100</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Internal Assmt 1</span>
+                                  <span className="font-black text-[#F36C21]">85 / 100</span>
                                 </div>
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Internal Assmt 2</span>
-                                  <span className="font-bold text-indigo-400">88 / 100</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Internal Assmt 2</span>
+                                  <span className="font-black text-[#F36C21]">88 / 100</span>
                                 </div>
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Practical Viva</span>
-                                  <span className="font-bold text-purple-400">46 / 50</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Practical Viva</span>
+                                  <span className="font-black text-purple-600 dark:text-purple-400">46 / 50</span>
                                 </div>
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Grade & Rank</span>
-                                  <span className="font-extrabold text-emerald-400">A+ (Rank #2)</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Grade &amp; Rank</span>
+                                  <span className="font-black text-[#00C48C]">A+ (Rank #2)</span>
                                 </div>
                               </div>
                             </div>
 
                             {/* Biochemistry Result */}
-                            <div className="p-3.5 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                              <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-2">
+                              <div className="flex justify-between items-center border-b border-[#E7EAF3] dark:border-slate-800 pb-1.5">
                                 <div>
-                                  <p className="font-extrabold text-white">Biochemistry (BIC101)</p>
-                                  <p className="text-[11px] text-slate-400">Faculty Examiner: Department of Biochemistry</p>
+                                  <p className="font-extrabold text-[#11141A] dark:text-white">Biochemistry (BIC101)</p>
+                                  <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Faculty Examiner: Department of Biochemistry</p>
                                 </div>
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">PASSED</span>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-[#00C48C]">PASSED</span>
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Internal Assmt 1</span>
-                                  <span className="font-bold text-indigo-400">78 / 100</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Internal Assmt 1</span>
+                                  <span className="font-black text-[#F36C21]">78 / 100</span>
                                 </div>
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Internal Assmt 2</span>
-                                  <span className="font-bold text-indigo-400">80 / 100</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Internal Assmt 2</span>
+                                  <span className="font-black text-[#F36C21]">80 / 100</span>
                                 </div>
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Practical Viva</span>
-                                  <span className="font-bold text-purple-400">42 / 50</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Practical Viva</span>
+                                  <span className="font-black text-purple-600 dark:text-purple-400">42 / 50</span>
                                 </div>
-                                <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                                  <span className="text-slate-400 block text-[10px]">Grade & Rank</span>
-                                  <span className="font-extrabold text-emerald-400">B+ (Rank #7)</span>
+                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-[#E7EAF3] dark:border-slate-800">
+                                  <span className="text-[#6F7887] dark:text-slate-400 block text-[10px] font-bold">Grade &amp; Rank</span>
+                                  <span className="font-black text-[#00C48C]">B+ (Rank #7)</span>
                                 </div>
                               </div>
                             </div>
@@ -871,25 +871,25 @@ export default function FacultyStudentsPage() {
                       </div>
 
                       {/* PROFESSIONAL II RESULTS ACCORDION */}
-                      <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+                      <div className="rounded-2xl border border-[#E7EAF3] dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
                         <button
                           onClick={() => toggleResProf('PROF_2')}
-                          className="w-full px-4 py-3 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between transition-all"
+                          className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between transition-all cursor-pointer"
                         >
                           <div className="flex items-center gap-3">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800">
                               Phase II
                             </span>
-                            <span className="font-extrabold text-white text-xs">Professional II Examination Results (Pathology, Micro, Pharm, FMT)</span>
+                            <span className="font-black text-[#11141A] dark:text-white text-xs">Professional II Examination Results (Pathology, Micro, Pharm, FMT)</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-slate-400">Scheduled Phase II</span>
-                            <span className="text-slate-400 text-sm font-bold">{openResProf.includes('PROF_2') ? '▲' : '▼'}</span>
+                            <span className="text-xs font-bold text-[#6F7887] dark:text-slate-400">Scheduled Phase II</span>
+                            <span className="text-[#6F7887] dark:text-slate-400 text-sm font-bold">{openResProf.includes('PROF_2') ? '▲' : '▼'}</span>
                           </div>
                         </button>
 
                         {openResProf.includes('PROF_2') && (
-                          <div className="p-4 border-t border-slate-800/80 space-y-2 bg-slate-950/40 text-slate-400">
+                          <div className="p-4 border-t border-[#E7EAF3] dark:border-slate-800 space-y-2 bg-slate-50/50 dark:bg-slate-950/40 text-[#6F7887] dark:text-slate-400 font-semibold">
                             <p>Phase II examination results will be published after completion of term examinations.</p>
                           </div>
                         )}
@@ -900,30 +900,30 @@ export default function FacultyStudentsPage() {
                   {/* TAB 4: UG LogBook */}
                   {activeTab === 'LOGBOOK' && (
                     <div className="space-y-3">
-                      <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex justify-between items-center">
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                         <div>
-                          <h4 className="font-extrabold text-white">NMC Competency Logbook Completion</h4>
-                          <p className="text-[11px] text-slate-400">Verified and signed off by department faculty</p>
+                          <h4 className="font-extrabold text-[#11141A] dark:text-white">NMC Competency Logbook Completion</h4>
+                          <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Verified and signed off by department faculty</p>
                         </div>
-                        <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        <span className="px-3 py-1 rounded-full text-xs font-black bg-orange-100 dark:bg-orange-950/40 text-[#F36C21] border border-[#F36C21]/30">
                           {selectedStudent.logbook_pct}% Verified
                         </span>
                       </div>
 
                       <div className="space-y-2">
-                        <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800 flex items-center justify-between">
+                        <div className="p-3 rounded-xl bg-white dark:bg-slate-900/40 border border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between">
                           <div>
-                            <p className="font-bold text-white">PY2.1 — Excitation-Contraction Coupling Practical</p>
-                            <p className="text-[11px] text-slate-400">Signed by: Dr. Sanjay Singh</p>
+                            <p className="font-bold text-[#11141A] dark:text-white">PY2.1 — Excitation-Contraction Coupling Practical</p>
+                            <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Signed by: Dr. Sanjay Singh</p>
                           </div>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">Signed</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-[#00C48C]">Signed</span>
                         </div>
-                        <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800 flex items-center justify-between">
+                        <div className="p-3 rounded-xl bg-white dark:bg-slate-900/40 border border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between">
                           <div>
-                            <p className="font-bold text-white">PY3.1 — 12-Lead ECG Recording & Analysis</p>
-                            <p className="text-[11px] text-slate-400">Signed by: Faculty Marker</p>
+                            <p className="font-bold text-[#11141A] dark:text-white">PY3.1 — 12-Lead ECG Recording &amp; Analysis</p>
+                            <p className="text-[11px] text-[#6F7887] dark:text-slate-400 font-semibold">Signed by: Faculty Marker</p>
                           </div>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">Signed</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-[#00C48C]">Signed</span>
                         </div>
                       </div>
                     </div>
@@ -933,21 +933,21 @@ export default function FacultyStudentsPage() {
                   {activeTab === 'FEES' && (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="glass-card p-4 text-center space-y-1">
-                          <span className="text-[11px] text-slate-400 uppercase">Annual Tuition Fee</span>
-                          <p className="text-xl font-extrabold text-white">₹ 1,50,000</p>
+                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 text-center space-y-1">
+                          <span className="text-[11px] text-[#6F7887] dark:text-slate-400 uppercase font-black">Annual Tuition Fee</span>
+                          <p className="text-xl font-black text-[#11141A] dark:text-white">₹ 1,50,000</p>
                         </div>
-                        <div className="glass-card p-4 text-center space-y-1">
-                          <span className="text-[11px] text-slate-400 uppercase">Amount Paid</span>
-                          <p className="text-xl font-extrabold text-emerald-400">₹ 1,50,000</p>
+                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 text-center space-y-1">
+                          <span className="text-[11px] text-[#6F7887] dark:text-slate-400 uppercase font-black">Amount Paid</span>
+                          <p className="text-xl font-black text-[#00C48C]">₹ 1,50,000</p>
                         </div>
-                        <div className="glass-card p-4 text-center space-y-1">
-                          <span className="text-[11px] text-slate-400 uppercase">Balance Due</span>
-                          <p className="text-xl font-extrabold text-indigo-400">₹ 0</p>
+                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 text-center space-y-1">
+                          <span className="text-[11px] text-[#6F7887] dark:text-slate-400 uppercase font-black">Balance Due</span>
+                          <p className="text-xl font-black text-[#F36C21]">₹ 0</p>
                         </div>
                       </div>
-                      <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center font-bold text-emerald-300">
-                        Fee Clearance Status: FULLY PAID & CLEARED
+                      <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center font-black text-emerald-800 dark:text-emerald-300">
+                        Fee Clearance Status: FULLY PAID &amp; CLEARED
                       </div>
                     </div>
                   )}
@@ -955,21 +955,21 @@ export default function FacultyStudentsPage() {
                   {/* TAB 6: Schedule */}
                   {activeTab === 'SCHEDULE' && (
                     <div className="space-y-3">
-                      <h4 className="font-extrabold text-white">Current Batch Daily Schedule ({selectedStudent.batch_cd})</h4>
+                      <h4 className="font-extrabold text-[#11141A] dark:text-white">Current Batch Daily Schedule ({selectedStudent.batch_cd})</h4>
                       <div className="space-y-2">
-                        <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex justify-between items-center">
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                           <div>
-                            <p className="font-bold text-indigo-400">09:00 AM – 10:00 AM</p>
-                            <p className="text-white font-medium">Human Physiology Theory Lecture — Organ Systems</p>
+                            <p className="font-black text-[#F36C21]">09:00 AM – 10:00 AM</p>
+                            <p className="text-[#11141A] dark:text-white font-bold">Human Physiology Theory Lecture — Organ Systems</p>
                           </div>
-                          <span className="text-slate-400 font-mono text-[11px]">Hall 1</span>
+                          <span className="text-[#6F7887] dark:text-slate-400 font-mono text-[11px] font-bold">Hall 1</span>
                         </div>
-                        <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex justify-between items-center">
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-800 flex justify-between items-center">
                           <div>
-                            <p className="font-bold text-indigo-400">10:00 AM – 01:00 PM</p>
-                            <p className="text-white font-medium">Practical & Dissection Lab Practical Session</p>
+                            <p className="font-black text-[#F36C21]">10:00 AM – 01:00 PM</p>
+                            <p className="text-[#11141A] dark:text-white font-bold">Practical &amp; Dissection Lab Practical Session</p>
                           </div>
-                          <span className="text-slate-400 font-mono text-[11px]">Lab B</span>
+                          <span className="text-[#6F7887] dark:text-slate-400 font-mono text-[11px] font-bold">Lab B</span>
                         </div>
                       </div>
                     </div>
@@ -977,19 +977,19 @@ export default function FacultyStudentsPage() {
 
                   {/* TAB 7: Complaints */}
                   {activeTab === 'COMPLAINTS' && (
-                    <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800 text-center space-y-2">
+                    <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-800 text-center space-y-2">
                       <p className="text-2xl">🛡️</p>
-                      <h4 className="font-bold text-white">No Disciplinary Complaints Registered</h4>
-                      <p className="text-slate-400">Student maintains clean conduct record in academic and hostel registers.</p>
+                      <h4 className="font-bold text-[#11141A] dark:text-white">No Disciplinary Complaints Registered</h4>
+                      <p className="text-[#6F7887] dark:text-slate-400 font-semibold">Student maintains clean conduct record in academic and hostel registers.</p>
                     </div>
                   )}
                 </div>
 
                 {/* Modal Footer */}
-                <div className="flex justify-end pt-3 border-t border-slate-800 shrink-0">
+                <div className="flex justify-end pt-3 border-t border-[#E7EAF3] dark:border-slate-800 shrink-0">
                   <button
                     onClick={() => setIsModalOpen(false)}
-                    className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg transition-all"
+                    className="px-5 py-2.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white font-black text-xs shadow-md transition-all cursor-pointer"
                   >
                     Close Student Record
                   </button>

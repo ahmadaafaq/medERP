@@ -243,27 +243,27 @@ export default function StudentSchedulePage() {
                       key={item.id}
                       onMouseEnter={() => setHoveredSlotId(item.id)}
                       onMouseLeave={() => setHoveredSlotId(null)}
-                      className="relative group cursor-pointer"
+                      className={`relative group cursor-pointer ${isHovered ? 'z-[60]' : 'z-10'}`}
                     >
                       {/* Timeline Dot */}
                       <div className="absolute -left-[31px] top-2 w-4 h-4 rounded-full border-2 border-white dark:border-slate-950 bg-[#5B4BFF] group-hover:bg-[#F36C21] transition-all shadow-md shadow-[#5B4BFF]/40" />
 
-                      <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/60 transition-all space-y-3 shadow-soft">
+                      <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/60 transition-all space-y-3 shadow-soft relative">
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-mono text-[#5B4BFF] dark:text-indigo-400 font-extrabold text-sm">
                             {item.start_time?.slice(0, 5)} - {item.end_time?.slice(0, 5)}
                           </span>
                           <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs">
-                            {item.subject_code || 'MBBS'} • {item.slot_type || 'LECTURE'}
+                            {item.subject_code || 'BCA'} • {item.slot_type || 'LECTURE'}
                           </span>
                         </div>
 
                         <div>
                           <span className="text-xs font-mono font-black text-[#5B4BFF] dark:text-indigo-300 uppercase">
-                            {item.subject_code || 'MBBS'}
+                            {item.subject_code || 'BCA'}
                           </span>
                           <h4 className="font-black text-base text-[#1B1E28] dark:text-white group-hover:text-[#5B4BFF] transition-colors">
-                            {item.subject_name || 'Medical Subject'}
+                            {item.subject_name || 'Engineering Subject'}
                           </h4>
                           <p className="text-xs text-[#4E5969] dark:text-slate-300 mt-1">
                             📖 Topic: <span className="text-[#F36C21] font-extrabold">{item.topic || 'Curriculum Module'}</span>
@@ -279,67 +279,67 @@ export default function StudentSchedulePage() {
                         <div className="pt-2 flex items-center justify-between text-xs text-[#4E5969] dark:text-slate-400 border-t border-[#E7EAF3] dark:border-slate-800">
                           <span className="font-bold text-[#1B1E28] dark:text-slate-300">🏫 {item.room || 'Lecture Hall 1'}</span>
                           <span className="text-[#00C48C] font-extrabold">👨‍🏫 {item.faculty_name || 'Faculty Member'}</span>
-                        </div>
 
-                        {/* HOVER TOOLTIP CARD */}
-                        {isHovered && (
-                          <div
-                            onMouseEnter={() => setHoveredSlotId(item.id)}
-                            onMouseLeave={() => setHoveredSlotId(null)}
-                            className="absolute left-0 bottom-full mb-3 w-80 sm:w-96 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-2xl backdrop-blur-xl z-50 text-[#1B1E28] dark:text-slate-100 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 before:absolute before:-bottom-4 before:left-0 before:right-0 before:h-4"
-                          >
-                            {/* Top Deep Purple Ribbon Header */}
-                            <div className="p-3.5 bg-gradient-to-r from-[#2D2575] to-[#3E3498] text-white flex items-center justify-between text-xs font-black force-text-white border-b border-white/10">
-                              <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/80 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs">
-                                {item.subject_code || 'BCA'} • {item.slot_type || 'LECTURE'}
-                              </span>
-                              <span className="font-mono text-white text-xs font-bold">
-                                🕒 {item.start_time?.slice(0, 5)} - {item.end_time?.slice(0, 5)}
-                              </span>
-                            </div>
-
-                            <div className="p-4 space-y-3">
-                              <div>
-                                <h5 className="font-black text-sm text-[#1B1E28] dark:text-white">{item.subject_name}</h5>
-                                <p className="text-xs text-[#5B4BFF] dark:text-indigo-400 font-bold mt-1 flex items-center gap-1.5">
-                                  <span>📖 Topic:</span>
-                                  <span>{item.topic || 'Curriculum Session'}</span>
-                                </p>
+                          {/* OVERLAY CARD ON HOVER (OFFSET TOP-10 SO HALF CARD REMAINS VISIBLE) */}
+                          {isHovered && (
+                            <div
+                              onMouseEnter={() => setHoveredSlotId(item.id)}
+                              onMouseLeave={() => setHoveredSlotId(null)}
+                              className="absolute top-10 -left-2 sm:-left-3 w-[calc(100%+16px)] sm:w-[400px] rounded-[22px] bg-white dark:bg-[#0B1120] border-2 border-[#F36C21]/60 dark:border-[#F36C21]/60 shadow-2xl shadow-slate-900/25 dark:shadow-slate-950/90 backdrop-blur-xl z-50 text-[#11141A] dark:text-slate-100 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 p-4 space-y-3"
+                            >
+                              {/* Top Header Ribbon */}
+                              <div className="flex items-center justify-between text-xs pb-2 border-b border-[#E5E8ED] dark:border-slate-800">
+                                <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#F36C21] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/40 shadow-xs uppercase">
+                                  {item.subject_code || 'BCA'} • {item.slot_type || 'LECTURE'}
+                                </span>
+                                <span className="font-mono text-[#475467] dark:text-indigo-200 text-xs font-bold">
+                                  🕒 {item.start_time?.slice(0, 5)} - {item.end_time?.slice(0, 5)}
+                                </span>
                               </div>
 
-                              {compList.length > 0 ? (
-                                <div className="space-y-2 pt-1">
-                                  <p className="text-[10px] font-black uppercase tracking-wider text-[#F36C21] flex items-center gap-1.5">
-                                    <span>🎯 {item.subject_code || ''} {isMedical ? 'Topic Competencies' : 'Sub Topics'}</span>
-                                    <span className="px-1.5 py-0.2 rounded-full bg-purple-50 text-purple-700 text-[9px] font-mono font-bold">
-                                      {compList.length}
-                                    </span>
+                              <div className="space-y-3">
+                                <div>
+                                  <h5 className="font-black text-sm text-[#11141A] dark:text-white">{item.subject_name}</h5>
+                                  <p className="text-xs text-[#F36C21] font-bold mt-1 flex items-center gap-1.5">
+                                    <span>📖 Topic:</span>
+                                    <span>{item.topic || 'Curriculum Session'}</span>
                                   </p>
-                                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                                    {compList.map((c, i) => (
-                                      <div key={i} className="p-2.5 rounded-2xl bg-[#F6F8FC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 text-xs flex items-start gap-2">
-                                        <span className="shrink-0 px-2 py-0.5 rounded-md bg-[#5B4BFF]/10 text-[#5B4BFF] dark:text-purple-300 font-mono font-black text-[10px] border border-[#5B4BFF]/20">
-                                          {c.code}
-                                        </span>
-                                        <p className="text-[#4E5969] dark:text-slate-300 text-[11px] leading-snug font-medium">{c.description}</p>
-                                      </div>
-                                    ))}
-                                  </div>
                                 </div>
-                              ) : displayCompCodes ? (
-                                <div className="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/30 text-xs space-y-0.5">
-                                  <p className="text-[10px] font-black uppercase text-[#F36C21]">🎯 {item.subject_code || ''} {isMedical ? 'Competencies' : 'Sub Topics'}</p>
-                                  <p className="font-mono font-black text-[#5B4BFF] dark:text-purple-300">{displayCompCodes}</p>
-                                </div>
-                              ) : null}
-                            </div>
 
-                            <div className="px-4 py-2.5 bg-[#F6F8FC] dark:bg-slate-800/50 border-t border-[#E7EAF3] dark:border-slate-800 flex justify-between text-[11px]">
-                              <span className="font-bold text-[#1B1E28] dark:text-slate-200">🏫 Hall: {item.room || 'Lecture Hall'}</span>
-                              <span className="font-black text-[#00C48C]">👨‍🏫 {item.faculty_name || 'Faculty'}</span>
+                                {compList.length > 0 ? (
+                                  <div className="space-y-2 pt-1">
+                                    <p className="text-[10px] font-black uppercase tracking-wider text-[#F36C21] flex items-center gap-1.5">
+                                      <span>🎯 {item.subject_code || ''} {isMedical ? 'Topic Competencies' : 'Sub Topics'}</span>
+                                      <span className="px-1.5 py-0.2 rounded-full bg-[#F36C21] text-white text-[9px] font-mono font-bold">
+                                        {compList.length}
+                                      </span>
+                                    </p>
+                                    <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                                      {compList.map((c, i) => (
+                                        <div key={i} className="p-2.5 rounded-xl bg-[#F7F8FA] dark:bg-slate-800/80 border border-[#E5E8ED] dark:border-slate-700 text-xs flex items-start gap-2">
+                                          <span className="shrink-0 px-2 py-0.5 rounded-md bg-[#F36C21] text-white font-mono font-black text-[10px]">
+                                            {c.code}
+                                          </span>
+                                          <p className="text-[#344054] dark:text-slate-200 text-[11px] leading-snug font-medium">{c.description}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : displayCompCodes ? (
+                                  <div className="p-2.5 rounded-xl bg-[#F7F8FA] dark:bg-slate-800/80 border border-[#E5E8ED] dark:border-slate-700 text-xs space-y-0.5">
+                                    <p className="text-[10px] font-black uppercase text-[#F36C21]">🎯 {item.subject_code || ''} {isMedical ? 'Competencies' : 'Sub Topics'}</p>
+                                    <p className="font-mono font-black text-[#11141A] dark:text-white">{displayCompCodes}</p>
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              <div className="pt-2.5 border-t border-[#E5E8ED] dark:border-slate-800 flex justify-between text-[11px]">
+                                <span className="font-bold text-[#344054] dark:text-slate-200">🏫 Hall: {item.room || 'Lecture Hall'}</span>
+                                <span className="font-black text-[#0E9F6E]">👨‍🏫 {item.faculty_name || 'Faculty'}</span>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
                   );

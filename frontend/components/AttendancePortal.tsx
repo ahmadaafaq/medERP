@@ -805,7 +805,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
               onClick={() => setViewMode('STUDENT')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
                 viewMode === 'STUDENT'
-                  ? 'bg-[#5B4BFF] text-white shadow-md'
+                  ? 'bg-[#F36C21] text-white shadow-md'
                   : 'bg-[#F6F8FC] dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 border border-slate-200 dark:border-slate-700'
               }`}
             >
@@ -1301,7 +1301,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                             selectedStudentRoll
                           )
                         }
-                        className="w-full mt-2 py-1.5 bg-white dark:bg-slate-900 hover:bg-[#5B4BFF] hover:text-white border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-black transition-all cursor-pointer shadow-2xs"
+                        className="w-full mt-2 py-1.5 bg-white dark:bg-slate-900 hover:bg-[#F36C21] hover:border-[#F36C21] hover:text-white border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-black transition-all cursor-pointer shadow-2xs"
                       >
                         Inspect Lecture Timeline ➔
                       </button>

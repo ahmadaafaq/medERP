@@ -82,19 +82,19 @@ export default function DigitalLogbookNavigation({ activeTab, onTabChange, stats
             <button
               key={tab.key}
               onClick={() => onTabChange(tab.key)}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm whitespace-nowrap transition-all duration-200 shrink-0 select-none ${
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all duration-200 shrink-0 select-none cursor-pointer ${
                 isActive
-                  ? 'bg-[#2D2575] text-white shadow-md shadow-[#2D2575]/20 font-semibold scale-[1.02]'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-[#F36C21] text-white shadow-md shadow-orange-500/25 scale-[1.02]'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-orange-50 dark:hover:bg-slate-800/80 hover:text-[#F36C21] dark:hover:text-[#F36C21]'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-[#F36C21]' : 'text-slate-400'}`} />
+              <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
               <span>{tab.label}</span>
               {typeof countBadge === 'number' && countBadge > 0 && (
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold leading-none ${
                     isActive
-                      ? 'bg-[#F36C21] text-white'
+                      ? 'bg-white/25 text-white'
                       : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}
                 >

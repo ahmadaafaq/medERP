@@ -429,11 +429,11 @@ export default function FacultyProfilePage() {
 
                 {/* Profile Card Body & Stats Header */}
                 <div className="p-6 pt-0 relative">
-                  <div className="flex flex-col lg:flex-row items-center lg:items-end justify-between gap-6 -mt-14 sm:-mt-16 mb-2">
+                  <div className="flex flex-col lg:flex-row items-center lg:items-end justify-between gap-6 mb-2">
                     
                     {/* Left: Avatar & Primary Faculty Info */}
                     <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 text-center sm:text-left">
-                      <div className="relative group shrink-0">
+                      <div className="relative group shrink-0 -mt-14 sm:-mt-16">
                         {profile?.photo_url ? (
                           <img
                             src={profile.photo_url}
@@ -454,9 +454,9 @@ export default function FacultyProfilePage() {
                         </button>
                       </div>
 
-                      <div className="space-y-1.5 pb-1">
+                      <div className="space-y-1.5 pb-1 pt-2 sm:pt-4">
                         <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                          <h2 className="text-2xl sm:text-3xl font-black text-[#1B1E28] dark:text-white tracking-tight">
+                          <h2 className="text-2xl sm:text-3xl font-black text-[#11141A] dark:text-white tracking-tight">
                             {profile?.name}
                           </h2>
                           <span className="px-3 py-0.5 rounded-full text-[11px] font-mono font-black bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">

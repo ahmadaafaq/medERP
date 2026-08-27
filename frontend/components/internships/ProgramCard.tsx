@@ -156,7 +156,7 @@ export default function ProgramCard({
         {/* Title & Organization Host */}
         <div>
           <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-400 mb-1">
-            <Building2 className="w-3.5 h-3.5 text-[#5B4BFF]" />
+            <Building2 className="w-3.5 h-3.5 text-[#F36C21]" />
             <span className="truncate">
               {program.organization_name || (isOffCampus ? 'Partner Organization' : 'SRMS Internal Research & Incubation Cell')}
             </span>
@@ -167,7 +167,7 @@ export default function ProgramCard({
             )}
           </div>
 
-          <h3 className="font-black text-slate-900 dark:text-white text-base tracking-tight group-hover:text-[#5B4BFF] transition-colors line-clamp-2">
+          <h3 className="font-black text-slate-900 dark:text-white text-base tracking-tight group-hover:text-[#F36C21] transition-colors line-clamp-2">
             {program.off_campus_title && isOffCampus ? program.off_campus_title : program.title}
           </h3>
 
@@ -203,16 +203,16 @@ export default function ProgramCard({
         <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-400">
             <span className="flex items-center gap-1">
-              <Users className="w-3.5 h-3.5 text-[#5B4BFF]" />
+              <Users className="w-3.5 h-3.5 text-[#F36C21]" />
               Applied Candidates
             </span>
-            <span className="text-[#5B4BFF] dark:text-[#7867FF] font-black">
+            <span className="text-[#F36C21] font-black">
               {program.total_applicants || 0} / {program.seats_available || 50} seats ({Math.min(100, Math.round(((program.total_applicants || 0) / (program.seats_available || 50)) * 100))}%)
             </span>
           </div>
           <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C] transition-all duration-500"
+              className="h-full rounded-full bg-[#F36C21] transition-all duration-500"
               style={{
                 width: `${Math.min(100, Math.max((program.total_applicants || 0) > 0 ? 8 : 0, Math.round(((program.total_applicants || 0) / (program.seats_available || 50)) * 100)))}%`
               }}
@@ -223,7 +223,7 @@ export default function ProgramCard({
         {/* Program Highlights & Certification Mode */}
         <div className="grid grid-cols-2 gap-2 pt-1">
           <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 font-semibold">
-            <Clock className="w-4 h-4 text-[#5B4BFF] shrink-0" />
+            <Clock className="w-4 h-4 text-[#F36C21] shrink-0" />
             <span>{durationFormatted}</span>
           </div>
 
@@ -261,7 +261,7 @@ export default function ProgramCard({
                     ? 'bg-slate-150 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
                     : isLocked
                     ? 'bg-slate-150 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                    : 'bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white active:scale-95 cursor-pointer'
+                    : 'bg-[#F36C21] hover:bg-[#E05B10] text-white active:scale-95 cursor-pointer'
                 }`}
               >
                 {isDeadlineExpired ? (
@@ -316,7 +316,7 @@ export default function ProgramCard({
                     Pay Enrollment Fee (₹{program.fee_amount})
                   </button>
                 ) : (
-                  <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-center text-xs font-bold text-[#5B4BFF] dark:text-indigo-300 flex items-center justify-center gap-1.5">
+                  <div className="p-2.5 rounded-xl bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 text-center text-xs font-bold text-[#F36C21] flex items-center justify-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4" />
                     Enrolled ({myApp.status.toUpperCase()})
                   </div>
@@ -330,7 +330,7 @@ export default function ProgramCard({
         {(role === 'admin' || role === 'faculty' || role === 'clerk') && (
           <button
             onClick={() => onViewApplicants?.(program)}
-            className="w-full py-2.5 rounded-xl text-xs font-black bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-2.5 rounded-xl text-xs font-black bg-[#F36C21] hover:bg-[#E05B10] text-white shadow-md shadow-orange-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 border border-orange-500"
           >
             Review Applicants ({program.total_applicants || 0})
             <ArrowRight className="w-3.5 h-3.5" />

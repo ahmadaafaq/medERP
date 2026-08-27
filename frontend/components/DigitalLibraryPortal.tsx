@@ -154,8 +154,8 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
               onClick={() => setActiveTab('digital')}
               className={`flex-1 md:flex-initial px-4 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'digital'
-                  ? 'bg-[#5B4BFF] text-white shadow-md shadow-indigo-500/20'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-[#5B4BFF]'
+                  ? 'bg-[#F36C21] text-white shadow-md shadow-orange-500/25'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-[#F36C21]'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -167,8 +167,8 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
               onClick={() => setActiveTab('all')}
               className={`flex-1 md:flex-initial px-4 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'all'
-                  ? 'bg-[#5B4BFF] text-white shadow-md shadow-indigo-500/20'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-[#5B4BFF]'
+                  ? 'bg-[#F36C21] text-white shadow-md shadow-orange-500/25'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-[#F36C21]'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -184,7 +184,7 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search title, author, title ID..."
-              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
             />
           </div>
 
@@ -202,7 +202,7 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
               className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                 selectedSubjectFilter === cat
                   ? 'bg-[#F36C21] text-white shadow-sm'
-                  : 'bg-[#F6F8FC] dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  : 'bg-[#F6F8FC] dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-[#F36C21]'
               }`}
             >
               {cat === 'ALL' ? 'All Subjects' : cat}
@@ -230,10 +230,10 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
           {filteredBooks.slice(0, 80).map((b, idx) => (
             <div
               key={b.ttl_id || idx}
-              className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] overflow-hidden shadow-soft hover:shadow-lg transition-all duration-300 flex flex-col justify-between group hover:border-[#5B4BFF]/50"
+              className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] overflow-hidden shadow-soft hover:shadow-lg transition-all duration-300 flex flex-col justify-between group hover:border-[#F36C21]/50"
             >
               {/* Top Cover Image / Fallback Art */}
-              <div className="relative h-48 w-full bg-gradient-to-br from-[#2D2575] via-slate-800 to-indigo-900 overflow-hidden flex items-center justify-center p-3 text-center">
+              <div className="relative h-48 w-full bg-gradient-to-br from-slate-900 via-slate-800 to-[#0F172A] overflow-hidden flex items-center justify-center p-3 text-center">
                 {b.cover_url ? (
                   <img
                     src={b.cover_url}
@@ -269,7 +269,7 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
               <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
                 <div className="space-y-1.5">
                   <h3
-                    className="text-xs font-black text-[#1B1E28] dark:text-white line-clamp-2 group-hover:text-[#5B4BFF] transition-colors"
+                    className="text-xs font-black text-[#1B1E28] dark:text-white line-clamp-2 group-hover:text-[#F36C21] transition-colors"
                     title={b.title}
                   >
                     {b.title}
@@ -286,7 +286,7 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
                     <button
                       type="button"
                       onClick={() => copyToClipboard(b.ttl_id)}
-                      className="hover:text-[#5B4BFF] flex items-center gap-1 cursor-pointer"
+                      className="hover:text-[#F36C21] flex items-center gap-1 cursor-pointer"
                       title="Copy Book Title ID"
                     >
                       {copiedId === b.ttl_id ? (
@@ -306,7 +306,7 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
                         href={b.pdf_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex-1 py-1.5 px-3 rounded-xl bg-[#5B4BFF] hover:bg-indigo-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/20 transition-all"
+                        className="flex-1 py-1.5 px-3 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 transition-all"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Read PDF</span>

@@ -598,8 +598,8 @@ export default function FacultyMISReportsPage() {
                     onClick={() => setActiveTab(tab.id as TabType)}
                     className={`px-4 py-2.5 rounded-xl font-black text-xs transition-all flex items-center gap-2 whitespace-nowrap ${
                       isActive
-                        ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/20'
-                        : 'bg-[#F8FAFC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-[#EEECFF] border border-[#E7EAF3] dark:border-slate-700'
+                        ? 'bg-[#F36C21] text-white shadow-md shadow-[#F36C21]/20'
+                        : 'bg-[#F8FAFC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-orange-50 dark:hover:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700'
                     }`}
                   >
                     <span>{tab.label}</span>

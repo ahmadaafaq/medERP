@@ -468,8 +468,8 @@ export default function IncubationCellPage() {
                     onClick={() => setStatusFilter(st)}
                     className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                       statusFilter === st
-                        ? 'bg-[#5B4FE9] text-white shadow-xs'
-                        : 'bg-slate-100 dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-slate-200'
+                        ? 'bg-[#F36C21] text-white shadow-sm'
+                        : 'bg-slate-100 dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                     }`}
                   >
                     {st === '' ? 'All' : st}
@@ -520,7 +520,7 @@ export default function IncubationCellPage() {
               </p>
               <button
                 onClick={handleResetFilters}
-                className="mt-2 px-4 py-2 rounded-xl text-xs font-bold bg-[#5B4FE9] text-white hover:bg-indigo-600 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                className="mt-2 px-4 py-2 rounded-xl text-xs font-bold bg-[#F36C21] text-white hover:bg-[#E05B10] transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset All Filters</span>

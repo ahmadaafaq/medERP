@@ -271,11 +271,10 @@ export default function FacultySchedulePage() {
                       key={dayName}
                       type="button"
                       onClick={() => setSelectedDay(dayNum)}
-                      className={`px-3.5 py-1.5 rounded-lg transition-all font-black ${
-                        isSelected 
-                          ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/20' 
-                          : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] dark:hover:text-white hover:bg-[#EEECFF]'
-                      }`}
+                      className={`px-3.5 py-1.5 rounded-lg transition-all font-black ${isSelected
+                        ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/20'
+                        : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] dark:hover:text-white hover:bg-[#EEECFF]'
+                        }`}
                     >
                       {dayName}
                     </button>
@@ -302,17 +301,15 @@ export default function FacultySchedulePage() {
                     key={tab.key}
                     type="button"
                     onClick={() => setSelectedType(tab.key)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
-                      isTabActive
-                        ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/25 scale-[1.02]'
-                        : 'bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-[#EEECFF] dark:hover:bg-slate-700 hover:text-[#5B4BFF] border border-[#E7EAF3] dark:border-slate-700'
-                    }`}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${isTabActive
+                      ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/25 scale-[1.02]'
+                      : 'bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-[#EEECFF] dark:hover:bg-slate-700 hover:text-[#5B4BFF] border border-[#E7EAF3] dark:border-slate-700'
+                      }`}
                   >
                     <span>{tab.icon}</span>
                     <span>{tab.label}</span>
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
-                      isTabActive ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                    }`}>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${isTabActive ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}>
                       {tab.count}
                     </span>
                   </button>
@@ -334,8 +331,10 @@ export default function FacultySchedulePage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredSlots.map((slot) => {
+                {filteredSlots.map((slot, sIdx) => {
                   const isHovered = hoveredSlotId === slot.id;
+                  const isTopOrMiddle = sIdx < Math.max(1, filteredSlots.length - 1);
+                  const popoverPosClass = isTopOrMiddle ? "top-full mt-2 left-0 z-50" : "bottom-full mb-2 left-0 z-50";
                   const compList = filterCompetenciesForSlot(slot.competencies_detail || [], slot.subject_code, slot.subject_name, slot.topic);
                   const displayCompCodes = filterCompetencyCodesString(slot.competency_codes, slot.subject_code, slot.subject_name, slot.topic);
                   const slotType = getNormalizedSlotType(slot);
@@ -359,7 +358,8 @@ export default function FacultySchedulePage() {
                       key={slot.id}
                       onMouseEnter={() => handleSlotMouseEnter(slot.id)}
                       onMouseLeave={handleSlotMouseLeave}
-                      className="relative p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/60 transition-all duration-300 space-y-3 shadow-soft hover:shadow-hover hover:-translate-y-0.5 group cursor-pointer"
+                      className={`relative p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#F36C21]/60 transition-all duration-300 space-y-3 shadow-soft hover:shadow-hover hover:-translate-y-0.5 group cursor-pointer ${isHovered ? 'z-[60]' : 'z-10'
+                        }`}
                     >
                       <div className="flex items-center gap-4">
                         {/* Time & Date Column */}
@@ -384,7 +384,7 @@ export default function FacultySchedulePage() {
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black font-mono border shadow-2xs ${typeBadgeStyles[slotType] || typeBadgeStyles.THEORY}`}>
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs ${typeBadgeStyles[slotType] || typeBadgeStyles.THEORY}`}>
                               {slot.subject_code || 'BCA'} • {typeLabels[slotType] || slot.slot_type || 'Theory'}
                             </span>
                             {cleanBatch(slot) && (
@@ -420,39 +420,39 @@ export default function FacultySchedulePage() {
                         <div
                           onMouseEnter={() => handleSlotMouseEnter(slot.id)}
                           onMouseLeave={handleSlotMouseLeave}
-                          className="absolute bottom-full left-0 mb-2 w-72 max-w-[270px] rounded-2xl bg-gradient-to-br from-[#2D2575] via-[#231C63] to-[#1B1652] text-white border-2 border-[#5B4BFF]/50 shadow-2xl shadow-[#2D2575]/60 backdrop-blur-xl z-50 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-3 space-y-2"
+                          className="absolute top-[60%] left-1/2 -translate-x-1/2 w-[calc(100%+24px)] sm:w-[380px] rounded-[22px] bg-white dark:bg-[#0B1120] text-[#11141A] dark:text-slate-100 border-2 border-[#F36C21]/60 dark:border-[#F36C21]/60 shadow-2xl shadow-slate-900/25 dark:shadow-slate-950/90 backdrop-blur-xl z-[100] overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-3.5 space-y-2.5"
                         >
-                          {/* Top Deep Purple Ribbon Header */}
-                          <div className="flex items-center justify-between gap-1.5 border-b border-white/10 pb-1.5">
-                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#F36C21] text-white shadow-xs uppercase">
-                              {slot.subject_code || 'BCA'} • {slot.slot_type || 'LECTURE'}
+                          {/* Top Header Ribbon */}
+                          <div className="flex items-center justify-between gap-1.5 border-b border-[#E5E8ED] dark:border-slate-800 pb-1.5">
+                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#FFF4EC] text-[#F36C21] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/40 shadow-xs uppercase">
+                              {slot.subject_code || 'BCA'} • {typeLabels[slotType] || slot.slot_type || 'Theory'}
                             </span>
-                            <span className="font-mono text-indigo-200 text-[10px] font-bold">
+                            <span className="font-mono text-[#475467] dark:text-indigo-200 text-[10px] font-bold">
                               🕒 {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
                             </span>
                           </div>
 
                           <div className="space-y-1.5">
                             <div>
-                              <h5 className="font-extrabold text-xs text-white leading-tight truncate">{slot.subject_name || 'Department Subject'}</h5>
+                              <h5 className="font-extrabold text-xs text-[#11141A] dark:text-white leading-tight truncate">{slot.subject_name || 'Department Subject'}</h5>
                             </div>
 
                             {/* Scheduled Topic */}
-                            <div className="p-2 rounded-lg bg-white/10 border border-white/15 space-y-0.5">
+                            <div className="p-2 rounded-xl bg-[#F7F8FA] dark:bg-slate-800/70 border border-[#E5E8ED] dark:border-slate-700 space-y-0.5">
                               <div className="text-[9px] font-black uppercase text-[#F36C21] tracking-wider">
                                 📖 Scheduled Topic
                               </div>
-                              <p className="text-[11px] font-bold text-white leading-snug">
+                              <p className="text-[11px] font-bold text-[#11141A] dark:text-white leading-snug">
                                 {slot.topic || 'Curriculum Module / Lesson'}
                               </p>
                             </div>
 
                             {/* Scheduled Sub Topics & Competencies */}
-                            <div className="p-2 rounded-lg bg-white/10 border border-white/15 space-y-1">
-                              <div className="text-[9px] font-black uppercase text-indigo-200 tracking-wider flex items-center justify-between">
+                            <div className="p-2 rounded-xl bg-[#F7F8FA] dark:bg-slate-800/70 border border-[#E5E8ED] dark:border-slate-700 space-y-1">
+                              <div className="text-[9px] font-black uppercase text-[#475467] dark:text-indigo-200 tracking-wider flex items-center justify-between">
                                 <span>🎯 {isMedical ? 'NMC COMPETENCY LOGBOOK' : 'SUB TOPICS / TEACHING SYLLABUS'}</span>
                                 {compList.length > 0 && (
-                                  <span className="px-1.5 py-0.2 rounded-full bg-[#5B4BFF] text-white text-[8.5px] font-mono font-bold">
+                                  <span className="px-1.5 py-0.2 rounded-full bg-[#F36C21] text-white text-[8.5px] font-mono font-bold">
                                     {compList.length}
                                   </span>
                                 )}
@@ -461,29 +461,29 @@ export default function FacultySchedulePage() {
                               {compList.length > 0 ? (
                                 <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
                                   {compList.map((c, i) => (
-                                    <div key={i} className="p-1 px-1.5 rounded bg-black/25 border border-white/10 text-[10px] flex items-start gap-1.5">
-                                      <span className="shrink-0 px-1 py-0.2 rounded bg-[#5B4BFF] text-white font-mono font-bold text-[9px]">
+                                    <div key={i} className="p-1 px-1.5 rounded-lg bg-white dark:bg-slate-900 border border-[#E5E8ED] dark:border-slate-800 text-[10px] flex items-start gap-1.5">
+                                      <span className="shrink-0 px-1 py-0.2 rounded bg-[#F36C21] text-white font-mono font-bold text-[9px]">
                                         {c.code}
                                       </span>
-                                      <p className="text-indigo-100 text-[9.5px] leading-tight font-medium self-center">{c.description}</p>
+                                      <p className="text-[#344054] dark:text-slate-200 text-[9.5px] leading-tight font-medium self-center">{c.description}</p>
                                     </div>
                                   ))}
                                 </div>
                               ) : displayCompCodes ? (
-                                <div className="p-1 px-1.5 rounded bg-black/25 border border-white/10 text-[10px] space-y-0.5">
-                                  <p className="font-mono font-black text-white">{displayCompCodes}</p>
+                                <div className="p-1 px-1.5 rounded-lg bg-white dark:bg-slate-900 border border-[#E5E8ED] dark:border-slate-800 text-[10px] space-y-0.5">
+                                  <p className="font-mono font-black text-[#11141A] dark:text-white">{displayCompCodes}</p>
                                 </div>
                               ) : (
-                                <p className="text-[10px] text-indigo-200 italic font-medium">
+                                <p className="text-[10px] text-[#667085] dark:text-indigo-200 italic font-medium">
                                   Sub topics: Scheduled per topic syllabus
                                 </p>
                               )}
                             </div>
                           </div>
 
-                          <div className="pt-1.5 border-t border-white/10 flex justify-between text-[10px]">
-                            <span className="font-bold text-indigo-100 truncate">🏫 Hall: {slot.room || 'Lecture Hall 1'}</span>
-                            <span className="font-black text-[#00C48C] shrink-0 ml-1">👨‍🏫 {slot.faculty_name || 'Faculty'}</span>
+                          <div className="pt-1.5 border-t border-[#E5E8ED] dark:border-slate-800 flex justify-between text-[10px]">
+                            <span className="font-bold text-[#344054] dark:text-slate-300 truncate">🏫 Hall: {slot.room || 'Lecture Hall 1'}</span>
+                            <span className="font-black text-[#0E9F6E] shrink-0 ml-1">👨‍🏫 {slot.faculty_name || 'Faculty'}</span>
                           </div>
                         </div>
                       )}

@@ -169,26 +169,32 @@ export default function Header({ title }: HeaderProps) {
     const email = data.email || p.email || '';
     const tenantSlug = data.tenantSlug || getStorageItem('tenantSlug') || 'srms';
 
-    const name =
+    const rawName =
       p.name ||
       data.name ||
       data.student_name ||
       data.faculty_name ||
       (email ? email.split('@')[0] : 'User Profile');
+    const name = (rawName && rawName !== 'undefined' && rawName !== 'null') ? rawName : (email ? email.split('@')[0] : 'User Profile');
 
     const empId = isStudentRole ? '' : (p.emp_id || p.empId || data.emp_id || data.empId || '');
 
     const nameStr = String(name || '');
-    const photoUrl =
+    const rawPhoto =
       p.photo_url ||
       p.photoUrl ||
       data.photo_url ||
       data.photoUrl ||
-      (!isStudentRole && (nameStr.toLowerCase().includes('sanjay') || empId.includes('DR/07/026'))
-        ? '/avatars/dr_sanjay_singh.png'
-        : !isStudentRole && (nameStr.toLowerCase().includes('sarah') || nameStr.toLowerCase().includes('aparna'))
-          ? '/avatars/dr_sarah_sharma.png'
-          : '');
+      '';
+
+    const photoUrl =
+      rawPhoto && rawPhoto !== 'undefined' && rawPhoto !== 'null' && !rawPhoto.includes('undefined') && !rawPhoto.includes('null')
+        ? rawPhoto
+        : (!isStudentRole && (nameStr.toLowerCase().includes('sanjay') || empId.includes('DR/07/026'))
+          ? '/avatars/dr_sanjay_singh.png'
+          : !isStudentRole && (nameStr.toLowerCase().includes('sarah') || nameStr.toLowerCase().includes('aparna'))
+            ? '/avatars/dr_sarah_sharma.png'
+            : '');
 
     const registrationNo =
       p.registration_no ||
@@ -372,15 +378,22 @@ export default function Header({ title }: HeaderProps) {
   };
 
   const getUserInitials = (nameStr?: string) => {
-    if (!nameStr) return 'U';
-    const parts = nameStr.trim().split(' ');
-    if (parts.length >= 2) {
+    if (!nameStr || nameStr === 'undefined' || nameStr === 'null') return 'U';
+    const cleanName = nameStr.trim();
+    if (!cleanName || cleanName.toLowerCase() === 'undefined') return 'U';
+
+    const parts = cleanName.split(/[\s_]+/).filter(Boolean);
+    if (parts.length >= 2 && parts[0][0] && parts[1][0]) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return nameStr.substring(0, 2).toUpperCase();
+    return cleanName.substring(0, 2).toUpperCase();
   };
 
-  const userName = user?.name || (mounted ? (getStorageItem('name') || getStorageItem('role') || 'Admin') : 'Admin');
+  const rawStoredName = mounted ? getStorageItem('name') : '';
+  const fallbackStoredName = (rawStoredName && rawStoredName !== 'undefined' && rawStoredName !== 'null')
+    ? rawStoredName
+    : (mounted ? (getStorageItem('role') || 'Admin') : 'Admin');
+  const userName = (user?.name && user.name !== 'undefined' && user.name !== 'null') ? user.name : fallbackStoredName;
   const userRole = (user?.role || (mounted ? (getStorageItem('role') || 'ADMIN') : 'ADMIN')).toUpperCase();
   const userDisplayId = userRole === 'STUDENT'
     ? (user?.registrationNo ? `REG: ${user.registrationNo}` : user?.rollno ? `ROLL: ${user.rollno}` : 'STUDENT')
@@ -592,14 +605,15 @@ export default function Header({ title }: HeaderProps) {
 
             {/* Profile Dropdown Card */}
             {dropdownOpen && (
-              <div className="absolute right-0 mt-3 w-80 bg-slate-900/95 border border-slate-800 backdrop-blur-xl shadow-2xl rounded-2xl p-4 text-slate-100 font-sans z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 mt-3 w-80 bg-white dark:bg-[#0B1120] border border-[#E5E8ED] dark:border-slate-800 backdrop-blur-xl shadow-2xl rounded-2xl p-4 text-[#11141A] dark:text-slate-100 font-sans z-50 animate-in fade-in zoom-in-95 duration-150">
                 {/* User Info Header */}
-                <div className="flex items-center gap-3.5 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-3.5 pb-3 border-b border-[#E5E8ED] dark:border-slate-800">
                   {user?.photoUrl && !imgError ? (
                     <img
                       src={user.photoUrl}
                       alt={userName}
                       className="w-12 h-12 rounded-xl object-cover border border-[#F36C21]/40 shadow-lg shadow-orange-500/10"
+                      onError={() => setImgError(true)}
                     />
                   ) : (
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#F36C21] to-[#E05B10] text-white font-black flex items-center justify-center text-base shadow-lg shadow-orange-600/25 border border-[#F36C21]/30" suppressHydrationWarning>
@@ -608,14 +622,14 @@ export default function Header({ title }: HeaderProps) {
                   )}
 
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-extrabold text-sm text-white truncate" suppressHydrationWarning>{userName}</h3>
-                    <p className="text-[11px] text-slate-400 truncate" suppressHydrationWarning>{user?.email || 'Registered User'}</p>
+                    <h3 className="font-extrabold text-sm text-[#11141A] dark:text-white truncate" suppressHydrationWarning>{userName}</h3>
+                    <p className="text-[11px] text-[#6F7887] dark:text-slate-400 truncate" suppressHydrationWarning>{user?.email || 'Registered User'}</p>
 
                     <div className="flex items-center gap-2 mt-1.5" suppressHydrationWarning>
                       <span className={`text-[9px] px-2 py-0.5 rounded-md border font-extrabold tracking-wider ${getRoleBadgeStyle(userRole)}`} suppressHydrationWarning>
                         {userRole}
                       </span>
-                      <span className="text-[9px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 font-mono font-bold" suppressHydrationWarning>
+                      <span className="text-[9px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono font-bold" suppressHydrationWarning>
                         {userDisplayId}
                       </span>
                     </div>
@@ -624,23 +638,23 @@ export default function Header({ title }: HeaderProps) {
 
                 {/* Additional Metadata Subtitle */}
                 {(user?.designation || user?.departmentName || user?.courseCd) && (
-                  <div className="py-2.5 px-3 my-2 rounded-xl bg-slate-800/50 border border-slate-800 text-xs space-y-1">
+                  <div className="py-2.5 px-3 my-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-[#E5E8ED] dark:border-slate-800 text-xs space-y-1">
                     {user.designation && (
-                      <p className="text-slate-300 font-medium flex justify-between">
-                        <span className="text-slate-500">Designation:</span>
-                        <span className="font-bold">{user.designation}</span>
+                      <p className="text-slate-700 dark:text-slate-300 font-medium flex justify-between">
+                        <span className="text-slate-500 dark:text-slate-400">Designation:</span>
+                        <span className="font-bold text-[#11141A] dark:text-white">{user.designation}</span>
                       </p>
                     )}
                     {user.departmentName && (
-                      <p className="text-slate-300 font-medium flex justify-between">
-                        <span className="text-slate-500">Department:</span>
-                        <span className="font-bold">{user.departmentName}</span>
+                      <p className="text-slate-700 dark:text-slate-300 font-medium flex justify-between">
+                        <span className="text-slate-500 dark:text-slate-400">Department:</span>
+                        <span className="font-bold text-[#11141A] dark:text-white">{user.departmentName}</span>
                       </p>
                     )}
                     {user.courseCd && (
-                      <p className="text-slate-300 font-medium flex justify-between">
-                        <span className="text-slate-500">Course / Batch:</span>
-                        <span className="font-bold">{user.courseCd} ({user.batchCd || 'Current'})</span>
+                      <p className="text-slate-700 dark:text-slate-300 font-medium flex justify-between">
+                        <span className="text-slate-500 dark:text-slate-400">Course / Batch:</span>
+                        <span className="font-bold text-[#11141A] dark:text-white">{user.courseCd} ({user.batchCd || 'Current'})</span>
                       </p>
                     )}
                   </div>
@@ -660,7 +674,7 @@ export default function Header({ title }: HeaderProps) {
                         setActiveModal('PROFILE');
                       }
                     }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition-all text-xs font-semibold text-left group"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#11141A] dark:hover:text-white transition-all text-xs font-bold text-left group cursor-pointer"
                   >
                     <div className="w-7 h-7 rounded-lg bg-[#F36C21]/10 text-[#F36C21] group-hover:bg-[#F36C21] group-hover:text-white flex items-center justify-center transition-all">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -676,9 +690,9 @@ export default function Header({ title }: HeaderProps) {
                       setDropdownOpen(false);
                       setActiveModal('SETTINGS');
                     }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition-all text-xs font-semibold text-left group"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#11141A] dark:hover:text-white transition-all text-xs font-bold text-left group cursor-pointer"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-slate-700/50 text-slate-300 group-hover:bg-slate-600 group-hover:text-white flex items-center justify-center transition-all">
+                    <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 group-hover:bg-slate-200 dark:group-hover:bg-slate-600 group-hover:text-[#11141A] dark:group-hover:text-white flex items-center justify-center transition-all">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -695,9 +709,9 @@ export default function Header({ title }: HeaderProps) {
                       setPassSuccess('');
                       setActiveModal('PASSWORD');
                     }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition-all text-xs font-semibold text-left group"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#11141A] dark:hover:text-white transition-all text-xs font-bold text-left group cursor-pointer"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-400 group-hover:bg-amber-600 group-hover:text-white flex items-center justify-center transition-all">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 group-hover:bg-amber-500 group-hover:text-white flex items-center justify-center transition-all">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
@@ -709,9 +723,9 @@ export default function Header({ title }: HeaderProps) {
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white transition-all text-xs font-semibold text-left group"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-500 text-rose-600 dark:text-rose-400 hover:text-white transition-all text-xs font-bold text-left group cursor-pointer"
                     >
-                      <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 group-hover:bg-white/20 group-hover:text-white flex items-center justify-center transition-all">
+                      <div className="w-7 h-7 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 group-hover:bg-white/20 group-hover:text-white flex items-center justify-center transition-all">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                         </svg>
@@ -809,9 +823,9 @@ export default function Header({ title }: HeaderProps) {
       {/* 1. PROFILE MODAL */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {activeModal === 'PROFILE' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl text-slate-100 space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-[#E5E8ED] dark:border-slate-800 rounded-2xl p-6 shadow-2xl text-[#11141A] dark:text-slate-100 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#E5E8ED] dark:border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#F36C21]/15 border border-[#F36C21]/30 text-[#F36C21] flex items-center justify-center">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -819,27 +833,28 @@ export default function Header({ title }: HeaderProps) {
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-base font-black text-white">Database Registration Profile</h2>
-                  <p className="text-xs text-slate-400">Authenticated user details stored in system schema</p>
+                  <h2 className="text-base font-black text-[#11141A] dark:text-white">Database Registration Profile</h2>
+                  <p className="text-xs text-[#6F7887] dark:text-slate-400">Authenticated user details stored in system schema</p>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setActiveModal('NONE')}
-                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all"
+                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-[#11141A] dark:hover:text-white flex items-center justify-center transition-all cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             {/* Profile Content Card */}
-            <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-800/40 border border-slate-800">
+            <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-[#E5E8ED] dark:border-slate-800">
               {user?.photoUrl && !imgError ? (
                 <img
                   src={user.photoUrl}
                   alt={userName}
-                  className="w-20 h-20 rounded-2xl object-cover border border-indigo-500/40 shadow-md shadow-indigo-600/20"
+                  className="w-20 h-20 rounded-2xl object-cover border border-orange-500/40 shadow-md shadow-orange-600/20"
+                  onError={() => setImgError(true)}
                 />
               ) : (
                 <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#F36C21] to-[#E05B10] text-white font-black flex items-center justify-center text-2xl shadow-md border border-[#F36C21]/30 shrink-0">
@@ -848,13 +863,13 @@ export default function Header({ title }: HeaderProps) {
               )}
 
               <div className="space-y-1">
-                <h3 className="text-lg font-extrabold text-white">{userName}</h3>
+                <h3 className="text-lg font-extrabold text-[#11141A] dark:text-white">{userName}</h3>
                 <p className="text-xs text-[#F36C21] font-mono">{user?.email || 'N/A'}</p>
                 <div className="flex items-center gap-2 pt-1">
                   <span className={`text-[10px] px-2.5 py-0.5 rounded-md border font-extrabold uppercase tracking-wider ${getRoleBadgeStyle(userRole)}`}>
                     {userRole}
                   </span>
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 font-mono font-bold">
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono font-bold">
                     {userDisplayId}
                   </span>
                 </div>
@@ -863,66 +878,66 @@ export default function Header({ title }: HeaderProps) {
 
             {/* Registration Metadata Grid */}
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Full Name</p>
-                <p className="text-slate-200 font-semibold">{userName}</p>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Full Name</p>
+                <p className="text-[#11141A] dark:text-slate-200 font-semibold">{userName}</p>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Registration / Emp ID</p>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Registration / Emp ID</p>
                 <p className="text-[#F36C21] font-mono font-semibold">{user?.registrationNo || user?.empId || user?.id || 'N/A'}</p>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">System Role</p>
-                <p className="text-slate-200 font-semibold">{userRole}</p>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">System Role</p>
+                <p className="text-[#11141A] dark:text-slate-200 font-semibold">{userRole}</p>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">College Tenant</p>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">College Tenant</p>
                 <p className="text-[#F36C21] font-mono font-semibold uppercase">{user?.tenantSlug || 'srms'}</p>
               </div>
 
               {user?.departmentName && (
-                <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                  <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Department</p>
-                  <p className="text-slate-200 font-semibold">{user.departmentName}</p>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                  <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Department</p>
+                  <p className="text-[#11141A] dark:text-slate-200 font-semibold">{user.departmentName}</p>
                 </div>
               )}
 
               {user?.designation && (
-                <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                  <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Designation</p>
-                  <p className="text-slate-200 font-semibold">{user.designation}</p>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                  <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Designation</p>
+                  <p className="text-[#11141A] dark:text-slate-200 font-semibold">{user.designation}</p>
                 </div>
               )}
 
               {user?.specialization && (
-                <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                  <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Specialization</p>
-                  <p className="text-slate-200 font-semibold">{user.specialization}</p>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                  <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Specialization</p>
+                  <p className="text-[#11141A] dark:text-slate-200 font-semibold">{user.specialization}</p>
                 </div>
               )}
 
               {user?.courseCd && (
-                <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                  <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Course / Batch</p>
-                  <p className="text-slate-200 font-semibold">{user.courseCd} ({user.batchCd || 'Active'})</p>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                  <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Course / Batch</p>
+                  <p className="text-[#11141A] dark:text-slate-200 font-semibold">{user.courseCd} ({user.batchCd || 'Active'})</p>
                 </div>
               )}
 
               {user?.phone && (
-                <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                  <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Contact Phone</p>
-                  <p className="text-slate-200 font-semibold">{user.phone}</p>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                  <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Contact Phone</p>
+                  <p className="text-[#11141A] dark:text-slate-200 font-semibold">{user.phone}</p>
                 </div>
               )}
 
-              <div className="p-3 rounded-xl bg-slate-800/30 border border-slate-800/80 space-y-1">
-                <p className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Account Status</p>
-                <p className="text-emerald-400 font-semibold flex items-center gap-1.5">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-[#E5E8ED] dark:border-slate-800/80 space-y-1">
+                <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Account Status</p>
+                <p className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Active & Verified
+                  Active &amp; Verified
                 </p>
               </div>
             </div>
@@ -931,7 +946,7 @@ export default function Header({ title }: HeaderProps) {
               <button
                 type="button"
                 onClick={() => setActiveModal('NONE')}
-                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-all"
+                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[#11141A] dark:text-white font-bold text-xs transition-all cursor-pointer"
               >
                 Close Profile
               </button>
@@ -943,26 +958,29 @@ export default function Header({ title }: HeaderProps) {
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* 2. SETTINGS MODAL */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* 2. SETTINGS MODAL */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
       {activeModal === 'SETTINGS' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl text-slate-100 space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-[#E5E8ED] dark:border-slate-800 rounded-2xl p-6 shadow-2xl text-[#11141A] dark:text-slate-100 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#E5E8ED] dark:border-slate-800 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 text-purple-400 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/15 border border-orange-500/30 text-[#F36C21] flex items-center justify-center">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-base font-black text-white">Portal & System Settings</h2>
-                  <p className="text-xs text-slate-400">Configure theme, notifications & portal context</p>
+                  <h2 className="text-base font-black text-[#11141A] dark:text-white">Portal &amp; System Settings</h2>
+                  <p className="text-xs text-[#6F7887] dark:text-slate-400">Configure theme, notifications &amp; portal context</p>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setActiveModal('NONE')}
-                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all"
+                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-[#11141A] dark:hover:text-white flex items-center justify-center transition-all cursor-pointer"
               >
                 ✕
               </button>
@@ -970,52 +988,53 @@ export default function Header({ title }: HeaderProps) {
 
             <div className="space-y-4 text-xs">
               {/* Theme Settings */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-800/40 border border-slate-800">
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-[#E5E8ED] dark:border-slate-800">
                 <div>
-                  <p className="font-bold text-white">Appearance Theme</p>
-                  <p className="text-slate-400 text-[11px]">Toggle between Slate Dark and Light mode</p>
+                  <p className="font-bold text-[#11141A] dark:text-white">Appearance Theme</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-[11px]">Toggle between Slate Dark and Light mode</p>
                 </div>
                 <button
                   type="button"
                   onClick={toggleTheme}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold shadow-sm hover:bg-indigo-500 transition-all"
+                  className="px-3 py-1.5 rounded-lg bg-[#F36C21] hover:bg-[#E05B10] text-white font-semibold shadow-sm transition-all cursor-pointer"
                 >
                   {theme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode'}
                 </button>
               </div>
 
               {/* Notification Preference */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-800/40 border border-slate-800">
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-[#E5E8ED] dark:border-slate-800">
                 <div>
-                  <p className="font-bold text-white">System Broadcasts & Alerts</p>
-                  <p className="text-slate-400 text-[11px]">Receive live WebSocket notifications</p>
+                  <p className="font-bold text-[#11141A] dark:text-white">System Broadcasts &amp; Alerts</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-[11px]">Receive live WebSocket notifications</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${notificationsEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'
-                    }`}
+                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                    notificationsEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}
                 >
                   {notificationsEnabled ? 'Enabled' : 'Disabled'}
                 </button>
               </div>
 
               {/* Active Tenant Information */}
-              <div className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-800 space-y-2">
-                <p className="font-bold text-white">Active Tenant Schema Context</p>
-                <div className="flex items-center justify-between text-slate-300 text-[11px]">
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-[#E5E8ED] dark:border-slate-800 space-y-2">
+                <p className="font-bold text-[#11141A] dark:text-white">Active Tenant Schema Context</p>
+                <div className="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px]">
                   <span>Tenant Slug:</span>
-                  <span className="font-mono font-bold text-indigo-400 uppercase">{user?.tenantSlug || 'srms'}</span>
+                  <span className="font-mono font-bold text-[#F36C21] uppercase">{user?.tenantSlug || 'srms'}</span>
                 </div>
-                <div className="flex items-center justify-between text-slate-300 text-[11px]">
+                <div className="flex items-center justify-between text-slate-600 dark:text-slate-300 text-[11px]">
                   <span>Isolation Strategy:</span>
-                  <span className="font-mono font-semibold text-emerald-400">PostgreSQL tenant_{user?.tenantSlug || 'srms'}</span>
+                  <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">PostgreSQL tenant_{user?.tenantSlug || 'srms'}</span>
                 </div>
               </div>
 
               {/* Platform Info */}
-              <div className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-800 space-y-1 text-slate-400 text-[11px]">
-                <p className="font-bold text-slate-300">MedERP Enterprise Core</p>
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-[#E5E8ED] dark:border-slate-800 space-y-1 text-slate-500 dark:text-slate-400 text-[11px]">
+                <p className="font-bold text-slate-700 dark:text-slate-300">MedERP Enterprise Core</p>
                 <p>Version 2.0.4 — Multi-Tenant Medical University ERP</p>
               </div>
             </div>
@@ -1024,9 +1043,9 @@ export default function Header({ title }: HeaderProps) {
               <button
                 type="button"
                 onClick={() => setActiveModal('NONE')}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow-md shadow-indigo-500/20"
+                className="px-5 py-2.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white font-semibold text-xs transition-all shadow-md cursor-pointer"
               >
-                Save & Done
+                Save &amp; Done
               </button>
             </div>
           </div>
@@ -1037,80 +1056,80 @@ export default function Header({ title }: HeaderProps) {
       {/* 3. CHANGE PASSWORD MODAL */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {activeModal === 'PASSWORD' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl text-slate-100 space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-[#E5E8ED] dark:border-slate-800 rounded-2xl p-6 shadow-2xl text-[#11141A] dark:text-slate-100 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#E5E8ED] dark:border-slate-800 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-600/20 border border-amber-500/30 text-amber-400 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-base font-black text-white">Change Account Password</h2>
-                  <p className="text-xs text-slate-400">Update current password securely in database</p>
+                  <h2 className="text-base font-black text-[#11141A] dark:text-white">Change Account Password</h2>
+                  <p className="text-xs text-[#6F7887] dark:text-slate-400">Update current password securely in database</p>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setActiveModal('NONE')}
-                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all"
+                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-[#11141A] dark:hover:text-white flex items-center justify-center transition-all cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             {passError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 font-medium text-center">
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 font-medium text-center">
                 {passError}
               </div>
             )}
 
             {passSuccess && (
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 font-medium text-center">
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300 font-medium text-center">
                 {passSuccess}
               </div>
             )}
 
             <form onSubmit={handleChangePassword} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
                   Current Password
                 </label>
                 <input
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white focus:outline-none focus:border-indigo-500 text-sm transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-[#F36C21] text-sm transition-all"
                   placeholder="••••••••"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
                   New Password
                 </label>
                 <input
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white focus:outline-none focus:border-indigo-500 text-sm transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-[#F36C21] text-sm transition-all"
                   placeholder="At least 8 chars, 1 uppercase & 1 number"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
                   Confirm New Password
                 </label>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white focus:outline-none focus:border-indigo-500 text-sm transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-[#F36C21] text-sm transition-all"
                   placeholder="Re-enter new password"
                   required
                 />
@@ -1120,7 +1139,7 @@ export default function Header({ title }: HeaderProps) {
                 <button
                   type="button"
                   onClick={() => setActiveModal('NONE')}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all"
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1128,7 +1147,7 @@ export default function Header({ title }: HeaderProps) {
                 <button
                   type="submit"
                   disabled={passLoading}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-500/25 transition-all flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white font-semibold text-xs shadow-lg shadow-orange-500/25 transition-all flex items-center gap-2 cursor-pointer"
                 >
                   {passLoading && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
                   {passLoading ? 'Updating Password...' : 'Update Password'}

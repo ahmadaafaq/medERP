@@ -298,8 +298,8 @@ export default function StudentTimetablePage() {
                       type="button"
                       onClick={() => setSelectedDay(dayNum)}
                       className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${isSelected
-                          ? 'bg-[#5B4BFF] text-white shadow-md font-bold'
-                          : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] hover:bg-white dark:hover:bg-slate-800'
+                        ? 'bg-[#5B4BFF] text-white shadow-md font-bold'
+                        : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] hover:bg-white dark:hover:bg-slate-800'
                         }`}
                     >
                       {dayName}
@@ -321,8 +321,10 @@ export default function StudentTimetablePage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredSlots.map((slot) => {
+                {filteredSlots.map((slot, sIdx) => {
                   const isHovered = hoveredSlotId === slot.id;
+                  const isTopOrMiddle = sIdx < Math.max(1, filteredSlots.length - 1);
+                  const popoverPosClass = isTopOrMiddle ? "top-full mt-2 left-0 z-50" : "bottom-full mb-2 left-0 z-50";
                   const compList = filterCompetenciesForSlot(slot.competencies_detail || [], slot.subject_code, slot.subject_name, slot.topic);
                   const displayCompCodes = filterCompetencyCodesString(slot.competency_codes, slot.subject_code, slot.subject_name, slot.topic);
 
@@ -331,7 +333,8 @@ export default function StudentTimetablePage() {
                       key={slot.id}
                       onMouseEnter={() => setHoveredSlotId(slot.id)}
                       onMouseLeave={() => setHoveredSlotId(null)}
-                      className="relative p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/60 transition-all space-y-3 shadow-soft group cursor-pointer"
+                      className={`relative p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#F36C21]/60 transition-all space-y-3 shadow-soft group cursor-pointer ${isHovered ? 'z-[60]' : 'z-10'
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-[#F6F8FC] dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-300 border border-[#E7EAF3] dark:border-slate-700">
@@ -383,14 +386,14 @@ export default function StudentTimetablePage() {
                         <div
                           onMouseEnter={() => handleSlotMouseEnter(slot.id)}
                           onMouseLeave={handleSlotMouseLeave}
-                          className="absolute bottom-full left-0 mb-2 w-80 max-w-[290px] rounded-[22px] bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 shadow-2xl backdrop-blur-xl z-50 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-4 space-y-2.5"
+                          className="absolute top-10 -left-2 sm:-left-3 w-[calc(100%+16px)] sm:w-[340px] rounded-[22px] bg-white dark:bg-[#0B1120] text-[#11141A] dark:text-slate-100 border-2 border-[#F36C21]/60 dark:border-[#F36C21]/60 shadow-2xl shadow-slate-900/25 dark:shadow-slate-950/90 backdrop-blur-xl z-50 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-3.5 space-y-2.5"
                         >
-                          {/* Header: Subject & Session Type */}
-                          <div className="flex items-center justify-between gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-1.5">
-                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#F36C21] text-white shadow-xs uppercase">
+                          {/* Top Header Ribbon */}
+                          <div className="flex items-center justify-between gap-1.5 border-b border-[#E5E8ED] dark:border-slate-800 pb-1.5">
+                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#FFF4EC] text-[#F36C21] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/40 shadow-xs uppercase">
                               {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'BCA')} • {slot.slot_type || 'LECTURE'}
                             </span>
-                            <span className="font-mono text-[#5B4BFF] dark:text-indigo-300 text-[10px] font-bold">
+                            <span className="font-mono text-[#475467] dark:text-indigo-200 text-[10px] font-bold">
                               ⏰ {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
                             </span>
                           </div>
@@ -418,21 +421,21 @@ export default function StudentTimetablePage() {
                           </div>
 
                           {/* 2. Scheduled Topic */}
-                          <div className="p-2 rounded-xl bg-orange-50/80 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/30 space-y-0.5">
+                          <div className="p-2 rounded-xl bg-[#F7F8FA] dark:bg-slate-800/70 border border-[#E5E8ED] dark:border-slate-700 space-y-0.5">
                             <div className="text-[9px] font-black uppercase text-[#F36C21] tracking-wider">
-                              📖 2. Scheduled Topic
+                              📖2. Scheduled Topic
                             </div>
-                            <p className="text-[11px] font-bold text-slate-900 dark:text-white leading-snug">
+                            <p className="text-[11px] font-bold text-[#11141A] dark:text-white leading-snug">
                               {slot.topic || 'Curriculum Module / Lesson'}
                             </p>
                           </div>
 
-                          {/* 3. Sub Topics / Competencies */}
-                          <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
-                            <div className="text-[9px] font-black uppercase text-slate-600 dark:text-slate-300 tracking-wider flex items-center justify-between">
-                              <span>🎯 3. SUB TOPICS</span>
+                          {/* Scheduled Sub Topics & Competencies */}
+                          <div className="p-2 rounded-xl bg-[#F7F8FA] dark:bg-slate-800/70 border border-[#E5E8ED] dark:border-slate-700 space-y-1">
+                            <div className="text-[9px] font-black uppercase text-[#475467] dark:text-indigo-200 tracking-wider flex items-center justify-between">
+                              <span>🎯3. SUB TOPICS</span>
                               {compList.length > 0 && (
-                                <span className="px-1.5 py-0.2 rounded-full bg-[#5B4BFF] text-white text-[8.5px] font-mono font-bold">
+                                <span className="px-1.5 py-0.2 rounded-full bg-[#F36C21] text-white text-[8.5px] font-mono font-bold">
                                   {compList.length}
                                 </span>
                               )}
