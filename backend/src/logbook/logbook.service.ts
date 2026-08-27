@@ -533,6 +533,18 @@ export class LogbookService {
     await this.ensureTables(tenantSlug);
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
 
+    let guideSignature = dto.guideSignature || null;
+    if (!guideSignature && facultyId && facultyId.length === 36) {
+      const fac = await this.tenantSchemaService.queryInTenant(
+        tenantSlug,
+        `SELECT name, designation FROM "${schema}".faculty WHERE id::text = $1 OR user_id::text = $1 LIMIT 1`,
+        [facultyId],
+      );
+      if (fac && fac.length > 0) {
+        guideSignature = fac[0].designation ? `${fac[0].name} (${fac[0].designation})` : fac[0].name;
+      }
+    }
+
     const res = await this.tenantSchemaService.queryInTenant(
       tenantSlug,
       `UPDATE "${schema}".logbook_weekly_logs
@@ -548,7 +560,7 @@ export class LogbookService {
         logId,
         dto.marks,
         dto.remarks,
-        dto.guideSignature || null,
+        guideSignature,
         dto.status || 'VERIFIED',
         facultyId && facultyId.length === 36 ? facultyId : null,
       ],
@@ -561,6 +573,18 @@ export class LogbookService {
     await this.ensureTables(tenantSlug);
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
     const studentId = await this.resolveStudentId(tenantSlug, dto.studentId);
+
+    let guideSignature = dto.guideSignature || null;
+    if (!guideSignature && facultyId && facultyId.length === 36) {
+      const fac = await this.tenantSchemaService.queryInTenant(
+        tenantSlug,
+        `SELECT name, designation FROM "${schema}".faculty WHERE id::text = $1 OR user_id::text = $1 LIMIT 1`,
+        [facultyId],
+      );
+      if (fac && fac.length > 0) {
+        guideSignature = fac[0].designation ? `${fac[0].name} (${fac[0].designation})` : fac[0].name;
+      }
+    }
 
     // Update logbook_mini_projects
     await this.tenantSchemaService.queryInTenant(
@@ -580,7 +604,7 @@ export class LogbookService {
         dto.finalGrade,
         dto.finalPercentage,
         dto.finalRemarks,
-        dto.guideSignature || null,
+        guideSignature,
         dto.projectId || null,
       ],
     );
@@ -602,7 +626,7 @@ export class LogbookService {
         dto.finalGrade,
         dto.finalPercentage,
         dto.finalRemarks,
-        dto.guideSignature || null,
+        guideSignature,
       ],
     );
 

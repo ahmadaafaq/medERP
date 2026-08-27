@@ -1072,7 +1072,7 @@ export default function StudentLogbookPage() {
                                   <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
                                     <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
                                       <Award className="w-3.5 h-3.5 text-[#F36C21]" />
-                                      <span>Evaluator: {log.guide_signature || 'Dr. Vinay Kumar (Faculty Guide)'}</span>
+                                      <span>Evaluator: {log.guide_signature || 'Faculty Guide'}</span>
                                     </div>
                                     {log.verified_at && (
                                       <span className="text-emerald-700 dark:text-emerald-400 font-medium">

@@ -37,6 +37,7 @@ export interface ApplicantStudent {
   final_grade?: string;
   final_percentage?: number;
   guide_remarks?: string;
+  guide_signature?: string;
   locked_at?: string;
   total_hours_spent: number;
   total_weeks_logged: number;
@@ -69,6 +70,21 @@ interface Props {
   projectTitle?: string;
 }
 
+const getLoggedInFacultyName = () => {
+  if (typeof window === 'undefined') return 'Faculty Guide';
+  try {
+    const stored = localStorage.getItem('user');
+    if (stored) {
+      const u = JSON.parse(stored);
+      const name = u.name || u.fullName || u.profile?.name;
+      if (name) {
+        return u.designation ? `${name} (${u.designation})` : name;
+      }
+    }
+  } catch {}
+  return 'Faculty Guide';
+};
+
 export default function MiniProjectTrackingModal({
   isOpen,
   onClose,
@@ -85,13 +101,15 @@ export default function MiniProjectTrackingModal({
   const [finalGrade, setFinalGrade] = useState<string>('A+');
   const [finalPercentage, setFinalPercentage] = useState<number>(90);
   const [finalRemarks, setFinalRemarks] = useState<string>('');
-  const [guideSignature, setGuideSignature] = useState<string>('Dr. Vinay Kumar (Faculty Guide)');
+  const [guideSignature, setGuideSignature] = useState<string>('');
   const [lockingProject, setLockingProject] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
   const [lockSuccess, setLockSuccess] = useState(false);
 
   useEffect(() => {
     if (applicant) {
+      const defaultFacultySign = getLoggedInFacultyName();
+
       if (applicant.weekly_logs && applicant.weekly_logs.length > 0) {
         setSelectedWeekTab(applicant.weekly_logs[0].week_number);
       } else {
@@ -108,7 +126,7 @@ export default function MiniProjectTrackingModal({
           marks: log.guide_marks !== undefined && log.guide_marks !== null ? Number(log.guide_marks) : 20,
           remarks: log.guide_remarks || 'Milestone verified successfully. Code architecture meets specifications.',
           status: log.status || 'VERIFIED',
-          signature: log.guide_signature || 'Dr. Vinay Kumar',
+          signature: log.guide_signature || defaultFacultySign,
           saving: false,
           saved: isAlreadySaved,
         };
@@ -121,6 +139,7 @@ export default function MiniProjectTrackingModal({
         applicant.guide_remarks ||
           'Candidate demonstrated excellent comprehension of full-stack engineering, clean database schemas, and structured git commits across all weekly milestones.'
       );
+      setGuideSignature(applicant.guide_signature || defaultFacultySign);
       setLockSuccess(applicant.is_locked || applicant.project_status === 'CLOSED');
       setLockError(null);
     }
@@ -514,7 +533,7 @@ export default function MiniProjectTrackingModal({
                     <input
                       type="text"
                       disabled={isProjectLocked}
-                      value={weeklyEvaluations[currentLog.id]?.signature || 'Dr. Vinay Kumar'}
+                      value={weeklyEvaluations[currentLog.id]?.signature || getLoggedInFacultyName()}
                       onChange={(e) =>
                         setWeeklyEvaluations((prev) => ({
                           ...prev,
