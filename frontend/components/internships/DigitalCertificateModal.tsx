@@ -61,72 +61,92 @@ export default function DigitalCertificateModal({
     : 'Batch 2025';
   const internshipTitle = certificate.internship_name || 'Full-Stack Cloud & AI Engineering Internship';
 
+  const [downloading, setDownloading] = useState(false);
+
   const handlePrint = () => {
     window.print();
   };
 
-  const handleDownload = () => {
-    if (!certificate) return;
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Certificate — ${certificate.certificate_no}</title>
-  <style>
-    @page { size: A4 portrait; margin: 15mm; }
-    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #fff; margin: 0; padding: 20px; color: #1B1E28; display: flex; justify-content: center; }
-    .cert-card { width: 720px; padding: 36px 44px; border: 8px double #2D2575; border-radius: 16px; text-align: center; position: relative; background: #fafbff; }
-    .logo-container { margin-bottom: 8px; display: flex; justify-content: center; align-items: center; }
-    .logo-img { height: 46px; max-width: 180px; object-fit: contain; }
-    .college-title { font-size: 12px; font-weight: 900; color: #2D2575; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-    .sub { font-size: 11px; font-weight: 800; color: #F36C21; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 18px; }
-    .presented { font-size: 12px; font-style: italic; color: #4E5969; margin-bottom: 10px; }
-    .name { font-size: 20px; font-weight: 800; color: #1B1E28; margin-bottom: 14px; border-bottom: 2px solid #5B4BFF; display: inline-block; padding: 0 20px 3px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .reason { font-size: 13px; color: #4E5969; line-height: 1.55; max-width: 580px; margin: 0 auto 16px; }
-    .course-details { font-size: 12px; font-weight: 700; color: #2D2575; margin-bottom: 20px; }
-    .meta-grid { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 26px; padding-top: 16px; border-top: 1px solid #E7EAF3; }
-    .meta-col { text-align: left; font-size: 11px; color: #4E5969; }
-    .meta-col strong { color: #1B1E28; display: block; font-size: 12px; margin-top: 2px; }
-    .cert-no { font-family: monospace; font-size: 10px; color: #5B4BFF; font-weight: bold; margin-top: 2px; }
-  </style>
-</head>
-<body>
-  <div class="cert-card">
-    ${displayLogo ? `<div class="logo-container"><img src="${displayLogo}" alt="Official Firm Logo" class="logo-img" /></div>` : ''}
-    <div class="college-title">${certificate.institution_name || 'SHRI RAM MURTI SMARAK COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY'}</div>
-    <div class="sub">Official e-Certificate of Completion</div>
-    <div class="presented">This digital certificate is proudly awarded to</div>
-    <div class="name">${studentName}</div>
-    <div class="reason">for successfully completing the rigorous curriculum and capstone project requirements of the internship program titled <strong>"${internshipTitle}"</strong> with commendable dedication and high professional standard.</div>
-    <div class="course-details">Course: ${courseName} &nbsp;|&nbsp; Batch: ${batchName}</div>
-    <div class="meta-grid">
-      <div class="meta-col">
-        Date of Certification: <strong>${certificate.issued_date}</strong>
-        <div class="cert-no">Cert No: ${certificate.certificate_no}</div>
-      </div>
-      <div class="meta-col" style="text-align: right;">
-        Approved & Verified by:
-        <strong>${certificate.approved_by || 'Prof. (Dr.) Prabhakar Gupta'}</strong>
-        <span style="font-size: 11px; color: #5B4BFF; font-weight: bold;">${certificate.approver_title || 'Dean Academics & Training Cell'}</span>
-        ${certificate.institution_name ? `<div style="font-size: 10px; color: #8C98A4; margin-top: 2px;">${certificate.institution_name}</div>` : ''}
-      </div>
-    </div>
-  </div>
-</body>
-</html>
-    `;
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Certificate_${certificate.certificate_no}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleDownloadPdf = async () => {
+    if (!printRef.current || !certificate) return;
+    setDownloading(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
+      const canvas = await html2canvas(printRef.current, {
+        scale: 3, // High-DPI 300+ DPI render
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#FAF9F6',
+        logging: false,
+        imageTimeout: 8000,
+      });
+
+      const imgData = canvas.toDataURL('image/png', 1.0);
+
+      // Standard A4 Landscape: 297mm x 210mm
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pageWidth = 297;
+      const pageHeight = 210;
+      const margin = 12; // 12mm margins
+      const targetWidth = pageWidth - margin * 2; // 273mm
+      const targetHeight = (canvas.height * targetWidth) / canvas.width;
+
+      // Center vertically on A4 page
+      const yPos = targetHeight < (pageHeight - margin * 2)
+        ? margin + ((pageHeight - margin * 2) - targetHeight) / 2
+        : margin;
+
+      pdf.addImage(imgData, 'PNG', margin, yPos, targetWidth, targetHeight, undefined, 'FAST');
+      pdf.save(`Certificate_${certificate.certificate_no || 'SRMS'}.pdf`);
+    } catch (err) {
+      console.error('Failed to export certificate PDF:', err);
+      // Fallback print
+      window.print();
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4">
+      {/* Print Styles for A4 with 100% Original Colors */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+          body * {
+            visibility: hidden;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #printable-certificate,
+          #printable-certificate * {
+            visibility: visible;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #printable-certificate {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: auto;
+            margin: 0 auto;
+            padding: 24px;
+            background-color: #FAF9F6 !important;
+          }
+        }
+      `}</style>
+
       <div className="bg-white dark:bg-slate-900 rounded-[28px] max-w-2xl w-full p-5 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-200">
         {/* Modal Top Bar */}
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5">
@@ -146,24 +166,37 @@ export default function DigitalCertificateModal({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={handlePrint}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F6F8FC] dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F6F8FC] dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
-              Print
+              <span>Print</span>
             </button>
 
             <button
-              onClick={handleDownload}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-sm transition-all flex items-center gap-1.5"
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={downloading}
+              className="px-4 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
             >
-              <Download className="w-3.5 h-3.5" />
-              Download Slip
+              {downloading ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+                  <span>Generating PDF...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download PDF (A4)</span>
+                </>
+              )}
             </button>
 
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors ml-1"
+              className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors ml-1 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -172,6 +205,7 @@ export default function DigitalCertificateModal({
 
         {/* Official Printable Certificate Canvas */}
         <div
+          id="printable-certificate"
           ref={printRef}
           className="p-6 sm:p-8 rounded-[20px] bg-[#FAF9F6] dark:bg-slate-950 border-4 sm:border-6 border-double border-[#2D2575] dark:border-indigo-900 text-center relative shadow-inner space-y-3.5"
         >

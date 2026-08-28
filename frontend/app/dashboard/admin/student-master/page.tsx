@@ -248,7 +248,7 @@ const SRMS_STUDENT_SESSION_OPTIONS = [
   { session_cd: '13', label: 'Session 2023-2024 (Code 13)' },
 ];
 
-const API_BASE = 'http://localhost:8081/api/v1';
+const API_BASE = 'http://localhost:3001/api/v1';
 
 
 export default function StudentMasterPage() {
@@ -260,18 +260,24 @@ export default function StudentMasterPage() {
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
   const [allGroups, setAllGroups] = useState<Group[]>([]);
 
-  // Filter console tenant-specific data (per selected college in filter)
-  const [filterCourses, setFilterCourses] = useState<Course[]>([]);
-  const [filterBatches, setFilterBatches] = useState<Batch[]>([]);
-  const [filterBranches, setFilterBranches] = useState<Branch[]>([]);
+  // Filter console tenant-specific data (pre-populated with standard SRMS defaults for zero-delay instant render)
+  const [filterCourses, setFilterCourses] = useState<Course[]>(
+    SRMS_STUDENT_COURSE_OPTIONS.map(c => ({ id: c.course_cd, code: c.course_cd, course_cd: c.course_cd, name: c.label }))
+  );
+  const [filterBatches, setFilterBatches] = useState<Batch[]>(
+    SRMS_STUDENT_BATCH_OPTIONS.map(b => ({ id: b.batch_cd, code: b.batch_cd, batch_cd: b.batch_cd, year: parseInt(b.label.match(/\d{4}/)?.[0] || '2025') }))
+  );
+  const [filterBranches, setFilterBranches] = useState<Branch[]>(
+    SRMS_STUDENT_BRANCH_OPTIONS.map(b => ({ id: b.branch_cd, code: b.branch_cd, branch_cd: b.branch_cd, name: b.label }))
+  );
   const [filterSessions, setFilterSessions] = useState<AcademicSession[]>([]);
 
-  // Filtering states
+  // Filtering states - initialized to BTech CS Batch 2025 by default
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCollege, setSelectedCollege] = useState('all');
-  const [selectedCourse, setSelectedCourse] = useState('all');
-  const [selectedBranch, setSelectedBranch] = useState('all');
-  const [selectedBatch, setSelectedBatch] = useState('all');
+  const [selectedCollege, setSelectedCollege] = useState('1');
+  const [selectedCourse, setSelectedCourse] = useState('2');
+  const [selectedBranch, setSelectedBranch] = useState("'1'");
+  const [selectedBatch, setSelectedBatch] = useState("'18'");
   const [selectedSession, setSelectedSession] = useState('all');
   const [selectedResidency, setSelectedResidency] = useState('all');
   const [selectedGroup, setSelectedGroup] = useState('all');
@@ -289,7 +295,7 @@ export default function StudentMasterPage() {
   const [isGroupLinking, setIsGroupLinking] = useState(false);
 
   const [metadataLoading, setMetadataLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // SRMS Live Student Sync Modal States
@@ -310,6 +316,24 @@ export default function StudentMasterPage() {
     count: number;
     message: string;
     data?: any[];
+  } | null>(null);
+
+  // Excel Bulk Import States
+  const [isExcelImportModalOpen, setIsExcelImportModalOpen] = useState(false);
+  const [importTargetCollege, setImportTargetCollege] = useState('1');
+  const [importTargetCourse, setImportTargetCourse] = useState('2');
+  const [importTargetBranch, setImportTargetBranch] = useState("'1'");
+  const [importTargetBatch, setImportTargetBatch] = useState("'18'");
+  const [importFileName, setImportFileName] = useState('');
+  const [importParsedRows, setImportParsedRows] = useState<any[]>([]);
+  const [importingBulk, setImportingBulk] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    success: boolean;
+    total: number;
+    createdCount: number;
+    updatedCount: number;
+    failedCount: number;
+    failed: any[];
   } | null>(null);
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -447,10 +471,9 @@ export default function StudentMasterPage() {
     window.print();
   };
 
-  // Fetch initial master lists
+  // Fetch initial master lists and default BTech CS cohort
   useEffect(() => {
     fetchMetadata();
-    fetchStudents();
   }, []);
 
   useEffect(() => {
@@ -939,7 +962,7 @@ export default function StudentMasterPage() {
       }));
       setColleges(collegeList);
 
-      // 2. Auto-load data from active college (from localStorage or default srms-cet-bareilly)
+      // 2. Auto-load data from active college (default: SRMS CET Bareilly)
       if (collegeList.length > 0) {
         const savedSlug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant')) : null;
         const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
@@ -950,7 +973,8 @@ export default function StudentMasterPage() {
           String(c.code) === '1'
         ) || collegeList[0];
 
-        setSelectedCollege(defaultCollege.code || defaultCollege.colg_cd || defaultCollege.slug || 'all');
+        const defaultColgCd = defaultCollege.code || defaultCollege.colg_cd || defaultCollege.slug || '1';
+        setSelectedCollege(defaultColgCd);
 
         const data = await loadTenantData(defaultCollege.slug);
         setAllCourses(data.courses || []);
@@ -973,13 +997,86 @@ export default function StudentMasterPage() {
           setTargetGroupId(data.groups[0].id);
         }
 
-        // Fetch students for the active college
+        // 3. Identify Default BTech Course, CS Branch, and Latest Batch
+        const defaultCourseObj = (data.courses || []).find((c: Course) =>
+          c.course_cd === '2' ||
+          c.code === '2' ||
+          c.course_cd === '1' ||
+          c.code === '1' ||
+          c.name.toLowerCase().includes('b.tech') ||
+          c.name.toLowerCase().includes('btech')
+        ) || (data.courses || [])[0];
+
+        const defaultCourseCd = defaultCourseObj?.course_cd || defaultCourseObj?.code || '2';
+
+        // Load branches for BTech
+        let finalBranches: Branch[] = data.branches || [];
+        try {
+          const resBr = await fetch(`/api/srms/branches?colgcd=${defaultColgCd}&coursecd=${defaultCourseCd}&tenant=${defaultCollege.slug}`);
+          const brList = await resBr.json().catch(() => []);
+          if (Array.isArray(brList) && brList.length > 0) {
+            finalBranches = brList.map((b: any) => ({
+              id: String(b.branch_cd || b.code || b.id),
+              code: String(b.branch_cd || b.code || b.id),
+              branch_cd: String(b.branch_cd || b.code || b.id),
+              name: String(b.branch_name || b.name || 'CS / Core').trim(),
+              college_id: String(b.colg_cd || defaultColgCd),
+              course_cd: String(b.course_cd || defaultCourseCd),
+            }));
+            setFilterBranches(finalBranches);
+          }
+        } catch (e) {}
+
+        const defaultBranchObj = finalBranches.find((b: Branch) =>
+          b.branch_cd === "'1'" ||
+          b.branch_cd === '1' ||
+          b.code === '1' ||
+          b.name.toLowerCase().includes('cs') ||
+          b.name.toLowerCase().includes('computer')
+        ) || finalBranches[0];
+
+        const defaultBranchCd = defaultBranchObj?.branch_cd || defaultBranchObj?.code || "'1'";
+
+        // Load batches for BTech and pick latest batch (Batch 2025 / code '18')
+        let finalBatches: Batch[] = data.batches || [];
+        try {
+          const resBat = await fetch(`/api/srms/batches?colgcd=${defaultColgCd}&coursecd=${defaultCourseCd}&tenant=${defaultCollege.slug}`);
+          const batList = await resBat.json().catch(() => []);
+          if (Array.isArray(batList) && batList.length > 0) {
+            finalBatches = batList.map((b: any) => ({
+              id: String(b.batch_cd || b.code || b.batch_name || b.id),
+              code: String(b.batch_name || b.year || b.batch_cd || b.code),
+              batch_cd: String(b.batch_cd || b.code || b.year),
+              year: Number(b.batch_name) || Number(b.year) || 2025,
+              course_cd: String(b.course_cd || defaultCourseCd),
+              colg_cd: String(b.colg_cd || defaultColgCd),
+            }));
+            setFilterBatches(finalBatches);
+          }
+        } catch (e) {}
+
+        const sortedBatches = [...finalBatches].sort((a: Batch, b: Batch) => (Number(b.year) || 0) - (Number(a.year) || 0));
+        const defaultBatchObj = sortedBatches.find((b: Batch) =>
+          String(b.year) === '2025' ||
+          b.batch_cd === "'18'" ||
+          b.batch_cd === '18' ||
+          b.code === "'18'"
+        ) || sortedBatches[0];
+
+        const defaultBatchCd = defaultBatchObj?.batch_cd || defaultBatchObj?.code || "'18'";
+
+        // Set UI Filters to BTech, CS, Latest Batch
+        setSelectedCourse(defaultCourseCd);
+        setSelectedBranch(defaultBranchCd);
+        setSelectedBatch(defaultBatchCd);
+
+        // Fetch students for BTech CS latest batch by default on page load
         fetchStudents({
           overrideTenant: defaultCollege.slug,
-          collegeId: defaultCollege.code || defaultCollege.colg_cd || defaultCollege.slug,
-          courseId: 'all',
-          batchId: 'all',
-          branchId: 'all',
+          collegeId: defaultColgCd,
+          courseId: defaultCourseCd,
+          branchId: defaultBranchCd,
+          batchId: defaultBatchCd,
           sessionId: 'all',
           residencyType: 'all',
           groupId: 'all',
@@ -990,10 +1087,6 @@ export default function StudentMasterPage() {
       console.error('Failed to fetch metadata', err);
     }
   };
-
-  useEffect(() => {
-    fetchMetadata();
-  }, []);
 
   const getActiveTenantSlug = () => {
     const savedSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null;
@@ -1160,14 +1253,22 @@ export default function StudentMasterPage() {
       const result = await res.json();
       if (result.data) {
         const studentData = result.data;
-        setFormData({
+        const currentStudent = students.find((s) => s.id === studentId);
+        const resolvedPhoto = studentData.photoUrl || currentStudent?.photo_url || studentData.photo_url || '';
+
+        setFormData((prev) => ({
+          ...prev,
           ...studentData,
+          photoUrl: resolvedPhoto,
+          collegeId: studentData.collegeId || currentStudent?.college_name || selectedCollege || '1',
           declarationSigned: true, // Auto sign declaration for edit
-        });
+        }));
+
         // Load tenant data for the student's college
-        const studentCollege = colleges.find((c) => c.id === studentData.collegeId);
-        if (studentCollege?.slug) {
-          const data = await loadTenantData(studentCollege.slug);
+        const studentCollege = colleges.find((c) => c.id === studentData.collegeId || c.code === studentData.collegeId || c.colg_cd === studentData.collegeId || c.slug === studentData.collegeId);
+        const colSlug = studentCollege?.slug || tenantSlug;
+        if (colSlug) {
+          const data = await loadTenantData(colSlug);
           setAllCourses(data.courses);
           setAllBatches(data.batches);
           setAllSessions(data.sessions);
@@ -1215,9 +1316,9 @@ export default function StudentMasterPage() {
 
     try {
       const token = localStorage.getItem('token') || '';
-      // Use the college slug from the form's selected college
-      const formCollege = colleges.find((c) => c.id === formData.collegeId);
-      const tenantSlug = formCollege?.slug || colleges[0]?.slug || 'srms-cet-bareilly';
+      // Use the college slug from the form's selected college or active tenant
+      const formCollege = colleges.find((c) => c.id === formData.collegeId || c.code === formData.collegeId || c.colg_cd === formData.collegeId || c.slug === formData.collegeId);
+      const tenantSlug = formCollege?.slug || getActiveTenantSlug() || 'srms-cet-bareilly';
       const url = editModeId
         ? `${API_BASE}/student-master/${editModeId}?tenant=${tenantSlug}`
         : `${API_BASE}/student-master?tenant=${tenantSlug}`;
@@ -1261,7 +1362,7 @@ export default function StudentMasterPage() {
 
       const result = await res.json();
       if (res.ok) {
-        alert(editModeId ? 'Student profile updated successfully.' : 'Student registration completed successfully.');
+        alert(editModeId ? 'Student profile updated successfully in PostgreSQL database.' : 'Student registration completed successfully.');
         setIsModalOpen(false);
         setEditModeId(null);
         fetchStudents();
@@ -1404,6 +1505,419 @@ export default function StudentMasterPage() {
       });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // Download official Excel/CSV Sample Template for Student Bulk Import
+  const handleDownloadStudentSampleFormat = () => {
+    const headers = [
+      'registration_no',
+      'roll_no',
+      'first_name',
+      'middle_name',
+      'last_name',
+      'email',
+      'phone',
+      'gender',
+      'dob',
+      'blood_group',
+      'college_code',
+      'course_code',
+      'branch_code',
+      'batch_year',
+      'residency_type',
+      'father_name',
+      'father_mobile',
+      'mother_name',
+      'permanent_address',
+      'city',
+      'state',
+      'pincode',
+    ];
+
+    const sampleRows = [
+      [
+        '20250001',
+        '25001',
+        'Aarav',
+        'Kumar',
+        'Sharma',
+        'aarav.sharma@srms.ac.in',
+        '9876543210',
+        'Male',
+        '2004-05-15',
+        'B+',
+        '1',
+        '2',
+        '1',
+        '2025',
+        'Day Scholar',
+        'Rajesh Sharma',
+        '9876543219',
+        'Sunita Sharma',
+        '123 Civil Lines',
+        'Bareilly',
+        'Uttar Pradesh',
+        '243001',
+      ],
+      [
+        '20250002',
+        '25002',
+        'Ananya',
+        '',
+        'Verma',
+        'ananya.verma@srms.ac.in',
+        '9876543211',
+        'Female',
+        '2005-02-20',
+        'O+',
+        '1',
+        '2',
+        '1',
+        '2025',
+        'Hosteller',
+        'Sanjay Verma',
+        '9876543218',
+        'Meena Verma',
+        '45 Model Town',
+        'Bareilly',
+        'Uttar Pradesh',
+        '243005',
+      ],
+      [
+        '20250003',
+        '25003',
+        'Rohan',
+        'Singh',
+        'Chauhan',
+        'rohan.chauhan@srms.ac.in',
+        '9876543212',
+        'Male',
+        '2004-09-10',
+        'A+',
+        '1',
+        '2',
+        '1',
+        '2025',
+        'Day Scholar',
+        'Vikram Chauhan',
+        '9876543217',
+        'Pooja Chauhan',
+        '78 Station Road',
+        'Bareilly',
+        'Uttar Pradesh',
+        '243002',
+      ],
+      [
+        '20250004',
+        '25004',
+        'Pooja',
+        '',
+        'Gupta',
+        'pooja.gupta@srms.ac.in',
+        '9876543213',
+        'Female',
+        '2004-11-28',
+        'AB+',
+        '1',
+        '2',
+        '1',
+        '2025',
+        'Hosteller',
+        'Manish Gupta',
+        '9876543216',
+        'Aarti Gupta',
+        '90 Rajendra Nagar',
+        'Bareilly',
+        'Uttar Pradesh',
+        '243122',
+      ],
+      [
+        '20250005',
+        '25005',
+        'Sameer',
+        'Ali',
+        'Khan',
+        'sameer.khan@srms.ac.in',
+        '9876543214',
+        'Male',
+        '2004-07-04',
+        'O-',
+        '1',
+        '2',
+        '1',
+        '2025',
+        'Day Scholar',
+        'Aslam Khan',
+        '9876543215',
+        'Fatima Khan',
+        '12 Rampur Garden',
+        'Bareilly',
+        'Uttar Pradesh',
+        '243001',
+      ],
+    ];
+
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [
+        headers.join(','),
+        ...sampleRows.map((e) =>
+          e.map((cell) => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')
+        ),
+      ].join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'MedERP_Student_Bulk_Import_Sample.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Robust CSV parser supporting quotes, commas, and multiline values
+  const parseCSVText = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentCell = '';
+    let insideQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (insideQuotes && nextChar === '"') {
+          currentCell += '"';
+          i++;
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+      } else if (char === ',' && !insideQuotes) {
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+      } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+        if (char === '\r' && nextChar === '\n') i++;
+        currentRow.push(currentCell.trim());
+        if (currentRow.some((c) => c !== '')) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+        currentCell = '';
+      } else {
+        currentCell += char;
+      }
+    }
+    if (currentCell || currentRow.length > 0) {
+      currentRow.push(currentCell.trim());
+      if (currentRow.some((c) => c !== '')) {
+        rows.push(currentRow);
+      }
+    }
+    return rows;
+  };
+
+  // Handle uploaded spreadsheet file
+  const handleStudentFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportFileName(file.name);
+    setImportResult(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const rawRows = parseCSVText(text);
+
+        if (rawRows.length < 2) {
+          alert('File contains no data rows. Header row + at least 1 record required.');
+          return;
+        }
+
+        const rawHeaders = rawRows[0].map((h) => h.toLowerCase().trim().replace(/[\s_-]+/g, ''));
+        const dataRows = rawRows.slice(1);
+
+        const getIdx = (...keys: string[]) => {
+          for (const k of keys) {
+            const normalized = k.toLowerCase().replace(/[\s_-]+/g, '');
+            const idx = rawHeaders.findIndex((h) => h === normalized || h.includes(normalized));
+            if (idx !== -1) return idx;
+          }
+          return -1;
+        };
+
+        const regNoIdx = getIdx('registrationno', 'regno', 'registration_no', 'reg_no', 'enrollmentno');
+        const rollNoIdx = getIdx('rollno', 'roll_no', 'rollnumber', 'roll');
+        const firstNameIdx = getIdx('firstname', 'first_name', 'fname');
+        const middleNameIdx = getIdx('middlename', 'middle_name', 'mname');
+        const lastNameIdx = getIdx('lastname', 'last_name', 'lname', 'surname');
+        const nameIdx = getIdx('name', 'studentname', 'fullname');
+        const emailIdx = getIdx('email', 'emailaddress', 'mail');
+        const phoneIdx = getIdx('phone', 'mobile', 'mobilenumber', 'contact');
+        const genderIdx = getIdx('gender', 'sex');
+        const dobIdx = getIdx('dob', 'dateofbirth', 'birthdate');
+        const bloodGroupIdx = getIdx('bloodgroup', 'blood_group', 'bg');
+        const collegeIdx = getIdx('collegecode', 'college_code', 'collegeid', 'colgcd');
+        const courseIdx = getIdx('coursecode', 'course_code', 'courseid', 'coursecd');
+        const branchIdx = getIdx('branchcode', 'branch_code', 'branchid', 'branchcd');
+        const batchIdx = getIdx('batchyear', 'batch_year', 'batchcode', 'batch_code', 'batchcd');
+        const residencyIdx = getIdx('residencytype', 'residency_type', 'residency');
+        const fatherNameIdx = getIdx('fathername', 'father_name', 'father');
+        const fatherMobileIdx = getIdx('fathermobile', 'father_mobile');
+        const motherNameIdx = getIdx('mothername', 'mother_name', 'mother');
+        const addressIdx = getIdx('permanentaddress', 'permanent_address', 'address');
+        const cityIdx = getIdx('city', 'permanentcity');
+        const stateIdx = getIdx('state', 'permanentstate');
+        const pincodeIdx = getIdx('pincode', 'permanentpincode', 'pin');
+
+        const parsed = dataRows.map((r, i) => {
+          const regNo = regNoIdx !== -1 ? r[regNoIdx] || '' : '';
+          const rollNo = rollNoIdx !== -1 ? r[rollNoIdx] || '' : '';
+          const firstName = firstNameIdx !== -1 ? r[firstNameIdx] || '' : '';
+          const middleName = middleNameIdx !== -1 ? r[middleNameIdx] || '' : '';
+          const lastName = lastNameIdx !== -1 ? r[lastNameIdx] || '' : '';
+          let name = nameIdx !== -1 ? r[nameIdx] || '' : '';
+          if (!name && (firstName || lastName)) {
+            name = `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
+          }
+
+          const email = emailIdx !== -1 ? r[emailIdx] || '' : '';
+          const phone = phoneIdx !== -1 ? r[phoneIdx] || '' : '';
+          const gender = genderIdx !== -1 ? r[genderIdx] || 'Male' : 'Male';
+          const dob = dobIdx !== -1 ? r[dobIdx] || '' : '';
+          const bloodGroup = bloodGroupIdx !== -1 ? r[bloodGroupIdx] || '' : '';
+          const collegeCode = collegeIdx !== -1 && r[collegeIdx] ? r[collegeIdx] : importTargetCollege;
+          const courseCode = courseIdx !== -1 && r[courseIdx] ? r[courseIdx] : importTargetCourse;
+          const branchCode = branchIdx !== -1 && r[branchIdx] ? r[branchIdx] : importTargetBranch;
+          const batchCode = batchIdx !== -1 && r[batchIdx] ? r[batchIdx] : importTargetBatch;
+          const residencyType = residencyIdx !== -1 && r[residencyIdx] ? r[residencyIdx] : 'Day Scholar';
+          const fatherName = fatherNameIdx !== -1 ? r[fatherNameIdx] || '' : '';
+          const fatherMobile = fatherMobileIdx !== -1 ? r[fatherMobileIdx] || '' : '';
+          const motherName = motherNameIdx !== -1 ? r[motherNameIdx] || '' : '';
+          const permanentAddress = addressIdx !== -1 ? r[addressIdx] || '' : '';
+          const city = cityIdx !== -1 ? r[cityIdx] || '' : '';
+          const state = stateIdx !== -1 ? r[stateIdx] || '' : '';
+          const pincode = pincodeIdx !== -1 ? r[pincodeIdx] || '' : '';
+
+          const isValid = Boolean(name || firstName || rollNo || regNo);
+
+          return {
+            rowNum: i + 1,
+            registrationNo: regNo,
+            rollNo,
+            firstName: firstName || (name ? name.split(' ')[0] : `Student`),
+            middleName,
+            lastName: lastName || (name ? name.split(' ').slice(1).join(' ') : `${i + 1}`),
+            name: name || `${firstName} ${lastName}`.trim() || `Student ${i + 1}`,
+            emailAddress: email || (regNo ? `${regNo.toLowerCase()}@srms.ac.in` : ''),
+            mobileNumber: phone,
+            gender,
+            dob: dob || '2004-01-01',
+            bloodGroup,
+            collegeId: collegeCode,
+            courseId: courseCode,
+            courseCode,
+            branchId: branchCode,
+            batchId: batchCode,
+            batchCode,
+            residencyType,
+            fatherName,
+            fatherMobile,
+            motherName,
+            permanentAddress1: permanentAddress,
+            permanentCity: city,
+            permanentState: state,
+            permanentPincode: pincode,
+            isValid,
+          };
+        });
+
+        setImportParsedRows(parsed);
+      } catch (err) {
+        console.error('Failed to parse spreadsheet file', err);
+        alert('Could not parse the uploaded file. Please verify CSV formatting.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Submit Bulk Student Records to Backend PostgreSQL API
+  const handleExecuteBulkStudentImport = async () => {
+    if (!importParsedRows.length) {
+      alert('Please upload a file with student rows first.');
+      return;
+    }
+
+    setImportingBulk(true);
+    setImportResult(null);
+
+    try {
+      const token = localStorage.getItem('token') || '';
+      const targetColObj = colleges.find((c) => c.code === importTargetCollege || c.colg_cd === importTargetCollege || c.slug === importTargetCollege || c.id === importTargetCollege);
+      const tenantSlug = targetColObj?.slug || getActiveTenantSlug() || 'srms-cet-bareilly';
+
+      const payload = {
+        students: importParsedRows.map((r) => ({
+          collegeId: targetColObj?.code || importTargetCollege,
+          collegeName: targetColObj?.name || 'SRMS CET Bareilly',
+          courseId: r.courseId || importTargetCourse,
+          courseCode: r.courseCode || importTargetCourse,
+          branchId: r.branchId || importTargetBranch,
+          batchId: r.batchId || importTargetBatch,
+          batchCode: r.batchCode || importTargetBatch,
+          residencyType: r.residencyType || 'Day Scholar',
+          registrationNo: r.registrationNo || undefined,
+          rollNo: r.rollNo || undefined,
+          firstName: r.firstName,
+          middleName: r.middleName || undefined,
+          lastName: r.lastName,
+          name: r.name,
+          emailAddress: r.emailAddress,
+          mobileNumber: r.mobileNumber,
+          gender: r.gender,
+          dob: r.dob,
+          bloodGroup: r.bloodGroup || undefined,
+          fatherName: r.fatherName || undefined,
+          fatherMobile: r.fatherMobile || undefined,
+          motherName: r.motherName || undefined,
+          permanentAddress1: r.permanentAddress1 || undefined,
+          permanentCity: r.permanentCity || undefined,
+          permanentState: r.permanentState || undefined,
+          permanentPincode: r.permanentPincode || undefined,
+        })),
+      };
+
+      const res = await fetch(`${API_BASE}/student-master/bulk?tenant=${tenantSlug}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+      if (res.ok) {
+        setImportResult({
+          success: true,
+          total: json.total || importParsedRows.length,
+          createdCount: json.createdCount || json.created?.length || 0,
+          updatedCount: json.updatedCount || 0,
+          failedCount: json.failedCount || json.failed?.length || 0,
+          failed: json.failed || [],
+        });
+        fetchStudents();
+      } else {
+        alert(json.message || 'Failed to import student records.');
+      }
+    } catch (err: any) {
+      console.error('Bulk import error', err);
+      alert(`Network error during bulk import: ${err.message}`);
+    } finally {
+      setImportingBulk(false);
     }
   };
 
@@ -1827,10 +2341,10 @@ export default function StudentMasterPage() {
               </div>
             </div>
 
-            {/* Linked Only toggle + view mode + action buttons */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t border-[var(--color-border)]">
-              {/* Left: Linked Only toggle & View Mode */}
-              <div className="flex flex-wrap items-center gap-3">
+            {/* Linked Only toggle + view mode + action buttons (Single Compact Line) */}
+            <div className="flex items-center justify-between gap-2 flex-nowrap overflow-x-auto pt-3 mt-3 border-t border-slate-200 dark:border-slate-800">
+              {/* Left: Linked Only toggle & View Mode Switcher */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -1838,31 +2352,28 @@ export default function StudentMasterPage() {
                     setLinkedOnly(next);
                     fetchStudents({ linkedOnly: next });
                   }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-[11px] transition-all cursor-pointer ${linkedOnly
-                    ? 'bg-[#F36C21] text-white border-[#F36C21] shadow-sm'
+                  className={`h-7.5 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold text-[10.5px] transition-all cursor-pointer shrink-0 ${linkedOnly
+                    ? 'bg-[#F36C21] text-white border-[#F36C21] shadow-xs'
                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:border-[#F36C21] hover:text-[#F36C21]'
                     }`}
                 >
-                  <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all ${linkedOnly ? 'bg-white border-white' : 'border-slate-400 dark:border-slate-500'
+                  <span className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${linkedOnly ? 'bg-white border-white' : 'border-slate-400 dark:border-slate-500'
                     }`}>
                     {linkedOnly && (
-                      <svg className="w-2.5 h-2.5 text-[#F36C21]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                      <svg className="w-2 h-2 text-[#F36C21]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" d="M5 13l4 4L19 7" />
                       </svg>
                     )}
                   </span>
-                  Linked Phase Students Only
-                  {linkedOnly && (
-                    <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[10px]">ACTIVE</span>
-                  )}
+                  <span>Linked Phase Only</span>
                 </button>
 
-                <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center border border-slate-200 dark:border-slate-700 gap-1">
+                <div className="h-7.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg flex items-center border border-slate-200 dark:border-slate-700 gap-0.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => setViewMode('roster')}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${viewMode === 'roster'
-                      ? 'bg-[#F36C21] text-white shadow-sm'
+                    className={`h-6.5 px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer shrink-0 ${viewMode === 'roster'
+                      ? 'bg-[#F36C21] text-white shadow-xs'
                       : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
                   >
@@ -1871,32 +2382,32 @@ export default function StudentMasterPage() {
                   <button
                     type="button"
                     onClick={() => { setViewMode('linker'); setLinkerMode('phase'); }}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${viewMode === 'linker' && linkerMode === 'phase'
-                      ? 'bg-[#F36C21] text-white shadow-sm'
+                    className={`h-6.5 px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer shrink-0 ${viewMode === 'linker' && linkerMode === 'phase'
+                      ? 'bg-[#F36C21] text-white shadow-xs'
                       : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
                   >
-                    🎓 Batch Phase Linker
+                    🎓 Phase Linker
                   </button>
                   <button
                     type="button"
                     onClick={() => { setViewMode('linker'); setLinkerMode('group'); }}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${viewMode === 'linker' && linkerMode === 'group'
-                      ? 'bg-[#F36C21] text-white shadow-sm'
+                    className={`h-6.5 px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer shrink-0 ${viewMode === 'linker' && linkerMode === 'group'
+                      ? 'bg-[#F36C21] text-white shadow-xs'
                       : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
                   >
-                    👥 Batch Group Linker
+                    👥 Group Linker
                   </button>
                 </div>
               </div>
 
-              {/* Right: Reset / Apply / Register */}
-              <div className="flex items-center gap-2">
+              {/* Right: Reset / Apply / Sync / Excel / Register */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 {metadataLoading && (
-                  <span className="flex items-center gap-1.5 text-[10px] text-[#F36C21] font-semibold mr-2">
-                    <span className="w-3 h-3 border-2 border-[#F36C21] border-t-transparent rounded-full animate-spin inline-block" />
-                    Loading tenant...
+                  <span className="flex items-center gap-1 text-[9.5px] text-[#F36C21] font-semibold mr-1">
+                    <span className="w-2.5 h-2.5 border-2 border-[#F36C21] border-t-transparent rounded-full animate-spin inline-block" />
+                    Loading...
                   </span>
                 )}
                 <button
@@ -1929,25 +2440,49 @@ export default function StudentMasterPage() {
                       search: '',
                     });
                   }}
-                  className="py-1.5 px-3 rounded-lg font-bold text-[11px] border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-[#F36C21] hover:text-[#F36C21] bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all cursor-pointer shadow-xs"
+                  className="h-7.5 py-1 px-2.5 rounded-lg font-bold text-[10.5px] border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-[#F36C21] hover:text-[#F36C21] bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all cursor-pointer shadow-xs shrink-0"
                 >
-                  Reset Filters
+                  Reset
                 </button>
                 <button
                   type="button"
                   onClick={() => fetchStudents()}
-                  className="py-1.5 px-3 rounded-lg font-bold text-[11px] bg-[#F36C21] hover:bg-[#E05B10] text-white border border-[#F36C21] shadow-sm transition-all cursor-pointer"
+                  className="h-7.5 py-1 px-2.5 rounded-lg font-bold text-[10.5px] bg-[#F36C21] hover:bg-[#E05B10] text-white border border-[#F36C21] shadow-xs transition-all cursor-pointer shrink-0"
                 >
-                  Apply Filters
+                  Apply
                 </button>
                 <button
                   type="button"
                   onClick={handleOpenSyncModal}
-                  className="py-1.5 px-3.5 rounded-lg font-extrabold text-[11px] bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white border border-[#F36C21] shadow-md shadow-orange-500/20 flex items-center gap-1.5 shrink-0 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                  className="h-7.5 py-1 px-2.5 rounded-lg font-extrabold text-[10.5px] bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white border border-[#F36C21] shadow-xs flex items-center gap-1 shrink-0 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                   title="Live sync student enrollment from SRMS ERP Portal"
                 >
-                  <span className="text-sm">⚡</span>
-                  <span>Sync SRMS Portal</span>
+                  <span className="text-xs">⚡</span>
+                  <span>Sync SRMS</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExcelImportModalOpen(true);
+                    setImportParsedRows([]);
+                    setImportFileName('');
+                    setImportResult(null);
+                    const col = selectedCollege !== 'all' ? selectedCollege.replace(/['"]/g, '') : '1';
+                    const crs = selectedCourse !== 'all' ? selectedCourse.replace(/['"]/g, '') : '2';
+                    const br = selectedBranch !== 'all' ? selectedBranch.replace(/['"]/g, '') : '1';
+                    const bat = selectedBatch !== 'all' ? selectedBatch.replace(/['"]/g, '') : '18';
+                    setImportTargetCollege(col);
+                    setImportTargetCourse(crs);
+                    setImportTargetBranch(br);
+                    setImportTargetBatch(bat);
+                  }}
+                  className="h-7.5 py-1 px-2.5 rounded-lg font-extrabold text-[10.5px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white border border-emerald-500 shadow-xs flex items-center gap-1 shrink-0 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                  title="Import Bulk Students from Excel / CSV spreadsheet"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                  </svg>
+                  <span>Excel</span>
                 </button>
                 <button
                   type="button"
@@ -1967,12 +2502,12 @@ export default function StudentMasterPage() {
                     setCurrentStep(1);
                     setIsModalOpen(true);
                   }}
-                  className="py-1.5 px-3 rounded-lg font-bold text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-sm flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+                  className="h-7.5 py-1 px-2.5 rounded-lg font-bold text-[10.5px] bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
                   </svg>
-                  Register Student
+                  <span>Register Student</span>
                 </button>
               </div>
             </div>
@@ -2584,50 +3119,70 @@ export default function StudentMasterPage() {
                 {/* STEP 2: Personal Information */}
                 {currentStep === 2 && (
                   <div className="space-y-6">
-                    {/* Photo Upload */}
-                    <div className="flex items-center gap-6 p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl">
+                    {/* Photo Upload & Preview */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 p-4 bg-indigo-500/5 dark:bg-indigo-950/20 border border-indigo-500/20 rounded-2xl">
                       <div className="relative flex-shrink-0">
                         {formData.photoUrl ? (
                           <img
                             src={formData.photoUrl}
                             alt="Student Photo"
-                            className="w-24 h-28 rounded-xl object-cover border-2 border-indigo-500 shadow-lg shadow-indigo-500/20"
+                            className="w-24 h-28 rounded-xl object-cover border-2 border-[#5B4BFF] shadow-lg shadow-indigo-500/20 bg-slate-800"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
                           />
                         ) : (
                           <div className="w-24 h-28 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 border-2 border-dashed border-slate-600 flex flex-col items-center justify-center gap-2">
-                            <span className="text-3xl">ðŸ“·</span>
-                            <span className="text-[9px] text-slate-500 uppercase font-bold">No Photo</span>
+                            <span className="text-3xl">📷</span>
+                            <span className="text-[9px] text-slate-400 uppercase font-bold">No Photo</span>
                           </div>
                         )}
                         {formData.photoUrl && (
                           <button
                             type="button"
                             onClick={() => setFormData({ ...formData, photoUrl: '' })}
-                            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center shadow"
-                          >âœ•</button>
+                            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center shadow hover:bg-rose-600 cursor-pointer"
+                            title="Remove Photo"
+                          >✕</button>
                         )}
                       </div>
-                      <div className="flex-1">
-                        <h4 className="text-xs font-black text-slate-900 dark:text-white mb-1 uppercase tracking-wider">Student Passport Photo</h4>
-                        <p className="text-[10px] text-slate-500 mb-3">Upload a recent passport-size photo (JPG/PNG, max 2MB). This will appear on the student ID card and printed profile.</p>
-                        <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg cursor-pointer transition-all shadow">
-                          ðŸ“ Choose Photo
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              if (file.size > 2 * 1024 * 1024) { alert('Photo must be under 2MB'); return; }
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setFormData({ ...formData, photoUrl: reader.result as string });
-                              };
-                              reader.readAsDataURL(file);
-                            }}
-                          />
-                        </label>
+                      <div className="flex-1 space-y-2.5 w-full">
+                        <div>
+                          <h4 className="text-xs font-black text-slate-900 dark:text-white mb-0.5 uppercase tracking-wider">Student Profile / Passport Photo</h4>
+                          <p className="text-[10px] text-slate-500">Upload a recent photo (JPG/PNG/WEBP, max 5MB) or enter image URL below.</p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#5B4BFF] hover:bg-indigo-700 text-white text-[11px] font-bold rounded-xl cursor-pointer transition-all shadow-xs">
+                            <span>📁 Choose File</span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/jpg"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.size > 5 * 1024 * 1024) { alert('Photo must be under 5MB'); return; }
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setFormData((prev) => ({ ...prev, photoUrl: reader.result as string }));
+                                };
+                                reader.readAsDataURL(file);
+                              }}
+                            />
+                          </label>
+
+                          <div className="flex-1 min-w-[200px]">
+                            <input
+                              type="text"
+                              value={formData.photoUrl?.startsWith('data:') ? 'Local Image Selected (Base64)' : (formData.photoUrl || '')}
+                              disabled={Boolean(formData.photoUrl?.startsWith('data:'))}
+                              onChange={(e) => setFormData({ ...formData, photoUrl: e.target.value })}
+                              placeholder="Or paste Direct Image URL (https://...)"
+                              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-[#5B4BFF] rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -3895,6 +4450,386 @@ export default function StudentMasterPage() {
               </div>
 
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* EXCEL / CSV STUDENT BULK IMPORT MODAL POPUP                    */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {isExcelImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#1E293B] border border-[#E7EAF3] dark:border-slate-700/80 rounded-[24px] shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-up">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-emerald-600/10 via-teal-500/5 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-xl shadow-lg shadow-emerald-500/20">
+                  📊
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-[#1B1E28] dark:text-white">
+                    Bulk Import Students (Excel / CSV)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    Upload batches of student enrollments with automatic PostgreSQL schema isolation & verification
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExcelImportModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+
+              {/* 1. Destination & Default Assignment Controls */}
+              <div className="p-4.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-extrabold uppercase text-[#1B1E28] dark:text-white tracking-wider">
+                      1. Target College & Default Academic Assignment
+                    </label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                      Rows without explicit course/branch/batch will inherit these active selections.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadStudentSampleFormat}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-extrabold text-[11px] border border-emerald-300 dark:border-emerald-700 shrink-0 transition-all cursor-pointer shadow-xs"
+                  >
+                    <span>📥</span>
+                    <span>Download Sample Template</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                  {/* College */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">Target College (colg_cd) *</label>
+                    <select
+                      value={importTargetCollege}
+                      onChange={(e) => {
+                        const newColg = e.target.value;
+                        setImportTargetCollege(newColg);
+                        // Dynamically update course & branch based on target college
+                        if (newColg === '4') {
+                          setImportTargetCourse('6'); // B.Pharm
+                          setImportTargetBranch('1');
+                        } else if (newColg === '5') {
+                          setImportTargetCourse('4'); // MBA
+                          setImportTargetBranch('1');
+                        } else if (newColg === '11') {
+                          setImportTargetCourse('1'); // MBBS
+                          setImportTargetBranch('1');
+                        } else {
+                          setImportTargetCourse('2'); // B.Tech
+                          setImportTargetBranch('1'); // CS
+                        }
+                      }}
+                      className="w-full h-9 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      <option value="1">[#1] SRMS CET, Bareilly</option>
+                      <option value="2">[#2] SRMS CETR, Bareilly</option>
+                      <option value="3">[#3] SRMS CET, Lucknow</option>
+                      <option value="4">[#4] SRMS College of Pharmacy, Bareilly</option>
+                      <option value="5">[#5] SRMS IBS, Lucknow</option>
+                      <option value="6">[#6] SRMS College of Nursing & Paramedical</option>
+                      <option value="11">[#11] SRMS Institute of Medical Sciences (IMS)</option>
+                    </select>
+                  </div>
+
+                  {/* Course */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">Default Course (course_cd) *</label>
+                    <select
+                      value={importTargetCourse}
+                      onChange={(e) => {
+                        const newCourse = e.target.value;
+                        setImportTargetCourse(newCourse);
+                        setImportTargetBranch('1');
+                      }}
+                      className="w-full h-9 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      {importTargetCollege === '4' ? (
+                        <>
+                          <option value="6">[#6] B.Pharm (Pharmacy)</option>
+                          <option value="21">[#21] M.Pharm</option>
+                        </>
+                      ) : importTargetCollege === '5' ? (
+                        <>
+                          <option value="4">[#4] MBA (Management Studies)</option>
+                          <option value="31">[#31] BBA (Business Administration)</option>
+                        </>
+                      ) : importTargetCollege === '11' ? (
+                        <>
+                          <option value="1">[#1] MBBS (Bachelor of Medicine)</option>
+                          <option value="11">[#11] MD / MS (Postgraduate)</option>
+                          <option value="12">[#12] B.Sc Nursing / Paramedical</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="2">[#2] B.Tech</option>
+                          <option value="13">[#13] BCA (Computer Applications)</option>
+                          <option value="3">[#3] MCA (Master of Computer Applications)</option>
+                          <option value="4">[#4] MBA (Management Studies)</option>
+                          <option value="5">[#5] M.Tech (Master of Technology)</option>
+                          <option value="6">[#6] B.Pharm (Pharmacy)</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Branch */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">Default Branch (branch_cd) *</label>
+                    <select
+                      value={importTargetBranch}
+                      onChange={(e) => setImportTargetBranch(e.target.value)}
+                      className="w-full h-9 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      {importTargetCourse === '2' || importTargetCourse === '5' ? (
+                        <>
+                          <option value="1">[#1] CS (Computer Science & Engg)</option>
+                          <option value="2">[#2] IT (Information Technology)</option>
+                          <option value="3">[#3] EC (Electronics & Comm)</option>
+                          <option value="4">[#4] EE (Electrical Engg)</option>
+                          <option value="5">[#5] EN (Electrical & Electronics)</option>
+                          <option value="6">[#6] ME (Mechanical Engg)</option>
+                          <option value="7">[#7] AI & ML (Artificial Intelligence)</option>
+                        </>
+                      ) : importTargetCourse === '13' ? (
+                        <option value="1">[#1] BCA (Computer Applications)</option>
+                      ) : importTargetCourse === '3' ? (
+                        <option value="1">[#1] MCA (Computer Applications)</option>
+                      ) : importTargetCourse === '4' ? (
+                        <option value="1">[#1] MBA (Management Studies)</option>
+                      ) : importTargetCourse === '31' ? (
+                        <option value="1">[#1] BBA (Business Administration)</option>
+                      ) : importTargetCourse === '6' || importTargetCourse === '21' ? (
+                        <>
+                          <option value="1">[#1] Pharmaceutics</option>
+                          <option value="2">[#2] Pharmacology</option>
+                          <option value="3">[#3] Pharmacognosy</option>
+                          <option value="4">[#4] Pharmaceutical Chemistry</option>
+                        </>
+                      ) : (
+                        <option value="1">[#1] General</option>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Batch */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">Default Batch (batch_cd) *</label>
+                    <select
+                      value={importTargetBatch}
+                      onChange={(e) => setImportTargetBatch(e.target.value)}
+                      className="w-full h-9 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      <option value="18">[#18] 2025 Batch</option>
+                      <option value="17">[#17] 2024 Batch</option>
+                      <option value="16">[#16] 2023 Batch</option>
+                      <option value="15">[#15] 2022 Batch</option>
+                      <option value="14">[#14] 2021 Batch</option>
+                      <option value="13">[#13] 2020 Batch</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. File Dropzone Area */}
+              <div className="space-y-2">
+                <label className="text-xs font-extrabold uppercase text-[#1B1E28] dark:text-white tracking-wider">
+                  2. Select Spreadsheet File (.csv / .xlsx / .xls)
+                </label>
+
+                <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-2xl p-6 text-center transition-all bg-slate-50/50 dark:bg-slate-900/30">
+                  <input
+                    type="file"
+                    accept=".csv, .xlsx, .xls, text/csv, text/plain"
+                    onChange={handleStudentFileSelect}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="space-y-2 pointer-events-none">
+                    <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl font-bold">
+                      📁
+                    </div>
+                    {importFileName ? (
+                      <div>
+                        <p className="font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
+                          Selected File: {importFileName}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                          {importParsedRows.length} student records parsed and ready for verification
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-bold text-slate-800 dark:text-slate-200">
+                          Click to browse or drag & drop your Excel/CSV file here
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                          Supported columns: registration_no, roll_no, first_name, last_name, email, phone, gender, dob, blood_group, father_name, address, city
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Live Preview of Parsed Rows */}
+              {importParsedRows.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-extrabold uppercase text-[#1B1E28] dark:text-white tracking-wider">
+                        3. Records Preview ({importParsedRows.length} Rows)
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
+                        ✓ {importParsedRows.filter((r) => r.isValid).length} Valid
+                      </span>
+                      {importParsedRows.some((r) => !r.isValid) && (
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 font-bold text-[10px]">
+                          ✕ {importParsedRows.filter((r) => !r.isValid).length} Incomplete
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Showing up to first 25 records
+                    </span>
+                  </div>
+
+                  <div className="border border-[#E7EAF3] dark:border-slate-800 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                    <table className="w-full text-left text-[11px] border-collapse">
+                      <thead className="bg-slate-100/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 sticky top-0 font-bold uppercase text-[9px] tracking-wider">
+                        <tr>
+                          <th className="p-2.5 pl-4">Reg No / Roll</th>
+                          <th className="p-2.5">Student Name</th>
+                          <th className="p-2.5">Course & Branch</th>
+                          <th className="p-2.5">Batch</th>
+                          <th className="p-2.5">Contact</th>
+                          <th className="p-2.5">Parent</th>
+                          <th className="p-2.5 pr-4 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
+                        {importParsedRows.slice(0, 25).map((r, i) => (
+                          <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="p-2.5 pl-4 font-mono font-bold text-slate-800 dark:text-white">
+                              {r.registrationNo || <span className="text-[#5B4BFF]">[Auto]</span>}
+                              {r.rollNo ? <span className="text-slate-400 font-normal"> (#{r.rollNo})</span> : ''}
+                            </td>
+                            <td className="p-2.5 font-bold text-slate-900 dark:text-white">
+                              {r.name}
+                            </td>
+                            <td className="p-2.5 text-slate-700 dark:text-slate-300">
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold text-[9px]">
+                                Crs {r.courseCode} / Br {r.branchId}
+                              </span>
+                            </td>
+                            <td className="p-2.5 font-mono text-slate-600 dark:text-slate-400 font-bold">
+                              {r.batchCode}
+                            </td>
+                            <td className="p-2.5 font-mono text-slate-500 dark:text-slate-400 text-[10px]">
+                              {r.mobileNumber || r.emailAddress || '—'}
+                            </td>
+                            <td className="p-2.5 text-slate-600 dark:text-slate-400 text-[10px]">
+                              {r.fatherName || '—'}
+                            </td>
+                            <td className="p-2.5 pr-4 text-right">
+                              {r.isValid ? (
+                                <span className="text-emerald-600 font-bold text-[10px]">🟢 Ready</span>
+                              ) : (
+                                <span className="text-red-600 font-bold text-[10px]">🔴 Incomplete</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 4. Import Results Banner */}
+              {importResult && (
+                <div
+                  className={`p-4 rounded-2xl border ${
+                    importResult.success
+                      ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800'
+                  } space-y-2 animate-fade-in`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{importResult.success ? '🎉' : '⚠️'}</span>
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white">
+                      Bulk Import Process Completed
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 pt-1 text-center text-xs">
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-xs border border-slate-200 dark:border-slate-800">
+                      <span className="block text-[9px] text-slate-400 uppercase font-black">Total Processed</span>
+                      <span className="font-black text-slate-900 dark:text-white">{importResult.total}</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-xs border border-slate-200 dark:border-slate-800">
+                      <span className="block text-[9px] text-emerald-600 uppercase font-black">New Students Created</span>
+                      <span className="font-black text-emerald-600">{importResult.createdCount}</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-xs border border-slate-200 dark:border-slate-800">
+                      <span className="block text-[9px] text-blue-600 uppercase font-black">Existing Updated</span>
+                      <span className="font-black text-blue-600">{importResult.updatedCount}</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-xs border border-slate-200 dark:border-slate-800">
+                      <span className="block text-[9px] text-red-500 uppercase font-black">Failed / Skipped</span>
+                      <span className="font-black text-red-500">{importResult.failedCount}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-4 px-6 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                💡 Tip: Imported students can be edited anytime via the 6-step wizard or batch-linked via Phase & Group Linker.
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsExcelImportModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-200/60 dark:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteBulkStudentImport}
+                  disabled={importingBulk || !importParsedRows.length}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {importingBulk ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+                      <span>Importing & Saving to PostgreSQL...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🚀</span>
+                      <span>Import & Upsert {importParsedRows.length} Students</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

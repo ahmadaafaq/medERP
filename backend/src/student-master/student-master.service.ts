@@ -2,7 +2,9 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { TenantSchemaService } from '../database/tenant-schema.service';
-import { CreateStudentDto, UpdateStudentDto, BulkLinkProfessionalDto, BulkLinkGroupDto } from './dto/student-master.dto';
+import {
+  CreateStudentDto, UpdateStudentDto, BulkLinkProfessionalDto, BulkLinkGroupDto, BulkCreateStudentsDto,
+} from './dto/student-master.dto';
 
 @Injectable()
 export class StudentMasterService {
@@ -653,26 +655,68 @@ export class StudentMasterService {
         throw new NotFoundException('Student not found');
       }
 
-      // Update core students table
+      // 1. Update core students table
       const name = `${dto.firstName} ${dto.middleName ? dto.middleName + ' ' : ''}${dto.lastName}`.trim();
       await runner.query(
         `UPDATE students
-         SET name = $1, rollno = $2, phone = $3, blood_group = $4, photo_url = $5, updated_at = NOW()
-         WHERE id = $6`,
-        [name, dto.rollNo || null, dto.mobileNumber || null, dto.bloodGroup || null, dto.photoUrl || null, id],
+         SET name = $1, rollno = $2, phone = $3, blood_group = $4,
+             photo_url = COALESCE($5, photo_url),
+             email = COALESCE($6, email),
+             course_cd = COALESCE($7, course_cd),
+             batch_cd = COALESCE($8, batch_cd),
+             updated_at = NOW()
+         WHERE id = $9`,
+        [
+          name,
+          dto.rollNo || null,
+          dto.mobileNumber || null,
+          dto.bloodGroup || null,
+          dto.photoUrl || null,
+          dto.emailAddress || null,
+          dto.courseCode || dto.courseId || null,
+          dto.batchCode || dto.batchId || null,
+          id,
+        ],
       );
 
-      // Update student_admissions
+      // Also update linked user email if exists
+      if (dto.emailAddress) {
+        await runner.query(
+          `UPDATE users u
+           SET email = $1, updated_at = NOW()
+           FROM students s
+           WHERE s.id = $2 AND s.user_id = u.id`,
+          [dto.emailAddress.toLowerCase().trim(), id],
+        ).catch(() => {});
+      }
+
+      // 2. Upsert student_admissions
       await runner.query(
-        `UPDATE student_admissions
-         SET college_id = $1, college_name = $2, course_id = $3, course_code = $4, professional_id = $5, professional_phase = $6,
-             session_id = $7, academic_session = $8, batch_id = $9, batch_code = $10, branch_id = $11, residency_type = $12, admission_type = $13, admission_date = $14
-         WHERE student_id = $15`,
+        `INSERT INTO student_admissions (
+           student_id, college_id, college_name, course_id, course_code, professional_id, professional_phase,
+           session_id, academic_session, batch_id, batch_code, branch_id, residency_type, admission_type, admission_date
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         ON CONFLICT (student_id) DO UPDATE SET
+           college_id = EXCLUDED.college_id,
+           college_name = EXCLUDED.college_name,
+           course_id = EXCLUDED.course_id,
+           course_code = EXCLUDED.course_code,
+           professional_id = EXCLUDED.professional_id,
+           professional_phase = EXCLUDED.professional_phase,
+           session_id = EXCLUDED.session_id,
+           academic_session = EXCLUDED.academic_session,
+           batch_id = EXCLUDED.batch_id,
+           batch_code = EXCLUDED.batch_code,
+           branch_id = EXCLUDED.branch_id,
+           residency_type = EXCLUDED.residency_type,
+           admission_type = EXCLUDED.admission_type,
+           admission_date = EXCLUDED.admission_date`,
         [
-          dto.collegeId,
-          dto.collegeName,
-          dto.courseId,
-          dto.courseCode,
+          id,
+          dto.collegeId || null,
+          dto.collegeName || null,
+          dto.courseId || null,
+          dto.courseCode || null,
           dto.professionalId || null,
           dto.professionalPhase || null,
           dto.sessionId || null,
@@ -683,17 +727,26 @@ export class StudentMasterService {
           dto.residencyType || null,
           dto.admissionType || null,
           dto.admissionDate ? new Date(dto.admissionDate) : null,
-          id,
         ],
       );
 
-      // Update student_academic_details
+      // 3. Upsert student_academic_details
       await runner.query(
-        `UPDATE student_academic_details
-         SET class_10_board = $1, class_10_percentage = $2, class_12_board = $3,
-             class_12_physics = $4, class_12_chemistry = $5, class_12_biology = $6, class_12_english = $7, class_12_percentage = $8
-         WHERE student_id = $9`,
+        `INSERT INTO student_academic_details (
+           student_id, class_10_board, class_10_percentage, class_12_board,
+           class_12_physics, class_12_chemistry, class_12_biology, class_12_english, class_12_percentage
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (student_id) DO UPDATE SET
+           class_10_board = EXCLUDED.class_10_board,
+           class_10_percentage = EXCLUDED.class_10_percentage,
+           class_12_board = EXCLUDED.class_12_board,
+           class_12_physics = EXCLUDED.class_12_physics,
+           class_12_chemistry = EXCLUDED.class_12_chemistry,
+           class_12_biology = EXCLUDED.class_12_biology,
+           class_12_english = EXCLUDED.class_12_english,
+           class_12_percentage = EXCLUDED.class_12_percentage`,
         [
+          id,
           dto.class10Board || null,
           dto.class10Pct || null,
           dto.class12Board || null,
@@ -702,30 +755,44 @@ export class StudentMasterService {
           dto.class12Biology || null,
           dto.class12English || null,
           dto.class12Pct || null,
-          id,
         ],
       );
 
-      // Update student_neet_details
+      // 4. Upsert student_neet_details
       await runner.query(
-        `UPDATE student_neet_details
-         SET neet_roll_no = $1, neet_score = $2, neet_percentile = $3, neet_air_rank = $4
-         WHERE student_id = $5`,
+        `INSERT INTO student_neet_details (
+           student_id, neet_roll_no, neet_score, neet_percentile, neet_air_rank
+         ) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (student_id) DO UPDATE SET
+           neet_roll_no = EXCLUDED.neet_roll_no,
+           neet_score = EXCLUDED.neet_score,
+           neet_percentile = EXCLUDED.neet_percentile,
+           neet_air_rank = EXCLUDED.neet_air_rank`,
         [
+          id,
           dto.neetRollNo || null,
           dto.neetScore || null,
           dto.neetPercentile || null,
           dto.neetAirRank || null,
-          id,
         ],
       );
 
-      // Update student_parents
+      // 5. Upsert student_parents
       await runner.query(
-        `UPDATE student_parents
-         SET father_name = $1, father_occupation = $2, father_mobile = $3, mother_name = $4, mother_occupation = $5, mother_mobile = $6, annual_income = $7
-         WHERE student_id = $8`,
+        `INSERT INTO student_parents (
+           student_id, father_name, father_occupation, father_mobile,
+           mother_name, mother_occupation, mother_mobile, annual_income
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (student_id) DO UPDATE SET
+           father_name = EXCLUDED.father_name,
+           father_occupation = EXCLUDED.father_occupation,
+           father_mobile = EXCLUDED.father_mobile,
+           mother_name = EXCLUDED.mother_name,
+           mother_occupation = EXCLUDED.mother_occupation,
+           mother_mobile = EXCLUDED.mother_mobile,
+           annual_income = EXCLUDED.annual_income`,
         [
+          id,
           dto.fatherName || null,
           dto.fatherOccupation || null,
           dto.fatherMobile || null,
@@ -733,16 +800,25 @@ export class StudentMasterService {
           dto.motherOccupation || null,
           dto.motherMobile || null,
           dto.annualIncome || null,
-          id,
         ],
       );
 
-      // Update student_addresses
+      // 6. Upsert student_addresses
       await runner.query(
-        `UPDATE student_addresses
-         SET permanent_address_1 = $1, permanent_address_2 = $2, permanent_city = $3, permanent_district = $4, permanent_state = $5, permanent_pincode = $6, same_as_permanent = $7
-         WHERE student_id = $8`,
+        `INSERT INTO student_addresses (
+           student_id, permanent_address_1, permanent_address_2, permanent_city,
+           permanent_district, permanent_state, permanent_pincode, same_as_permanent
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (student_id) DO UPDATE SET
+           permanent_address_1 = EXCLUDED.permanent_address_1,
+           permanent_address_2 = EXCLUDED.permanent_address_2,
+           permanent_city = EXCLUDED.permanent_city,
+           permanent_district = EXCLUDED.permanent_district,
+           permanent_state = EXCLUDED.permanent_state,
+           permanent_pincode = EXCLUDED.permanent_pincode,
+           same_as_permanent = EXCLUDED.same_as_permanent`,
         [
+          id,
           dto.permanentAddress1 || null,
           dto.permanentAddress2 || null,
           dto.permanentCity || null,
@@ -750,74 +826,96 @@ export class StudentMasterService {
           dto.permanentState || null,
           dto.permanentPincode || null,
           dto.sameAsPermanent ?? false,
-          id,
         ],
       );
 
-      // Update student_fees
+      // 7. Upsert student_fees
       await runner.query(
-        `UPDATE student_fees
-         SET paid_fees = $1, total_fees = $2, pending_fees = $3
-         WHERE student_id = $4`,
+        `INSERT INTO student_fees (
+           student_id, paid_fees, pending_fees, total_fees
+         ) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (student_id) DO UPDATE SET
+           paid_fees = EXCLUDED.paid_fees,
+           total_fees = EXCLUDED.total_fees,
+           pending_fees = EXCLUDED.pending_fees`,
         [
-          dto.paidFees || 0,
-          dto.totalFees || 0,
-          (dto.totalFees || 0) - (dto.paidFees || 0),
           id,
+          dto.paidFees || 0,
+          (dto.totalFees || 0) - (dto.paidFees || 0),
+          dto.totalFees || 0,
         ],
       );
 
-      // Update student_hostel
+      // 8. Upsert student_hostel
       await runner.query(
-        `UPDATE student_hostel
-         SET hostel_required = $1, hostel_name = $2, room_number = $3
-         WHERE student_id = $4`,
+        `INSERT INTO student_hostel (
+           student_id, hostel_required, hostel_name, room_number
+         ) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (student_id) DO UPDATE SET
+           hostel_required = EXCLUDED.hostel_required,
+           hostel_name = EXCLUDED.hostel_name,
+           room_number = EXCLUDED.room_number`,
         [dto.hostelRequired ?? false, dto.hostelName || null, dto.roomNumber || null, id],
       );
 
-      // Update student_emergency_contacts
+      // 9. Upsert student_emergency_contacts
       await runner.query(
-        `UPDATE student_emergency_contacts
-         SET contact_name = $1, relationship = $2, phone_number = $3
-         WHERE student_id = $4`,
+        `INSERT INTO student_emergency_contacts (
+           student_id, contact_name, relationship, phone_number
+         ) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (student_id) DO UPDATE SET
+           contact_name = EXCLUDED.contact_name,
+           relationship = EXCLUDED.relationship,
+           phone_number = EXCLUDED.phone_number`,
         [
+          id,
           dto.emergencyContactName || dto.fatherName || null,
           dto.emergencyRelationship || 'Parent',
           dto.emergencyContactMobile || dto.fatherMobile || null,
-          id,
         ],
       );
 
-      // Update student_bank_accounts
+      // 10. Upsert student_bank_accounts
       await runner.query(
-        `UPDATE student_bank_accounts
-         SET bank_name = $1, account_number = $2, ifsc_code = $3
-         WHERE student_id = $4`,
-        [dto.bankName || null, dto.accountNumber || null, dto.ifscCode || null, id],
+        `INSERT INTO student_bank_accounts (
+           student_id, bank_name, account_number, ifsc_code
+         ) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (student_id) DO UPDATE SET
+           bank_name = EXCLUDED.bank_name,
+           account_number = EXCLUDED.account_number,
+           ifsc_code = EXCLUDED.ifsc_code`,
+        [id, dto.bankName || null, dto.accountNumber || null, dto.ifscCode || null],
       );
 
-      // Update student_library
+      // 11. Upsert student_library
       await runner.query(
-        `UPDATE student_library
-         SET library_card_no = $1
-         WHERE student_id = $2`,
-        [dto.libraryCardNo || null, id],
+        `INSERT INTO student_library (
+           student_id, library_card_no
+         ) VALUES ($1, $2)
+         ON CONFLICT (student_id) DO UPDATE SET
+           library_card_no = EXCLUDED.library_card_no`,
+        [id, dto.libraryCardNo || null],
       );
 
-      // Update student_medical
+      // 12. Upsert student_medical
       await runner.query(
-        `UPDATE student_medical
-         SET vaccination_status = $1
-         WHERE student_id = $2`,
-        [dto.vaccinationStatus || null, id],
+        `INSERT INTO student_medical (
+           student_id, vaccination_status, blood_group
+         ) VALUES ($1, $2, $3)
+         ON CONFLICT (student_id) DO UPDATE SET
+           vaccination_status = EXCLUDED.vaccination_status,
+           blood_group = EXCLUDED.blood_group`,
+        [id, dto.vaccinationStatus || null, dto.bloodGroup || null],
       );
 
-      // Update student_documents
+      // 13. Upsert student_documents
       await runner.query(
-        `UPDATE student_documents
-         SET passport_photo_url = COALESCE($1, passport_photo_url)
-         WHERE student_id = $2`,
-        [dto.photoUrl || null, id],
+        `INSERT INTO student_documents (
+           student_id, passport_photo_url
+         ) VALUES ($1, $2)
+         ON CONFLICT (student_id) DO UPDATE SET
+           passport_photo_url = COALESCE(EXCLUDED.passport_photo_url, passport_photo_url)`,
+        [id, dto.photoUrl || null],
       );
 
       await runner.commitTransaction();
@@ -1230,7 +1328,7 @@ export class StudentMasterService {
   async getHustleBoard(tenantSlug: string, query: { filterMode?: string; departmentId?: string; limit?: number } = {}) {
     const slug = await this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${slug}`;
-    const limit = Math.min(Number(query.limit) || 50, 200);
+    const limit = Math.min(Number(query.limit) || 200, 500);
 
     try {
       const rawQuery = `
@@ -1399,6 +1497,220 @@ export class StudentMasterService {
       this.logger.error(`Failed to fetch authentic hustle board: ${err.message}`);
       return { success: false, data: [] };
     }
+  }
+
+  async bulkCreateStudents(tenantSlug: string, dto: BulkCreateStudentsDto) {
+    const rawList = Array.isArray(dto.students) ? dto.students : [];
+    if (!rawList.length) {
+      throw new BadRequestException('No student records provided in payload');
+    }
+
+    const results = {
+      success: true,
+      total: rawList.length,
+      createdCount: 0,
+      updatedCount: 0,
+      failedCount: 0,
+      created: [] as any[],
+      failed: [] as any[],
+    };
+
+    for (let index = 0; index < rawList.length; index++) {
+      const row = rawList[index];
+      const rawCollege = row.collegeId || row.college_id || row.college_slug || row.collegeCode || row.colg_cd || tenantSlug || 'srms-cet-bareilly';
+      const slug = await this.resolveTenantSlug(rawCollege);
+      if (!slug || slug === 'all') {
+        results.failed.push({
+          row: index + 1,
+          name: row.name || `${row.firstName || ''} ${row.lastName || ''}`,
+          rollno: row.rollno || row.roll_no,
+          error: 'Could not resolve valid tenant college',
+        });
+        results.failedCount++;
+        continue;
+      }
+
+      await this.tenantSchemaService.ensureLatestSchema(slug);
+      const runner = await this.tenantSchemaService.getTenantRunner(slug);
+      await runner.startTransaction();
+
+      try {
+        const rollNo = String(row.rollno || row.roll_no || row.rollNo || '').trim() || null;
+        let regNo = String(row.registration_no || row.registrationNo || row.regNo || '').trim();
+        const firstName = String(row.firstName || row.first_name || '').trim();
+        const middleName = String(row.middleName || row.middle_name || '').trim();
+        const lastName = String(row.lastName || row.last_name || '').trim();
+        let name = String(row.name || '').trim();
+        if (!name && (firstName || lastName)) {
+          name = `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
+        }
+        if (!name) {
+          name = rollNo ? `Student ${rollNo}` : `Student ${index + 1}`;
+        }
+
+        const email = String(row.email || row.emailAddress || row.email_address || '').trim().toLowerCase();
+        const phone = String(row.phone || row.mobileNumber || row.mobile_number || '').trim() || null;
+        const bloodGroup = String(row.bloodGroup || row.blood_group || '').trim() || null;
+        const gender = String(row.gender || 'Male').trim();
+        const dob = row.dob || row.dateOfBirth || row.date_of_birth || null;
+        const courseCd = String(row.courseCode || row.course_code || row.courseId || row.course_cd || '2').trim();
+        const branchId = row.branchId || row.branch_id || row.branchCode || row.branch_cd || null;
+        const batchCd = String(row.batchCode || row.batch_code || row.batchId || row.batch_cd || row.batch_year || "'18'").trim();
+        const residencyType = String(row.residencyType || row.residency_type || 'Day Scholar').trim();
+        const collegeName = String(row.collegeName || row.college_name || 'SRMS CET Bareilly').trim();
+        const photoUrl = row.photoUrl || row.photo_url || null;
+
+        // Auto-generate regNo if missing
+        if (!regNo) {
+          const yearStr = new Date().getFullYear().toString();
+          regNo = await this.generateNextRegistrationNo(slug, yearStr);
+        }
+
+        const studentEmail = email || `${regNo.toLowerCase()}@srms.ac.in`;
+        const defaultHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.'; // Default Password@123
+
+        // Upsert User
+        const userRows = await runner.query(
+          `INSERT INTO users (email, password_hash, role, onboarding_completed, must_change_password)
+           VALUES ($1, $2, 'STUDENT', true, false)
+           ON CONFLICT (email) DO UPDATE SET is_active = true
+           RETURNING id`,
+          [studentEmail, defaultHash],
+        );
+        const userId = userRows[0]?.id;
+
+        // Check if student already exists by registration_no or rollno
+        let studentId: string | null = null;
+        let isUpdate = false;
+
+        const existRows = await runner.query(
+          `SELECT id FROM students WHERE registration_no = $1 OR (rollno IS NOT NULL AND rollno = $2)`,
+          [regNo, rollNo],
+        );
+
+        if (existRows.length > 0) {
+          studentId = existRows[0].id;
+          isUpdate = true;
+          await runner.query(
+            `UPDATE students
+             SET name = $1, rollno = COALESCE($2, rollno), phone = COALESCE($3, phone),
+                 blood_group = COALESCE($4, blood_group), photo_url = COALESCE($5, photo_url),
+                 course_cd = $6, batch_cd = $7, updated_at = NOW()
+             WHERE id = $8`,
+            [name, rollNo, phone, bloodGroup, photoUrl, courseCd, batchCd, studentId],
+          );
+        } else {
+          const insertStudent = await runner.query(
+            `INSERT INTO students (
+               user_id, name, rollno, registration_no, is_active, phone, blood_group, photo_url, course_cd, batch_cd
+             ) VALUES ($1, $2, $3, $4, true, $5, $6, $7, $8, $9) RETURNING id`,
+            [userId || null, name, rollNo, regNo, phone, bloodGroup, photoUrl, courseCd, batchCd],
+          );
+          studentId = insertStudent[0].id;
+        }
+
+        // Upsert child tables
+        // 1. student_admissions
+        await runner.query(
+          `INSERT INTO student_admissions (
+             student_id, college_id, college_name, course_id, course_code,
+             batch_id, batch_code, branch_id, residency_type, admission_date
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (student_id) DO UPDATE SET
+             college_id = EXCLUDED.college_id,
+             college_name = EXCLUDED.college_name,
+             course_id = EXCLUDED.course_id,
+             course_code = EXCLUDED.course_code,
+             batch_id = EXCLUDED.batch_id,
+             batch_code = EXCLUDED.batch_code,
+             branch_id = EXCLUDED.branch_id,
+             residency_type = EXCLUDED.residency_type`,
+          [
+            studentId,
+            rawCollege,
+            collegeName,
+            courseCd,
+            courseCd,
+            batchCd,
+            batchCd,
+            branchId ? String(branchId) : null,
+            residencyType,
+            dob ? new Date(dob) : new Date(),
+          ],
+        );
+
+        // 2. student_parents
+        const fatherName = row.fatherName || row.father_name || null;
+        const fatherMobile = row.fatherMobile || row.father_mobile || null;
+        const motherName = row.motherName || row.mother_name || null;
+        if (fatherName || motherName || fatherMobile) {
+          await runner.query(
+            `INSERT INTO student_parents (
+               student_id, father_name, father_mobile, mother_name
+             ) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (student_id) DO UPDATE SET
+               father_name = COALESCE(EXCLUDED.father_name, student_parents.father_name),
+               father_mobile = COALESCE(EXCLUDED.father_mobile, student_parents.father_mobile),
+               mother_name = COALESCE(EXCLUDED.mother_name, student_parents.mother_name)`,
+            [studentId, fatherName, fatherMobile, motherName],
+          );
+        }
+
+        // 3. student_addresses
+        const address1 = row.address || row.permanentAddress || row.permanent_address || row.permanent_address_1 || null;
+        const city = row.city || row.permanentCity || row.permanent_city || null;
+        const state = row.state || row.permanentState || row.permanent_state || null;
+        const pincode = row.pincode || row.permanentPincode || row.permanent_pincode || null;
+        if (address1 || city || state || pincode) {
+          await runner.query(
+            `INSERT INTO student_addresses (
+               student_id, permanent_address_1, permanent_city, permanent_state, permanent_pincode, same_as_permanent
+             ) VALUES ($1, $2, $3, $4, $5, true)
+             ON CONFLICT (student_id) DO UPDATE SET
+               permanent_address_1 = COALESCE(EXCLUDED.permanent_address_1, student_addresses.permanent_address_1),
+               permanent_city = COALESCE(EXCLUDED.permanent_city, student_addresses.permanent_city),
+               permanent_state = COALESCE(EXCLUDED.permanent_state, student_addresses.permanent_state),
+               permanent_pincode = COALESCE(EXCLUDED.permanent_pincode, student_addresses.permanent_pincode)`,
+            [studentId, address1, city, state, pincode],
+          );
+        }
+
+        // 4. student_documents
+        if (photoUrl) {
+          await runner.query(
+            `INSERT INTO student_documents (
+               student_id, passport_photo_url
+             ) VALUES ($1, $2)
+             ON CONFLICT (student_id) DO UPDATE SET
+               passport_photo_url = COALESCE(EXCLUDED.passport_photo_url, student_documents.passport_photo_url)`,
+            [studentId, photoUrl],
+          );
+        }
+
+        await runner.commitTransaction();
+
+        if (isUpdate) {
+          results.updatedCount++;
+        } else {
+          results.createdCount++;
+        }
+        results.created.push({ id: studentId, rollno: rollNo, registration_no: regNo, name });
+      } catch (err: any) {
+        await runner.rollbackTransaction();
+        this.logger.error(`[StudentMaster] Bulk row ${index + 1} failed: ${err.message}`);
+        results.failed.push({
+          row: index + 1,
+          name: row.name || `${row.firstName || ''} ${row.lastName || ''}`,
+          rollno: row.rollno || row.roll_no,
+          error: err.message,
+        });
+        results.failedCount++;
+      } finally {
+        await runner.release();
+      }
+    }
+
+    return results;
   }
 }
 
