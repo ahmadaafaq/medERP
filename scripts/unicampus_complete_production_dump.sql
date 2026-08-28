@@ -30,6 +30,77 @@ SET client_encoding = 'UTF8';
 -- ========================================================
 CREATE SCHEMA IF NOT EXISTS "public";
 
+-- Ensure public enums
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'firm_mode_enum') THEN
+    CREATE TYPE firm_mode_enum AS ENUM ('MED', 'NONMED');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'firm_status_enum') THEN
+    CREATE TYPE firm_status_enum AS ENUM ('ACTIVE', 'TRIAL', 'SUSPENDED', 'EXPIRED');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'firm_level_type_enum') THEN
+    CREATE TYPE firm_level_type_enum AS ENUM ('STANDARD', 'ENTERPRISE', 'CUSTOM');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'license_status_enum') THEN
+    CREATE TYPE license_status_enum AS ENUM ('ACTIVE', 'EXPIRED', 'REVOKED');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'transaction_status_enum') THEN
+    CREATE TYPE transaction_status_enum AS ENUM ('PENDING', 'SUCCESS', 'FAILED', 'REFUNDED');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'menu_role_enum') THEN
+    CREATE TYPE menu_role_enum AS ENUM ('SUPERADMIN', 'ADMIN', 'CLERK', 'FACULTY', 'WARDEN', 'STUDENT');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'applicable_firm_mode_enum') THEN
+    CREATE TYPE applicable_firm_mode_enum AS ENUM ('MED', 'NONMED', 'BOTH');
+  END IF;
+END $$;
+
+-- Ensure public tables and missing columns exist
+CREATE TABLE IF NOT EXISTS public.firms (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(100) NOT NULL UNIQUE,
+  tenant_name VARCHAR(255) NOT NULL,
+  domain VARCHAR(255) UNIQUE,
+  logo_url TEXT,
+  cover_url TEXT,
+  banner_url TEXT,
+  level_type firm_level_type_enum NOT NULL DEFAULT 'STANDARD',
+  theme_color VARCHAR(20) NOT NULL DEFAULT '#5B4BFF',
+  theme_config JSONB,
+  favicon_url TEXT,
+  updated_by VARCHAR(100),
+  timetable_module_type VARCHAR(50),
+  firm_mode firm_mode_enum NOT NULL DEFAULT 'MED',
+  status firm_status_enum NOT NULL DEFAULT 'ACTIVE',
+  trial_days INTEGER DEFAULT 14,
+  trial_started_at TIMESTAMPTZ,
+  trial_ends_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.firms ADD COLUMN IF NOT EXISTS theme_config JSONB;
+ALTER TABLE public.firms ADD COLUMN IF NOT EXISTS favicon_url TEXT;
+ALTER TABLE public.firms ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);
+ALTER TABLE public.firms ADD COLUMN IF NOT EXISTS timetable_module_type VARCHAR(50);
+
+ALTER TABLE public.firms ALTER COLUMN logo_url TYPE TEXT;
+ALTER TABLE public.firms ALTER COLUMN cover_url TYPE TEXT;
+ALTER TABLE public.firms ALTER COLUMN banner_url TYPE TEXT;
+ALTER TABLE public.firms ALTER COLUMN favicon_url TYPE TEXT;
+
+
+CREATE TABLE IF NOT EXISTS public.firm_role_permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  firm_id UUID NOT NULL,
+  role VARCHAR(50) NOT NULL,
+  menu_key VARCHAR(150) NOT NULL,
+  is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Data for "public"."firm_role_permissions" (1450 rows)
 INSERT INTO "public"."firm_role_permissions" ("id", "firm_id", "role", "menu_key", "is_enabled", "created_at", "updated_at") VALUES ('f749d0f6-596d-4c66-8e1c-3eae351d5bfb', '93b07fe4-8e84-40da-8377-34dbba699434', 'STUDENT', 'dashboard', TRUE, '2026-08-22T06:39:40.536Z', '2026-08-22T06:39:40.536Z') ON CONFLICT DO NOTHING;
 INSERT INTO "public"."firm_role_permissions" ("id", "firm_id", "role", "menu_key", "is_enabled", "created_at", "updated_at") VALUES ('e8b58297-0fab-42f7-b75f-0e4c65efaab8', '93b07fe4-8e84-40da-8377-34dbba699434', 'STUDENT', 'attendance', TRUE, '2026-08-22T06:39:40.541Z', '2026-08-22T06:39:40.541Z') ON CONFLICT DO NOTHING;

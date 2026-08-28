@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
   ManyToOne,
   JoinColumn,
   Index,
@@ -66,4 +67,7 @@ export class LicenseKeyEntity {
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updated_at: Date;
 }
