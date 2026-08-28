@@ -353,12 +353,14 @@ export class IncubationCellService {
         LEFT JOIN "${schema}".departments dep ON (
           p.branch_id = dep.code 
           OR p.branch_id = dep.id::text 
-          OR s.branch_cd = dep.code
+          OR s.branch_id = dep.code
+          OR s.department_id = dep.id
         )
         LEFT JOIN "${schema}".batches bth ON (
           p.batch_id = bth.code 
           OR p.batch_id = bth.id::text 
           OR s.batch_cd = bth.code
+          OR s.batch_id = bth.id
         )
         ORDER BY p.created_at DESC
         LIMIT 50
