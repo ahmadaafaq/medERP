@@ -53,3 +53,7 @@ services:
       - backend
     networks:
       - unicampus_net
+
+networks:
+  unicampus_net:
+    driver: bridge
