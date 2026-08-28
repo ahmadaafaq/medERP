@@ -1,7 +1,8 @@
 import {
   IsString, IsEmail, IsEnum, IsOptional, MinLength,
-  MaxLength, IsBoolean, Matches,
+  MaxLength, IsBoolean, Matches, IsArray, ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { UserRole } from '../../common/enums/role.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -91,14 +92,14 @@ export class CreateFacultyDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'Temp@1234' })
+  @ApiPropertyOptional({ example: 'Temp@1234' })
+  @IsOptional()
   @IsString()
-  @MinLength(8)
-  password: string;
+  password?: string;
 
-  @ApiProperty({ enum: UserRole })
-  @IsEnum(UserRole)
-  role: UserRole;
+  @ApiPropertyOptional({ enum: UserRole })
+  @IsOptional()
+  role?: any;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -288,11 +289,39 @@ export class CreateFacultyDto {
   @IsOptional()
   @IsString()
   deviceCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isValid?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  departmentCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  initial_password?: string;
 }
 
 export class BulkCreateStudentsDto {
   @ApiProperty({ type: [CreateStudentDto] })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateStudentDto)
   students: CreateStudentDto[];
+}
+
+export class BulkCreateFacultyDto {
+  @ApiProperty({ type: [CreateFacultyDto] })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateFacultyDto)
+  faculty: CreateFacultyDto[];
 }
 
 export class UpdateStudentDto extends PartialType(CreateStudentDto) {}

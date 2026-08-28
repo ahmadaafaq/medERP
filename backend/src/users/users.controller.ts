@@ -5,7 +5,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import {
-  CreateStudentDto, CreateFacultyDto, BulkCreateStudentsDto,
+  CreateStudentDto, CreateFacultyDto, BulkCreateStudentsDto, BulkCreateFacultyDto,
   UpdateStudentDto, UpdateFacultyDto, GetStudentsQueryDto, GetFacultyQueryDto,
 } from './dto/user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -134,6 +134,16 @@ export class UsersController {
     @Body() dto: CreateFacultyDto,
   ) {
     return this.usersService.createFaculty(tenantSlug, dto);
+  }
+
+  @Public()
+  @Post('faculty/bulk')
+  @ApiOperation({ summary: 'Bulk-create or update faculty/staff accounts from array' })
+  bulkCreateFaculty(
+    @TenantSlug() tenantSlug: string,
+    @Body() dto: BulkCreateFacultyDto,
+  ) {
+    return this.usersService.bulkCreateFaculty(tenantSlug, dto);
   }
 
   @Public()

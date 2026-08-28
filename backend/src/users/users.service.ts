@@ -7,7 +7,7 @@ import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import {
   CreateStudentDto, CreateFacultyDto,
-  UpdateStudentDto, UpdateFacultyDto, BulkCreateStudentsDto,
+  UpdateStudentDto, UpdateFacultyDto, BulkCreateStudentsDto, BulkCreateFacultyDto,
 } from './dto/user.dto';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { UserRole } from '../common/enums/role.enum';
@@ -397,35 +397,62 @@ export class UsersService {
     const resolvedSlug = await this.resolveTenantSlug(dto.college_slug || dto.college_id || tenantSlug);
     const schema = `tenant_${resolvedSlug}`;
 
+    // 1. Check if employee already exists by emp_id in this tenant schema
     const empCheck = await this.ds.query(
-      `SELECT id FROM "${schema}".faculty WHERE emp_id = $1`,
+      `SELECT id, user_id FROM "${schema}".faculty WHERE emp_id = $1`,
       [dto.empId],
-    );
-    if (empCheck.length) throw new ConflictException(`Emp ID '${dto.empId}' already exists`);
+    ).catch(() => []);
 
+    if (empCheck.length > 0) {
+      // Upsert: update existing faculty
+      const fId = empCheck[0].id;
+      return await this.updateFaculty(resolvedSlug, fId, dto);
+    }
+
+    const emailStr = (dto.email || `${dto.empId.toLowerCase()}@srms.ac.in`).toLowerCase().trim();
+    const plainPassword = dto.password || 'Temp@1234';
+    const hash = await bcrypt.hash(plainPassword, BCRYPT_ROUNDS);
+
+    // Map role safely
+    let role: UserRole = UserRole.FACULTY;
+    if (dto.role) {
+      const r = String(dto.role).toUpperCase().trim();
+      if (r === 'HOD') role = UserRole.HOD;
+      else if (r === 'CLERK') role = UserRole.CLERK;
+      else if (r === 'ADMIN' || r === 'COLLEGE_ADMIN') role = UserRole.COLLEGE_ADMIN;
+      else if (r === 'STAFF') role = UserRole.STAFF;
+      else role = UserRole.FACULTY;
+    } else if (dto.staffType && (dto.staffType.toUpperCase().includes('CLERK') || dto.staffType.toUpperCase().includes('ADMIN'))) {
+      role = dto.staffType.toUpperCase().includes('CLERK') ? UserRole.CLERK : UserRole.FACULTY;
+    }
+
+    // 2. Check if email already exists in users table
     const emailCheck = await this.ds.query(
       `SELECT id FROM "${schema}".users WHERE email = $1`,
-      [dto.email.toLowerCase()],
-    );
-    if (emailCheck.length) throw new ConflictException(`Email '${dto.email}' already in use`);
+      [emailStr],
+    ).catch(() => []);
 
-    const hash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-
-    // Map role safely (handle ADMIN alias -> COLLEGE_ADMIN)
-    let role: UserRole = dto.role || UserRole.FACULTY;
-    if ((dto.role as any) === 'ADMIN') role = UserRole.COLLEGE_ADMIN;
-
-    const userRows = await this.ds.query(
-      `INSERT INTO "${schema}".users (email, password_hash, role, must_change_password, is_active)
-       VALUES ($1,$2,$3,true,COALESCE($4, true)) RETURNING id`,
-      [dto.email.toLowerCase(), hash, role, dto.isActive ?? true],
-    );
-    const userId = userRows[0].id;
+    let userId: string;
+    if (emailCheck.length > 0) {
+      userId = emailCheck[0].id;
+      // Update role and status if needed
+      await this.ds.query(
+        `UPDATE "${schema}".users SET role = $1, is_active = COALESCE($2, true) WHERE id = $3`,
+        [role, dto.isActive ?? true, userId],
+      ).catch(() => {});
+    } else {
+      const userRows = await this.ds.query(
+        `INSERT INTO "${schema}".users (email, password_hash, role, must_change_password, is_active)
+         VALUES ($1,$2,$3,true,COALESCE($4, true)) RETURNING id`,
+        [emailStr, hash, role, dto.isActive ?? true],
+      );
+      userId = userRows[0].id;
+    }
 
     let validDeptId = this.isUUID(dto.departmentId) ? dto.departmentId : null;
     if (!validDeptId && dto.departmentId) {
       const dRows = await this.ds.query(
-        `SELECT id FROM "${schema}".departments WHERE code = $1 OR id::text = $1 LIMIT 1`,
+        `SELECT id FROM "${schema}".departments WHERE code = $1 OR id::text = $1 OR name ILIKE $1 LIMIT 1`,
         [dto.departmentId],
       ).catch(() => []);
       if (dRows.length) validDeptId = dRows[0].id;
@@ -434,10 +461,20 @@ export class UsersService {
     let validSubjectId = this.isUUID(dto.subjectId) ? dto.subjectId : null;
     if (!validSubjectId && dto.subjectId) {
       const sRows = await this.ds.query(
-        `SELECT id FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
+        `SELECT id FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 OR name ILIKE $1 LIMIT 1`,
         [dto.subjectId],
       ).catch(() => []);
       if (sRows.length) validSubjectId = sRows[0].id;
+    }
+
+    // Check if faculty row already exists for this userId
+    const existingFacultyByUserId = await this.ds.query(
+      `SELECT id FROM "${schema}".faculty WHERE user_id = $1`,
+      [userId],
+    ).catch(() => []);
+
+    if (existingFacultyByUserId.length > 0) {
+      return await this.updateFaculty(resolvedSlug, existingFacultyByUserId[0].id, dto);
     }
 
     const facultyRows = await this.ds.query(
@@ -452,12 +489,45 @@ export class UsersService {
         dto.gender || null, dto.experience || null,
         dto.staffType || 'Faculty', dto.photoUrl || null,
         dto.isActive ?? true,
-        dto.email ? dto.email.toLowerCase().trim() : null,
+        emailStr,
       ],
     );
 
-    this.logger.log(`Faculty created: ${dto.empId} [${role}] in tenant ${resolvedSlug}`);
-    return { ...facultyRows[0], email: dto.email, role };
+    this.logger.log(`Faculty created/upserted: ${dto.empId} [${role}] in tenant ${resolvedSlug}`);
+    return { ...facultyRows[0], email: emailStr, role };
+  }
+
+  async bulkCreateFaculty(tenantSlug: string, dto: BulkCreateFacultyDto) {
+    const results = { created: [] as any[], failed: [] as any[], updated: [] as any[] };
+    const resolvedSlug = await this.resolveTenantSlug(tenantSlug);
+
+    for (const faculty of (dto.faculty || [])) {
+      try {
+        const targetSlug = faculty.college_slug || faculty.college_id ? await this.resolveTenantSlug(faculty.college_slug || faculty.college_id) : resolvedSlug;
+        const schema = `tenant_${targetSlug}`;
+        
+        // Check if employee already exists in tenant schema by empId or email
+        const existingFaculty = await this.ds.query(
+          `SELECT f.id, f.user_id FROM "${schema}".faculty f WHERE f.emp_id = $1 OR (f.email IS NOT NULL AND f.email = $2)`,
+          [faculty.empId, faculty.email ? faculty.email.toLowerCase().trim() : ''],
+        ).catch(() => []);
+
+        if (existingFaculty.length > 0) {
+          // Update existing
+          const fId = existingFaculty[0].id;
+          await this.updateFaculty(targetSlug, fId, faculty);
+          results.updated.push({ empId: faculty.empId, name: faculty.name, college: targetSlug });
+        } else {
+          // Create new
+          const created = await this.createFaculty(targetSlug, faculty);
+          results.created.push(created);
+        }
+      } catch (e: any) {
+        results.failed.push({ empId: faculty.empId, name: faculty.name, error: e.message });
+      }
+    }
+
+    return results;
   }
 
   async updateFaculty(tenantSlug: string, id: string, dto: UpdateFacultyDto) {

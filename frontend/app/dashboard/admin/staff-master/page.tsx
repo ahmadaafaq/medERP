@@ -163,6 +163,20 @@ export default function StaffMasterPage() {
     nonTeachingCount?: number;
   } | null>(null);
 
+  // Excel / CSV Import Modal State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importTargetCollege, setImportTargetCollege] = useState('srms-cet-bareilly');
+  const [importFileName, setImportFileName] = useState('');
+  const [importParsedRows, setImportParsedRows] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    success: boolean;
+    createdCount: number;
+    updatedCount: number;
+    failedCount: number;
+    failedItems?: { empId: string; name: string; error: string }[];
+  } | null>(null);
+
   // Custom Designation control
   const [selectedDesignationOption, setSelectedDesignationOption] = useState('Assistant Professor');
   const [customDesignationText, setCustomDesignationText] = useState('');
@@ -419,6 +433,411 @@ export default function StaffMasterPage() {
       showAlert('error', 'Network error during sync execution.');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // ─── EXCEL / CSV IMPORT & SAMPLE DOWNLOAD LOGIC ───
+
+  // Download official Excel/CSV Sample Template
+  const handleDownloadSampleFormat = () => {
+    const headers = [
+      'emp_id',
+      'name',
+      'email',
+      'phone',
+      'designation',
+      'staff_type',
+      'role',
+      'department_code',
+      'gender',
+      'qualification',
+      'experience',
+      'date_of_joining',
+      'date_of_birth',
+      'blood_group',
+      'father_name',
+      'address',
+      'city',
+      'state',
+      'pan_no',
+      'aadhaar_no',
+      'initial_password',
+    ];
+
+    const sampleRows = [
+      [
+        'EMP1001',
+        'Dr. Ramesh Chandra',
+        'ramesh.chandra@srms.ac.in',
+        '9876543210',
+        'Professor',
+        'Faculty',
+        'FACULTY',
+        'CS',
+        'Male',
+        'Ph.D (Computer Science), M.Tech',
+        '14 Years',
+        '2018-07-15',
+        '1980-04-12',
+        'B+',
+        'Late S. N. Chandra',
+        '45 Civil Lines',
+        'Bareilly',
+        'Uttar Pradesh',
+        'ABCDE1234F',
+        '123456789012',
+        'Temp@1234',
+      ],
+      [
+        'EMP1002',
+        'Dr. Priya Sharma',
+        'priya.sharma@srms.ac.in',
+        '9876543211',
+        'Associate Professor',
+        'Faculty',
+        'HOD',
+        'IT',
+        'Female',
+        'M.Tech (Information Technology)',
+        '9 Years',
+        '2020-01-10',
+        '1986-09-22',
+        'O+',
+        'Mr. K. P. Sharma',
+        '12 Rajendra Nagar',
+        'Bareilly',
+        'Uttar Pradesh',
+        'FGHIJ5678K',
+        '234567890123',
+        'Temp@1234',
+      ],
+      [
+        'EMP1003',
+        'Er. Amit Verma',
+        'amit.verma@srms.ac.in',
+        '9876543212',
+        'Assistant Professor',
+        'Faculty',
+        'FACULTY',
+        'ME',
+        'Male',
+        'M.Tech (Mechanical Engineering)',
+        '5 Years',
+        '2022-08-01',
+        '1992-11-05',
+        'A+',
+        'Mr. V. K. Verma',
+        '78 Model Town',
+        'Bareilly',
+        'Uttar Pradesh',
+        'KLMNO9012P',
+        '345678901234',
+        'Temp@1234',
+      ],
+      [
+        'EMP1004',
+        'Sunil Kumar Rastogi',
+        'sunil.rastogi@srms.ac.in',
+        '9876543213',
+        'Senior Clerk',
+        'CLERK',
+        'CLERK',
+        'ADM',
+        'Male',
+        'B.Com, PGDCA',
+        '11 Years',
+        '2015-03-20',
+        '1984-06-18',
+        'AB+',
+        'Mr. R. L. Rastogi',
+        '89 Station Road',
+        'Bareilly',
+        'Uttar Pradesh',
+        'PQRST3456U',
+        '456789012345',
+        'Temp@1234',
+      ],
+      [
+        'EMP1005',
+        'Dr. Sanjay Singh',
+        'sanjay.singh@srms.ac.in',
+        '9876543214',
+        'Professor & HOD',
+        'Faculty',
+        'HOD',
+        'ANAT',
+        'Male',
+        'MD (Anatomy), MBBS',
+        '18 Years',
+        '2012-09-01',
+        '1976-03-14',
+        'O+',
+        'Dr. M. P. Singh',
+        'Campus Residence A-4',
+        'Bareilly',
+        'Uttar Pradesh',
+        'UVWXY7890Z',
+        '567890123456',
+        'Temp@1234',
+      ],
+    ];
+
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [
+        headers.join(','),
+        ...sampleRows.map((e) =>
+          e.map((cell) => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')
+        ),
+      ].join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'MedERP_Staff_Import_Sample_Template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Robust CSV parser supporting quotes, commas, and multiline values
+  const parseCSVText = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentCell = '';
+    let insideQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (insideQuotes && nextChar === '"') {
+          currentCell += '"';
+          i++; // skip escaped quote
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+      } else if (char === ',' && !insideQuotes) {
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+      } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+        if (char === '\r' && nextChar === '\n') i++;
+        currentRow.push(currentCell.trim());
+        if (currentRow.some((c) => c !== '')) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+        currentCell = '';
+      } else {
+        currentCell += char;
+      }
+    }
+    if (currentCell || currentRow.length > 0) {
+      currentRow.push(currentCell.trim());
+      if (currentRow.some((c) => c !== '')) {
+        rows.push(currentRow);
+      }
+    }
+    return rows;
+  };
+
+  // Handle uploaded spreadsheet file
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportFileName(file.name);
+    setImportResult(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const rawRows = parseCSVText(text);
+
+        if (rawRows.length < 2) {
+          showAlert('error', 'File contains no data rows. Header row + at least 1 record required.');
+          return;
+        }
+
+        const rawHeaders = rawRows[0].map((h) => h.toLowerCase().trim().replace(/[\s_-]+/g, ''));
+        const dataRows = rawRows.slice(1);
+
+        // Header mapping helper
+        const getIdx = (...keys: string[]) => {
+          for (const k of keys) {
+            const normalized = k.toLowerCase().replace(/[\s_-]+/g, '');
+            const idx = rawHeaders.findIndex((h) => h === normalized || h.includes(normalized));
+            if (idx !== -1) return idx;
+          }
+          return -1;
+        };
+
+        const empIdIdx = getIdx('empid', 'emp_id', 'employeecode', 'code', 'staffid');
+        const nameIdx = getIdx('name', 'staffname', 'facultyname', 'fullname');
+        const emailIdx = getIdx('email', 'emailaddress', 'mail');
+        const phoneIdx = getIdx('phone', 'mobile', 'contact', 'phonenumber');
+        const desigIdx = getIdx('designation', 'post', 'title');
+        const staffTypeIdx = getIdx('stafftype', 'staff_type', 'type');
+        const roleIdx = getIdx('role', 'systemrole');
+        const deptIdx = getIdx('departmentcode', 'department_code', 'department', 'dept', 'deptcode');
+        const genderIdx = getIdx('gender', 'sex');
+        const qualIdx = getIdx('qualification', 'degree');
+        const expIdx = getIdx('experience', 'exp');
+        const dojIdx = getIdx('dateofjoining', 'date_of_joining', 'joiningdate', 'doj');
+        const dobIdx = getIdx('dateofbirth', 'date_of_birth', 'dob');
+        const bgIdx = getIdx('bloodgroup', 'blood_group');
+        const fatherIdx = getIdx('fathername', 'father_name');
+        const addrIdx = getIdx('address', 'permaddr');
+        const cityIdx = getIdx('city');
+        const stateIdx = getIdx('state');
+        const panIdx = getIdx('panno', 'pan_no', 'pan');
+        const aadhaarIdx = getIdx('aadhaarno', 'aadhaar_no', 'aadhaar');
+        const passIdx = getIdx('initialpassword', 'password', 'temp_password', 'temppassword');
+
+        const parsedList = dataRows.map((row, rowNum) => {
+          const empId = empIdIdx !== -1 ? row[empIdIdx] || '' : `EMP${rowNum + 1000}`;
+          const name = nameIdx !== -1 ? row[nameIdx] || '' : '';
+          const email = emailIdx !== -1 ? row[emailIdx] || '' : `${empId.toLowerCase()}@srms.ac.in`;
+          const phone = phoneIdx !== -1 ? row[phoneIdx] || '' : '';
+          const designation = desigIdx !== -1 ? row[desigIdx] || 'Assistant Professor' : 'Assistant Professor';
+          const staffType = staffTypeIdx !== -1 ? row[staffTypeIdx] || 'Faculty' : 'Faculty';
+          const role = roleIdx !== -1 ? row[roleIdx] || 'FACULTY' : 'FACULTY';
+          const departmentCode = deptIdx !== -1 ? row[deptIdx] || '' : '';
+          const gender = genderIdx !== -1 ? row[genderIdx] || 'Male' : 'Male';
+          const qualification = qualIdx !== -1 ? row[qualIdx] || '' : '';
+          const experience = expIdx !== -1 ? row[expIdx] || '' : '';
+          const dateOfJoining = dojIdx !== -1 ? row[dojIdx] || '' : '';
+          const dateOfBirth = dobIdx !== -1 ? row[dobIdx] || '' : '';
+          const bloodGroup = bgIdx !== -1 ? row[bgIdx] || '' : '';
+          const fatherName = fatherIdx !== -1 ? row[fatherIdx] || '' : '';
+          const address = addrIdx !== -1 ? row[addrIdx] || '' : '';
+          const city = cityIdx !== -1 ? row[cityIdx] || 'Bareilly' : 'Bareilly';
+          const state = stateIdx !== -1 ? row[stateIdx] || 'Uttar Pradesh' : 'Uttar Pradesh';
+          const panNo = panIdx !== -1 ? row[panIdx] || '' : '';
+          const aadhaarNo = aadhaarIdx !== -1 ? row[aadhaarIdx] || '' : '';
+          const password = passIdx !== -1 && row[passIdx] ? row[passIdx] : 'Temp@1234';
+
+          const isValid = Boolean(empId && name && email);
+
+          return {
+            empId,
+            name,
+            email,
+            phone,
+            designation,
+            staffType,
+            role,
+            departmentId: departmentCode,
+            departmentCode,
+            gender,
+            qualification,
+            experience,
+            dateOfJoining,
+            dateOfBirth,
+            bloodGroup,
+            fatherName,
+            address,
+            city,
+            state,
+            panNo,
+            aadhaarNo,
+            password,
+            isActive: true,
+            isValid,
+          };
+        });
+
+        setImportParsedRows(parsedList);
+        showAlert('success', `Parsed ${parsedList.length} rows from ${file.name}. Review preview below!`);
+      } catch (err: any) {
+        showAlert('error', `Failed to parse CSV file: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Submit Bulk Faculty Import to Backend for Target College
+  const handleExecuteImport = async () => {
+    if (importParsedRows.length === 0) {
+      showAlert('error', 'No staff rows to import.');
+      return;
+    }
+
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const chosenCollege = colleges.find(
+        (c) => c.slug === importTargetCollege || c.code === importTargetCollege || c.id === importTargetCollege
+      );
+      const targetSlug = chosenCollege?.slug || importTargetCollege || 'srms-cet-bareilly';
+      const targetColId = chosenCollege?.id || targetSlug;
+
+      const payload = {
+        faculty: importParsedRows.map((r) => {
+          const { isValid, ...cleanRow } = r;
+          let aadhaar = cleanRow.aadhaarNo ? String(cleanRow.aadhaarNo).trim() : '';
+          if (aadhaar.includes('E+') || aadhaar.includes('e+')) {
+            const num = Number(aadhaar);
+            if (!isNaN(num)) aadhaar = num.toLocaleString('fullwide', { useGrouping: false });
+          }
+          return {
+            ...cleanRow,
+            aadhaarNo: aadhaar,
+            college_id: targetColId,
+            college_slug: targetSlug,
+          };
+        }),
+      };
+
+      const res = await fetch(`${API_BASE}/users/faculty/bulk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-slug': targetSlug,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+
+      if (res.ok) {
+        const createdCount = Array.isArray(json.created) ? json.created.length : 0;
+        const updatedCount = Array.isArray(json.updated) ? json.updated.length : 0;
+        const failedItems = Array.isArray(json.failed) ? json.failed : [];
+        const failedCount = failedItems.length;
+
+        setImportResult({
+          success: true,
+          createdCount,
+          updatedCount,
+          failedCount,
+          failedItems,
+        });
+
+        showAlert(
+          'success',
+          `🎉 Bulk Staff Import complete! (${createdCount} Created, ${updatedCount} Updated, ${failedCount} Failed)`
+        );
+        fetchFaculties(selectedCollegeFilter);
+      } else {
+        setImportResult({
+          success: false,
+          createdCount: 0,
+          updatedCount: 0,
+          failedCount: importParsedRows.length,
+          failedItems: [{ empId: 'ALL', name: 'Batch', error: json.message || 'Server Error' }],
+        });
+        showAlert('error', json.message || 'Failed to import staff batch.');
+      }
+    } catch (err: any) {
+      showAlert('error', `Import request failed: ${err?.message || 'Network error'}`);
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -957,7 +1376,7 @@ export default function StaffMasterPage() {
 
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#1B1E28] dark:text-slate-100 font-sans transition-colors duration-200">
-      <Sidebar role="admin" />
+      <Sidebar role={userRole.toLowerCase() === 'clerk' ? 'clerk' : userRole.toLowerCase() === 'super_admin' ? 'superadmin' : 'admin'} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Faculty & Staff Directory" />
         <main className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 flex-1 min-w-0 max-w-full overflow-x-hidden bg-[#F6F8FC] dark:bg-[#0F172A]">
@@ -1054,19 +1473,49 @@ export default function StaffMasterPage() {
                 )}
               </div>
 
-              {/* Action Buttons: Sync HR + Register New Staff */}
-              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 shrink-0 w-full lg:w-auto">
+              {/* Action Buttons: Sample Download + Import Excel/CSV + Sync HR + Register New Staff */}
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-2.5 shrink-0 w-full lg:w-auto">
                 
+                {/* Download Sample Format Button */}
+                <button
+                  onClick={handleDownloadSampleFormat}
+                  className="flex-1 sm:flex-none h-11 px-3.5 sm:px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold text-xs flex items-center justify-center gap-2 border border-slate-300 dark:border-slate-700 shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                  title="Download pre-formatted Excel / CSV template for bulk staff registration"
+                >
+                  <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  <span>Sample Format</span>
+                </button>
+
+                {/* Import Excel / CSV Button */}
+                <button
+                  onClick={() => {
+                    setIsImportModalOpen(true);
+                    setImportParsedRows([]);
+                    setImportFileName('');
+                    setImportResult(null);
+                    setImportTargetCollege(selectedCollegeFilter !== 'all' ? selectedCollegeFilter : userTenantSlug);
+                  }}
+                  className="flex-1 sm:flex-none h-11 px-3.5 sm:px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                  title="Import faculty and non-teaching staff from Excel / CSV into selected college"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                  </svg>
+                  <span>Import Excel / CSV</span>
+                </button>
+
                 {/* Sync from SRMS HR Button */}
                 <button
                   onClick={() => { setIsSyncModalOpen(true); setSyncResult(null); }}
-                  className="flex-1 sm:flex-none h-11 px-4 sm:px-5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                  className="flex-1 sm:flex-none h-11 px-3.5 sm:px-4 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
                   title="Synchronize employee records from live SRMS HR API"
                 >
                   <svg className="w-4 h-4 animate-spin-reverse" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                   </svg>
-                  <span>Sync from SRMS HR</span>
+                  <span>Sync HR</span>
                 </button>
 
                 {/* Register New Staff Button */}
@@ -1077,7 +1526,7 @@ export default function StaffMasterPage() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
-                  <span>Register New Staff</span>
+                  <span>Register Staff</span>
                 </button>
               </div>
 
@@ -2338,6 +2787,279 @@ export default function StaffMasterPage() {
 
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── EXCEL / CSV BULK STAFF IMPORT MODAL ─── */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 rounded-[28px] max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            {/* Modal Header Ribbon */}
+            <div className="p-6 border-b border-[#E7EAF3] dark:border-slate-800 bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-emerald-600/30">
+                  📊
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-[#1B1E28] dark:text-white tracking-tight">
+                    Bulk Staff Excel / CSV Import
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    Upload faculty and non-teaching employee spreadsheets directly into any chosen college schema
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white flex items-center justify-center text-sm font-bold transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+              
+              {/* College Destination Selector */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-extrabold uppercase text-[#1B1E28] dark:text-white tracking-wider">
+                      1. Target College / Institution Destination *
+                    </label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                      All staff rows in this spreadsheet will be created in this selected college's isolated PostgreSQL database schema.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadSampleFormat}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-extrabold text-[11px] border border-emerald-300 dark:border-emerald-700 shrink-0 transition-all cursor-pointer"
+                  >
+                    <span>📥</span>
+                    <span>Download Sample Template</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={importTargetCollege}
+                    onChange={(e) => setImportTargetCollege(e.target.value)}
+                    className="w-full h-11 px-4 pr-10 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white shadow-sm appearance-none cursor-pointer"
+                  >
+                    {colleges.map((col) => (
+                      <option key={col.id} value={col.slug || col.code || col.id}>
+                        🏛️ [#{col.code || col.id}] {col.name} ({col.slug})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-3.5 pointer-events-none text-slate-400">
+                    ▼
+                  </div>
+                </div>
+              </div>
+
+              {/* File Dropzone Area */}
+              <div className="space-y-2">
+                <label className="text-xs font-extrabold uppercase text-[#1B1E28] dark:text-white tracking-wider">
+                  2. Select Spreadsheet File (.csv / .xlsx / .xls)
+                </label>
+
+                <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-2xl p-6 text-center transition-all bg-slate-50/50 dark:bg-slate-900/30">
+                  <input
+                    type="file"
+                    accept=".csv, .xlsx, .xls, text/csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={handleFileSelect}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="space-y-2 pointer-events-none">
+                    <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl font-bold">
+                      📁
+                    </div>
+                    {importFileName ? (
+                      <div>
+                        <p className="font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
+                          Selected File: {importFileName}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                          {importParsedRows.length} employee records parsed and ready for verification
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-bold text-slate-800 dark:text-slate-200">
+                          Click to browse or drag & drop your Excel/CSV file here
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                          Supported columns: emp_id, name, email, phone, designation, staff_type, department_code, qualification, experience, pan, aadhaar
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview of Parsed Rows */}
+              {importParsedRows.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-extrabold uppercase text-[#1B1E28] dark:text-white tracking-wider">
+                        3. Records Preview ({importParsedRows.length} Rows)
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
+                        ✓ {importParsedRows.filter((r) => r.isValid).length} Valid
+                      </span>
+                      {importParsedRows.some((r) => !r.isValid) && (
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 font-bold text-[10px]">
+                          ✕ {importParsedRows.filter((r) => !r.isValid).length} Missing Fields
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Showing up to first 20 records
+                    </span>
+                  </div>
+
+                  <div className="border border-[#E7EAF3] dark:border-slate-800 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                    <table className="w-full text-left text-[11px] border-collapse">
+                      <thead className="bg-slate-100/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 sticky top-0 font-bold uppercase text-[9px] tracking-wider">
+                        <tr>
+                          <th className="p-2.5 pl-4">Emp ID</th>
+                          <th className="p-2.5">Staff Name</th>
+                          <th className="p-2.5">Email</th>
+                          <th className="p-2.5">Designation</th>
+                          <th className="p-2.5">Dept Code</th>
+                          <th className="p-2.5">Type & Role</th>
+                          <th className="p-2.5 pr-4 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
+                        {importParsedRows.slice(0, 20).map((r, i) => (
+                          <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="p-2.5 pl-4 font-mono font-bold text-slate-800 dark:text-white">
+                              {r.empId || <span className="text-red-500">Missing</span>}
+                            </td>
+                            <td className="p-2.5 font-bold text-slate-900 dark:text-white">
+                              {r.name || <span className="text-red-500">Missing</span>}
+                            </td>
+                            <td className="p-2.5 font-mono text-slate-600 dark:text-slate-400">
+                              {r.email || <span className="text-red-500">Missing</span>}
+                            </td>
+                            <td className="p-2.5 text-slate-700 dark:text-slate-300">{r.designation}</td>
+                            <td className="p-2.5 font-mono text-purple-600 dark:text-purple-400 font-bold">
+                              {r.departmentCode || 'General'}
+                            </td>
+                            <td className="p-2.5">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[9px] font-bold">
+                                {r.staffType} [{r.role}]
+                              </span>
+                            </td>
+                            <td className="p-2.5 pr-4 text-right">
+                              {r.isValid ? (
+                                <span className="text-emerald-600 font-bold text-[10px]">🟢 Ready</span>
+                              ) : (
+                                <span className="text-red-600 font-bold text-[10px]">🔴 Incomplete</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Import Results Banner */}
+              {importResult && (
+                <div
+                  className={`p-4 rounded-2xl border ${
+                    importResult.success
+                      ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-red-50/80 dark:bg-red-950/30 border-red-200 dark:border-red-800'
+                  } space-y-2`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{importResult.success ? '🎉' : '⚠️'}</span>
+                    <h4
+                      className={`font-black text-sm ${
+                        importResult.success
+                          ? 'text-emerald-900 dark:text-emerald-200'
+                          : 'text-red-900 dark:text-red-200'
+                      }`}
+                    >
+                      {importResult.success
+                        ? 'Staff Import Successfully Executed!'
+                        : 'Import Process Encountered Errors'}
+                    </h4>
+                  </div>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+                    Created: <strong className="text-emerald-600">{importResult.createdCount}</strong> records | Updated:{' '}
+                    <strong className="text-indigo-600">{importResult.updatedCount}</strong> records | Failed:{' '}
+                    <strong className="text-red-600">{importResult.failedCount}</strong> records
+                  </p>
+                  {importResult.failedItems && importResult.failedItems.length > 0 && (
+                    <div className="mt-2 text-[11px] text-red-600 font-mono max-h-24 overflow-y-auto space-y-1">
+                      {importResult.failedItems.map((f, idx) => (
+                        <div key={idx}>
+                          • [{f.empId}] {f.name}: {f.error}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer Controls */}
+            <div className="p-6 border-t border-[#E7EAF3] dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="h-11 px-5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs border border-slate-300 dark:border-slate-700 transition-all cursor-pointer"
+              >
+                Close
+              </button>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleDownloadSampleFormat}
+                  className="h-11 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs border border-slate-300 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>📥</span>
+                  <span>Sample Format</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={importing || importParsedRows.length === 0}
+                  onClick={handleExecuteImport}
+                  className="h-11 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/25 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 cursor-pointer"
+                >
+                  {importing ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                      </svg>
+                      <span>Importing Staff Records...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🚀</span>
+                      <span>
+                        Import {importParsedRows.length > 0 ? `(${importParsedRows.length}) Staff` : 'Records'} to Selected College
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}
