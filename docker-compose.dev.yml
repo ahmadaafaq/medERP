@@ -1,13 +1,11 @@
-version: '3.9'
-
 services:
   postgres:
     ports:
-      - '5433:5432'
+      - '5432:5432'
     environment:
-      POSTGRES_USER: unicampus
-      POSTGRES_PASSWORD: unicampus_secret
-      POSTGRES_DB: unicampus_erp
+      POSTGRES_USER: ${DB_USER:-unicampus}
+      POSTGRES_PASSWORD: ${DB_PASS:-unicampus_secret}
+      POSTGRES_DB: ${DB_NAME:-unicampus_erp}
 
   redis:
     ports:
@@ -15,6 +13,8 @@ services:
 
   backend:
     build:
+      context: ./backend
+      dockerfile: Dockerfile
       target: development
     volumes:
       - ./backend:/app
@@ -22,6 +22,9 @@ services:
     command: npm run start:dev
     environment:
       NODE_ENV: development
+      PORT: 8081
+    ports:
+      - '8081:8081'
 
   frontend:
     volumes:
@@ -31,3 +34,6 @@ services:
     command: npm run dev
     environment:
       NODE_ENV: development
+      PORT: 3000
+    ports:
+      - '3000:3000'

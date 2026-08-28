@@ -76,6 +76,71 @@ export class CreateStudentDto {
   @IsOptional()
   @IsString()
   admissionYear?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  registration_no?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  registrationNo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branch_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  photoUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  photo_url?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bloodGroup?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  emergencyContact?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bio?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
 }
 
 export class CreateFacultyDto {

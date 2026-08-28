@@ -66,10 +66,14 @@ export class TenantMiddleware implements NestMiddleware {
       return;
     }
 
-    // Normalize slug to lowercase and resolve 'srms' to 'srms-ims'
+    // Normalize slug to lowercase and resolve aliases
     slug = slug.toLowerCase();
     if (slug === 'srms') {
       slug = 'srms-ims';
+    } else if (slug === 'srms-cet' || slug === 'srms_cet' || slug === 'cet' || slug === '1') {
+      slug = 'srms-cet-bareilly';
+    } else if (slug === 'srms-cetr' || slug === 'srms_cetr' || slug === 'cetr' || slug === '2') {
+      slug = 'srms-cetr-bareilly';
     }
 
     // Look up tenant in the public schema by slug, code, or id

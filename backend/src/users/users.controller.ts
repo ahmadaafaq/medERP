@@ -35,7 +35,8 @@ export class UsersController {
     @TenantSlug() tenantSlug: string,
     @Query() query: GetStudentsQueryDto,
   ) {
-    return this.usersService.getStudents(tenantSlug, query, {
+    const slug = query.tenant || tenantSlug || 'srms-cet-bareilly';
+    return this.usersService.getStudents(slug, query, {
       search: query.search,
       batchId: query.batchId,
       departmentId: query.departmentId,
@@ -107,7 +108,8 @@ export class UsersController {
     @TenantSlug() tenantSlug: string,
     @Query() query: GetFacultyQueryDto,
   ) {
-    return this.usersService.getFaculty(tenantSlug, query, {
+    const slug = query.tenant || tenantSlug || 'srms-cet-bareilly';
+    return this.usersService.getFaculty(slug, query, {
       search: query.search,
       departmentId: query.departmentId,
       role: query.role as UserRole,

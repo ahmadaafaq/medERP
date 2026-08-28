@@ -18,20 +18,56 @@ const BCRYPT_ROUNDS = 12;
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(@InjectDataSource() private readonly ds: DataSource) {}
+  constructor(@InjectDataSource() private readonly ds: DataSource) { }
 
   // ═══════════════════════════════════════════════════════════════
   //  STUDENTS
   // ═══════════════════════════════════════════════════════════════
 
   async getStudents(tenantSlug: string, pagination: PaginationDto, filters: {
-    search?: string; batchId?: string; departmentId?: string;
+    search?: string; batchId?: string; departmentId?: string; courseCd?: string;
   } = {}) {
-    const schema = `tenant_${tenantSlug}`;
+    const colleges = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+    const resolvedSlug = await this.resolveTenantSlug(tenantSlug);
+
+    if (resolvedSlug === 'all') {
+      const allStudents: any[] = [];
+      for (const col of colleges) {
+        if (!col.slug) continue;
+        const s = `tenant_${col.slug}`;
+        try {
+          const rows = await this.ds.query(
+            `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url,
+                    COALESCE(b.code, s.batch_cd, '2025-MBBS') AS batch_cd,
+                    s.course_cd, s.phone, s.admission_year, s.batch_id, s.department_id, s.branch_id,
+                    u.email, COALESCE(u.is_active, s.is_active, true) as is_active, s.created_at,
+                    d.name as department_name, d.code as department_code
+             FROM "${s}".students s
+             LEFT JOIN "${s}".users u ON u.id = s.user_id
+             LEFT JOIN "${s}".batches b ON b.id = s.batch_id
+             LEFT JOIN "${s}".departments d ON (d.id = s.department_id OR d.code = s.branch_id OR d.code = s.department_id::text)
+             ORDER BY s.name ASC`
+          );
+          rows.forEach((r: any) => {
+            allStudents.push({
+              ...r,
+              college_id: col.id,
+              college_name: col.name,
+              college_code: col.code,
+              college_slug: col.slug,
+            });
+          });
+        } catch (e) { }
+      }
+      return paginate(allStudents, allStudents.length, pagination);
+    }
+
+    const currentCollege = colleges.find((c: any) => c.slug === resolvedSlug || c.id === resolvedSlug || c.code === resolvedSlug);
+    const schema = `tenant_${currentCollege?.slug || resolvedSlug}`;
     const { page = 1, limit = 20 } = pagination;
     const offset = (page - 1) * limit;
 
-    const conditions: string[] = ['s.is_active = true'];
+    const conditions: string[] = ['(s.is_active = true OR s.is_active IS NULL)'];
     const params: any[] = [];
     let i = 1;
 
@@ -40,13 +76,15 @@ export class UsersService {
       params.push(`%${filters.search}%`);
       i++;
     }
-    if (filters.batchId) {
-      conditions.push(`s.batch_id = $${i++}`);
+    if (filters.batchId && filters.batchId !== 'all') {
+      conditions.push(`(s.batch_id::text = $${i} OR s.batch_cd = $${i})`);
       params.push(filters.batchId);
+      i++;
     }
-    if (filters.departmentId) {
-      conditions.push(`s.department_id = $${i++}`);
+    if (filters.departmentId && filters.departmentId !== 'all') {
+      conditions.push(`(s.department_id::text = $${i} OR s.branch_id = $${i} OR d.code = $${i})`);
       params.push(filters.departmentId);
+      i++;
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -55,11 +93,13 @@ export class UsersService {
       this.ds.query(
         `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url,
                 COALESCE(b.code, s.batch_cd, '2025-MBBS') AS batch_cd,
-                s.course_cd, s.phone, s.admission_year, s.batch_id, s.department_id,
-                u.email, u.is_active, u.created_at
+                s.course_cd, s.phone, s.admission_year, s.batch_id, s.department_id, s.branch_id,
+                u.email, COALESCE(u.is_active, s.is_active, true) as is_active, s.created_at,
+                d.name as department_name, d.code as department_code
          FROM "${schema}".students s
-         JOIN "${schema}".users u ON u.id = s.user_id
+         LEFT JOIN "${schema}".users u ON u.id = s.user_id
          LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
+         LEFT JOIN "${schema}".departments d ON (d.id = s.department_id OR d.code = s.branch_id OR d.code = s.department_id::text)
          ${where}
          ORDER BY s.name ASC
          LIMIT $${i} OFFSET $${i + 1}`,
@@ -67,7 +107,8 @@ export class UsersService {
       ),
       this.ds.query(
         `SELECT COUNT(*) FROM "${schema}".students s
-         JOIN "${schema}".users u ON u.id = s.user_id
+         LEFT JOIN "${schema}".users u ON u.id = s.user_id
+         LEFT JOIN "${schema}".departments d ON (d.id = s.department_id OR d.code = s.branch_id OR d.code = s.department_id::text)
          ${where}`,
         params,
       ),
@@ -77,15 +118,16 @@ export class UsersService {
   }
 
   async getStudentById(tenantSlug: string, id: string) {
-    const schema = `tenant_${tenantSlug}`;
+    const resolvedSlug = await this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${resolvedSlug}`;
     const rows = await this.ds.query(
-      `SELECT s.*, u.email, u.is_active, u.created_at,
+      `SELECT s.*, u.email, COALESCE(u.is_active, s.is_active, true) as is_active, u.created_at as user_created_at,
               d.name AS department_name, b.code AS batch_code
        FROM "${schema}".students s
-       JOIN "${schema}".users u ON u.id = s.user_id
-       LEFT JOIN "${schema}".departments d ON d.id = s.department_id
+       LEFT JOIN "${schema}".users u ON u.id = s.user_id
+       LEFT JOIN "${schema}".departments d ON (d.id = s.department_id OR d.code = s.branch_id OR d.code = s.department_id::text)
        LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
-       WHERE s.id = $1`,
+       WHERE s.id = $1 OR s.rollno = $1 OR s.registration_no = $1`,
       [id],
     );
     if (!rows[0]) throw new NotFoundException('Student not found');
@@ -226,7 +268,7 @@ export class UsersService {
         [cleaned],
       );
       if (rows.length > 0) return rows[0].slug;
-    } catch (e) {}
+    } catch (e) { }
     return cleaned;
   }
 
@@ -269,7 +311,7 @@ export class UsersService {
               college_slug: col.slug,
             });
           });
-        } catch (e) {}
+        } catch (e) { }
       }
       return paginate(allFaculty, allFaculty.length, pagination);
     }
@@ -439,7 +481,7 @@ export class UsersService {
       await this.ds.query(
         `UPDATE "${schema}".users SET role = $1, is_active = COALESCE($2, true) WHERE id = $3`,
         [role, dto.isActive ?? true, userId],
-      ).catch(() => {});
+      ).catch(() => { });
     } else {
       const userRows = await this.ds.query(
         `INSERT INTO "${schema}".users (email, password_hash, role, must_change_password, is_active)
@@ -505,7 +547,7 @@ export class UsersService {
       try {
         const targetSlug = faculty.college_slug || faculty.college_id ? await this.resolveTenantSlug(faculty.college_slug || faculty.college_id) : resolvedSlug;
         const schema = `tenant_${targetSlug}`;
-        
+
         // Check if employee already exists in tenant schema by empId or email
         const existingFaculty = await this.ds.query(
           `SELECT f.id, f.user_id FROM "${schema}".faculty f WHERE f.emp_id = $1 OR (f.email IS NOT NULL AND f.email = $2)`,
@@ -557,7 +599,7 @@ export class UsersService {
         await this.ds.query(
           `UPDATE "${schema}".users SET ${userUpdates.join(', ')} WHERE id = $${uIdx}`,
           userParams,
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
 
@@ -684,7 +726,7 @@ export class UsersService {
         `UPDATE "${schema}".users u SET is_active = $1
          FROM "${schema}".faculty f WHERE f.user_id = u.id AND f.id = $2`,
         [dto.isActive, id],
-      ).catch(() => {});
+      ).catch(() => { });
     }
 
     if (!sets.length && dto.isActive === undefined && !dto.email && !dto.role) {
@@ -706,24 +748,24 @@ export class UsersService {
 
   private async executeFacultyCascadeDelete(schema: string, facultyId: string, userId?: string | null) {
     // 1. Unlink nullable references
-    await this.ds.query(`UPDATE "${schema}".timetable_slots SET faculty_id = NULL WHERE faculty_id = $1`, [facultyId]).catch(() => {});
+    await this.ds.query(`UPDATE "${schema}".timetable_slots SET faculty_id = NULL WHERE faculty_id = $1`, [facultyId]).catch(() => { });
     if (userId) {
-      await this.ds.query(`UPDATE "${schema}".departments SET hod_user_id = NULL WHERE hod_user_id = $1`, [userId]).catch(() => {});
-      await this.ds.query(`UPDATE "${schema}".hostel_blocks SET warden_id = NULL WHERE warden_id = $1`, [userId]).catch(() => {});
+      await this.ds.query(`UPDATE "${schema}".departments SET hod_user_id = NULL WHERE hod_user_id = $1`, [userId]).catch(() => { });
+      await this.ds.query(`UPDATE "${schema}".hostel_blocks SET warden_id = NULL WHERE warden_id = $1`, [userId]).catch(() => { });
     }
 
     // 2. Delete child records
-    await this.ds.query(`DELETE FROM "${schema}".faculty_punch_logs WHERE faculty_id = $1`, [facultyId]).catch(() => {});
-    await this.ds.query(`DELETE FROM "${schema}".attendance_sessions WHERE faculty_id = $1`, [facultyId]).catch(() => {});
-    await this.ds.query(`DELETE FROM "${schema}".leave_applications WHERE faculty_id = $1`, [facultyId]).catch(() => {});
-    await this.ds.query(`DELETE FROM "${schema}".logbook_entries WHERE faculty_id = $1`, [facultyId]).catch(() => {});
-    await this.ds.query(`DELETE FROM "${schema}".salary_records WHERE faculty_id = $1`, [facultyId]).catch(() => {});
-    await this.ds.query(`DELETE FROM "${schema}".faculty_subjects WHERE faculty_id = $1`, [facultyId]).catch(() => {});
+    await this.ds.query(`DELETE FROM "${schema}".faculty_punch_logs WHERE faculty_id = $1`, [facultyId]).catch(() => { });
+    await this.ds.query(`DELETE FROM "${schema}".attendance_sessions WHERE faculty_id = $1`, [facultyId]).catch(() => { });
+    await this.ds.query(`DELETE FROM "${schema}".leave_applications WHERE faculty_id = $1`, [facultyId]).catch(() => { });
+    await this.ds.query(`DELETE FROM "${schema}".logbook_entries WHERE faculty_id = $1`, [facultyId]).catch(() => { });
+    await this.ds.query(`DELETE FROM "${schema}".salary_records WHERE faculty_id = $1`, [facultyId]).catch(() => { });
+    await this.ds.query(`DELETE FROM "${schema}".faculty_subjects WHERE faculty_id = $1`, [facultyId]).catch(() => { });
 
     // 3. Delete faculty and user account
     await this.ds.query(`DELETE FROM "${schema}".faculty WHERE id = $1`, [facultyId]);
     if (userId) {
-      await this.ds.query(`DELETE FROM "${schema}".users WHERE id = $1`, [userId]).catch(() => {});
+      await this.ds.query(`DELETE FROM "${schema}".users WHERE id = $1`, [userId]).catch(() => { });
     }
   }
 
@@ -742,7 +784,7 @@ export class UsersService {
             await this.executeFacultyCascadeDelete(s, id, rows[0].user_id);
             return { success: true, message: 'Faculty member deleted successfully' };
           }
-        } catch (e) {}
+        } catch (e) { }
       }
       throw new NotFoundException('Faculty member not found in any institution');
     }
@@ -767,7 +809,7 @@ export class UsersService {
             await this.executeFacultyCascadeDelete(s, id, rows[0].user_id);
             return { success: true, message: 'Faculty member deleted successfully' };
           }
-        } catch (e) {}
+        } catch (e) { }
       }
       throw new NotFoundException('Faculty member not found');
     }
@@ -808,7 +850,7 @@ export class UsersService {
               colg_cd: col.code || col.id,
             });
           });
-        } catch (e) {}
+        } catch (e) { }
       }
       return allDepts;
     }
@@ -877,7 +919,7 @@ export class UsersService {
               colg_cd: col.code || col.id,
             });
           });
-        } catch (e) {}
+        } catch (e) { }
       }
       return allSubjects;
     }
@@ -932,7 +974,7 @@ export class UsersService {
       `INSERT INTO "${schema}".batches (code, year, course_cd, department_id, start_date, end_date)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, code, year`,
       [data.code, data.year, data.courseCd,
-       data.departmentId ?? null, data.startDate ?? null, data.endDate ?? null],
+      data.departmentId ?? null, data.startDate ?? null, data.endDate ?? null],
     );
     return rows[0];
   }
