@@ -3,7 +3,7 @@ const backendUrl = process.env.BACKEND_INTERNAL_URL || 'http://127.0.0.1:3001/ap
 const backendBase = process.env.BACKEND_BASE_URL || 'http://127.0.0.1:3001';
 
 const nextConfig = {
-  output: process.env.NEXT_OUTPUT_STANDALONE === 'true' ? 'standalone' : undefined,
+  output: 'standalone',
   reactStrictMode: true,
   swcMinify: true,
   async rewrites() {
