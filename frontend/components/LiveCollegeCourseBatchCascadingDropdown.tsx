@@ -127,7 +127,7 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
 
       // Fallback 1: Backend live proxy
       if (!res || !res.ok) {
-        res = await fetch(`http://localhost:3001/api/v1/college-master/live/batches?colgcd=${colgCd}&coursecd=${courseCd}`, {
+        res = await fetch(`http://localhost:8081/api/v1/college-master/live/batches?colgcd=${colgCd}&coursecd=${courseCd}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
@@ -194,7 +194,7 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
 
       // Fallback 1: Backend live proxy
       if (!res || !res.ok) {
-        res = await fetch(`http://localhost:3001/api/v1/college-master/live/courses?colgcd=${colgCd}`, {
+        res = await fetch(`http://localhost:8081/api/v1/college-master/live/courses?colgcd=${colgCd}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);

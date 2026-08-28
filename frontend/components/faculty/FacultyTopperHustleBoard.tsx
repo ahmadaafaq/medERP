@@ -54,7 +54,7 @@ export default function FacultyTopperHustleBoard() {
           ...(slug ? { 'x-tenant-slug': slug, 'x-tenant': slug } : {}),
         };
 
-        const res = await fetch(`http://localhost:3001/api/v1/student-master/hustle-board${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
+        const res = await fetch(`http://localhost:8081/api/v1/student-master/hustle-board${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
         if (res && res.ok) {
           const json = await res.json();
           const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];

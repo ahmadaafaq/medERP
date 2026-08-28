@@ -39,7 +39,7 @@ export default function ChatAttachmentChip({
   };
 
   const isImage = ['image', 'jpg', 'jpeg', 'png', 'webp'].includes(file_type?.toLowerCase() || '');
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3001';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:8081';
   const fullDownloadUrl = file_url?.startsWith('http') ? file_url : `${API_BASE}${file_url}`;
 
   return (

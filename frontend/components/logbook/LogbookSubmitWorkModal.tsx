@@ -22,7 +22,7 @@ interface LogbookSubmitWorkModalProps {
   onSuccess: () => void;
 }
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = 'http://localhost:8081/api/v1';
 
 export default function LogbookSubmitWorkModal({
   isOpen,

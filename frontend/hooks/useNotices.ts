@@ -52,7 +52,7 @@ export interface NoticeUnreadCount {
   normalUnread: number;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
 
 export function useNotices() {
   const [notices, setNotices] = useState<NoticeItem[]>([]);

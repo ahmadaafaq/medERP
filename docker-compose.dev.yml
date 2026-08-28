@@ -3,7 +3,7 @@ version: '3.9'
 services:
   postgres:
     ports:
-      - '5432:5432'
+      - '5433:5432'
     environment:
       POSTGRES_USER: unicampus
       POSTGRES_PASSWORD: unicampus_secret

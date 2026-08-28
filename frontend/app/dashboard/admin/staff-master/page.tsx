@@ -91,7 +91,7 @@ interface Subject {
   colg_cd?: string;
 }
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = 'http://localhost:8081/api/v1';
 
 const SRMS_FIRM_OPTIONS = [
   { locid: '7', label: '[Loc 7] SRMS CET, Bareilly (Engineering & Pharmacy)', slug: 'srms-cet-bareilly' },

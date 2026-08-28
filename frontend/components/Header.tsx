@@ -90,7 +90,7 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
       const tenantSlug = getStorageItem('tenantSlug') || 'srms-cet-bareilly';
       if (!token) return;
 
-      const res = await fetch(`http://localhost:3001/api/v1/chat/unread-count?tenant=${tenantSlug}`, {
+      const res = await fetch(`http://localhost:8081/api/v1/chat/unread-count?tenant=${tenantSlug}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'x-tenant-slug': tenantSlug,
@@ -247,7 +247,7 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
       const tenantSlug = getStorageItem('tenantSlug') || 'srms';
       if (!token) return;
 
-      const res = await fetch('http://localhost:3001/api/v1/auth/me', {
+      const res = await fetch('http://localhost:8081/api/v1/auth/me', {
         headers: {
           Authorization: `Bearer ${token}`,
           'x-tenant-slug': tenantSlug,
@@ -327,7 +327,7 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
       const token = getStorageItem('token');
       const tenantSlug = getStorageItem('tenantSlug') || 'srms';
 
-      const res = await fetch('http://localhost:3001/api/v1/auth/change-password', {
+      const res = await fetch('http://localhost:8081/api/v1/auth/change-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -7,7 +7,7 @@ import Header from '../../../../../components/Header';
 import NoticeDetailModal from '../../../../../components/notices/NoticeDetailModal';
 import { NoticeItem } from '../../../../../hooks/useNotices';
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = 'http://localhost:8081/api/v1';
 
 export default function AdminSentNoticesPage() {
   const [notices, setNotices] = useState<any[]>([]);

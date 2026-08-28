@@ -87,7 +87,7 @@ export default function FacultyStudentsPage() {
     if (!token) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/auth/me`, {
+      const res = await fetch(`http://localhost:8081/api/v1/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
@@ -111,7 +111,7 @@ export default function FacultyStudentsPage() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/users/batches?tenant=${slug}`, {
+      const res = await fetch(`http://localhost:8081/api/v1/users/batches?tenant=${slug}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
@@ -144,7 +144,7 @@ export default function FacultyStudentsPage() {
         queryParams += `&search=${encodeURIComponent(search.trim())}`;
       }
 
-      const res = await fetch(`http://localhost:3001/api/v1/users/students?${queryParams}`, {
+      const res = await fetch(`http://localhost:8081/api/v1/users/students?${queryParams}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,

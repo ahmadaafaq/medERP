@@ -248,7 +248,7 @@ const SRMS_STUDENT_SESSION_OPTIONS = [
   { session_cd: '13', label: 'Session 2023-2024 (Code 13)' },
 ];
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = 'http://localhost:8081/api/v1';
 
 
 export default function StudentMasterPage() {

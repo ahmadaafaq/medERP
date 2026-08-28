@@ -47,7 +47,7 @@ export default function FacultyPlacementPage() {
     try {
       const tenant = getTenantSlug();
       const res = await axios.get(`/api/placement-drive/list?tenant=${tenant}`).catch(async () => {
-        return axios.get(`http://localhost:3001/api/v1/placement-drive/list?tenant=${tenant}`);
+        return axios.get(`http://localhost:8081/api/v1/placement-drive/list?tenant=${tenant}`);
       });
       const list = res.data?.data?.data || res.data?.data || res.data || [];
       setCompanies(Array.isArray(list) ? list : []);
@@ -64,7 +64,7 @@ export default function FacultyPlacementPage() {
     try {
       const tenant = getTenantSlug();
       const res = await axios.get(`/api/placement-drive/${company.drive_id}?tenant=${tenant}`).catch(async () => {
-        return axios.get(`http://localhost:3001/api/v1/placement-drive/${company.drive_id}?tenant=${tenant}`);
+        return axios.get(`http://localhost:8081/api/v1/placement-drive/${company.drive_id}?tenant=${tenant}`);
       });
       const apps = res.data?.data?.applicants || res.data?.applicants || [];
       setApplicantsList(Array.isArray(apps) ? apps : []);
@@ -79,7 +79,7 @@ export default function FacultyPlacementPage() {
     try {
       const tenant = getTenantSlug();
       await axios.patch(`/api/placement-drive/shortlist?tenant=${tenant}`, { application_id: appId, status }).catch(async () => {
-        return axios.patch(`http://localhost:3001/api/v1/placement-drive/shortlist?tenant=${tenant}`, { application_id: appId, status });
+        return axios.patch(`http://localhost:8081/api/v1/placement-drive/shortlist?tenant=${tenant}`, { application_id: appId, status });
       });
       if (applicantsModalCompany) {
         handleOpenApplicants(applicantsModalCompany);
@@ -97,7 +97,7 @@ export default function FacultyPlacementPage() {
         ? `/api/placement-drive/export?tenant=${tenant}&drive_id=${driveId}&status=${status}`
         : `/api/placement-drive/export?tenant=${tenant}&drive_id=${driveId}`;
       const res = await axios.get(url).catch(async () => {
-        return axios.get(`http://localhost:3001/api/v1/placement-drive/export?tenant=${tenant}&drive_id=${driveId}${status ? `&status=${status}` : ''}`);
+        return axios.get(`http://localhost:8081/api/v1/placement-drive/export?tenant=${tenant}&drive_id=${driveId}${status ? `&status=${status}` : ''}`);
       });
       const rows = res.data?.data || res.data || [];
       if (rows.length === 0) {

@@ -62,7 +62,7 @@ interface TimetableSlotItem {
   departmentName: string;
 }
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = 'http://localhost:8081/api/v1';
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);

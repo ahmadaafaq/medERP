@@ -29,6 +29,6 @@ RUN apk add --no-cache python3 make g++ \
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist
 
-EXPOSE 3001
+EXPOSE 8081
 
 CMD ["node", "dist/main"]

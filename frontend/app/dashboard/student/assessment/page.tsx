@@ -29,7 +29,7 @@ interface StudentResult {
   created_at?: string;
 }
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = 'http://localhost:8081/api/v1';
 
 const getTenantSlug = (): string => {
   if (typeof window !== 'undefined') {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { srmsPost } from '@/lib/srms-client';
 
-const BACKEND_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const BACKEND_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
 
 export async function POST(req: NextRequest) {
   try {
