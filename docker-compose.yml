@@ -54,6 +54,11 @@ services:
     networks:
       - unicampus_net
 
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
+
 networks:
   unicampus_net:
     driver: bridge
