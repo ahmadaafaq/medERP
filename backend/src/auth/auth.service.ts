@@ -988,6 +988,7 @@ export class AuthService {
                   b.code AS batch_code,
                   b.year AS batch_year,
                   s.bio, s.github_url, s.github_followers, s.linkedin_url, s.linkedin_connections,
+                  s.cgpa, s.attendance, s.social_credits, s.current_skills, s.certificates_done,
                   s.department_id, s.batch_id, s.admission_year, s.phone, s.address, s.blood_group,
                   s.emergency_contact, s.is_active,
                   d.name AS department_name, d.code AS department_code,

@@ -209,9 +209,14 @@ export class PlacementDriveService {
     const params: any[] = [];
     let whereConditions: string[] = ['1=1'];
 
-    if (status) {
-      params.push(status);
-      whereConditions.push(`pd.status = $${params.length}`);
+    if (status && status !== 'all') {
+      const lower = status.toLowerCase();
+      if (lower === 'open' || lower === 'active') {
+        whereConditions.push(`LOWER(pd.status) IN ('open', 'active', 'published', 'upcoming')`);
+      } else {
+        params.push(lower);
+        whereConditions.push(`LOWER(pd.status) = $${params.length}`);
+      }
     }
 
     const sql = `
