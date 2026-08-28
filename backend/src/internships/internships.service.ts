@@ -20,6 +20,7 @@ import {
 @Injectable()
 export class InternshipsService {
   private readonly logger = new Logger(InternshipsService.name);
+  private static readonly ensuredSchemas = new Set<string>();
 
   constructor(
     private readonly tenantSchemaService: TenantSchemaService,
@@ -33,6 +34,9 @@ export class InternshipsService {
 
   private async ensureTables(slug?: string): Promise<string> {
     const resolved = this.resolveTenantSlug(slug);
+    if (InternshipsService.ensuredSchemas.has(resolved)) {
+      return resolved;
+    }
     const schema = `tenant_${resolved}`;
 
     try {
@@ -155,6 +159,7 @@ export class InternshipsService {
       for (const colSql of certColumns) {
         await this.tenantSchemaService.queryInTenant(resolved, colSql).catch(() => {});
       }
+      InternshipsService.ensuredSchemas.add(resolved);
     } catch (e: any) {
       this.logger.warn(`Could not ensure internship tables in ${schema}: ${e.message}`);
     }

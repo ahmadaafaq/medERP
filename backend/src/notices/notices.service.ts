@@ -21,13 +21,15 @@ import {
 export class NoticesService implements OnModuleInit {
   private readonly logger = new Logger(NoticesService.name);
 
+  private static readonly ensuredSlugs = new Set<string>();
+
   constructor(
     private readonly tenantSchemaService: TenantSchemaService,
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   async onModuleInit() {
-    const defaultSlugs = ['srms-ims', 'srms-cet-bareilly', 'srms-cetr-bareilly'];
+    const defaultSlugs = ['srms-ims', 'srms-cet-bareilly'];
     for (const slug of defaultSlugs) {
       try {
         await this.ensureTables(slug);
@@ -39,70 +41,76 @@ export class NoticesService implements OnModuleInit {
   }
 
   async ensureTables(slug: string) {
-    await this.tenantSchemaService.queryInTenant(
-      slug,
-      `
-      CREATE TABLE IF NOT EXISTS notices (
-        id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        college_id               UUID,
-        title                    VARCHAR(255) NOT NULL,
-        body                     TEXT NOT NULL,
-        priority                 VARCHAR(20) DEFAULT 'normal',
-        category                 VARCHAR(50) DEFAULT 'announcement',
-        created_by               UUID,
-        creator_name             VARCHAR(200),
-        creator_role             VARCHAR(100),
-        status                   VARCHAR(20) DEFAULT 'sent',
-        scheduled_at             TIMESTAMPTZ,
-        expires_at               TIMESTAMPTZ,
-        requires_acknowledgement BOOLEAN DEFAULT false,
-        created_at               TIMESTAMPTZ DEFAULT NOW(),
-        updated_at               TIMESTAMPTZ DEFAULT NOW()
-      );
+    if (NoticesService.ensuredSlugs.has(slug)) return;
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `
+        CREATE TABLE IF NOT EXISTS notices (
+          id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          college_id               UUID,
+          title                    VARCHAR(255) NOT NULL,
+          body                     TEXT NOT NULL,
+          priority                 VARCHAR(20) DEFAULT 'normal',
+          category                 VARCHAR(50) DEFAULT 'announcement',
+          created_by               UUID,
+          creator_name             VARCHAR(200),
+          creator_role             VARCHAR(100),
+          status                   VARCHAR(20) DEFAULT 'sent',
+          scheduled_at             TIMESTAMPTZ,
+          expires_at               TIMESTAMPTZ,
+          requires_acknowledgement BOOLEAN DEFAULT false,
+          created_at               TIMESTAMPTZ DEFAULT NOW(),
+          updated_at               TIMESTAMPTZ DEFAULT NOW()
+        );
 
-      CREATE TABLE IF NOT EXISTS notice_attachments (
-        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        notice_id    UUID REFERENCES notices(id) ON DELETE CASCADE,
-        file_name    VARCHAR(255) NOT NULL,
-        file_type    VARCHAR(50),
-        file_url     TEXT NOT NULL,
-        file_size_kb INT DEFAULT 0,
-        created_at   TIMESTAMPTZ DEFAULT NOW()
-      );
+        CREATE TABLE IF NOT EXISTS notice_attachments (
+          id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          notice_id    UUID REFERENCES notices(id) ON DELETE CASCADE,
+          file_name    VARCHAR(255) NOT NULL,
+          file_type    VARCHAR(50),
+          file_url     TEXT NOT NULL,
+          file_size_kb INT DEFAULT 0,
+          created_at   TIMESTAMPTZ DEFAULT NOW()
+        );
 
-      CREATE TABLE IF NOT EXISTS notice_targets (
-        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        notice_id    UUID REFERENCES notices(id) ON DELETE CASCADE,
-        target_type  VARCHAR(50) NOT NULL,
-        target_value VARCHAR(255) NOT NULL,
-        target_label VARCHAR(255),
-        created_at   TIMESTAMPTZ DEFAULT NOW()
-      );
+        CREATE TABLE IF NOT EXISTS notice_targets (
+          id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          notice_id    UUID REFERENCES notices(id) ON DELETE CASCADE,
+          target_type  VARCHAR(50) NOT NULL,
+          target_value VARCHAR(255) NOT NULL,
+          target_label VARCHAR(255),
+          created_at   TIMESTAMPTZ DEFAULT NOW()
+        );
 
-      CREATE TABLE IF NOT EXISTS notice_recipients (
-        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        notice_id       UUID REFERENCES notices(id) ON DELETE CASCADE,
-        user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
-        is_read         BOOLEAN DEFAULT false,
-        read_at         TIMESTAMPTZ,
-        acknowledged    BOOLEAN DEFAULT false,
-        acknowledged_at TIMESTAMPTZ,
-        created_at      TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(notice_id, user_id)
-      );
+        CREATE TABLE IF NOT EXISTS notice_recipients (
+          id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          notice_id       UUID REFERENCES notices(id) ON DELETE CASCADE,
+          user_id         UUID,
+          is_read         BOOLEAN DEFAULT false,
+          read_at         TIMESTAMPTZ,
+          acknowledged    BOOLEAN DEFAULT false,
+          acknowledged_at TIMESTAMPTZ,
+          created_at      TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(notice_id, user_id)
+        );
 
-      CREATE TABLE IF NOT EXISTS notice_group_templates (
-        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name         VARCHAR(200) NOT NULL,
-        description  TEXT,
-        created_by   UUID,
-        target_rules JSONB DEFAULT '[]'::jsonb,
-        is_active    BOOLEAN DEFAULT true,
-        created_at   TIMESTAMPTZ DEFAULT NOW(),
-        updated_at   TIMESTAMPTZ DEFAULT NOW()
+        CREATE TABLE IF NOT EXISTS notice_group_templates (
+          id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name         VARCHAR(200) NOT NULL,
+          description  TEXT,
+          created_by   UUID,
+          target_rules JSONB DEFAULT '[]'::jsonb,
+          is_active    BOOLEAN DEFAULT true,
+          created_at   TIMESTAMPTZ DEFAULT NOW(),
+          updated_at   TIMESTAMPTZ DEFAULT NOW()
+        );
+        `,
       );
-      `,
-    );
+      NoticesService.ensuredSlugs.add(slug);
+    } catch (e) {
+      // Ignore if table initialization has minor errors
+    }
   }
 
   async seedSampleNoticesIfEmpty(slug: string) {

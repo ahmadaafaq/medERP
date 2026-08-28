@@ -93,7 +93,7 @@ export default function LiveCollegeCourseCascadingDropdown({
 
       // Fallback: Backend live proxy
       if (!res || !res.ok) {
-        res = await fetch('http://localhost:8081/api/v1/college-master/live/courses', {
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/college-master/live/courses`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ colgcd: colgCd }),
@@ -129,7 +129,7 @@ export default function LiveCollegeCourseCascadingDropdown({
 
       // Fallback: Backend live endpoint
       if (!res || !res.ok) {
-        res = await fetch('http://localhost:8081/api/v1/college-master/live/colleges', {
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/college-master/live/colleges`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);

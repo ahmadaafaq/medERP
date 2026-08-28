@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import Sidebar from '../../../../../../components/Sidebar';
 import Header from '../../../../../../components/Header';
 
-const API_BASE = 'http://localhost:8081/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
 
 export default function AdminNoticeReadReportPage() {
   const params = useParams();

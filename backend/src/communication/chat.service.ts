@@ -826,7 +826,7 @@ export class ChatService implements OnModuleInit {
         m.joined_at,
         u.email
        FROM "${schema}".chat_group_members m
-       LEFT JOIN "${schema}".users u ON u.id = m.user_id
+       LEFT JOIN "${schema}".users u ON u.id::text = m.user_id::text
        WHERE m.chat_group_id = $1
        ORDER BY 
          CASE WHEN m.role = 'FACULTY' THEN 1 WHEN m.role = 'ADMIN' THEN 2 ELSE 3 END,

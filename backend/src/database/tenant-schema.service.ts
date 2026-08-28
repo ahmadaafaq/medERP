@@ -28,12 +28,17 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     return s;
   }
 
+  private static readonly provisionedSchemas = new Set<string>();
+
   /**
    * Provision a new tenant schema with all required tables.
    * Called during onboarding → college setup wizard.
    */
   async provisionSchema(slug: string): Promise<void> {
     const resolvedSlug = this.resolveTenantSlug(slug);
+    if (TenantSchemaService.provisionedSchemas.has(resolvedSlug)) {
+      return;
+    }
     const schema = `tenant_${resolvedSlug}`;
     this.logger.log(`Provisioning schema: ${schema}`);
 
@@ -49,6 +54,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       await this.seedDefaultData(runner, slug);
 
       await runner.commitTransaction();
+
+      TenantSchemaService.provisionedSchemas.add(resolvedSlug);
 
       // Mark tenant schema as provisioned in public schema
       await this.dataSource.query(
@@ -1052,7 +1059,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".placement_applications (
           application_id    SERIAL PRIMARY KEY,
-          drive_id          INT NOT NULL REFERENCES "${schema}".placement_drives(drive_id) ON DELETE CASCADE,
+          drive_id          INT NOT NULL,
           student_reg_no    VARCHAR(50) NOT NULL,
           student_name      VARCHAR(200),
           resume_link       TEXT NOT NULL,
@@ -1945,7 +1952,15 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         is_deleted  BOOLEAN      DEFAULT false
       )
     `);
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_chat_msg_group ON "${schema}".chat_messages(group_id, sent_at DESC)`);
+    await runner.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'chat_messages' AND column_name = 'chat_group_id') THEN
+          CREATE INDEX IF NOT EXISTS "idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cm_g" ON "${schema}".chat_messages(chat_group_id, created_at DESC);
+        ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'chat_messages' AND column_name = 'group_id') THEN
+          CREATE INDEX IF NOT EXISTS "idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cm_g" ON "${schema}".chat_messages(group_id, sent_at DESC);
+        END IF;
+      END $$;
+    `);
 
     // ── Notifications ──────────────────────────────────────────────────────
     await runner.query(`
@@ -2174,7 +2189,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       CREATE TABLE IF NOT EXISTS "${schema}".drive_companies (
         id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        drive_id            UUID REFERENCES "${schema}".placement_drives(id) ON DELETE CASCADE,
+        drive_id            UUID,
         company_name        VARCHAR(255) NOT NULL,
         role                VARCHAR(255),
         package_min         NUMERIC(10,2),
@@ -2194,7 +2209,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       CREATE TABLE IF NOT EXISTS "${schema}".drive_applications (
         id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        drive_company_id    UUID REFERENCES "${schema}".drive_companies(id) ON DELETE CASCADE,
+        drive_company_id    UUID,
         student_id          VARCHAR(100),
         student_reg_no      VARCHAR(100),
         student_name        VARCHAR(255),
@@ -2229,7 +2244,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       CREATE TABLE IF NOT EXISTS "${schema}".internship_applications (
         id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        program_id          UUID REFERENCES "${schema}".internship_programs(id) ON DELETE CASCADE,
+        program_id          UUID,
         student_id          VARCHAR(100),
         student_reg_no      VARCHAR(100),
         student_name        VARCHAR(255),
@@ -2247,7 +2262,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       CREATE TABLE IF NOT EXISTS "${schema}".certificates (
         id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        application_id      UUID UNIQUE REFERENCES "${schema}".internship_applications(id) ON DELETE CASCADE,
+        application_id      UUID,
         certificate_no      VARCHAR(100) UNIQUE NOT NULL,
         internship_name     VARCHAR(255) NOT NULL,
         applicant_name      VARCHAR(255) NOT NULL,

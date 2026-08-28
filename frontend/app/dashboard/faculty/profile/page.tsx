@@ -103,7 +103,7 @@ export default function FacultyProfilePage() {
     }
 
     try {
-      const res = await fetch(`http://localhost:8081/api/v1/auth/me`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
@@ -305,7 +305,7 @@ export default function FacultyProfilePage() {
     };
 
     try {
-      const res = await fetch(`http://localhost:8081/api/v1/auth/profile`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/auth/profile`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

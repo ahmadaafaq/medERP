@@ -445,8 +445,8 @@ interface TempCompetencyItem {
   is_core: boolean;
 }
 
-const API_BASE = 'http://localhost:8081/api/v1/admin-master';
-const COLLEGE_API_BASE = 'http://localhost:8081/api/v1/college-master';
+const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/admin-master`;
+const COLLEGE_API_BASE = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/college-master`;
 
 const getAuthHeaders = (): Record<string, string> => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';

@@ -36,7 +36,7 @@ const COURSES_STATIC = [
   { id: '5', code: '5', name: 'M.Tech (Master of Technology)', duration: 4 },
 ];
 
-const API_BASE = 'http://localhost:8081/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
 
 export default function PostSeminarTutorialModal({ isOpen, onClose, onSuccess }: Props) {
   const [courses, setCourses] = useState<OptionItem[]>(COURSES_STATIC);

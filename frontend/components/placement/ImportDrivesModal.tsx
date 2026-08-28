@@ -51,7 +51,7 @@ export default function ImportDrivesModal({ onClose, onSuccess }: ImportDrivesMo
       const res = await axios.post(`/api/placement-drive/import-preview?tenant=${tenant}`, formData, {
         headers,
       }).catch(async () => {
-        return axios.post(`http://localhost:8081/api/v1/placement-drive/import-preview?tenant=${tenant}`, formData, {
+        return axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/import-preview?tenant=${tenant}`, formData, {
           headers,
         });
       });
@@ -85,7 +85,7 @@ export default function ImportDrivesModal({ onClose, onSuccess }: ImportDrivesMo
       };
 
       await axios.post(`/api/placement-drive/import-confirm?tenant=${tenant}`, payload, { headers }).catch(async () => {
-        return axios.post(`http://localhost:8081/api/v1/placement-drive/import-confirm?tenant=${tenant}`, payload, { headers });
+        return axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/import-confirm?tenant=${tenant}`, payload, { headers });
       });
 
       onSuccess();
@@ -112,7 +112,7 @@ export default function ImportDrivesModal({ onClose, onSuccess }: ImportDrivesMo
       try {
         const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
         const res = await axios.get(`/api/placement-drive/template?tenant=${tenant}`).catch(async () => {
-          return axios.get(`http://localhost:8081/api/v1/placement-drive/template?tenant=${tenant}`);
+          return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/template?tenant=${tenant}`);
         });
         if (res.data?.base64) {
           const link = document.createElement('a');

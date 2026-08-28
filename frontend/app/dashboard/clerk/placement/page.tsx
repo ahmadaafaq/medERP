@@ -45,7 +45,7 @@ export default function ClerkPlacementPage() {
     try {
       const tenant = getTenantSlug();
       const res = await axios.get(`/api/placement-drive/list?tenant=${tenant}`).catch(async () => {
-        return axios.get(`http://localhost:8081/api/v1/placement-drive/list?tenant=${tenant}`);
+        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/list?tenant=${tenant}`);
       });
       const list = res.data?.data?.data || res.data?.data || res.data || [];
       setCompanies(Array.isArray(list) ? list : []);
@@ -62,7 +62,7 @@ export default function ClerkPlacementPage() {
     try {
       const tenant = getTenantSlug();
       const res = await axios.get(`/api/placement-drive/${company.drive_id}?tenant=${tenant}`).catch(async () => {
-        return axios.get(`http://localhost:8081/api/v1/placement-drive/${company.drive_id}?tenant=${tenant}`);
+        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/${company.drive_id}?tenant=${tenant}`);
       });
       const apps = res.data?.data?.applicants || res.data?.applicants || [];
       setApplicantsList(Array.isArray(apps) ? apps : []);
@@ -77,7 +77,7 @@ export default function ClerkPlacementPage() {
     try {
       const tenant = getTenantSlug();
       const res = await axios.get(`/api/placement-drive/export?tenant=${tenant}`).catch(async () => {
-        return axios.get(`http://localhost:8081/api/v1/placement-drive/export?tenant=${tenant}`);
+        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/export?tenant=${tenant}`);
       });
       const rows = res.data?.data || res.data || [];
       if (rows.length === 0) {

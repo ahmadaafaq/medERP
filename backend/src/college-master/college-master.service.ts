@@ -1320,14 +1320,6 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       const collegeId = targetCollege?.id || await this.getCollegeIdBySlug(slug);
       const collegeName = targetCollege?.name || '';
       const collegeCode = targetCollege?.code || '';
-      const schema = `tenant_${slug}`;
-      await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
-      await this.ds.query(`
-        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50);
-        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
-        ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
-        ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1);
-      `).catch(() => {});
 
       try {
         const rows = await this.tenantSchemaService.queryInTenant(
@@ -1339,8 +1331,18 @@ export class CollegeMasterService implements OnApplicationBootstrap {
            ORDER BY created_at ASC, code ASC`,
         );
 
+        if (rows && rows.length > 0) {
+          return rows.map(r => ({
+            ...r,
+            college_id: collegeId,
+            college_name: collegeName,
+            college_code: collegeCode,
+            college_slug: slug,
+          }));
+        }
+
         const isSrms = SRMS_FIRM_LOCATIONS.some(l => l.slug === slug || l.locid === slug || l.code === slug);
-        if (rows.length === 0 && isSrms) {
+        if (isSrms) {
           await this.syncExternalCourses(slug).catch(() => []);
           const fresh = await this.tenantSchemaService.queryInTenant(
             slug,
@@ -1358,13 +1360,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
             college_slug: slug,
           }));
         }
-        return rows.map(r => ({
-          ...r,
-          college_id: collegeId,
-          college_name: collegeName,
-          college_code: collegeCode,
-          college_slug: slug,
-        }));
+        return [];
       } catch (err: any) {
         return [];
       }

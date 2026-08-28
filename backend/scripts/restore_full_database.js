@@ -7,7 +7,7 @@ const config = {
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   user: process.env.DB_USER || 'unicampus',
-  password: process.env.DB_PASSWORD || 'unicampus_secret',
+  password: process.env.DB_PASSWORD || process.env.DB_PASS || 'unicampus_dev@qsd!3ous',
   database: process.env.DB_NAME || 'unicampus_erp',
 };
 
