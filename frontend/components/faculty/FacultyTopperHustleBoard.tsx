@@ -40,6 +40,8 @@ export default function FacultyTopperHustleBoard() {
   const [filterMode, setFilterMode] = useState<'all' | 'incubation' | 'project' | 'mini_project'>('all');
   const [students, setStudents] = useState<TopperStudent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const PAGE_SIZE = 10;
 
   useEffect(() => {
     const fetchToppers = async () => {
@@ -91,8 +93,18 @@ export default function FacultyTopperHustleBoard() {
 
   const miniProjectsActiveCount = students.filter(s => s.hasMiniProject && (s.miniProjectsCovered ?? 0) > 0).length;
 
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (validCurrentPage - 1) * PAGE_SIZE;
+  const paginatedStudents = filteredStudents.slice(startIndex, startIndex + PAGE_SIZE);
+
+  const handleFilterChange = (mode: 'all' | 'incubation' | 'project' | 'mini_project') => {
+    setFilterMode(mode);
+    setCurrentPage(1);
+  };
+
   return (
-    <div className="h-full flex flex-col justify-between bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md transition-all">
+    <div className="h-full flex flex-col bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md transition-all">
       {/* Header */}
       <div className="pb-4 border-b border-[#E7EAF3] dark:border-slate-800 shrink-0 space-y-3">
         {/* Title & Brand Row */}
@@ -121,7 +133,7 @@ export default function FacultyTopperHustleBoard() {
         {/* Filter Pills Row - Fully Contained */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin w-full">
           <button
-            onClick={() => setFilterMode('all')}
+            onClick={() => handleFilterChange('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
               filterMode === 'all'
                 ? 'bg-[#5B4BFF] text-white shadow-xs'
@@ -131,7 +143,7 @@ export default function FacultyTopperHustleBoard() {
             All Hustlers ({students.length})
           </button>
           <button
-            onClick={() => setFilterMode('mini_project')}
+            onClick={() => handleFilterChange('mini_project')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
               filterMode === 'mini_project'
                 ? 'bg-[#F36C21] text-white shadow-xs'
@@ -142,7 +154,7 @@ export default function FacultyTopperHustleBoard() {
             <span>Mini Project ({miniProjectsActiveCount})</span>
           </button>
           <button
-            onClick={() => setFilterMode('incubation')}
+            onClick={() => handleFilterChange('incubation')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
               filterMode === 'incubation'
                 ? 'bg-amber-500 text-white shadow-xs'
@@ -153,7 +165,7 @@ export default function FacultyTopperHustleBoard() {
             <span>Incubation ({students.filter(s => s.isIncubationSelected).length})</span>
           </button>
           <button
-            onClick={() => setFilterMode('project')}
+            onClick={() => handleFilterChange('project')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
               filterMode === 'project'
                 ? 'bg-[#00C48C] text-white shadow-xs'
@@ -169,16 +181,16 @@ export default function FacultyTopperHustleBoard() {
       {/* Formula Explainer Tag */}
       <div className="mt-3 px-3.5 py-1.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between text-[10px] text-indigo-900 dark:text-indigo-300 font-bold shrink-0">
         <span>⚡ Metric: 35% Theory + 15% Mini Project Logbook + 35% Repo + 10% Attd + Incubation</span>
-        <span className="font-extrabold text-[#5B4BFF]">{students.length} Evaluated</span>
+        <span className="font-extrabold text-[#5B4BFF]">{filteredStudents.length} Records</span>
       </div>
 
-      {/* Topper Student Cards List with Accurate Records */}
-      <div className="flex-1 pt-3 space-y-2.5 flex flex-col justify-start min-h-[160px]">
+      {/* Topper Student Cards List with Accurate Records (10 per page) */}
+      <div className="flex-1 min-h-0 pt-3 space-y-2.5 flex flex-col justify-start">
         {loading ? (
           <div className="flex items-center justify-center p-8 text-slate-400 text-xs font-bold animate-pulse">
             Loading merit rankings...
           </div>
-        ) : filteredStudents.length === 0 ? (
+        ) : paginatedStudents.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/60 dark:border-slate-800 my-auto">
             <span className="text-2xl mb-1.5">🎓</span>
             <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -189,7 +201,7 @@ export default function FacultyTopperHustleBoard() {
             </p>
           </div>
         ) : (
-          filteredStudents.map((student) => {
+          paginatedStudents.map((student) => {
             const isRankOne = student.rank === 1;
             const isRankTwo = student.rank === 2;
             const isRankThree = student.rank === 3;
@@ -320,6 +332,63 @@ export default function FacultyTopperHustleBoard() {
           })
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {filteredStudents.length > PAGE_SIZE && (
+        <div className="pt-3 pb-1 mt-2 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">
+            Showing <strong className="text-[#1B1E28] dark:text-white font-extrabold">{startIndex + 1}</strong> to <strong className="text-[#1B1E28] dark:text-white font-extrabold">{Math.min(startIndex + PAGE_SIZE, filteredStudents.length)}</strong> of <strong className="text-[#1B1E28] dark:text-white font-extrabold">{filteredStudents.length}</strong> Hustlers
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={validCurrentPage === 1}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <span>‹</span>
+              <span>Prev</span>
+            </button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                // If many pages, show first, last, and window around current
+                if (
+                  totalPages > 5 &&
+                  page !== 1 &&
+                  page !== totalPages &&
+                  Math.abs(page - validCurrentPage) > 1
+                ) {
+                  if (page === 2 || page === totalPages - 1) {
+                    return <span key={page} className="px-1 text-slate-400 text-xs">...</span>;
+                  }
+                  return null;
+                }
+
+                return (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-7 h-7 rounded-lg text-xs font-black transition-all flex items-center justify-center cursor-pointer ${
+                      validCurrentPage === page
+                        ? 'bg-[#5B4BFF] text-white shadow-xs'
+                        : 'border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={validCurrentPage === totalPages}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <span>Next</span>
+              <span>›</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer Link */}
       <div className="pt-3.5 border-t border-[#E7EAF3] dark:border-slate-800 shrink-0 mt-auto flex items-center justify-between text-xs font-bold text-[#4E5969] dark:text-slate-400">

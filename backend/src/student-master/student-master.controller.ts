@@ -3,7 +3,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { StudentMasterService } from './student-master.service';
-import { CreateStudentDto, UpdateStudentDto, BulkLinkProfessionalDto, BulkLinkGroupDto } from './dto/student-master.dto';
+import {
+  CreateStudentDto, UpdateStudentDto, BulkLinkProfessionalDto, BulkLinkGroupDto, BulkCreateStudentsDto,
+} from './dto/student-master.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { TenantSlug } from '../common/decorators/tenant.decorator';
@@ -139,6 +141,16 @@ export class StudentMasterController {
     @Body('students') students: any[],
   ) {
     return this.studentMasterService.syncLiveStudents(tenantSlug, students || []);
+  }
+
+  @Post('bulk')
+  @ApiOperation({ summary: 'Bulk create/import student records from Excel/CSV' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async bulkCreateStudents(
+    @TenantSlug() tenantSlug: string,
+    @Body() dto: BulkCreateStudentsDto,
+  ) {
+    return this.studentMasterService.bulkCreateStudents(tenantSlug, dto);
   }
 
   @Delete(':id')

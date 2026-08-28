@@ -1031,22 +1031,34 @@ export default function FacultyLogbookPage() {
                                         </a>
                                       ) : null}
                                       {app.documentation_url ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setDocPreviewTarget({
-                                              url: app.documentation_url || '',
-                                              name: app.documentation_name || 'Project_Documentation.pdf',
-                                              studentName: app.student_name,
-                                              projectTitle: app.project_title || miniProject?.title,
-                                            });
-                                            setIsDocPreviewOpen(true);
-                                          }}
-                                          className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-[#5B4BFF] transition-colors border border-indigo-200/60 dark:border-indigo-800/60"
-                                          title={`Preview Documentation Report (${app.documentation_name || 'Report'})`}
-                                        >
-                                          <FileText className="w-3.5 h-3.5" />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setDocPreviewTarget({
+                                                url: app.documentation_url || '',
+                                                name: app.documentation_name || 'Project_Documentation.pdf',
+                                                studentName: app.student_name,
+                                                projectTitle: app.project_title || miniProject?.title,
+                                              });
+                                              setIsDocPreviewOpen(true);
+                                            }}
+                                            className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-[#5B4BFF] transition-colors border border-indigo-200/60 dark:border-indigo-800/60"
+                                            title={`Preview Documentation Report (${app.documentation_name || 'Report'})`}
+                                          >
+                                            <FileText className="w-3.5 h-3.5" />
+                                          </button>
+                                          <a
+                                            href={app.documentation_url}
+                                            download={app.documentation_name || 'Project_Documentation.pdf'}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 transition-colors"
+                                            title="Download Physical Document"
+                                          >
+                                            <ExternalLink className="w-3 h-3" />
+                                          </a>
+                                        </div>
                                       ) : null}
                                       {!app.repository_url && !app.live_demo_url && !app.documentation_url && (
                                         <span className="text-slate-400 text-[11px]">Pending Links</span>

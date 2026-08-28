@@ -456,3 +456,9 @@ export class BulkLinkGroupDto {
   batchId?: string;
 }
 
+export class BulkCreateStudentsDto {
+  @ApiProperty({ description: 'Array of student objects to bulk-import' })
+  @IsArray()
+  students: any[];
+}
+

@@ -1,5 +1,8 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { TenantSchemaService } from '../database/tenant-schema.service';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Response } from 'express';
 import {
   CreateLogbookCategoryDto,
   CreateLogbookTopicDto,
@@ -200,6 +203,9 @@ export class LogbookService {
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS zip_submission_url TEXT;
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS documentation_url TEXT;
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS documentation_name TEXT;
+        ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS file_path TEXT;
+        ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS file_size VARCHAR(50);
+        ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS file_mime VARCHAR(100);
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS college_id VARCHAR(100);
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS discipline_type VARCHAR(100);
@@ -448,6 +454,233 @@ export class LogbookService {
     return res[0];
   }
 
+  private getProjectUploadDir(tenantSlug: string, projectId: string): string {
+    const slug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '').replace(/[^a-z0-9_-]/g, '');
+    const dir = path.join(process.cwd(), 'uploads', 'projects', slug, String(projectId || 'general'));
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  }
+
+  async uploadProjectDocument(tenantSlug: string, projectId: string, file: Express.Multer.File, studentIdentifier?: string) {
+    if (!file) {
+      throw new BadRequestException('Physical project document file is required.');
+    }
+    await this.ensureTables(tenantSlug);
+    const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
+    const studentId = await this.resolveStudentId(tenantSlug, studentIdentifier);
+
+    const uploadDir = this.getProjectUploadDir(tenantSlug, projectId);
+    const timestamp = Date.now();
+    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const diskFileName = `${timestamp}_${sanitizedName}`;
+    const fullDiskPath = path.join(uploadDir, diskFileName);
+
+    fs.writeFileSync(fullDiskPath, file.buffer);
+
+    const fileSizeFormatted = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+    const docDownloadUrl = `/api/v1/logbook/mini-project/${projectId}/document?tenant=${tenantSlug}${studentId ? `&studentId=${studentId}` : ''}`;
+
+    let targetProjectId = projectId;
+    const projRows = await this.tenantSchemaService.queryInTenant(
+      tenantSlug,
+      `SELECT * FROM "${schema}".logbook_mini_projects WHERE id::text = $1 LIMIT 1`,
+      [projectId],
+    );
+
+    if (projRows && projRows.length > 0) {
+      const proj = projRows[0];
+      if (proj.student_id && studentId && String(proj.student_id) !== String(studentId)) {
+        // Create candidate copy
+        const newProj = await this.tenantSchemaService.queryInTenant(
+          tenantSlug,
+          `INSERT INTO "${schema}".logbook_mini_projects (
+            faculty_id, student_id, title, description, prompt_instructions, technologies,
+            college_id, discipline_type, course_id, batch_id, branch_id, submission_deadline,
+            max_marks, repository_url, live_demo_url, documentation_url, documentation_name,
+            file_path, file_size, file_mime, project_status
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'IN_PROGRESS') RETURNING *`,
+          [
+            proj.faculty_id, studentId, proj.title, proj.description, proj.prompt_instructions, proj.technologies,
+            proj.college_id, proj.discipline_type, proj.course_id, proj.batch_id, proj.branch_id, proj.submission_deadline,
+            proj.max_marks, proj.repository_url, proj.live_demo_url, docDownloadUrl, file.originalname,
+            fullDiskPath, fileSizeFormatted, file.mimetype,
+          ],
+        );
+        targetProjectId = newProj[0]?.id || projectId;
+      } else {
+        await this.tenantSchemaService.queryInTenant(
+          tenantSlug,
+          `UPDATE "${schema}".logbook_mini_projects
+           SET documentation_url = $1, documentation_name = $2, file_path = $3, file_size = $4, file_mime = $5,
+               student_id = COALESCE(student_id, $6::uuid), updated_at = NOW()
+           WHERE id::text = $7`,
+          [docDownloadUrl, file.originalname, fullDiskPath, fileSizeFormatted, file.mimetype, studentId, projectId],
+        );
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Project documentation physical file saved and persisted in database successfully',
+      projectId: targetProjectId,
+      documentUrl: docDownloadUrl,
+      documentName: file.originalname,
+      fileSize: fileSizeFormatted,
+    };
+  }
+
+  async streamProjectDocument(tenantSlug: string, projectId: string, studentIdentifier: string, res: Response) {
+    await this.ensureTables(tenantSlug);
+    const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
+    const studentId = await this.resolveStudentId(tenantSlug, studentIdentifier);
+
+    let proj: any = null;
+    let projRows = await this.tenantSchemaService.queryInTenant(
+      tenantSlug,
+      `SELECT * FROM "${schema}".logbook_mini_projects
+       WHERE (id::text = $1 OR title ILIKE $1)
+         AND ($2::text IS NULL OR student_id::text = $2 OR student_id IS NULL)
+       ORDER BY (CASE WHEN student_id::text = $2 THEN 0 ELSE 1 END), updated_at DESC LIMIT 1`,
+      [projectId, studentId],
+    );
+
+    if (projRows && projRows.length > 0) {
+      proj = projRows[0];
+    } else {
+      projRows = await this.tenantSchemaService.queryInTenant(
+        tenantSlug,
+        `SELECT * FROM "${schema}".logbook_mini_projects WHERE id::text = $1 LIMIT 1`,
+        [projectId],
+      );
+      if (projRows && projRows.length > 0) proj = projRows[0];
+    }
+
+    let filePath = proj?.file_path;
+    let filename = proj?.documentation_name;
+
+    // Resilient disk scan if file_path wasn't saved in this row
+    if (!filePath || !fs.existsSync(filePath)) {
+      const uploadDir = this.getProjectUploadDir(tenantSlug, projectId);
+      if (fs.existsSync(uploadDir)) {
+        const files = fs.readdirSync(uploadDir);
+        if (files && files.length > 0) {
+          const sortedFiles = files
+            .filter((f) => fs.statSync(path.join(uploadDir, f)).isFile())
+            .map((f) => ({ name: f, time: fs.statSync(path.join(uploadDir, f)).mtimeMs }))
+            .sort((a, b) => b.time - a.time);
+          if (sortedFiles.length > 0) {
+            filePath = path.join(uploadDir, sortedFiles[0].name);
+            if (!filename) filename = sortedFiles[0].name;
+          }
+        }
+      }
+    }
+
+    // Fallback: search the entire tenant's projects upload folder
+    if (!filePath || !fs.existsSync(filePath)) {
+      const cleanSlug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
+      const tenantProjectsDir = path.join(process.cwd(), 'uploads', 'projects', cleanSlug);
+      if (fs.existsSync(tenantProjectsDir)) {
+        const scanDir = (dir: string): string[] => {
+          let results: string[] = [];
+          try {
+            const list = fs.readdirSync(dir);
+            list.forEach((file) => {
+              const full = path.join(dir, file);
+              const stat = fs.statSync(full);
+              if (stat && stat.isDirectory()) results = results.concat(scanDir(full));
+              else if (stat && stat.isFile()) results.push(full);
+            });
+          } catch (e) {}
+          return results;
+        };
+        const allFiles = scanDir(tenantProjectsDir);
+        if (allFiles.length > 0) {
+          const sorted = allFiles
+            .map((f) => ({ path: f, time: fs.statSync(f).mtimeMs }))
+            .sort((a, b) => b.time - a.time);
+          filePath = sorted[0].path;
+          if (!filename) filename = path.basename(filePath);
+        }
+      }
+    }
+
+    if (filePath && fs.existsSync(filePath)) {
+      const ext = path.extname(filePath).toLowerCase();
+      let mime = proj?.file_mime;
+      if (!mime || mime === 'application/octet-stream') {
+        mime = ext === '.pdf' ? 'application/pdf' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf';
+      }
+      if (!filename) filename = path.basename(filePath);
+
+      const fileBuffer = fs.readFileSync(filePath);
+      res.removeHeader('X-Frame-Options');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Security-Policy', "frame-ancestors *");
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Length', String(fileBuffer.length));
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+      return res.status(200).send(fileBuffer);
+    }
+
+    if (proj?.documentation_url && typeof proj.documentation_url === 'string') {
+      if (proj.documentation_url.startsWith('data:')) {
+        const matches = proj.documentation_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const buffer = Buffer.from(matches[2], 'base64');
+          res.removeHeader('X-Frame-Options');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Security-Policy', "frame-ancestors *");
+          res.setHeader('Content-Type', matches[1] || 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(proj.documentation_name || 'document.pdf')}"`);
+          return res.send(buffer);
+        }
+      } else if (proj.documentation_url.startsWith('http://') || proj.documentation_url.startsWith('https://')) {
+        return res.redirect(proj.documentation_url);
+      }
+    }
+
+    throw new NotFoundException('Physical project document not found on server disk.');
+  }
+
+  async deleteProjectDocument(tenantSlug: string, projectId: string, studentIdentifier?: string) {
+    await this.ensureTables(tenantSlug);
+    const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
+    const studentId = await this.resolveStudentId(tenantSlug, studentIdentifier);
+
+    // 1. Delete physical files from disk
+    try {
+      const uploadDir = this.getProjectUploadDir(tenantSlug, projectId);
+      if (fs.existsSync(uploadDir)) {
+        const files = fs.readdirSync(uploadDir);
+        for (const file of files) {
+          try {
+            fs.unlinkSync(path.join(uploadDir, file));
+          } catch (e) {}
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Could not delete physical files: ${err.message}`);
+    }
+
+    // 2. Clear database fields for this project or student
+    await this.tenantSchemaService.queryInTenant(
+      tenantSlug,
+      `UPDATE "${schema}".logbook_mini_projects
+       SET documentation_url = NULL, documentation_name = NULL, file_path = NULL, file_size = NULL, file_mime = NULL, zip_submission_url = NULL, updated_at = NOW()
+       WHERE id::text = $1
+          OR ($2::text IS NOT NULL AND student_id::text = $2)
+          OR (title ILIKE $1)`,
+      [projectId, studentId],
+    );
+
+    return { success: true, message: 'Project document deleted successfully from database and server disk.' };
+  }
+
   async updateMiniProject(tenantSlug: string, projectId: string, dto: UpdateMiniProjectDto) {
     await this.ensureTables(tenantSlug);
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
@@ -462,7 +695,48 @@ export class LogbookService {
     if ((dto as any).disciplineType !== undefined) { params.push((dto as any).disciplineType); sets.push(`discipline_type = $${params.length}`); }
     if (dto.repositoryUrl !== undefined) { params.push(dto.repositoryUrl); sets.push(`repository_url = $${params.length}`); }
     if (dto.liveDemoUrl !== undefined) { params.push(dto.liveDemoUrl); sets.push(`live_demo_url = $${params.length}`); }
-    if (dto.documentationUrl !== undefined) { params.push(dto.documentationUrl); sets.push(`documentation_url = $${params.length}`); }
+
+    // If Base64 document is provided, convert and write to physical disk
+    if (dto.documentationUrl !== undefined) {
+      if (dto.documentationUrl && dto.documentationUrl.startsWith('data:')) {
+        try {
+          const uploadDir = this.getProjectUploadDir(tenantSlug, projectId);
+          const matches = dto.documentationUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+          if (matches && matches.length === 3) {
+            const mime = matches[1];
+            const buffer = Buffer.from(matches[2], 'base64');
+            const ext = mime.includes('pdf') ? '.pdf' : mime.includes('word') || mime.includes('docx') ? '.docx' : '.dat';
+            const cleanName = (dto.documentationName || `Project_Report${ext}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+            const diskFileName = `${Date.now()}_${cleanName}`;
+            const fullDiskPath = path.join(uploadDir, diskFileName);
+            fs.writeFileSync(fullDiskPath, buffer);
+
+            const fileSizeFormatted = `${(buffer.length / 1024 / 1024).toFixed(2)} MB`;
+            const persistentUrl = `/api/v1/logbook/mini-project/${projectId}/document?tenant=${tenantSlug}`;
+
+            params.push(persistentUrl);
+            sets.push(`documentation_url = $${params.length}`);
+
+            params.push(fullDiskPath);
+            sets.push(`file_path = $${params.length}`);
+
+            params.push(fileSizeFormatted);
+            sets.push(`file_size = $${params.length}`);
+
+            params.push(mime);
+            sets.push(`file_mime = $${params.length}`);
+          }
+        } catch (fErr) {
+          this.logger.warn(`Failed to write base64 project document to disk: ${fErr.message}`);
+          params.push(dto.documentationUrl);
+          sets.push(`documentation_url = $${params.length}`);
+        }
+      } else {
+        params.push(dto.documentationUrl);
+        sets.push(`documentation_url = $${params.length}`);
+      }
+    }
+
     if (dto.documentationName !== undefined) { params.push(dto.documentationName); sets.push(`documentation_name = $${params.length}`); }
     if (dto.zipSubmissionUrl !== undefined) { params.push(dto.zipSubmissionUrl); sets.push(`zip_submission_url = $${params.length}`); }
     if (dto.teamMembers !== undefined) { params.push(dto.teamMembers); sets.push(`team_members = $${params.length}`); }
@@ -503,7 +777,7 @@ export class LogbookService {
       `SELECT st.id as student_id, st.name as student_name, st.rollno, st.registration_no,
               cr.name as course_name, b.name as batch_name,
               p.id as project_id, p.title as project_title, p.repository_url, p.live_demo_url, p.zip_submission_url,
-              p.documentation_url, p.documentation_name,
+              p.documentation_url, p.documentation_name, p.file_path, p.file_size, p.file_mime,
               p.is_locked, p.project_status, p.final_grade, p.final_percentage, p.guide_remarks, p.locked_at,
               COALESCE(SUM(w.hours_spent), 0) as total_hours_spent,
               COUNT(w.id) as total_weeks_logged,
@@ -522,7 +796,7 @@ export class LogbookService {
        )
        GROUP BY st.id, st.name, st.rollno, st.registration_no, cr.name, b.name,
                 p.id, p.title, p.repository_url, p.live_demo_url, p.zip_submission_url,
-                p.documentation_url, p.documentation_name,
+                p.documentation_url, p.documentation_name, p.file_path, p.file_size, p.file_mime,
                 p.is_locked, p.project_status, p.final_grade, p.final_percentage, p.guide_remarks, p.locked_at
        ORDER BY total_weeks_logged DESC, st.name ASC`,
       [projectId || null],

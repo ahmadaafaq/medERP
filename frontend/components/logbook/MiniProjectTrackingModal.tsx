@@ -339,15 +339,27 @@ export default function MiniProjectTrackingModal({
             )}
 
             {applicant.documentation_url ? (
-              <button
-                type="button"
-                onClick={() => setIsPreviewDocModalOpen(true)}
-                className="px-3 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-[#5B4BFF] hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 font-bold flex items-center gap-1.5 transition-all shadow-sm"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Preview Documentation ({applicant.documentation_name || 'Report'})</span>
-                <Eye className="w-3 h-3 ml-0.5" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewDocModalOpen(true)}
+                  className="px-3 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-[#5B4BFF] hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Preview Doc ({applicant.documentation_name || 'Report'})</span>
+                  <Eye className="w-3 h-3 ml-0.5" />
+                </button>
+                <a
+                  href={applicant.documentation_url}
+                  download={applicant.documentation_name || 'Project_Documentation.pdf'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 transition-colors"
+                  title="Download / Open Physical Document"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
             ) : applicant.zip_submission_url ? (
               <a
                 href={applicant.zip_submission_url}

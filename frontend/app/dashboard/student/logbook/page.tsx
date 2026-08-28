@@ -72,6 +72,9 @@ export default function StudentLogbookPage() {
   const [docUrl, setDocUrl] = useState('');
   const [docName, setDocName] = useState('');
   const [docFileSize, setDocFileSize] = useState('');
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [deletingDoc, setDeletingDoc] = useState(false);
   const [isDocPreviewModalOpen, setIsDocPreviewModalOpen] = useState(false);
   const [savingProjectLinks, setSavingProjectLinks] = useState(false);
   const [projectLinksSaved, setProjectLinksSaved] = useState(false);
@@ -165,7 +168,8 @@ export default function StudentLogbookPage() {
         setRepoUrl(projectData?.repository_url || '');
         setLiveUrl(projectData?.live_demo_url || '');
         setDocUrl(projectData?.documentation_url || projectData?.zip_submission_url || '');
-        setDocName(projectData?.documentation_name || '');
+        setDocName(projectData?.documentation_name || (projectData?.documentation_url ? 'Project_Documentation.pdf' : ''));
+        setDocFileSize(projectData?.file_size || '');
       }
 
       // 4. Weekly Logs
@@ -233,14 +237,114 @@ export default function StudentLogbookPage() {
   const handleDocFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
+      const fileSize = `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`;
       setDocName(selectedFile.name);
-      setDocFileSize(`${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`);
+      setDocFileSize(fileSize);
+      setUploadProgress(10);
+      setUploadingDoc(true);
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        setDocUrl(reader.result as string);
+      const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+      const token = localStorage.getItem('token') || '';
+      const studentIdentifier = getStudentIdentifier();
+      const projId = miniProject?.id || 'general';
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/v1/logbook/mini-project/${projId}/upload-doc?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.setRequestHeader('x-tenant-slug', slug);
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 90);
+          setUploadProgress(Math.max(15, percent));
+        }
       };
-      reader.readAsDataURL(selectedFile);
+
+      xhr.onload = () => {
+        setUploadProgress(100);
+        setTimeout(() => {
+          setUploadingDoc(false);
+          setUploadProgress(0);
+        }, 500);
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const json = JSON.parse(xhr.responseText);
+            const uploadedUrl = json?.data?.documentUrl || json?.documentUrl;
+            if (uploadedUrl) {
+              setDocUrl(uploadedUrl);
+              setDocName(json?.data?.documentName || json?.documentName || selectedFile.name);
+              setDocFileSize(json?.data?.fileSize || json?.fileSize || fileSize);
+              setProjectLinksSaved(true);
+              setTimeout(() => setProjectLinksSaved(false), 3000);
+              fetchAllData();
+              return;
+            }
+          } catch (pe) {
+            console.error('Error parsing upload response', pe);
+          }
+        }
+
+        // Fallback to base64
+        const reader = new FileReader();
+        reader.onload = () => {
+          setDocUrl(reader.result as string);
+        };
+        reader.readAsDataURL(selectedFile);
+      };
+
+      xhr.onerror = () => {
+        setUploadingDoc(false);
+        setUploadProgress(0);
+        const reader = new FileReader();
+        reader.onload = () => {
+          setDocUrl(reader.result as string);
+        };
+        reader.readAsDataURL(selectedFile);
+      };
+
+      xhr.send(formData);
+    }
+  };
+
+  const handleDeleteDocument = async () => {
+    setDeletingDoc(true);
+    const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+    const token = localStorage.getItem('token') || '';
+    const studentIdentifier = getStudentIdentifier();
+    const projId = miniProject?.id || 'general';
+
+    // Optimistic reset
+    setDocUrl('');
+    setDocName('');
+    setDocFileSize('');
+    setMiniProject((prev: any) => (prev ? {
+      ...prev,
+      documentation_url: null,
+      documentation_name: null,
+      file_path: null,
+      file_size: null,
+      zip_submission_url: null,
+    } : null));
+
+    try {
+      await fetch(`/api/v1/logbook/mini-project/${projId}/document?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-tenant-slug': slug,
+        },
+      });
+      setProjectLinksSaved(true);
+      setTimeout(() => setProjectLinksSaved(false), 3000);
+      await fetchAllData();
+    } catch (e) {
+      console.error('Failed to delete document', e);
+    } finally {
+      setDeletingDoc(false);
     }
   };
 
@@ -960,11 +1064,16 @@ export default function StudentLogbookPage() {
                               {!isProjectLocked && (
                                 <button
                                   type="button"
-                                  onClick={() => { setDocUrl(''); setDocName(''); setDocFileSize(''); }}
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
-                                  title="Remove Document"
+                                  disabled={deletingDoc}
+                                  onClick={handleDeleteDocument}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors disabled:opacity-50"
+                                  title="Delete Document from Server"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  {deletingDoc ? (
+                                    <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
                                 </button>
                               )}
                             </div>
@@ -972,20 +1081,65 @@ export default function StudentLogbookPage() {
                         </div>
 
                         {docUrl ? (
-                          <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700/70 text-xs">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700/70 text-xs gap-3">
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                                <FileCheck className="w-4 h-4" />
+                              <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                                <FileCheck className="w-5 h-5" />
                               </div>
                               <div className="min-w-0">
-                                <div className="font-bold text-slate-900 dark:text-white truncate">
+                                <div className="font-bold text-slate-900 dark:text-white truncate text-sm">
                                   {docName || 'Project_Documentation.pdf'}
                                 </div>
-                                <div className="text-[10px] text-slate-400 flex items-center gap-2">
+                                <div className="text-[11px] text-slate-400 flex items-center gap-2">
                                   {docFileSize && <span>Size: {docFileSize}</span>}
-                                  <span className="text-emerald-600 font-medium">✓ Document attached and ready to save</span>
+                                  <span className="text-emerald-600 font-medium">✓ Document uploaded and saved on server</span>
                                 </div>
                               </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
+                              <button
+                                type="button"
+                                onClick={() => setIsDocPreviewModalOpen(true)}
+                                className="px-3 py-1.5 rounded-xl bg-[#5B4BFF] text-white hover:bg-[#4338CA] font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Preview</span>
+                              </button>
+                              {!isProjectLocked && (
+                                <button
+                                  type="button"
+                                  disabled={deletingDoc}
+                                  onClick={handleDeleteDocument}
+                                  className="px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50"
+                                  title="Delete Document"
+                                >
+                                  {deletingDoc ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>Remove</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ) : uploadingDoc ? (
+                          <div className="p-5 rounded-xl border border-dashed border-[#5B4BFF] bg-indigo-50/70 dark:bg-indigo-950/40 text-center space-y-3">
+                            <div className="flex items-center justify-between text-xs font-bold">
+                              <span className="text-[#5B4BFF] flex items-center gap-2">
+                                <span className="w-4 h-4 border-2 border-[#5B4BFF] border-t-transparent rounded-full animate-spin inline-block" />
+                                <span>Uploading {docName || 'Document'} to server disk...</span>
+                              </span>
+                              <span className="text-[#5B4BFF] font-mono">{uploadProgress}%</span>
+                            </div>
+                            <div className="w-full bg-indigo-200 dark:bg-indigo-900 rounded-full h-2.5 overflow-hidden">
+                              <div
+                                className="bg-gradient-to-r from-[#5B4BFF] to-[#F36C21] h-2.5 rounded-full transition-all duration-300 ease-out"
+                                style={{ width: `${uploadProgress}%` }}
+                              />
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              Writing physical file to server disk and linking to PostgreSQL project record...
                             </div>
                           </div>
                         ) : !isProjectLocked ? (

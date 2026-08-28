@@ -13,7 +13,9 @@ out/
 
 # Environment variables
 
-
+# Uploads
+uploads/
+**/uploads/
 # Logs
 logs
 *.log

@@ -9,8 +9,13 @@ import {
   Param,
   Query,
   UseGuards,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { Response } from 'express';
 import { LogbookService } from './logbook.service';
 import {
   CreateLogbookCategoryDto,
@@ -99,6 +104,46 @@ export class LogbookController {
     @Body() dto: UpdateMiniProjectDto,
   ) {
     return this.logbookService.updateMiniProject(tenantSlug, id, dto);
+  }
+
+  @Public()
+  @Post('mini-project/:id/upload-doc')
+  @ApiOperation({ summary: 'Upload physical project documentation file (PDF, DOCX, ZIP up to 25MB)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadProjectDocument(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('studentId') queryStudentId?: string,
+  ) {
+    const studentIdentifier = queryStudentId || user?.profile?.id || user?.sub || user?.id || user?.userId;
+    return this.logbookService.uploadProjectDocument(tenantSlug, id, file, studentIdentifier);
+  }
+
+  @Public()
+  @Get('mini-project/:id/document')
+  @ApiOperation({ summary: 'Stream and view/download physical project documentation report' })
+  async downloadProjectDocument(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @Query('studentId') queryStudentId: string,
+    @Res() res: Response,
+  ) {
+    return this.logbookService.streamProjectDocument(tenantSlug, id, queryStudentId, res);
+  }
+
+  @Delete('mini-project/:id/document')
+  @ApiOperation({ summary: 'Delete attached project documentation file from disk and database' })
+  async deleteProjectDocument(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Query('studentId') queryStudentId?: string,
+  ) {
+    const studentIdentifier = queryStudentId || user?.profile?.id || user?.sub || user?.id || user?.userId;
+    return this.logbookService.deleteProjectDocument(tenantSlug, id, studentIdentifier);
   }
 
   @Public()

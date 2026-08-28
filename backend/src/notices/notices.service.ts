@@ -108,13 +108,13 @@ export class NoticesService implements OnModuleInit {
   async seedSampleNoticesIfEmpty(slug: string) {
     try {
       const countRes = await this.tenantSchemaService.queryInTenant(slug, 'SELECT COUNT(*) as count FROM notices');
-      if (parseInt(countRes[0]?.count || '0', 10) > 0) return;
+      if (parseInt(countRes?.[0]?.count || '0', 10) > 0) return;
 
-      const adminUser = (await this.tenantSchemaService.queryInTenant(slug, 'SELECT id, email FROM users LIMIT 1'))[0];
-      const adminId = adminUser?.id || null;
+      const adminRows = await this.tenantSchemaService.queryInTenant(slug, 'SELECT id, email FROM users LIMIT 1');
+      const adminId = adminRows?.[0]?.id || null;
 
       // 1. Notice 1: Urgent
-      const n1 = (await this.tenantSchemaService.queryInTenant(
+      const r1 = await this.tenantSchemaService.queryInTenant(
         slug,
         `INSERT INTO notices (title, body, priority, category, created_by, creator_name, creator_role, requires_acknowledgement)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
@@ -128,10 +128,11 @@ export class NoticesService implements OnModuleInit {
           'Administration',
           true,
         ],
-      ))[0];
+      );
+      const n1 = r1?.[0];
 
       // 2. Notice 2: Important
-      const n2 = (await this.tenantSchemaService.queryInTenant(
+      const r2 = await this.tenantSchemaService.queryInTenant(
         slug,
         `INSERT INTO notices (title, body, priority, category, created_by, creator_name, creator_role, requires_acknowledgement)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
@@ -145,10 +146,11 @@ export class NoticesService implements OnModuleInit {
           'Faculty Committee',
           false,
         ],
-      ))[0];
+      );
+      const n2 = r2?.[0];
 
       // 3. Notice 3: Normal
-      const n3 = (await this.tenantSchemaService.queryInTenant(
+      const r3 = await this.tenantSchemaService.queryInTenant(
         slug,
         `INSERT INTO notices (title, body, priority, category, created_by, creator_name, creator_role, requires_acknowledgement)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
@@ -162,7 +164,8 @@ export class NoticesService implements OnModuleInit {
           'Library Admin',
           false,
         ],
-      ))[0];
+      );
+      const n3 = r3?.[0];
 
       // Targets
       for (const nid of [n1?.id, n2?.id, n3?.id]) {
@@ -178,22 +181,22 @@ export class NoticesService implements OnModuleInit {
 
       // Fan out to all users in tenant
       const allUsers = await this.tenantSchemaService.queryInTenant(slug, 'SELECT id FROM users WHERE is_active = true');
-      for (const u of allUsers) {
-        if (n1?.id) {
+      for (const u of (allUsers || [])) {
+        if (n1?.id && u?.id) {
           await this.tenantSchemaService.queryInTenant(
             slug,
             `INSERT INTO notice_recipients (notice_id, user_id, is_read) VALUES ($1, $2, false) ON CONFLICT DO NOTHING`,
             [n1.id, u.id],
           );
         }
-        if (n2?.id) {
+        if (n2?.id && u?.id) {
           await this.tenantSchemaService.queryInTenant(
             slug,
             `INSERT INTO notice_recipients (notice_id, user_id, is_read) VALUES ($1, $2, false) ON CONFLICT DO NOTHING`,
             [n2.id, u.id],
           );
         }
-        if (n3?.id) {
+        if (n3?.id && u?.id) {
           await this.tenantSchemaService.queryInTenant(
             slug,
             `INSERT INTO notice_recipients (notice_id, user_id, is_read) VALUES ($1, $2, true) ON CONFLICT DO NOTHING`,
@@ -203,8 +206,8 @@ export class NoticesService implements OnModuleInit {
       }
 
       this.logger.log(`Sample notices seeded successfully for tenant: ${slug}`);
-    } catch (err) {
-      this.logger.warn(`Could not seed sample notices for ${slug}: ${err.message}`);
+    } catch (e) {
+      this.logger.warn(`Notice auto-seeding skipped: ${e.message}`);
     }
   }
 
