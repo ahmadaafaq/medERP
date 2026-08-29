@@ -35,28 +35,6 @@ services:
       - backend
     ports:
       - '3000:3000'
-    # networks:
-    #   - unicampus_net
 
-    #   # ── Nginx Reverse Proxy ────────────────────────────────────────────────────
-    #   nginx:
-    #     image: nginx:alpine
-    #     restart: unless-stopped
-    #     volumes:
-    #       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    #     ports:
-    #       - '80:80'
-    #     depends_on:
-    #       - frontend
-    #       - backend
-    #     networks:
-    #       - unicampus_net
-
-    volumes:
-      # postgres_data:
-      # redis_data:
-      backend_uploads:
-
-        # networks:
-        #   unicampus_net:
-        #     driver: bridge
+volumes:
+  backend_uploads:
