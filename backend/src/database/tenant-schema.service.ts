@@ -382,26 +382,29 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         },
       ];
 
+      // Ensure unique index on tenants & firms slug
+      await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_slug ON public.tenants (slug);`).catch(() => {});
+      await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_firms_slug ON public.firms (slug);`).catch(() => {});
+
       for (const f of defaultFirms) {
         // Insert tenant
         await runner.query(`
           INSERT INTO public.tenants (id, name, slug, domain, colg_cd, firm_mode, schema_provisioned, is_active)
-          VALUES ('${f.id}', '${f.title}', '${f.slug}', '${f.domain}', '1', '${f.firm_mode}', true, true)
-          ON CONFLICT (slug) DO NOTHING;
-        `);
+          SELECT '${f.id}', '${f.title}', '${f.slug}', '${f.domain}', '1', '${f.firm_mode}', true, true
+          WHERE NOT EXISTS (SELECT 1 FROM public.tenants WHERE slug = '${f.slug}');
+        `).catch(() => {});
 
         // Insert firm
         await runner.query(`
           INSERT INTO public.firms (
             id, title, slug, tenant_name, domain, level_type, theme_color, firm_mode, status,
             trial_days, trial_started_at, trial_ends_at, created_at, updated_at
-          ) VALUES (
+          ) SELECT
             '${f.id}', '${f.title}', '${f.slug}', '${f.tenant_name}', '${f.domain}',
             'STANDARD', '#5B4BFF', '${f.firm_mode}', 'ACTIVE',
             365, NOW(), NOW() + INTERVAL '365 days', NOW(), NOW()
-          )
-          ON CONFLICT (slug) DO NOTHING;
-        `);
+          WHERE NOT EXISTS (SELECT 1 FROM public.firms WHERE slug = '${f.slug}');
+        `).catch(() => {});
 
         const firmRow = await runner.query(`SELECT id FROM public.firms WHERE slug = $1 LIMIT 1`, [f.slug]);
         const actualFirmId = firmRow[0]?.id || f.id;
