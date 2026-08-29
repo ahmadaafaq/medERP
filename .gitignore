@@ -11,7 +11,9 @@ out/
 **/out/
 *.tsbuildinfo
 
-# Environment variables
+# Environment variables (local overrides — never commit)
+.env.local
+**/.env.local
 
 # Uploads
 uploads/
