@@ -38,6 +38,7 @@ import { validationSchema } from './config/joi.validation';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['.env', 'backend/.env', '../.env'],
       load: [configuration],
       validationSchema: validationSchema,
     }),

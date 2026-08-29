@@ -42,7 +42,7 @@ export default function StudentOffersCard({
     try {
       const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly').replace(/^tenant_/, '') : 'srms-cet-bareilly';
       await axios.patch(`/api/placement-drive/offers/${appId}/respond?tenant=${tenant}`, { action }).catch(async () => {
-        return axios.patch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/offers/${appId}/respond?tenant=${tenant}`, { action });
+        return axios.patch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/offers/${appId}/respond?tenant=${tenant}`, { action });
       });
       onRefresh();
     } catch (e) {

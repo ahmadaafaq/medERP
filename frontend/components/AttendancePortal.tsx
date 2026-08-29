@@ -157,7 +157,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
           : 'srms-cet-bareilly';
 
       if (token) {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/auth/me`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
             'x-tenant-slug': tenant,

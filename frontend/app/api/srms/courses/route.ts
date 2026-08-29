@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { srmsPost } from '@/lib/srms-client';
 
-const BACKEND_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
+const BACKEND_API = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 async function handleGetCourse(colgcd?: string, tenantSlug?: string) {
   const cd = colgcd || '1';

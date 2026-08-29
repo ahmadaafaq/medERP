@@ -40,7 +40,7 @@ export default function IncubationCellCard({ role = 'faculty', className = '' }:
         return;
       }
 
-      const directRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/incubation-cell/projects${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
+      const directRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/incubation-cell/projects${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
       if (directRes && directRes.ok) {
         const json = await directRes.json();
         const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];

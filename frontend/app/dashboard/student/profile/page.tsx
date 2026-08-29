@@ -117,7 +117,7 @@ export default function StudentProfilePage() {
 
     try {
       // 1. Fetch Auth Profile
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/auth/me`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
@@ -130,7 +130,7 @@ export default function StudentProfilePage() {
       // 2. Fetch Student Repositories Count
       let repoCount = 0;
       try {
-        const repoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/repository/list?student_reg_no=${regNo}&tenant=${slug}`, {
+        const repoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/list?student_reg_no=${regNo}&tenant=${slug}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'x-tenant-slug': slug,
@@ -303,7 +303,7 @@ export default function StudentProfilePage() {
     const { regNo } = getStudentIdentity();
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/auth/profile`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/auth/profile`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

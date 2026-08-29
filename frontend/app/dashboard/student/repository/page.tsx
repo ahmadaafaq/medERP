@@ -98,7 +98,7 @@ export default function StudentRepositoryPage() {
     const { regNo, name } = getStudentIdentity();
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/repository/list?student_reg_no=${regNo}&tenant=${slug}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/list?student_reg_no=${regNo}&tenant=${slug}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
@@ -218,7 +218,7 @@ export default function StudentRepositoryPage() {
     try {
       if (editingRepo) {
         // UPDATE Existing Repository (Only if Pending)
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/repository/${editingRepo.repo_id}`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/${editingRepo.repo_id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -248,7 +248,7 @@ export default function StudentRepositoryPage() {
         }
       } else {
         // CREATE New Repository
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/repository/submit`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/submit`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

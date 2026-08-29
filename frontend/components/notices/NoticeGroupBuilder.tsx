@@ -46,7 +46,7 @@ export default function NoticeGroupBuilder({ rules, onChange }: NoticeGroupBuild
       }
 
       // 2. Fetch live batches for all primary courses
-      const btRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/college-master/batches?tenant=${slug}`, {
+      const btRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/batches?tenant=${slug}`, {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => null);
       if (btRes && btRes.ok) {
@@ -60,7 +60,7 @@ export default function NoticeGroupBuilder({ rules, onChange }: NoticeGroupBuild
       }
 
       // 3. Fetch departments
-      const deptRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/college-master/departments?tenant=${slug}`, {
+      const deptRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/departments?tenant=${slug}`, {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => null);
       if (deptRes && deptRes.ok) {

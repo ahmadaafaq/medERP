@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export default function OwnerLoginPage() {
   const router = useRouter();
@@ -12,8 +12,8 @@ export default function OwnerLoginPage() {
   useEffect(() => {
     router.replace('/access/superadmin');
   }, [router]);
-  const [username, setUsername] = useState<string>('nornx');
-  const [password, setPassword] = useState<string>('nornx@med');
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 

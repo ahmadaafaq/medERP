@@ -82,10 +82,10 @@ export default function StudentPlacementPage() {
       const headers = getAuthHeaders();
       const [drivesRes, offersRes] = await Promise.all([
         axios.get(`/api/placement-drive/list?tenant=${tenant}`, { headers }).catch(async () => {
-          return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/list?tenant=${tenant}`, { headers });
+          return axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/list?tenant=${tenant}`, { headers });
         }),
         axios.get(`/api/placement-drive/student/offers?tenant=${tenant}`, { headers }).catch(async () => {
-          return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/student/offers?tenant=${tenant}`, { headers });
+          return axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/student/offers?tenant=${tenant}`, { headers });
         }),
       ]);
 
@@ -120,7 +120,7 @@ export default function StudentPlacementPage() {
       };
 
       await axios.post(`/api/placement-drive/apply?tenant=${tenant}`, payload, { headers }).catch(async () => {
-        return axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/apply?tenant=${tenant}`, payload, { headers });
+        return axios.post(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/apply?tenant=${tenant}`, payload, { headers });
       });
 
       // Optimistically mark as applied

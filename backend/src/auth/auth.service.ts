@@ -144,8 +144,8 @@ export class AuthService {
           const sName = sr.schema_name;
           const userMatch = await this.ds.query(
             `SELECT u.id FROM "${sName}".users u
-             LEFT JOIN "${sName}".students s ON s.user_id = u.id
-             LEFT JOIN "${sName}".faculty f ON f.user_id = u.id
+             LEFT JOIN "${sName}".students s ON s.user_id::text = u.id::text
+             LEFT JOIN "${sName}".faculty f ON f.user_id::text = u.id::text
              WHERE LOWER(u.email) = $1
                 OR LOWER(COALESCE(s.registration_no, '')) = $1
                 OR LOWER(COALESCE(s.rollno, '')) = $1
@@ -262,8 +262,8 @@ export class AuthService {
                 f.qualification, f.phone, f.gender, f.experience, f.joining_date, f.staff_type,
                 f.department_id, f.subject_id
          FROM "${schema}".users u
-         LEFT JOIN "${schema}".students s ON s.user_id = u.id
-         LEFT JOIN "${schema}".faculty f ON f.user_id = u.id
+         LEFT JOIN "${schema}".students s ON s.user_id::text = u.id::text
+         LEFT JOIN "${schema}".faculty f ON f.user_id::text = u.id::text
          WHERE LOWER(u.email) = $1
             OR LOWER(COALESCE(u.emp_id, '')) = $1
             OR LOWER(COALESCE(s.registration_no, '')) = $1
@@ -387,7 +387,7 @@ export class AuthService {
 
       // Ensure faculty record exists
       const existingFac = await this.ds.query(
-        `SELECT id FROM "${schema}".faculty WHERE user_id = $1 OR usr_id = $2 OR LOWER(emp_id) = LOWER($3) LIMIT 1`,
+        `SELECT id FROM "${schema}".faculty WHERE user_id::text = $1::text OR usr_id::text = $2::text OR LOWER(emp_id) = LOWER($3) LIMIT 1`,
         [userId, srmsRecord.usr_id, empIdToUse],
       );
 
@@ -648,8 +648,8 @@ export class AuthService {
       const countSql = `
         SELECT COUNT(u.id) as total
         FROM "${schema}".users u
-        LEFT JOIN "${schema}".faculty f ON f.user_id = u.id
-        LEFT JOIN "${schema}".students s ON s.user_id = u.id
+        LEFT JOIN "${schema}".faculty f ON f.user_id::text = u.id::text
+        LEFT JOIN "${schema}".students s ON s.user_id::text = u.id::text
         ${whereSql}
       `;
       const countRes = await this.ds.query(countSql, params);
@@ -661,8 +661,8 @@ export class AuthService {
                COALESCE(f.name, s.name, u.email) as name,
                f.emp_id, s.registration_no, s.rollno
         FROM "${schema}".users u
-        LEFT JOIN "${schema}".faculty f ON f.user_id = u.id
-        LEFT JOIN "${schema}".students s ON s.user_id = u.id
+        LEFT JOIN "${schema}".faculty f ON f.user_id::text = u.id::text
+        LEFT JOIN "${schema}".students s ON s.user_id::text = u.id::text
         ${whereSql}
         ORDER BY u.${sortBy} ${sortOrder}
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -965,7 +965,7 @@ export class AuthService {
         `SELECT u.id, u.email, u.role, u.is_active, u.onboarding_completed, u.must_change_password,
                 u.last_login_at, u.created_at
          FROM ${table} u
-         LEFT JOIN "${schema}".students s ON s.user_id = u.id
+         LEFT JOIN "${schema}".students s ON s.user_id::text = u.id::text
          WHERE s.registration_no = $1 OR s.rollno = $1 OR u.email = $1 LIMIT 1`,
         [payload.sub],
       ).catch(() => []);
@@ -996,12 +996,12 @@ export class AuthService {
                   sa.academic_session, sa.residency_type, sa.status AS admission_status,
                   sp.father_name, sp.mother_name, sp.father_mobile, sp.mother_mobile
            FROM "${schema}".students s
-           LEFT JOIN "${schema}".departments d ON d.id = s.department_id
+           LEFT JOIN "${schema}".departments d ON d.id::text = s.department_id::text
            LEFT JOIN "${schema}".courses c ON c.code = s.course_cd OR c.id::text = s.course_cd
-           LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
-           LEFT JOIN "${schema}".student_admissions sa ON sa.student_id = s.id
-           LEFT JOIN "${schema}".student_parents sp ON sp.student_id = s.id
-           WHERE (s.user_id = (CASE WHEN $1 ~ '^[0-9a-f-]{36}$' THEN $1::uuid ELSE NULL END))
+           LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
+           LEFT JOIN "${schema}".student_admissions sa ON sa.student_id::text = s.id::text
+           LEFT JOIN "${schema}".student_parents sp ON sp.student_id::text = s.id::text
+           WHERE (s.user_id::text = $1::text)
               OR s.registration_no = $2
               OR s.rollno = $2`,
           [studentUserSub, payload.sub],
@@ -1019,16 +1019,16 @@ export class AuthService {
                   f.department_id, d.name AS department_name, d.code AS department_code,
                   f.subject_id, s.name AS primary_subject_name, s.code AS primary_subject_code
            FROM "${schema}".faculty f
-           LEFT JOIN "${schema}".departments d ON d.id = f.department_id
-           LEFT JOIN "${schema}".subjects s ON s.id = f.subject_id
-           WHERE (f.user_id = (CASE WHEN $1 ~ '^[0-9a-f-]{36}$' THEN $1::uuid ELSE NULL END))
+           LEFT JOIN "${schema}".departments d ON d.id::text = f.department_id::text
+           LEFT JOIN "${schema}".subjects s ON s.id::text = f.subject_id::text
+           WHERE (f.user_id::text = $1::text)
               OR (f.emp_id IS NOT NULL AND LOWER(f.emp_id) = LOWER($2))
               OR (f.email IS NOT NULL AND LOWER(f.email) = LOWER($3))
               OR (f.emp_id IS NOT NULL AND LOWER(f.emp_id) = LOWER($3))
               OR (f.emp_id IS NOT NULL AND LOWER(f.emp_id) = LOWER($1))
            ORDER BY 
              CASE 
-               WHEN f.user_id = (CASE WHEN $1 ~ '^[0-9a-f-]{36}$' THEN $1::uuid ELSE NULL END) THEN 0
+               WHEN f.user_id::text = $1::text THEN 0
                WHEN LOWER(f.emp_id) = LOWER($2) THEN 1
                ELSE 2
              END
@@ -1197,7 +1197,7 @@ export class AuthService {
     const sql = `
       UPDATE "${schema}".faculty
       SET ${fields.join(', ')}, updated_at = NOW()
-      WHERE (user_id = (CASE WHEN $${uIdx} ~ '^[0-9a-f-]{36}$' THEN $${uIdx}::uuid ELSE NULL END))
+      WHERE (user_id::text = $${uIdx}::text)
          OR (emp_id IS NOT NULL AND LOWER(emp_id) = LOWER($${empIdx}))
          OR (email IS NOT NULL AND LOWER(email) = LOWER($${emailIdx}))
          OR (emp_id IS NOT NULL AND LOWER(emp_id) = LOWER($${prefixIdx}))
@@ -1257,7 +1257,7 @@ export class AuthService {
     const sql = `
       UPDATE "${schema}".students 
       SET ${fields.join(', ')}, updated_at = NOW()
-      WHERE registration_no = $${whereIdx} OR rollno = $${whereIdx} OR user_id = (SELECT id FROM "${schema}".users WHERE id::text = $${whereIdx} LIMIT 1)
+      WHERE registration_no = $${whereIdx} OR rollno = $${whereIdx} OR user_id::text = (SELECT id::text FROM "${schema}".users WHERE id::text = $${whereIdx} LIMIT 1)
       RETURNING id, name, registration_no, rollno, bio, github_url, github_followers, linkedin_url, linkedin_connections
     `;
 

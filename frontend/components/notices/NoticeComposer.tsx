@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import NoticeGroupBuilder from './NoticeGroupBuilder';
 import { TargetRule, useNoticeGroups } from '../../hooks/useNoticeGroups';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export default function NoticeComposer() {
   const router = useRouter();

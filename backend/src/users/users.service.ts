@@ -43,9 +43,9 @@ export class UsersService {
                     u.email, COALESCE(u.is_active, s.is_active, true) as is_active, s.created_at,
                     d.name as department_name, d.code as department_code
              FROM "${s}".students s
-             LEFT JOIN "${s}".users u ON u.id = s.user_id
-             LEFT JOIN "${s}".batches b ON b.id = s.batch_id
-             LEFT JOIN "${s}".departments d ON (d.id = s.department_id OR d.code = s.branch_id OR d.code = s.department_id::text)
+             LEFT JOIN "${s}".users u ON u.id::text = s.user_id::text
+             LEFT JOIN "${s}".batches b ON b.id::text = s.batch_id::text
+             LEFT JOIN "${s}".departments d ON (d.id::text = s.department_id::text OR d.code = s.branch_id OR d.code = s.department_id::text)
              ORDER BY s.name ASC`
           );
           rows.forEach((r: any) => {
@@ -97,9 +97,9 @@ export class UsersService {
                 u.email, COALESCE(u.is_active, s.is_active, true) as is_active, s.created_at,
                 d.name as department_name, d.code as department_code
          FROM "${schema}".students s
-         LEFT JOIN "${schema}".users u ON u.id = s.user_id
-         LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
-         LEFT JOIN "${schema}".departments d ON (d.id = s.department_id OR d.code = s.branch_id OR d.code = s.department_id::text)
+         LEFT JOIN "${schema}".users u ON u.id::text = s.user_id::text
+         LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
+         LEFT JOIN "${schema}".departments d ON (d.id::text = s.department_id::text OR d.code = s.branch_id OR d.code = s.department_id::text)
          ${where}
          ORDER BY s.name ASC
          LIMIT $${i} OFFSET $${i + 1}`,
@@ -107,8 +107,8 @@ export class UsersService {
       ),
       this.ds.query(
         `SELECT COUNT(*) FROM "${schema}".students s
-         LEFT JOIN "${schema}".users u ON u.id = s.user_id
-         LEFT JOIN "${schema}".departments d ON (d.id = s.department_id OR d.code = s.branch_id OR d.code = s.department_id::text)
+         LEFT JOIN "${schema}".users u ON u.id::text = s.user_id::text
+         LEFT JOIN "${schema}".departments d ON (d.id::text = s.department_id::text OR d.code = s.branch_id OR d.code = s.department_id::text)
          ${where}`,
         params,
       ),
@@ -124,10 +124,10 @@ export class UsersService {
       `SELECT s.*, u.email, COALESCE(u.is_active, s.is_active, true) as is_active, u.created_at as user_created_at,
               d.name AS department_name, b.code AS batch_code
        FROM "${schema}".students s
-       LEFT JOIN "${schema}".users u ON u.id = s.user_id
-       LEFT JOIN "${schema}".departments d ON (d.id = s.department_id OR d.code = s.branch_id OR d.code = s.department_id::text)
-       LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
-       WHERE s.id = $1 OR s.rollno = $1 OR s.registration_no = $1`,
+       LEFT JOIN "${schema}".users u ON u.id::text = s.user_id::text
+       LEFT JOIN "${schema}".departments d ON (d.id::text = s.department_id::text OR d.code = s.branch_id OR d.code = s.department_id::text)
+       LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
+       WHERE s.id::text = $1::text OR s.rollno = $1 OR s.registration_no = $1`,
       [id],
     );
     if (!rows[0]) throw new NotFoundException('Student not found');
@@ -237,7 +237,7 @@ export class UsersService {
     // Toggle via the users table (is_active drives login access)
     await this.ds.query(
       `UPDATE "${schema}".users u SET is_active = NOT u.is_active
-       FROM "${schema}".students s WHERE s.user_id = u.id AND s.id = $1`,
+       FROM "${schema}".students s WHERE s.user_id::text = u.id::text AND s.id = $1`,
       [id],
     );
     await this.ds.query(
@@ -297,9 +297,9 @@ export class UsersService {
                     d.name AS department_name, d.code AS department_code,
                     s.name AS subject_name, s.code AS subject_code
              FROM "${s}".faculty f
-             LEFT JOIN "${s}".users u ON u.id = f.user_id
-             LEFT JOIN "${s}".departments d ON (d.id = f.department_id OR d.code = f.department_id::text)
-             LEFT JOIN "${s}".subjects s ON (s.id = f.subject_id OR s.code = f.subject_id::text)
+             LEFT JOIN "${s}".users u ON u.id::text = f.user_id::text
+             LEFT JOIN "${s}".departments d ON (d.id::text = f.department_id::text OR d.code = f.department_id::text)
+             LEFT JOIN "${s}".subjects s ON (s.id::text = f.subject_id::text OR s.code = f.subject_id::text)
              ORDER BY f.name ASC`
           );
           rows.forEach((r: any) => {
@@ -364,9 +364,9 @@ export class UsersService {
                 d.name AS department_name, d.code AS department_code,
                 s.name AS subject_name, s.code AS subject_code
          FROM "${schema}".faculty f
-         LEFT JOIN "${schema}".users u ON u.id = f.user_id
-         LEFT JOIN "${schema}".departments d ON (d.id = f.department_id OR (f.department_id IS NOT NULL AND d.code = f.department_id::text))
-         LEFT JOIN "${schema}".subjects s ON (s.id = f.subject_id OR (f.subject_id IS NOT NULL AND s.code = f.subject_id::text))
+         LEFT JOIN "${schema}".users u ON u.id::text = f.user_id::text
+         LEFT JOIN "${schema}".departments d ON (d.id::text = f.department_id::text OR (f.department_id IS NOT NULL AND d.code = f.department_id::text))
+         LEFT JOIN "${schema}".subjects s ON (s.id::text = f.subject_id::text OR (f.subject_id IS NOT NULL AND s.code = f.subject_id::text))
          ${where}
          ORDER BY f.id, f.name ASC
          LIMIT $${i} OFFSET $${i + 1}`,
@@ -374,9 +374,9 @@ export class UsersService {
       ).catch(() => []),
       this.ds.query(
         `SELECT COUNT(DISTINCT f.id) FROM "${schema}".faculty f
-         LEFT JOIN "${schema}".users u ON u.id = f.user_id
-         LEFT JOIN "${schema}".departments d ON (d.id = f.department_id OR (f.department_id IS NOT NULL AND d.code = f.department_id::text))
-         LEFT JOIN "${schema}".subjects s ON (s.id = f.subject_id OR (f.subject_id IS NOT NULL AND s.code = f.subject_id::text))
+         LEFT JOIN "${schema}".users u ON u.id::text = f.user_id::text
+         LEFT JOIN "${schema}".departments d ON (d.id::text = f.department_id::text OR (f.department_id IS NOT NULL AND d.code = f.department_id::text))
+         LEFT JOIN "${schema}".subjects s ON (s.id::text = f.subject_id::text OR (f.subject_id IS NOT NULL AND s.code = f.subject_id::text))
          ${where}`,
         params,
       ).catch(() => [{ count: '0' }]),
@@ -405,10 +405,10 @@ export class UsersService {
                 d.name AS department_name, d.code AS department_code,
                 s.name AS subject_name, s.code AS subject_code
          FROM "${s}".faculty f
-         LEFT JOIN "${s}".users u ON u.id = f.user_id
-         LEFT JOIN "${s}".departments d ON (d.id = f.department_id OR d.code = f.department_id::text)
-         LEFT JOIN "${s}".subjects s ON (s.id = f.subject_id OR s.code = f.subject_id::text)
-         WHERE f.id = $1`,
+         LEFT JOIN "${s}".users u ON u.id::text = f.user_id::text
+         LEFT JOIN "${s}".departments d ON (d.id::text = f.department_id::text OR d.code = f.department_id::text)
+         LEFT JOIN "${s}".subjects s ON (s.id::text = f.subject_id::text OR s.code = f.subject_id::text)
+         WHERE f.id::text = $1::text OR f.emp_id = $1`,
         [id],
       ).catch(() => []);
     };
@@ -724,7 +724,7 @@ export class UsersService {
 
       await this.ds.query(
         `UPDATE "${schema}".users u SET is_active = $1
-         FROM "${schema}".faculty f WHERE f.user_id = u.id AND f.id = $2`,
+         FROM "${schema}".faculty f WHERE f.user_id::text = u.id::text AND f.id = $2`,
         [dto.isActive, id],
       ).catch(() => { });
     }
@@ -835,8 +835,8 @@ export class UsersService {
           const rows = await this.ds.query(
             `SELECT d.*, f.name AS hod_name
              FROM "${s}".departments d
-             LEFT JOIN "${s}".users u ON u.id = d.hod_user_id
-             LEFT JOIN "${s}".faculty f ON f.user_id = u.id
+             LEFT JOIN "${s}".users u ON u.id::text = d.hod_user_id::text
+             LEFT JOIN "${s}".faculty f ON f.user_id::text = u.id::text
              WHERE d.is_active = true
              ORDER BY d.name ASC`
           );
@@ -860,8 +860,8 @@ export class UsersService {
     const rows = await this.ds.query(
       `SELECT d.*, f.name AS hod_name
        FROM "${schema}".departments d
-       LEFT JOIN "${schema}".users u ON u.id = d.hod_user_id
-       LEFT JOIN "${schema}".faculty f ON f.user_id = u.id
+       LEFT JOIN "${schema}".users u ON u.id::text = d.hod_user_id::text
+       LEFT JOIN "${schema}".faculty f ON f.user_id::text = u.id::text
        WHERE d.is_active = true
        ORDER BY d.name ASC`,
     ).catch(() => []);

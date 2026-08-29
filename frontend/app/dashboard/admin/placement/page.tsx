@@ -89,7 +89,7 @@ export default function AdminPlacementPage() {
       const tenant = getTenantSlug();
       const headers = getAuthHeaders();
       const res = await axios.get(`/api/placement-drive/list?tenant=${tenant}`, { headers }).catch(async () => {
-        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/list?tenant=${tenant}`, { headers });
+        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/list?tenant=${tenant}`, { headers });
       });
       const dataObj = res.data?.data || res.data;
       const list = Array.isArray(dataObj?.data) ? dataObj.data : Array.isArray(dataObj) ? dataObj : [];
@@ -108,7 +108,7 @@ export default function AdminPlacementPage() {
       const tenant = getTenantSlug();
       const headers = getAuthHeaders();
       const res = await axios.get(`/api/placement-drive/${company.drive_id}?tenant=${tenant}`, { headers }).catch(async () => {
-        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/${company.drive_id}?tenant=${tenant}`, { headers });
+        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/${company.drive_id}?tenant=${tenant}`, { headers });
       });
       const dataObj = res.data?.data || res.data;
       const apps = Array.isArray(dataObj?.applicants) ? dataObj.applicants : Array.isArray(dataObj) ? dataObj : [];
@@ -125,7 +125,7 @@ export default function AdminPlacementPage() {
       const tenant = getTenantSlug();
       const headers = getAuthHeaders();
       await axios.patch(`/api/placement-drive/applicant/${appId}/status?tenant=${tenant}`, { status: newStatus }, { headers }).catch(async () => {
-        return axios.patch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/applicant/${appId}/status?tenant=${tenant}`, { status: newStatus }, { headers });
+        return axios.patch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/applicant/${appId}/status?tenant=${tenant}`, { status: newStatus }, { headers });
       });
       setApplicantsList((prev) =>
         prev.map((a) => (a.application_id === appId ? { ...a, status: newStatus } : a))
@@ -156,7 +156,7 @@ export default function AdminPlacementPage() {
       };
 
       await axios.post(`/api/placement-drive/create?tenant=${tenant}`, payload, { headers }).catch(async () => {
-        return axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/create?tenant=${tenant}`, payload, { headers });
+        return axios.post(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/create?tenant=${tenant}`, payload, { headers });
       });
 
       setCreateSuccess(true);
@@ -189,7 +189,7 @@ export default function AdminPlacementPage() {
       const tenant = getTenantSlug();
       const headers = getAuthHeaders();
       const res = await axios.get(`/api/placement-drive/export?tenant=${tenant}`, { headers }).catch(async () => {
-        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/export?tenant=${tenant}`, { headers });
+        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/export?tenant=${tenant}`, { headers });
       });
       const rows = res.data?.data || res.data || [];
       if (!Array.isArray(rows) || rows.length === 0) {
@@ -231,7 +231,7 @@ export default function AdminPlacementPage() {
         ? `/api/placement-drive/export?tenant=${tenant}&drive_id=${driveId}&status=${status}`
         : `/api/placement-drive/export?tenant=${tenant}&drive_id=${driveId}`;
       const res = await axios.get(url, { headers }).catch(async () => {
-        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/export?tenant=${tenant}&drive_id=${driveId}${status ? `&status=${status}` : ''}`, { headers });
+        return axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/export?tenant=${tenant}&drive_id=${driveId}${status ? `&status=${status}` : ''}`, { headers });
       });
       const rows = res.data?.data || res.data || [];
       if (!Array.isArray(rows) || rows.length === 0) {

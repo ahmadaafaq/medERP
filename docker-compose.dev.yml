@@ -1,16 +1,4 @@
 services:
-  postgres:
-    ports:
-      - '5432:5432'
-    environment:
-      POSTGRES_USER: ${DB_USER:-unicampus}
-      POSTGRES_PASSWORD: ${DB_PASS:-unicampus_secret}
-      POSTGRES_DB: ${DB_NAME:-unicampus_erp}
-
-  redis:
-    ports:
-      - '6379:6379'
-
   backend:
     build:
       context: ./backend
@@ -20,6 +8,7 @@ services:
       - ./backend:/app
       - /app/node_modules
     command: npm run start:dev
+    env_file: ./backend/.env
     environment:
       NODE_ENV: development
       PORT: 8081
@@ -27,13 +16,22 @@ services:
       - '8081:8081'
 
   frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     command: npm run dev
+    env_file: ./frontend/.env
     environment:
       NODE_ENV: development
       PORT: 3000
+      NEXT_PUBLIC_API_URL: http://34.236.107.120:8081/api/v1
+      NEXT_PUBLIC_WS_URL: http://34.236.107.120:8081
+      BACKEND_INTERNAL_URL: http://backend:8081/api/v1/:path*
+      BACKEND_BASE_URL: http://backend:8081
     ports:
       - '3000:3000'

@@ -270,6 +270,10 @@ export class MenuRegistryService implements OnModuleInit {
   async seedManifest(items: MenuManifestItemDto[]) {
     let count = 0;
 
+    await this.dataSource.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_menu_registry_role_key ON public.menu_registry (role, menu_key);
+    `).catch(() => {});
+
     for (const item of items) {
       const applicableMode = item.applicable_firm_mode || 'BOTH';
 

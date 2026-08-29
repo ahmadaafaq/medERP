@@ -328,8 +328,12 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       // 8. Seed default Super Admin if missing
       await runner.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_super_admins_email ON public.super_admins (email);
+      `).catch(() => {});
+
+      await runner.query(`
         INSERT INTO public.super_admins (id, username, email, password_hash, name, role, is_active, created_at, updated_at)
-        VALUES (
+        SELECT
           '00000000-0000-0000-0000-000000000001',
           'nornx',
           'nornx@mederp.app',
@@ -339,9 +343,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           true,
           NOW(),
           NOW()
-        )
-        ON CONFLICT (email) DO NOTHING;
-      `);
+        WHERE NOT EXISTS (SELECT 1 FROM public.super_admins WHERE email = 'nornx@mederp.app');
+      `).catch(() => {});
 
       // 9. Seed default Firms & License Keys
       const defaultFirms = [
@@ -735,7 +738,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
         ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
         ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS professional_phase VARCHAR(100) DEFAULT 'Semester 1 (1st Year)';
-        ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1);
+        ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1) USING NULLIF(regexp_replace(duration_years::text, '[^0-9.]', '', 'g'), '')::numeric(4,1);
       `);
 
       // ── Academic Sessions (added in later migration) ──────────────────────
@@ -776,14 +779,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".topics (
           id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-          subject_id   UUID        REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
-          linker_id    UUID        REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL,
+          subject_id   UUID,
+          linker_id    UUID,
           code         VARCHAR(50) NOT NULL,
           name         VARCHAR(200) NOT NULL,
           description  TEXT,
           hours        INT         DEFAULT 1,
           is_active    BOOLEAN     DEFAULT true,
-          created_at         TIMESTAMPTZ DEFAULT NOW()
+          created_at   TIMESTAMPTZ DEFAULT NOW()
         );
       `);
 
@@ -791,16 +794,16 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".competencies (
           id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-          subject_id   UUID        REFERENCES "${schema}".subjects(id) ON DELETE SET NULL,
-          topic_id     UUID        REFERENCES "${schema}".topics(id) ON DELETE SET NULL,
-          linker_id    UUID        REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL,
+          subject_id   UUID,
+          topic_id     UUID,
+          linker_id    UUID,
           code         VARCHAR(50) NOT NULL,
           description  TEXT        NOT NULL,
           domain       VARCHAR(50) DEFAULT 'Knowledge',
           level        VARCHAR(50) DEFAULT 'Knows How',
           is_core      BOOLEAN     DEFAULT true,
           is_active    BOOLEAN     DEFAULT true,
-          created_at         TIMESTAMPTZ DEFAULT NOW()
+          created_at   TIMESTAMPTZ DEFAULT NOW()
         );
       `);
 
@@ -1600,7 +1603,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".faculty_subjects (
         id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        faculty_id  UUID        NOT NULL REFERENCES "${schema}".faculty(id) ON DELETE CASCADE,
+        faculty_id  UUID        NOT NULL,
         subject_id  UUID        NOT NULL REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
         is_active   BOOLEAN      DEFAULT true,
         created_at  TIMESTAMPTZ  DEFAULT NOW(),
@@ -1650,7 +1653,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".attendance_sessions (
         id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        faculty_id    UUID        REFERENCES "${schema}".faculty(id),
+        faculty_id    UUID,
         subject_id    UUID        REFERENCES "${schema}".subjects(id),
         batch_id      UUID        REFERENCES "${schema}".batches(id),
         offering_id   UUID        REFERENCES "${schema}".subject_offerings(id) ON DELETE SET NULL,
@@ -1681,7 +1684,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".faculty_punch_logs (
         id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        faculty_id  UUID        REFERENCES "${schema}".faculty(id),
+        faculty_id  UUID,
         punch_time  TIMESTAMPTZ  NOT NULL,
         punch_type  VARCHAR(10),
         device_id   VARCHAR(50),
@@ -1709,7 +1712,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
         student_id        UUID        REFERENCES "${schema}".students(id),
         activity_type_id  UUID        REFERENCES "${schema}".logbook_activity_types(id),
-        faculty_id        UUID        REFERENCES "${schema}".faculty(id),
+        faculty_id        UUID,
         entry_date        DATE         NOT NULL,
         description       TEXT,
         batch_year        INT,
@@ -1834,7 +1837,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".timetable_slots (
         id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        faculty_id      UUID        REFERENCES "${schema}".faculty(id),
+        faculty_id      UUID,
         subject_id      UUID        REFERENCES "${schema}".subjects(id),
         department_id   UUID        REFERENCES "${schema}".departments(id),
         batch_id        UUID        REFERENCES "${schema}".batches(id),
@@ -1865,7 +1868,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".leave_applications (
         id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        faculty_id      UUID        REFERENCES "${schema}".faculty(id),
+        faculty_id      UUID,
         leave_type_id   UUID        REFERENCES "${schema}".leave_types(id),
         from_date       DATE         NOT NULL,
         to_date         DATE         NOT NULL,
@@ -1881,7 +1884,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".salary_records (
         id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        faculty_id          UUID        REFERENCES "${schema}".faculty(id),
+        faculty_id          UUID,
         month               INT          NOT NULL,
         year                INT          NOT NULL,
         basic               NUMERIC(10,2),
@@ -1954,9 +1957,11 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     `);
     await runner.query(`
       DO $$ BEGIN
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'chat_messages' AND column_name = 'chat_group_id') THEN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'chat_messages' AND column_name = 'chat_group_id')
+           AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'chat_messages' AND column_name = 'created_at') THEN
           CREATE INDEX IF NOT EXISTS "idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cm_g" ON "${schema}".chat_messages(chat_group_id, created_at DESC);
-        ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'chat_messages' AND column_name = 'group_id') THEN
+        ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'chat_messages' AND column_name = 'group_id')
+              AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'chat_messages' AND column_name = 'sent_at') THEN
           CREATE INDEX IF NOT EXISTS "idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cm_g" ON "${schema}".chat_messages(group_id, sent_at DESC);
         END IF;
       END $$;
@@ -2090,14 +2095,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".topics (
         id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        subject_id   UUID        REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
-        linker_id    UUID        REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL,
+        subject_id   UUID,
+        linker_id    UUID,
         code         VARCHAR(50) NOT NULL,
         name         VARCHAR(200) NOT NULL,
         description  TEXT,
         hours        INT         DEFAULT 1,
         is_active    BOOLEAN     DEFAULT true,
-        created_at         TIMESTAMPTZ DEFAULT NOW()
+        created_at   TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
@@ -2105,16 +2110,16 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".competencies (
         id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        subject_id   UUID        REFERENCES "${schema}".subjects(id) ON DELETE SET NULL,
-        topic_id     UUID        REFERENCES "${schema}".topics(id) ON DELETE SET NULL,
-        linker_id    UUID        REFERENCES "${schema}".professional_linkers(id) ON DELETE SET NULL,
+        subject_id   UUID,
+        topic_id     UUID,
+        linker_id    UUID,
         code         VARCHAR(50) NOT NULL,
         description  TEXT        NOT NULL,
         domain       VARCHAR(50) DEFAULT 'Knowledge',
         level        VARCHAR(50) DEFAULT 'Knows How',
         is_core      BOOLEAN     DEFAULT true,
         is_active    BOOLEAN     DEFAULT true,
-        created_at         TIMESTAMPTZ DEFAULT NOW()
+        created_at   TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
@@ -2332,28 +2337,32 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       return;
     }
 
+    // Safely ensure unique indexes exist before inserting seed data
+    await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_users_email" ON "${schema}".users (email)`).catch(() => {});
+    await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_fac_emp_id" ON "${schema}".faculty (emp_id)`).catch(() => {});
+
     const defaultPasswordHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.'; // Default password hash for 'Password@123' / 'admin@123' / '1234'
 
     // 1. College Admin (admin / admin@123)
     await runner.query(`
       INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-      VALUES ('admin@srms.edu', $1, 'COLLEGE_ADMIN', true, false)
-      ON CONFLICT (email) DO NOTHING;
-    `, [defaultPasswordHash]);
+      SELECT 'admin@srms.edu', $1, 'COLLEGE_ADMIN', true, false
+      WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE email = 'admin@srms.edu');
+    `, [defaultPasswordHash]).catch(() => {});
 
     // 2. Clerk (1234 / 1234)
     await runner.query(`
       INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-      VALUES ('clerk@srms.edu', $1, 'CLERK', true, false)
-      ON CONFLICT (email) DO NOTHING;
-    `, [defaultPasswordHash]);
+      SELECT 'clerk@srms.edu', $1, 'CLERK', true, false
+      WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE email = 'clerk@srms.edu');
+    `, [defaultPasswordHash]).catch(() => {});
 
     // 3. Warden (warden / warden123)
     await runner.query(`
       INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-      VALUES ('warden@srms.edu', $1, 'WARDEN', true, false)
-      ON CONFLICT (email) DO NOTHING;
-    `, [defaultPasswordHash]);
+      SELECT 'warden@srms.edu', $1, 'WARDEN', true, false
+      WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE email = 'warden@srms.edu');
+    `, [defaultPasswordHash]).catch(() => {});
 
     const isMedicalTenant = ['srms-ims', 'unicamp-med', 'aiims-delhi', 'aiims-jodhpur', 'kmc-manipal', 'rajshreemri'].includes(resolvedSlug);
 
@@ -2769,10 +2778,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         }
       } else {
         // Engineering / Management schemas (SRMS CET, CETR, IBS, Law, etc.)
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS subjects_code_uq_idx ON "${schema}".subjects (code);`).catch(() => {});
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS units_code_uq_idx ON "${schema}".units (code);`).catch(() => {});
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS topics_code_uq_idx ON "${schema}".topics (code);`).catch(() => {});
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS competencies_code_uq_idx ON "${schema}".competencies (code);`).catch(() => {});
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_sub_code" ON "${schema}".subjects (code);`).catch(() => {});
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_unt_code" ON "${schema}".units (code);`).catch(() => {});
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_top_code" ON "${schema}".topics (code);`).catch(() => {});
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cmp_code" ON "${schema}".competencies (code);`).catch(() => {});
 
         // Purge any accidental medical Anatomy/Physiology records from engineering schemas
         await runner.query(`

@@ -212,7 +212,7 @@ export class ChatService implements OnModuleInit {
           const groupName = `${year} Batch · ${dept.name}`;
           const existingGroup = await this.tenantSchemaService.queryInTenant(
             slug,
-            `SELECT id FROM "${schema}".chat_groups WHERE department_id = $1 AND batch_year = $2 LIMIT 1`,
+            `SELECT id FROM "${schema}".chat_groups WHERE department_id::text = $1::text AND batch_year::text = $2::text LIMIT 1`,
             [dept.id, year],
           ).catch(() => []);
 
@@ -243,7 +243,7 @@ export class ChatService implements OnModuleInit {
             slug,
             `SELECT f.user_id, f.name, f.photo_url 
              FROM "${schema}".faculty f 
-             WHERE f.department_id = $1 AND f.user_id IS NOT NULL AND f.is_active = true`,
+             WHERE f.department_id::text = $1::text AND f.user_id IS NOT NULL AND f.is_active = true`,
             [dept.id],
           ).catch(() => []);
 
@@ -264,9 +264,9 @@ export class ChatService implements OnModuleInit {
             slug,
             `SELECT s.user_id, s.name, s.photo_url 
              FROM "${schema}".students s 
-             LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
-             WHERE s.department_id = $1 
-               AND (s.admission_year::text = $2 OR b.year::text = $2 OR s.batch_cd ILIKE $3)
+             LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
+             WHERE s.department_id::text = $1::text 
+               AND (s.admission_year::text = $2::text OR b.year::text = $2::text OR s.batch_cd ILIKE $3)
                AND s.user_id IS NOT NULL 
                AND s.is_active = true`,
             [dept.id, year, `%${year}%`],
@@ -342,7 +342,7 @@ export class ChatService implements OnModuleInit {
           slug,
           `SELECT s.department_id, s.batch_cd, s.admission_year, b.year as batch_year
            FROM "${schema}".students s
-           LEFT JOIN "${schema}".batches b ON b.id = s.batch_id
+           LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
            WHERE (s.user_id::text = $1 OR s.registration_no = $1 OR s.rollno = $1) LIMIT 1`,
           [userId],
         ).catch(() => []);
@@ -353,7 +353,7 @@ export class ChatService implements OnModuleInit {
           params.push(userId, stu.department_id, sYear);
           whereConditions.push(`(
             EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id = g.id AND m.user_id::text = $${params.length - 2})
-            OR (g.department_id::text = $${params.length - 1}::text AND g.batch_year = $${params.length})
+            OR (g.department_id::text = $${params.length - 1}::text AND g.batch_year::text = $${params.length}::text)
           )`);
         } else {
           // If no student record match, check joined groups
@@ -373,17 +373,17 @@ export class ChatService implements OnModuleInit {
 
     if (filters?.search) {
       params.push(`%${filters.search.trim()}%`);
-      whereConditions.push(`(g.name ILIKE $${params.length} OR g.department_name ILIKE $${params.length} OR g.batch_year ILIKE $${params.length})`);
+      whereConditions.push(`(g.name ILIKE $${params.length} OR g.department_name ILIKE $${params.length} OR g.batch_year::text ILIKE $${params.length})`);
     }
 
     if (filters?.department_id) {
       params.push(filters.department_id);
-      whereConditions.push(`g.department_id = $${params.length}`);
+      whereConditions.push(`g.department_id::text = $${params.length}::text`);
     }
 
     if (filters?.batch_year) {
       params.push(filters.batch_year);
-      whereConditions.push(`g.batch_year = $${params.length}`);
+      whereConditions.push(`g.batch_year::text = $${params.length}::text`);
     }
 
     // Prepare query with unread count and latest message preview
@@ -400,7 +400,7 @@ export class ChatService implements OnModuleInit {
         g.batch_code,
         g.description,
         g.created_at,
-        (SELECT COUNT(*) FROM "${schema}".chat_group_members mem WHERE mem.chat_group_id = g.id) AS member_count,
+        (SELECT COUNT(*) FROM "${schema}".chat_group_members mem WHERE mem.chat_group_id::text = g.id::text) AS member_count,
         (
           SELECT json_build_object(
             'id', msg.id,
@@ -411,7 +411,7 @@ export class ChatService implements OnModuleInit {
             'created_at', msg.created_at
           )
           FROM "${schema}".chat_messages msg
-          WHERE msg.chat_group_id = g.id
+          WHERE msg.chat_group_id::text = g.id::text
           ORDER BY msg.created_at DESC
           LIMIT 1
         ) AS last_message,
@@ -419,14 +419,14 @@ export class ChatService implements OnModuleInit {
           (
             SELECT COUNT(*) 
             FROM "${schema}".chat_messages unread_msg
-            WHERE unread_msg.chat_group_id = g.id
-              AND unread_msg.sender_id != $${userParamIndex}
+            WHERE unread_msg.chat_group_id::text = g.id::text
+              AND unread_msg.sender_id::text != $${userParamIndex}::text
               AND unread_msg.created_at > COALESCE(
                 (
                   SELECT prev.created_at 
                   FROM "${schema}".chat_messages prev 
-                  JOIN "${schema}".chat_read_state rs ON rs.last_read_message_id = prev.id
-                  WHERE rs.chat_group_id = g.id AND rs.user_id = $${userParamIndex}
+                  JOIN "${schema}".chat_read_state rs ON rs.last_read_message_id::text = prev.id::text
+                  WHERE rs.chat_group_id::text = g.id::text AND rs.user_id::text = $${userParamIndex}::text
                   LIMIT 1
                 ),
                 '1970-01-01'::timestamptz
@@ -452,7 +452,7 @@ export class ChatService implements OnModuleInit {
         const fallbackGroups = await this.tenantSchemaService.queryInTenant(
           slug,
           `SELECT g.*, 
-            (SELECT COUNT(*) FROM "${schema}".chat_group_members mem WHERE mem.chat_group_id = g.id) AS member_count,
+            (SELECT COUNT(*) FROM "${schema}".chat_group_members mem WHERE mem.chat_group_id::text = g.id::text) AS member_count,
             0 AS unread_count
            FROM "${schema}".chat_groups g
            WHERE ${whereConditions.join(' AND ')}
@@ -482,9 +482,9 @@ export class ChatService implements OnModuleInit {
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT g.*, 
-        (SELECT COUNT(*) FROM "${schema}".chat_group_members mem WHERE mem.chat_group_id = g.id) AS member_count
+        (SELECT COUNT(*) FROM "${schema}".chat_group_members mem WHERE mem.chat_group_id::text = g.id::text) AS member_count
        FROM "${schema}".chat_groups g
-       WHERE g.id = $1`,
+       WHERE g.id::text = $1::text`,
       [groupId],
     );
 
@@ -508,7 +508,7 @@ export class ChatService implements OnModuleInit {
 
     if (pagination.before) {
       params.push(pagination.before);
-      beforeClause = `AND m.created_at < (SELECT created_at FROM "${schema}".chat_messages WHERE id = $2)`;
+      beforeClause = `AND m.created_at < (SELECT created_at FROM "${schema}".chat_messages WHERE id::text = $2::text)`;
     }
 
     params.push(limit);
@@ -537,11 +537,11 @@ export class ChatService implements OnModuleInit {
               )
             )
             FROM "${schema}".chat_attachments a
-            WHERE a.message_id = m.id
+            WHERE a.message_id::text = m.id::text
           ), '[]'::json
         ) AS attachments
       FROM "${schema}".chat_messages m
-      WHERE m.chat_group_id = $1 ${beforeClause}
+      WHERE m.chat_group_id::text = $1::text ${beforeClause}
       ORDER BY m.created_at DESC
       LIMIT $${limitIndex}
     `;
@@ -573,7 +573,7 @@ export class ChatService implements OnModuleInit {
       // Verify group exists
       const groupRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, name, department_name, batch_year FROM "${schema}".chat_groups WHERE id = $1`,
+        `SELECT id, name, department_name, batch_year FROM "${schema}".chat_groups WHERE id::text = $1::text`,
         [groupId],
       );
       if (!groupRows[0]) throw new NotFoundException('Chat group not found');
@@ -590,7 +590,7 @@ export class ChatService implements OnModuleInit {
         ).catch(async () => {
           await this.tenantSchemaService.queryInTenant(
             slug,
-            `UPDATE "${schema}".chat_group_members SET name = $1 WHERE chat_group_id = $2 AND user_id = $3`,
+            `UPDATE "${schema}".chat_group_members SET name = $1 WHERE chat_group_id::text = $2::text AND user_id::text = $3::text`,
             [senderName, groupId, senderId],
           ).catch(() => null);
         });
@@ -788,14 +788,14 @@ export class ChatService implements OnModuleInit {
         COUNT(unread_msg.id) AS total_unread,
         COUNT(DISTINCT unread_msg.chat_group_id) AS groups_with_unread
       FROM "${schema}".chat_messages unread_msg
-      JOIN "${schema}".chat_group_members mem ON mem.chat_group_id = unread_msg.chat_group_id AND mem.user_id = $1
+      JOIN "${schema}".chat_group_members mem ON mem.chat_group_id::text = unread_msg.chat_group_id::text AND mem.user_id::text = $1::text
       LEFT JOIN "${schema}".chat_read_state rs 
-        ON rs.chat_group_id = unread_msg.chat_group_id AND rs.user_id = $1
-      WHERE unread_msg.sender_id != $1
+        ON rs.chat_group_id::text = unread_msg.chat_group_id::text AND rs.user_id::text = $1::text
+      WHERE unread_msg.sender_id::text != $1::text
         AND (
           rs.last_read_message_id IS NULL 
           OR unread_msg.created_at > (
-            SELECT prev.created_at FROM "${schema}".chat_messages prev WHERE prev.id = rs.last_read_message_id
+            SELECT prev.created_at FROM "${schema}".chat_messages prev WHERE prev.id::text = rs.last_read_message_id::text
           )
         )
     `;
@@ -827,7 +827,7 @@ export class ChatService implements OnModuleInit {
         u.email
        FROM "${schema}".chat_group_members m
        LEFT JOIN "${schema}".users u ON u.id::text = m.user_id::text
-       WHERE m.chat_group_id = $1
+       WHERE m.chat_group_id::text = $1::text
        ORDER BY 
          CASE WHEN m.role = 'FACULTY' THEN 1 WHEN m.role = 'ADMIN' THEN 2 ELSE 3 END,
          m.name ASC`,

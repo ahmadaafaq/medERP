@@ -6,15 +6,16 @@ services:
       dockerfile: Dockerfile
       target: production
     restart: unless-stopped
-    env_file: .env
+    env_file: ./backend/.env
     environment:
       PORT: 8081
+      NODE_ENV: production
     ports:
       - '8081:8081'
     volumes:
       - backend_uploads:/app/uploads
     healthcheck:
-      test: [ 'CMD-SHELL', 'wget -qO- http://127.0.0.1:8081/api/v1/health/ping || exit 1' ]
+      test: [ 'CMD-SHELL', 'wget -qO- http://127.0.0.1:8081/api/v1/health || exit 1' ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -27,10 +28,14 @@ services:
       dockerfile: Dockerfile
       target: production
     restart: unless-stopped
-    env_file: .env
+    env_file: ./frontend/.env
     environment:
       PORT: 3000
+      NODE_ENV: production
       NEXT_PUBLIC_API_URL: http://34.236.107.120:8081/api/v1
+      NEXT_PUBLIC_WS_URL: http://34.236.107.120:8081
+      BACKEND_INTERNAL_URL: http://backend:8081/api/v1/:path*
+      BACKEND_BASE_URL: http://backend:8081
     depends_on:
       - backend
     ports:

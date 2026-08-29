@@ -86,7 +86,7 @@ export default function FacultyBatchAttendanceAnalytics() {
     try {
       // 1. Fetch live student attendance roster from hustle-board API
       try {
-        const hbRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/student-master/hustle-board${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
+        const hbRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/student-master/hustle-board${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
         if (hbRes && hbRes.ok) {
           const hbJson = await hbRes.json();
           const list = Array.isArray(hbJson.data) ? hbJson.data : Array.isArray(hbJson) ? hbJson : [];
@@ -120,7 +120,7 @@ export default function FacultyBatchAttendanceAnalytics() {
       let facultyEmpId = typeof window !== 'undefined' ? localStorage.getItem('empid') || localStorage.getItem('emp_id') || '' : '';
 
       try {
-        const meRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/auth/me`, { headers });
+        const meRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/auth/me`, { headers });
         if (meRes && meRes.ok) {
           const meJson = await meRes.json();
           const meData = meJson.data || meJson;
@@ -255,7 +255,7 @@ export default function FacultyBatchAttendanceAnalytics() {
     setLoading(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-      const subRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/college-master/subjects?tenant=${slug}&course_cd=${batch.courseCd}&semester=3`, {
+      const subRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/subjects?tenant=${slug}&course_cd=${batch.courseCd}&semester=3`, {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => null);
 
@@ -265,7 +265,7 @@ export default function FacultyBatchAttendanceAnalytics() {
         subjectsList = Array.isArray(sJson.data) ? sJson.data : Array.isArray(sJson) ? sJson : [];
       }
 
-      const studRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/users/students?tenant=${slug}&courseCd=${batch.courseCd}&batchCd=${batch.batchCd}&limit=1`, {
+      const studRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/users/students?tenant=${slug}&courseCd=${batch.courseCd}&batchCd=${batch.batchCd}&limit=1`, {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => null);
 
@@ -278,7 +278,7 @@ export default function FacultyBatchAttendanceAnalytics() {
       }
 
       if (subjectsList.length === 0) {
-        const fallbackRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/college-master/subjects?tenant=${slug}`, {
+        const fallbackRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/subjects?tenant=${slug}`, {
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => null);
         if (fallbackRes && fallbackRes.ok) {

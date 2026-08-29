@@ -4,7 +4,7 @@ import { srmsPost } from '@/lib/srms-client';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const BACKEND_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
+const BACKEND_API = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 async function handleGetAllSubjectDetail(
   colgcd?: string,

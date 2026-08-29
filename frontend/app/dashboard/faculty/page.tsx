@@ -12,7 +12,7 @@ import FacultyBatchAttendanceAnalytics from '../../../components/faculty/Faculty
 import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperHustleBoard';
 import IncubationCellCard from '../../../components/incubation/IncubationCellCard';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export default function FacultyDashboard() {
   // 1. Dynamic Lectures state
@@ -146,7 +146,7 @@ export default function FacultyDashboard() {
       });
 
     // 1. Fetch Placements
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/placement-drive/list${slug ? `?tenant=${slug}` : ''}`, { headers })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/list${slug ? `?tenant=${slug}` : ''}`, { headers })
       .then(async (r) => {
         if (r.ok) {
           const j = await r.json();
@@ -179,7 +179,7 @@ export default function FacultyDashboard() {
       .catch(() => setPlacementStats((prev) => ({ ...prev, loading: false })));
 
     // 2. Fetch Repositories with Student Details
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1'}/repository/list${slug ? `?tenant=${slug}` : ''}`, { headers })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/list${slug ? `?tenant=${slug}` : ''}`, { headers })
       .then(async (r) => {
         if (r.ok) {
           const j = await r.json();

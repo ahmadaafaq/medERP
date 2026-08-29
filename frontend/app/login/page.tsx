@@ -29,7 +29,7 @@ interface College {
   };
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 const DEFAULT_COLLEGES: College[] = [
   {
@@ -197,8 +197,8 @@ export default function LoginPage() {
 
   // ─── 2. Auth Credentials & Role State ──────────────────────────────────────
   const [role, setRole] = useState<'STUDENT' | 'FACULTY' | 'ADMIN' | 'CLERK' | 'WARDEN'>('STUDENT');
-  const [email, setEmail] = useState('2500141790009');
-  const [password, setPassword] = useState('2500141790009');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -415,35 +415,11 @@ export default function LoginPage() {
       localStorage.setItem('colg_name', college.name);
       document.cookie = `auth_tenant=${slug}; path=/; max-age=604800; SameSite=Lax`;
     }
-
-    // Adjust demo presets based on college type
-    if (role === 'STUDENT') {
-      setEmail(code === '1' ? '2500141790009' : '2023MBBS045');
-      setPassword(code === '1' ? '2500141790009' : '2023MBBS045');
-    }
   };
 
   const applyRolePreset = (newRole: 'STUDENT' | 'FACULTY' | 'ADMIN' | 'CLERK' | 'WARDEN') => {
     setRole(newRole);
     setErrorMsg('');
-    const code = String(selectedCollege.colg_cd || selectedCollege.code || '1');
-
-    if (newRole === 'STUDENT') {
-      setEmail(code === '1' ? '2500141790009' : '2023MBBS045');
-      setPassword(code === '1' ? '2500141790009' : '2023MBBS045');
-    } else if (newRole === 'FACULTY') {
-      setEmail(code === '1' ? 'CET-FAC-001' : 'EMP1001');
-      setPassword('Password@123');
-    } else if (newRole === 'ADMIN') {
-      setEmail('admin');
-      setPassword('admin@123');
-    } else if (newRole === 'CLERK') {
-      setEmail('1234');
-      setPassword('1234');
-    } else if (newRole === 'WARDEN') {
-      setEmail('warden');
-      setPassword('warden123');
-    }
   };
 
   // ─── 4. Handle Login Submission ────────────────────────────────────────────
@@ -751,7 +727,7 @@ export default function LoginPage() {
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={role === 'STUDENT' ? 'e.g. 2500141790009' : 'e.g. CET-FAC-001'}
+                placeholder={role === 'STUDENT' ? 'Enter Registration / Roll No' : role === 'FACULTY' ? 'Enter Faculty ID / Email' : 'Enter Username / Email'}
                 className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/25 border border-white/20 text-white font-bold text-xs focus:outline-none focus:bg-black/40 transition placeholder-white/40"
                 style={{ outlineColor: currentTheme.primary }}
                 required
@@ -813,37 +789,6 @@ export default function LoginPage() {
             )}
           </button>
         </form>
-
-        {/* ─── QUICK PRESET CHIPS FOR ZERO-FRICTION TESTING ───────────────────── */}
-        <div className="pt-2 border-t border-white/10 space-y-1.5">
-          <span className="block text-[9px] font-black uppercase text-white/50 tracking-wider text-center">
-            Quick 1-Click Demo Credentials
-          </span>
-          <div className="flex flex-wrap items-center justify-center gap-1.5 text-[10px]">
-            <button
-              type="button"
-              onClick={() => applyRolePreset('STUDENT')}
-              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 border border-white/15 transition cursor-pointer"
-            >
-              🎓 Student: 2500141790009
-            </button>
-            <button
-              type="button"
-              onClick={() => applyRolePreset('FACULTY')}
-              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 border border-white/15 transition cursor-pointer"
-            >
-              👨‍🏫 Faculty: CET-FAC-001
-            </button>
-            <button
-              type="button"
-              onClick={() => applyRolePreset('ADMIN')}
-              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 border border-white/15 transition cursor-pointer"
-            >
-              🏛️ Admin: admin
-            </button>
-          </div>
-        </div>
-
       </div>
 
       {/* ─── BOTTOM COPYRIGHT ──────────────────────────────────────────────── */}

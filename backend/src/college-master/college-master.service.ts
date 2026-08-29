@@ -1188,7 +1188,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50) DEFAULT '${academicSystem}';
         ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
         ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
-        ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1);
+        ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1) USING NULLIF(regexp_replace(duration_years::text, '[^0-9.]', '', 'g'), '')::numeric(4,1);
       `).catch(() => {});
 
       // 3. Sequentially query official external API: POST https://myportal.srms.ac.in/SRMSERP/erpadmin/GetCourse
@@ -1415,7 +1415,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50) DEFAULT '${academicSystem}';
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
-      ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1);
+      ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1) USING NULLIF(regexp_replace(duration_years::text, '[^0-9.]', '', 'g'), '')::numeric(4,1);
     `).catch(() => {});
 
     const courseCdVal = dto.courseCd || (dto as any).course_cd || dto.code || '1';
@@ -1445,7 +1445,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50);
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
       ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
-      ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1);
+      ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1) USING NULLIF(regexp_replace(duration_years::text, '[^0-9.]', '', 'g'), '')::numeric(4,1);
     `).catch(() => {});
 
     const rows = await this.tenantSchemaService.queryInTenant(

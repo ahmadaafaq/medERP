@@ -367,6 +367,18 @@ export class CollegeMasterController {
     return { success: true, data };
   }
 
+  @Get('departments')
+  @ApiOperation({ summary: 'List Departments/Branches (alias) — tenant-scoped' })
+  async listDepartments(
+    @Query('tenant') tenant?: string,
+    @Query('course_cd') courseCd?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    const data = await this.collegeMasterService.listBranches(effectiveTenant, courseCd, user);
+    return { success: true, data };
+  }
+
   @Post('branches')
   @ApiOperation({ summary: 'Create Branch/Department' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)

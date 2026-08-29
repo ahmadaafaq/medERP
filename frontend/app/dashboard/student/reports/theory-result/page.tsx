@@ -86,7 +86,7 @@ interface StudentAttempt {
   subQuestions?: { id: string; label: string; questionText: string; scored: number; max: number }[];
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export default function StudentTheoryResultPage() {
   // Student Profile Auto-Locked States
