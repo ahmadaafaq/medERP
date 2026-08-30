@@ -72,6 +72,10 @@ async function exportDatabase() {
       `, [schema, table]);
 
       const columns = colsRes.rows;
+      const colMap = {};
+      columns.forEach(c => {
+        colMap[c.column_name] = { dataType: c.data_type, udtName: c.udt_name };
+      });
 
       // Fetch all rows
       const dataRes = await client.query(`SELECT * FROM "${schema}"."${table}"`);
@@ -92,6 +96,21 @@ async function exportDatabase() {
             if (typeof val === 'number') return String(val);
             if (val instanceof Date) return `'${val.toISOString()}'`;
             if (typeof val === 'object') {
+              if (Array.isArray(val)) {
+                const colMeta = colMap[col];
+                if (colMeta && (colMeta.dataType === 'ARRAY' || (colMeta.udtName && colMeta.udtName.startsWith('_')))) {
+                  let elemType = colMeta.udtName ? colMeta.udtName.replace(/^_/, '') : 'text';
+                  if (elemType === 'varchar') elemType = 'varchar';
+                  if (val.length === 0) {
+                    return `'{}'::${elemType}[]`;
+                  }
+                  const escapedElems = val.map(item => {
+                    if (item === null || item === undefined) return 'NULL';
+                    return `'${String(item).replace(/'/g, "''")}'`;
+                  });
+                  return `ARRAY[${escapedElems.join(', ')}]::${elemType}[]`;
+                }
+              }
               const str = JSON.stringify(val).replace(/'/g, "''");
               return `'${str}'::jsonb`;
             }
