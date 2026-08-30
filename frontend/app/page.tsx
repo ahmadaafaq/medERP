@@ -341,9 +341,6 @@ export default function UniCampusBrandHomePage() {
             <a href="#mobile-app" className="hover:text-[#F36C21] transition-colors flex items-center gap-1.5">
               <span>📱 Mobile Apps</span>
             </a>
-            <a href="#tenants" className="hover:text-[#F36C21] transition-colors flex items-center gap-1.5">
-              <span>🏛️ Tenants</span>
-            </a>
           </nav>
 
           {/* Action CTAs */}
@@ -496,12 +493,12 @@ export default function UniCampusBrandHomePage() {
                   ✕
                 </button>
               )}
-              <a
-                href="#tenants"
+              <Link
+                href="/login"
                 className="px-6 py-3 rounded-[16px] bg-[#F36C21] hover:bg-[#E05A10] text-white font-extrabold text-xs shadow-md shadow-orange-500/40 transition-all shrink-0 cursor-pointer whitespace-nowrap"
               >
-                Find Campus
-              </a>
+                Go to Login ➔
+              </Link>
             </div>
 
             {/* Autocomplete dropdown */}
@@ -825,142 +822,7 @@ export default function UniCampusBrandHomePage() {
         </div>
       </section>
 
-      {/* ─── 5. ACTIVE TENANTS & DIRECT LOGIN DIRECTORY ──────────────────────── */}
-      <section id="tenants" className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#E2E8F0] pb-6">
-          <div>
-            <span className="text-xs font-black text-[#F36C21] uppercase tracking-wider mb-1 block">
-              INSTITUTIONAL DIRECTORY
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-black text-[#0F172A] tracking-tight">
-              Select Your Campus Tenant to Login
-            </h2>
-            <p className="text-xs sm:text-sm text-[#64748B] mt-1">
-              Direct access to localized ERP portals. Choose your institution below.
-            </p>
-          </div>
 
-          {/* Category Filter Buttons */}
-          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-white border border-[#E2E8F0] shadow-xs self-start sm:self-auto">
-            <button
-              onClick={() => setCategoryFilter('ALL')}
-              className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
-                categoryFilter === 'ALL'
-                  ? 'bg-[#0F172A] text-white shadow-xs'
-                  : 'text-[#64748B] hover:text-[#0F172A]'
-              }`}
-            >
-              All Campuses
-            </button>
-            <button
-              onClick={() => setCategoryFilter('MED')}
-              className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
-                categoryFilter === 'MED'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-[#64748B] hover:text-[#0F172A]'
-              }`}
-            >
-              🏥 Medical (MED)
-            </button>
-            <button
-              onClick={() => setCategoryFilter('NONMED')}
-              className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
-                categoryFilter === 'NONMED'
-                  ? 'bg-[#5B4BFF] text-white shadow-xs'
-                  : 'text-[#64748B] hover:text-[#0F172A]'
-              }`}
-            >
-              ⚙️ Engineering & Tech
-            </button>
-          </div>
-        </div>
-
-        {/* Institutions Grid */}
-        {filteredInstitutions.length === 0 ? (
-          <div className="p-12 text-center rounded-[24px] bg-white border border-dashed border-[#CBD5E1] space-y-3">
-            <div className="text-3xl">🔍</div>
-            <h4 className="font-bold text-sm text-[#0F172A]">No Matching Campus Tenants Found</h4>
-            <p className="text-xs text-[#64748B]">Try resetting your search query.</p>
-            <button
-              onClick={() => {
-                setSearchQuery('');
-                setCategoryFilter('ALL');
-              }}
-              className="px-4 py-2 rounded-xl bg-[#F36C21] text-white font-bold text-xs"
-            >
-              Reset Search
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-            {filteredInstitutions.map((inst) => (
-              <div
-                key={inst.slug}
-                className="p-6 rounded-[24px] bg-white border border-[#E2E8F0] shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                        inst.category === 'MED'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-indigo-50 text-[#5B4BFF] border border-indigo-200'
-                      }`}
-                    >
-                      {inst.category === 'MED' ? '🏥 Medical College' : '⚙️ Technical Institute'}
-                    </span>
-                    <span className="text-[10px] font-mono font-bold text-[#00C48C] bg-[#E6F9F3] px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C] animate-pulse" />
-                      Active Tenant
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-4 mb-4">
-                    {inst.logo_url ? (
-                      <div className="w-14 h-14 rounded-2xl bg-white border border-[#E2E8F0] p-1.5 flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-                        <img src={inst.logo_url} alt={inst.name} className="w-full h-full object-contain" />
-                      </div>
-                    ) : (
-                      <div className="w-14 h-14 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-3xl shrink-0 group-hover:scale-105 transition-transform">
-                        {inst.icon || '🏛️'}
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <h3 className="font-black text-base text-[#0F172A] group-hover:text-[#F36C21] transition-colors leading-snug">
-                        {inst.name}
-                      </h3>
-                      <p className="text-xs text-[#64748B] font-medium mt-0.5">
-                        {inst.location} • <span className="font-mono text-[#F36C21] font-bold">tenant: {inst.slug}</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-xs text-[#64748B] border-t border-[#F1F5F9] pt-4 mb-6 font-medium">
-                    <div className="flex justify-between">
-                      <span>Primary Programs:</span>
-                      <span className="font-bold text-[#0F172A] text-right truncate max-w-[220px]">
-                        {inst.courses ? inst.courses.slice(0, 3).join(', ') : inst.type}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Cloud Domain:</span>
-                      <span className="font-mono font-bold text-[#5B4BFF]">{inst.domain}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <Link
-                  href={`/login?college=${inst.slug}`}
-                  className="w-full py-3.5 rounded-2xl font-extrabold text-xs text-center text-white bg-[#0F172A] group-hover:bg-[#F36C21] transition-all shadow-sm flex items-center justify-center gap-2 group-hover:shadow-md group-hover:shadow-orange-500/20"
-                >
-                  <span>Select & Access ERP Portal</span>
-                  <span>➔</span>
-                </Link>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
 
       {/* ─── 6. LIGHT LUXURY FOOTER ──────────────────────────────────────────── */}
       <footer className="bg-white border-t border-[#E2E8F0] py-14 text-[#475569]">
@@ -991,9 +853,6 @@ export default function UniCampusBrandHomePage() {
               <Link href="/access/superadmin" className="hover:text-[#F36C21] transition-colors">
                 SuperAdmin
               </Link>
-              <a href="#tenants" className="hover:text-[#F36C21] transition-colors">
-                Campuses
-              </a>
               <a href="#solutions" className="hover:text-[#F36C21] transition-colors">
                 AI Solutions
               </a>
