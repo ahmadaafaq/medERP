@@ -14,6 +14,7 @@ interface College {
   domain?: string;
   plan?: string;
   primary_color?: string;
+  logo_url?: string;
   theme_config?: {
     primary_color?: string;
     secondary_color?: string;
@@ -23,6 +24,7 @@ interface College {
     page_bg?: string;
     card_bg?: string;
     card_radius?: string;
+    logo_url?: string;
     table_header_bg?: string;
     table_zebra?: boolean;
     theme_mode?: string;
@@ -40,6 +42,7 @@ const DEFAULT_COLLEGES: College[] = [
     domain: 'srms-cet.mederp.app',
     plan: 'enterprise',
     primary_color: '#F36C21',
+    logo_url: '/srms-logo.png',
     theme_config: {
       primary_color: '#F36C21',
       secondary_color: '#E05A10',
@@ -49,6 +52,7 @@ const DEFAULT_COLLEGES: College[] = [
       page_bg: '#0F121C',
       card_bg: '#161926',
       card_radius: '22px',
+      logo_url: '/srms-logo.png',
     },
   },
   {
@@ -59,6 +63,7 @@ const DEFAULT_COLLEGES: College[] = [
     domain: 'srms-ims.mederp.app',
     plan: 'enterprise',
     primary_color: '#00C48C',
+    logo_url: '/srms-logo.png',
     theme_config: {
       primary_color: '#00C48C',
       secondary_color: '#059669',
@@ -68,6 +73,7 @@ const DEFAULT_COLLEGES: College[] = [
       page_bg: '#F0FDF4',
       card_bg: '#FFFFFF',
       card_radius: '22px',
+      logo_url: '/srms-logo.png',
     },
   },
   {
@@ -309,14 +315,43 @@ export default function LoginPage() {
     try {
       const map = new Map<string, College>();
 
-      // 1. Insert built-in default institutions
-      DEFAULT_COLLEGES.forEach((c) => {
-        map.set(c.slug, c);
-      });
-
-      // 2. Fetch newly registered SaaS firms from /api/firms
+      // 1. Fetch active institutions from /api/college-master/colleges
       try {
-        const firmsRes = await fetch('/api/firms');
+        const res = await fetch(`/api/college-master/colleges`);
+        if (res.ok) {
+          const json = await res.json();
+          const list: any[] = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
+          list.forEach((item) => {
+            if (item.is_active === false) return; // Skip deactivated
+            const slug = item.slug || `srms-${item.code || item.colg_cd}`;
+            const code = String(item.code || item.colg_cd || '1');
+            const logoUrl = item.logo_url || (slug.startsWith('srms') ? '/srms-logo.png' : undefined);
+            if (slug && item.name) {
+              map.set(slug, {
+                id: item.id,
+                code,
+                colg_cd: code,
+                name: item.name,
+                slug,
+                domain: item.domain || `${slug}.mederp.app`,
+                plan: item.plan || 'enterprise',
+                primary_color: item.primary_color || '#5B4BFF',
+                logo_url: logoUrl,
+                theme_config: {
+                  logo_url: logoUrl,
+                  primary_color: item.primary_color || '#5B4BFF',
+                },
+              });
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Could not load college-master colleges:', e);
+      }
+
+      // 2. Fetch newly registered SaaS firms from /api/firms?public=true
+      try {
+        const firmsRes = await fetch('/api/firms?public=true');
         if (firmsRes.ok) {
           const firmsJson = await firmsRes.json();
           const firmsList: any[] = Array.isArray(firmsJson.data)
@@ -325,8 +360,13 @@ export default function LoginPage() {
             ? firmsJson
             : [];
           firmsList.forEach((f) => {
+            if (f.status === 'SUSPENDED' || f.status === 'INACTIVE' || f.is_active === false) {
+              map.delete(f.slug);
+              return;
+            }
             if (f.slug && f.title) {
               const primaryColor = (f.theme_config && f.theme_config.primary_color) || f.theme_color || '#5B4BFF';
+              const logoUrl = f.logo_url || (f.theme_config && f.theme_config.logo_url) || (f.slug.startsWith('srms') ? '/srms-logo.png' : undefined);
               map.set(f.slug, {
                 id: f.id,
                 code: f.slug,
@@ -336,7 +376,9 @@ export default function LoginPage() {
                 domain: f.domain || `${f.slug}.mederp.app`,
                 plan: f.level_type || 'standard',
                 primary_color: primaryColor,
+                logo_url: logoUrl,
                 theme_config: f.theme_config || {
+                  logo_url: logoUrl,
                   primary_color: primaryColor,
                   sidebar_bg: '#2D2575',
                   header_bg: '#2D2575',
@@ -349,36 +391,29 @@ export default function LoginPage() {
         console.warn('Could not load firms for login autocomplete:', e);
       }
 
-      // 3. Fetch college-master sync roster
-      try {
-        const res = await fetch(`${API_BASE}/college-master/colleges`);
-        if (res.ok) {
-          const json = await res.json();
-          const list: any[] = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
-          list.forEach((item) => {
-            const slug = item.slug || `srms-${item.code || item.colg_cd}`;
-            const code = String(item.code || item.colg_cd || '1');
-            if (slug && item.name) {
-              map.set(slug, {
-                id: item.id,
-                code,
-                colg_cd: code,
-                name: item.name,
-                slug,
-                domain: item.domain || `${slug}.mederp.app`,
-                plan: item.plan || 'enterprise',
-                primary_color: item.primary_color || '#5B4BFF',
-              });
-            }
-          });
-        }
-      } catch {
-        // Keep merged roster
+      // 3. Fallback to DEFAULT_COLLEGES only if map is completely empty (e.g. initial offline)
+      if (map.size === 0) {
+        DEFAULT_COLLEGES.forEach((c) => {
+          map.set(c.slug, c);
+        });
       }
 
       const combined = Array.from(map.values());
       if (combined.length > 0) {
         setColleges(combined);
+        // If current selected college is no longer in active list, switch to first active
+        setSelectedCollege((prev) => {
+          if (!prev || !map.has(prev.slug)) {
+            const first = combined[0];
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('colg_cd', String(first.colg_cd || first.code));
+              localStorage.setItem('tenantSlug', first.slug);
+              localStorage.setItem('selectedTenant', first.slug);
+            }
+            return first;
+          }
+          return prev;
+        });
       }
     } catch {
       // Keep default roster fallback
@@ -530,150 +565,272 @@ export default function LoginPage() {
   };
 
   return (
-    <div 
-      className="min-h-screen relative flex flex-col justify-center items-center p-3 sm:p-4 text-white font-sans overflow-hidden transition-colors duration-500 bg-[#0F121C]"
-    >
-      
-      {/* ─── BLURRED CAMPUS BACKGROUND OVERLAY ──────────────────────────────── */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <Image
-          src="/images/srms_campus.png"
-          alt="SRMS Campus"
-          fill
-          priority
-          className="object-cover object-center opacity-15 filter blur-xs scale-105"
-        />
-        <div 
-          className="absolute inset-0 opacity-95 transition-all duration-500 bg-gradient-to-b from-[#1A1D2D]/95 via-[#0F121C]/98 to-[#0F121C]"
-        />
-      </div>
+    /* ═══════════════════════════════════════════════════════════════════════
+       PREMIUM SPLIT-SCREEN SAAS LOGIN:
+       - Strict no-scroll 100vh viewport on desktop (overflow-hidden)
+       - Left: Luxurious vibrant brand gradient canvas (hidden on mobile)
+       - Right: Ultra-clean, modern high-contrast login card (mobile shows ONLY this)
+    ═══════════════════════════════════════════════════════════════════════ */
+    <div className="h-screen max-h-screen w-screen overflow-hidden flex flex-col md:flex-row font-sans bg-[#F8FAFC] selection:bg-[#F36C21] selection:text-white">
 
-      {/* Floating Accent Glows */}
-      <div 
-        className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full blur-3xl pointer-events-none opacity-20 transition-all duration-500 bg-[#F36C21]"
-      />
-      <div 
-        className="absolute bottom-10 right-10 w-72 h-72 rounded-full blur-3xl pointer-events-none opacity-15 transition-all duration-500 bg-[#F36C21]"
-      />
-
-      {/* ─── TOP HEADER BAR ─────────────────────────────────────────────────── */}
-      <div className="relative z-10 w-full max-w-[440px] flex items-center justify-between mb-3 px-1">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-xs text-white/80 hover:text-white font-bold transition-all py-1 px-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/15 cursor-pointer shadow-sm"
-        >
-          <span>←</span>
-          <span>Campus Home</span>
-        </Link>
-
-        <span className="text-[11px] text-white/80 font-mono flex items-center gap-1.5 bg-black/20 px-2 py-0.5 rounded-full border border-white/10">
-          <span className="w-2 h-2 rounded-full animate-pulse bg-[#F36C21]" />
-          ERP Secure v2.4
-        </span>
-      </div>
-
-      {/* ─── COMPACT PREMIUM LOGIN CARD (SMALL FORM, SMALL PADDING) ─────────── */}
-      <div 
-        className="relative z-10 w-full max-w-[440px] backdrop-blur-xl border border-white/15 p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.6)] space-y-4 transition-all duration-500 bg-[#161926]/95 rounded-[24px]"
-      >
+      {/* ═══════════════════════════════════════════════════════════════════
+          LEFT PANEL — LUXURIOUS BRAND CANVAS (ALWAYS VISIBLE ON WEB, HIDDEN ONLY ON MOBILE)
+      ═══════════════════════════════════════════════════════════════════ */}
+      <div className="max-md:hidden flex flex-1 h-full flex-col justify-between p-6 lg:p-8 xl:p-10 relative overflow-hidden bg-gradient-to-br from-[#EA580C] via-[#F36C21] to-[#C2410C] text-white">
         
-        {/* Brand Header */}
-        <div className="text-center space-y-1">
-          <div 
-            className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#F36C21] text-white font-black text-lg shadow-md mb-1 transition-colors"
+        {/* Subtle geometric lighting overlay */}
+        <div
+          className="absolute inset-0 opacity-[0.05] pointer-events-none"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,1) 1px, transparent 0)`,
+            backgroundSize: '24px 24px',
+          }}
+        />
+        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-white/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-black/25 blur-3xl pointer-events-none" />
+
+        {/* ── TOP: Brand Bar */}
+        <div className="relative z-10 flex items-center justify-between">
+          <a
+            href="https://nornx.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 border border-white/25 text-white text-[11px] font-extrabold transition-all backdrop-blur-md shadow-sm"
           >
-            M
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            <span>Powered by <strong className="font-black">Nornx Technologies</strong></span>
+            <span className="text-white/80 text-[10px]">↗</span>
+          </a>
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/15 border border-white/20 text-[10px] font-mono font-bold text-white/90 backdrop-blur-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+            <span>CorteX AI Active</span>
           </div>
-          <h1 className="text-xl font-black tracking-tight text-white">
-            Institutional Access Portal
-          </h1>
-          <p className="text-[11px] text-white/70 font-medium">
-            Enterprise Medical & Engineering ERP Platform
-          </p>
         </div>
 
-        {/* ─── COMPACT COLLEGE SELECTOR BAR ─────────────────────────────────── */}
-        <div className="relative">
-          <div
-            onClick={() => setIsCollegePickerOpen(!isCollegePickerOpen)}
-            className="p-2.5 rounded-xl bg-black/25 hover:bg-black/35 border border-white/15 cursor-pointer transition-all flex items-center justify-between gap-2 text-xs group"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span 
-                className="w-6 h-6 rounded-lg text-white flex items-center justify-center font-bold text-[10px] shrink-0 shadow-sm"
-                style={{ backgroundColor: currentTheme.primary }}
-              >
-                {selectedCollege.code || '1'}
+        {/* ── MIDDLE: Headline & Feature Highlights */}
+        <div className="relative z-10 space-y-4 my-auto py-1">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 border border-white/30 text-white text-[10px] font-black uppercase tracking-wider">
+              UniCampus AI Cloud
+            </div>
+            <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tight text-white leading-[1.15] drop-shadow-sm">
+              The Operating System for{' '}
+              <span className="underline underline-offset-4 decoration-white/40 decoration-2">
+                Modern Higher Education
               </span>
-              <div className="min-w-0">
-                <p className="font-bold text-white text-xs truncate leading-tight">
-                  {selectedCollege.name}
-                </p>
-                <p className="text-[10px] font-mono font-semibold" style={{ color: currentTheme.accent }}>
-                  tenant: {selectedCollege.slug}
-                </p>
-              </div>
-            </div>
-            <span className="text-xs text-white/60 group-hover:text-white shrink-0">
-              {isCollegePickerOpen ? '▲' : '▼'}
-            </span>
+            </h1>
+            <p className="text-xs lg:text-sm text-white/85 font-medium leading-relaxed max-w-lg">
+              Empowering medical colleges, engineering institutes, and university hospitals with autonomous AI operations, conflict-free scheduling & mobile apps.
+            </p>
           </div>
 
-          {/* Autocomplete Dropdown */}
-          {isCollegePickerOpen && (
-            <div 
-              className="absolute left-0 right-0 top-full mt-1.5 p-2 border border-white/20 rounded-2xl shadow-2xl z-50 space-y-2 animate-fadeIn max-h-56 overflow-hidden flex flex-col"
-              style={{ backgroundColor: `${currentTheme.sidebarBg}FA` }}
-            >
-              <input
-                type="text"
-                value={collegeSearchQuery}
-                onChange={(e) => setCollegeSearchQuery(e.target.value)}
-                placeholder="🔍 Search college..."
-                className="w-full px-3 py-1.5 rounded-xl bg-black/30 border border-white/20 text-white text-xs font-semibold focus:outline-none"
-                style={{ borderColor: currentTheme.primary }}
-                autoFocus
-              />
-              <div className="overflow-y-auto space-y-1 pr-1 flex-1">
-                {filteredColleges.map((colg) => (
-                  <div
-                    key={colg.slug || colg.code}
-                    onClick={() => handleSelectCollege(colg)}
-                    className="p-2 rounded-lg hover:bg-white/10 cursor-pointer text-xs flex items-center justify-between gap-2 transition"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className="w-4 h-4 rounded-md flex items-center justify-center font-black text-[9px] text-white shrink-0"
-                        style={{ backgroundColor: colg.primary_color || '#5B4BFF' }}
-                      >
-                        {colg.name.charAt(0)}
-                      </span>
-                      <div className="min-w-0">
-                        <span className="truncate block font-semibold text-white/95">{colg.name}</span>
-                        <span className="text-[9px] font-mono opacity-80" style={{ color: currentTheme.accent }}>{colg.slug}</span>
-                      </div>
-                    </div>
-                    <span className="px-1.5 py-0.5 rounded bg-white/10 text-[9px] font-mono text-white/70 shrink-0">
-                      {colg.plan || 'standard'}
-                    </span>
-                  </div>
-                ))}
+          {/* 4 Feature Cards */}
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { icon: '⚡', title: 'CorteX.io Autonomous AI', desc: 'Conflict-free timetables & automated duty rosters.' },
+              { icon: '🛡️', title: 'Enterprise Data Isolation', desc: 'Bank-grade multi-campus PostgreSQL schemas.' },
+              { icon: '🏥', title: 'NMC & AICTE Framework', desc: 'Clinical bed rotations & automated compliance.' },
+              { icon: '📱', title: 'Intelligent Mobile Apps', desc: 'Biometric attendance, digital ID wallet & alerts.' },
+            ].map(({ icon, title, desc }) => (
+              <div
+                key={title}
+                className="p-2.5 lg:p-3 rounded-xl lg:rounded-2xl bg-white/12 border border-white/20 hover:bg-white/20 transition-all space-y-1 backdrop-blur-sm shadow-xs"
+              >
+                <div className="flex items-center gap-1.5 text-xs font-black text-white">
+                  <span className="w-5 h-5 rounded-md bg-white/20 flex items-center justify-center text-xs shrink-0">{icon}</span>
+                  <span className="truncate">{title}</span>
+                </div>
+                <p className="text-[10px] text-white/75 leading-snug font-medium line-clamp-2">{desc}</p>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
 
-        {/* ─── ROLE SELECTOR PILLS ───────────────────────────────────────────── */}
-        <div>
-          <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-black/25 border border-white/15 text-[11px] font-bold">
+        {/* ── BOTTOM: Metrics strip */}
+        <div className="relative z-10 flex items-center justify-between pt-2.5 border-t border-white/20">
+          <div className="flex items-center gap-4 lg:gap-6 text-white">
+            <div>
+              <span className="font-black text-lg lg:text-xl leading-none">50K+</span>
+              <p className="text-[9px] text-white/70 uppercase tracking-wider font-bold mt-0.5">Active Users</p>
+            </div>
+            <div className="w-px h-5 lg:h-6 bg-white/25" />
+            <div>
+              <span className="font-black text-lg lg:text-xl leading-none">99.99%</span>
+              <p className="text-[9px] text-white/70 uppercase tracking-wider font-bold mt-0.5">Uptime SLA</p>
+            </div>
+            <div className="w-px h-5 lg:h-6 bg-white/25" />
+            <div>
+              <span className="font-black text-lg lg:text-xl leading-none">100%</span>
+              <p className="text-[9px] text-white/70 uppercase tracking-wider font-bold mt-0.5">AI-Powered</p>
+            </div>
+          </div>
+
+          <a
+            href="https://nornx.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-white/90 text-[#EA580C] font-extrabold text-[11px] lg:text-xs shadow-md transition-all group"
+          >
+            <span>Explore Nornx</span>
+            <span className="group-hover:translate-x-0.5 transition-transform font-mono text-[10px]">➔</span>
+          </a>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          RIGHT PANEL — MODERN HIGH-CONTRAST LOGIN PANEL (FULL WIDTH ON MOBILE)
+      ═══════════════════════════════════════════════════════════════════ */}
+      <div className="w-full md:w-[440px] lg:w-[470px] xl:w-[500px] h-full flex flex-col justify-between items-center bg-white px-5 sm:px-8 lg:px-8 xl:px-12 py-4 lg:py-6 overflow-y-auto md:overflow-hidden relative shrink-0">
+
+        {/* Subtle warm gradient ambient */}
+        <div className="absolute top-0 left-0 w-32 h-full bg-gradient-to-r from-[#FFF7ED]/50 to-transparent pointer-events-none hidden lg:block" />
+
+        {/* ── TOP NAV BAR ── */}
+        <div className="w-full flex items-center justify-between shrink-0 mb-2">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs text-[#475569] hover:text-[#0F172A] font-bold transition-all py-1 px-2.5 rounded-lg bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] shadow-xs"
+          >
+            <span>←</span>
+            <span>Campus Home</span>
+          </Link>
+          <span className="text-[10px] text-[#64748B] font-mono font-bold flex items-center gap-1.5 bg-[#F8FAFC] px-2.5 py-1 rounded-full border border-[#E2E8F0] shadow-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C] animate-pulse" />
+            <span>ERP Secure v2.4</span>
+          </span>
+        </div>
+
+        {/* ── CENTER LOGIN FORM CARD ── */}
+        <div className="w-full max-w-[370px] my-auto space-y-3.5 shrink-0 py-1">
+
+          {/* College Logo & Institution Name */}
+          <div className="text-center space-y-1.5">
+            <div className="flex justify-center">
+              {selectedCollege.logo_url || selectedCollege.theme_config?.logo_url ? (
+                <div className="w-14 h-14 rounded-2xl bg-white p-1 shadow-[0_4px_20px_rgba(243,108,33,0.15)] border-2 border-[#F36C21]/20 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={selectedCollege.logo_url || selectedCollege.theme_config?.logo_url}
+                    alt={selectedCollege.name}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : selectedCollege.slug && selectedCollege.slug.startsWith('srms') ? (
+                <div className="w-14 h-14 rounded-2xl bg-white p-1 shadow-[0_4px_20px_rgba(243,108,33,0.15)] border-2 border-[#F36C21]/20 flex items-center justify-center overflow-hidden">
+                  <img src="/srms-logo.png" alt={selectedCollege.name} className="w-full h-full object-contain" />
+                </div>
+              ) : (
+                <div
+                  className="w-14 h-14 rounded-2xl text-white font-black text-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] flex items-center justify-center"
+                  style={{ backgroundColor: currentTheme.primary || '#F36C21' }}
+                >
+                  {selectedCollege.name ? selectedCollege.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+              )}
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-black tracking-tight text-[#0F172A] leading-snug">
+                {selectedCollege.name ? selectedCollege.name.split(',')[0] : 'Institutional Access Portal'}
+              </h2>
+              <p className="text-[11px] text-[#64748B] font-semibold">
+                {selectedCollege.name && selectedCollege.name.includes(',')
+                  ? selectedCollege.name.split(',').slice(1).join(',').trim()
+                  : 'Enterprise University ERP Platform'}
+              </p>
+            </div>
+          </div>
+
+          {/* College Selector Dropdown */}
+          <div className="relative">
+            <div
+              onClick={() => setIsCollegePickerOpen(!isCollegePickerOpen)}
+              className="p-2.5 rounded-xl bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] hover:border-[#F36C21]/40 cursor-pointer transition-all flex items-center justify-between gap-2 text-xs group shadow-2xs"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {selectedCollege.logo_url || selectedCollege.theme_config?.logo_url ? (
+                  <div className="w-6 h-6 rounded-md bg-white p-0.5 shrink-0 flex items-center justify-center overflow-hidden shadow-xs border border-[#E2E8F0]">
+                    <img src={selectedCollege.logo_url || selectedCollege.theme_config?.logo_url} alt={selectedCollege.name} className="w-full h-full object-contain" />
+                  </div>
+                ) : selectedCollege.slug && selectedCollege.slug.startsWith('srms') ? (
+                  <div className="w-6 h-6 rounded-md bg-white p-0.5 shrink-0 flex items-center justify-center overflow-hidden shadow-xs border border-[#E2E8F0]">
+                    <img src="/srms-logo.png" alt={selectedCollege.name} className="w-full h-full object-contain" />
+                  </div>
+                ) : (
+                  <span
+                    className="w-6 h-6 rounded-md text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs"
+                    style={{ backgroundColor: currentTheme.primary || '#F36C21' }}
+                  >
+                    {selectedCollege.code || '1'}
+                  </span>
+                )}
+                <div className="min-w-0">
+                  <p className="font-bold text-[#0F172A] text-xs truncate leading-tight">{selectedCollege.name}</p>
+                  <p className="text-[9px] font-mono font-semibold text-[#F36C21]">tenant: {selectedCollege.slug}</p>
+                </div>
+              </div>
+              <span className="text-[#94A3B8] group-hover:text-[#0F172A] shrink-0 font-bold text-[10px]">
+                {isCollegePickerOpen ? '▲' : '▼'}
+              </span>
+            </div>
+
+            {isCollegePickerOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 p-2 bg-white border border-[#E2E8F0] rounded-2xl shadow-2xl z-50 space-y-1.5 max-h-52 overflow-hidden flex flex-col">
+                <input
+                  type="text"
+                  value={collegeSearchQuery}
+                  onChange={(e) => setCollegeSearchQuery(e.target.value)}
+                  placeholder="🔍 Search campus tenant..."
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] text-xs font-semibold focus:outline-none focus:border-[#F36C21]"
+                  autoFocus
+                />
+                <div className="overflow-y-auto space-y-1 pr-1 flex-1 divide-y divide-[#F8FAFC]">
+                  {filteredColleges.map((colg) => {
+                    const colgLogo = colg.logo_url || colg.theme_config?.logo_url || (colg.slug.startsWith('srms') ? '/srms-logo.png' : null);
+                    return (
+                      <div
+                        key={colg.slug || colg.code}
+                        onClick={() => handleSelectCollege(colg)}
+                        className={`p-2 rounded-xl cursor-pointer text-xs flex items-center justify-between gap-2 transition ${
+                          selectedCollege.slug === colg.slug
+                            ? 'bg-[#FFF5ED] text-[#F36C21] font-bold border border-[#FBE0D0]'
+                            : 'text-[#334155] hover:bg-[#F8FAFC] hover:text-[#0F172A]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {colgLogo ? (
+                            <div className="w-5 h-5 rounded bg-white p-0.5 shrink-0 flex items-center justify-center overflow-hidden border border-[#E2E8F0]">
+                              <img src={colgLogo} alt={colg.name} className="w-full h-full object-contain" />
+                            </div>
+                          ) : (
+                            <span
+                              className="w-5 h-5 rounded flex items-center justify-center font-bold text-[8px] text-white shrink-0"
+                              style={{ backgroundColor: colg.primary_color || '#5B4BFF' }}
+                            >
+                              {colg.code || '1'}
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <span className="truncate block font-bold text-[#0F172A] text-xs">{colg.name}</span>
+                            <span className="text-[9px] font-mono text-[#F36C21]">{colg.slug}</span>
+                          </div>
+                        </div>
+                        <span className="px-1.5 py-0.5 rounded bg-[#F1F5F9] text-[9px] font-mono text-[#64748B] shrink-0 font-bold">
+                          {colg.plan || 'standard'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Role Tabs */}
+          <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] text-[11px] font-bold">
             {(['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN'] as const).map((r) => {
               const isActive = role === r;
               const labelMap: Record<string, string> = {
-                STUDENT: 'Student',
-                FACULTY: 'Faculty',
-                ADMIN: 'Admin',
-                CLERK: 'Clerk',
-                WARDEN: 'Warden',
+                STUDENT: 'Student', FACULTY: 'Faculty', ADMIN: 'Admin', CLERK: 'Clerk', WARDEN: 'Warden',
               };
               return (
                 <button
@@ -682,120 +839,109 @@ export default function LoginPage() {
                   onClick={() => applyRolePreset(r)}
                   className={`py-1.5 rounded-lg text-center transition-all cursor-pointer ${
                     isActive
-                      ? 'text-white font-extrabold shadow-sm'
-                      : 'text-white/70 hover:text-white hover:bg-white/5'
+                      ? 'bg-[#0F172A] text-white font-extrabold shadow-sm shadow-slate-900/30'
+                      : 'text-[#64748B] hover:text-[#0F172A] hover:bg-white/80'
                   }`}
-                  style={isActive ? { backgroundColor: '#F36C21', boxShadow: '0 2px 8px rgba(243, 108, 33, 0.45)' } : {}}
                 >
                   {labelMap[r]}
                 </button>
               );
             })}
           </div>
+
+          {/* Error Alert */}
+          {errorMsg && (
+            <div className="p-2.5 rounded-xl border bg-rose-50 border-rose-200 text-rose-700 text-xs font-bold text-center">
+              <p className="text-[11px] leading-tight text-rose-700">{errorMsg}</p>
+            </div>
+          )}
+
+          {/* Login Form */}
+          <form onSubmit={handleLogin} className="space-y-3">
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black uppercase tracking-wider text-[#475569]">
+                {role === 'STUDENT' ? 'Student Registration / Roll No' : role === 'FACULTY' ? 'Faculty Emp ID / Email' : 'Admin Username / Email'}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-[#94A3B8] text-xs">👤</span>
+                <input
+                  type="text"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={role === 'STUDENT' ? 'Enter Registration / Roll No' : role === 'FACULTY' ? 'Enter Faculty ID / Email' : 'Enter Username / Email'}
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/15 transition placeholder-[#94A3B8]"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-[#475569]">Password</label>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-[10px] text-[#64748B] hover:text-[#0F172A] font-bold cursor-pointer"
+                >
+                  {showPassword ? 'Hide 👁️' : 'Show 👁️'}
+                </button>
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-[#94A3B8] text-xs">🔒</span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/15 transition placeholder-[#94A3B8]"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Submit Action Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 mt-1 rounded-xl font-extrabold text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 bg-[#0F172A] hover:bg-[#1E293B] text-white shadow-md shadow-slate-900/20"
+            >
+              {loading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Signing In...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In to {role === 'ADMIN' ? 'Admin Console' : `${role.charAt(0) + role.slice(1).toLowerCase()} Portal`}</span>
+                  <span className="font-mono">➔</span>
+                </>
+              )}
+            </button>
+          </form>
+
         </div>
 
-        {/* Error Alert Message */}
-        {errorMsg && (
-          <div className={`p-3.5 rounded-2xl border text-xs font-bold text-center animate-shake ${
-            errorMsg.toLowerCase().includes('expired') || errorMsg.toLowerCase().includes('renewal')
-              ? 'bg-gradient-to-br from-rose-950/90 to-red-900/90 border-rose-500 text-rose-100 shadow-xl shadow-rose-950/60'
-              : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-          }`}>
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <span className="text-base">⚠️</span>
-              <span className="font-black text-white text-xs uppercase tracking-wide">
-                {errorMsg.toLowerCase().includes('expired') || errorMsg.toLowerCase().includes('renewal')
-                  ? 'Licence Key is expired • Renewal Now'
-                  : 'Authentication Failed'}
-              </span>
-            </div>
-            <p className="text-[11px] font-medium leading-relaxed text-rose-200">{errorMsg}</p>
-          </div>
-        )}
+        {/* ── FOOTER SIGNATURE ── */}
+        <div className="text-center space-y-0.5 pt-2 border-t border-[#F1F5F9] w-full shrink-0">
+          <p className="text-[10px] text-[#94A3B8] font-semibold">
+            © {new Date().getFullYear()} Shri Ram Murti Smarak Institutions • UniCampus
+          </p>
+          <p className="text-[10px] text-[#94A3B8] font-medium">
+            Systems by{' '}
+            <a
+              href="https://nornx.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#F36C21] hover:text-[#EA580C] font-bold transition-colors"
+            >
+              Nornx Technologies Pvt Ltd
+            </a>
+          </p>
+        </div>
 
-        {/* ─── COMPACT LOGIN INPUT FORM ──────────────────────────────────────── */}
-        <form onSubmit={handleLogin} className="space-y-3">
-          
-          {/* User ID / Registration No Input */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-black uppercase tracking-wider text-white/70">
-              {role === 'STUDENT' ? 'Student Registration / Roll No' : role === 'FACULTY' ? 'Faculty Emp ID / Email' : 'Admin Username / Email'}
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-2.5 text-white/50 text-xs">👤</span>
-              <input
-                type="text"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder={role === 'STUDENT' ? 'Enter Registration / Roll No' : role === 'FACULTY' ? 'Enter Faculty ID / Email' : 'Enter Username / Email'}
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/25 border border-white/20 text-white font-bold text-xs focus:outline-none focus:bg-black/40 transition placeholder-white/40"
-                style={{ outlineColor: currentTheme.primary }}
-                required
-              />
-            </div>
-          </div>
-
-          {/* Password Input */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label className="block text-[10px] font-black uppercase tracking-wider text-white/70">
-                Password
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="text-[10px] text-white/60 hover:text-white font-semibold cursor-pointer"
-              >
-                {showPassword ? 'Hide 👁️' : 'Show 👁️'}
-              </button>
-            </div>
-            <div className="relative">
-              <span className="absolute left-3.5 top-2.5 text-white/50 text-xs">🔒</span>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/25 border border-white/20 text-white font-bold text-xs focus:outline-none focus:bg-black/40 transition placeholder-white/40"
-                style={{ outlineColor: currentTheme.primary }}
-                required
-              />
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 rounded-xl font-black text-xs transition-all transform active:scale-98 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2 shadow-lg hover:brightness-110 !bg-[#F36C21] !bg-none !border-transparent !text-white"
-            style={{
-              backgroundColor: '#F36C21',
-              backgroundImage: 'none',
-              borderColor: 'transparent',
-              color: '#FFFFFF',
-              boxShadow: '0 8px 24px rgba(243, 108, 33, 0.45)'
-            }}
-          >
-            {loading ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Signing In...</span>
-              </>
-            ) : (
-              <>
-                <span>Sign In to {role === 'ADMIN' ? 'Admin Console' : `${role.charAt(0) + role.slice(1).toLowerCase()} Portal`}</span>
-                <span className="font-mono">➔</span>
-              </>
-            )}
-          </button>
-        </form>
-      </div>
-
-      {/* ─── BOTTOM COPYRIGHT ──────────────────────────────────────────────── */}
-      <div className="relative z-10 mt-4 text-center text-[10px] text-white/50 font-medium">
-        © {new Date().getFullYear()} Shri Ram Murti Smarak Institutions • UniCampus MedERP v2.4
       </div>
 
     </div>
   );
 }
+

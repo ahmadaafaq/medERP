@@ -179,13 +179,14 @@ export default function FacultyDashboard() {
       .catch(() => setPlacementStats((prev) => ({ ...prev, loading: false })));
 
     // 2. Fetch Repositories with Student Details
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/list${slug ? `?tenant=${slug}` : ''}`, { headers })
+    fetch(`/api/repository/list${slug ? `?tenant=${slug}` : ''}`, { headers: { 'x-tenant-slug': slug, ...headers } })
       .then(async (r) => {
         if (r.ok) {
           const j = await r.json();
-          const list = Array.isArray(j.data) ? j.data : Array.isArray(j.data?.data) ? j.data.data : [];
+          const rawList = Array.isArray(j.data) ? j.data : Array.isArray(j.data?.data) ? j.data.data : [];
+          const list: any[] = Array.from(new Map(rawList.map((x: any) => [x.repo_id || x.id, x])).values());
           if (list.length > 0) {
-            const first = list[0] || {};
+            const first: any = list[0] || {};
             const firstTitle = first.title || '';
             const reviewedList = list.filter((x: any) => x.score !== null && x.score !== undefined);
             const pendingList = list.filter((x: any) => !x.score || x.status === 'Pending Review');

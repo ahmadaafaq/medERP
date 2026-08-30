@@ -188,66 +188,66 @@ export default function FacultyTopperHustleBoard() {
   const paginatedStudents = filteredStudents.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <div className="bg-white dark:bg-slate-900/90 rounded-2.5xl p-5 border border-[#E7EAF3] dark:border-slate-800 shadow-sm flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 pb-4 border-b border-[#E7EAF3] dark:border-slate-800 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#5B4BFF] to-[#3B28CC] text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-            <Trophy className="w-5 h-5 text-amber-300" />
+    <div className="bg-white dark:bg-slate-900/90 rounded-2.5xl p-4 sm:p-5 border border-[#E7EAF3] dark:border-slate-800 shadow-sm flex flex-col h-full overflow-hidden">
+      {/* Header with Title and Responsive Filter Tabs */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-[#E7EAF3] dark:border-slate-800 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#F36C21] via-orange-500 to-amber-500 text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0 border border-orange-400/30">
+            <Trophy className="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-black text-[#1E293B] dark:text-white tracking-tight">
+              <h3 className="text-sm font-black text-[#1E293B] dark:text-white tracking-tight truncate">
                 Campus Hustle & Topper Leaderboard
               </h3>
-              <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0">
                 <Sparkles className="w-2.5 h-2.5" /> LIVE
               </span>
             </div>
-            <p className="text-xs text-[#64748B] dark:text-slate-400 font-medium">
+            <p className="text-xs text-[#64748B] dark:text-slate-400 font-medium truncate">
               Ranked by Theory, Practical Labs, Mini-Projects, Incubation & Attendance
             </p>
           </div>
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold shrink-0">
+        {/* Filter Pills with Horizontal Scroll on Narrow Viewports */}
+        <div className="flex items-center gap-1 bg-[#F6F8FC] dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold overflow-x-auto max-w-full shrink-0">
           <button
             onClick={() => { setFilterMode('all'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
+            className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
               filterMode === 'all'
-                ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] dark:text-white shadow-sm font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] dark:text-white shadow-xs font-extrabold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             All Star Toppers
           </button>
           <button
             onClick={() => { setFilterMode('incubation'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
               filterMode === 'incubation'
-                ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-300 shadow-sm font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-300 shadow-xs font-extrabold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Rocket className="w-3.5 h-3.5 text-amber-500" /> Incubation
           </button>
           <button
             onClick={() => { setFilterMode('project'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
               filterMode === 'project'
-                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs font-extrabold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <FolderGit2 className="w-3.5 h-3.5 text-indigo-500" /> High Capstone
           </button>
           <button
             onClick={() => { setFilterMode('mini_project'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
               filterMode === 'mini_project'
-                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-sm font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-xs font-extrabold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Award className="w-3.5 h-3.5 text-emerald-500" /> Mini-Projects
@@ -281,22 +281,22 @@ export default function FacultyTopperHustleBoard() {
             return (
               <div
                 key={st.id || st.regNo}
-                className={`p-3.5 rounded-2xl border transition-all hover:shadow-md ${
+                className={`p-3 sm:p-3.5 rounded-2xl border transition-all hover:shadow-md ${
                   isTop3
                     ? 'bg-gradient-to-r from-amber-50/40 via-white to-orange-50/20 dark:from-amber-950/10 dark:via-slate-900 dark:to-orange-950/10 border-amber-200/80 dark:border-amber-900/40'
                     : 'bg-[#F9FAFD] dark:bg-slate-800/40 border-slate-100 dark:border-slate-800 hover:border-slate-200'
                 }`}
               >
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between gap-3 sm:gap-4">
                   {/* Left: Rank & Avatar & Info */}
-                  <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-sm ${rankBadgeColor}`}
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-xs ${rankBadgeColor}`}
                     >
                       {st.rank === 1 ? '🥇' : st.rank === 2 ? '🥈' : st.rank === 3 ? '🥉' : `#${st.rank}`}
                     </div>
 
-                    <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-200 shrink-0">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-200 shrink-0">
                       {st.photoUrl ? (
                         <img
                           src={st.photoUrl}
@@ -316,16 +316,16 @@ export default function FacultyTopperHustleBoard() {
                       )}
                     </div>
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-black text-slate-900 dark:text-white truncate">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight truncate">
                           {st.name}
                         </span>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                        <span className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-400 dark:text-slate-500">
                           {st.rollNo || st.regNo}
                         </span>
                         {st.hustleTag && (
-                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-[#5B4BFF] dark:text-indigo-400 text-[9px] font-black border border-indigo-100 dark:border-indigo-900/40">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-50/80 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[9px] font-extrabold border border-amber-200/60 dark:border-amber-800/60 inline-flex items-center gap-1">
                             {st.hustleTag}
                           </span>
                         )}
@@ -339,7 +339,7 @@ export default function FacultyTopperHustleBoard() {
                   {/* Right: Metrics Badges & Composite Score */}
                   <div className="flex items-center gap-3 shrink-0">
                     {/* Performance Chips */}
-                    <div className="hidden sm:flex items-center gap-2 text-[10px] font-bold">
+                    <div className="hidden lg:flex items-center gap-2 text-[10px] font-bold">
                       {/* Attendance */}
                       <div className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-center">
                         <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-extrabold">Attendance</span>
@@ -390,9 +390,9 @@ export default function FacultyTopperHustleBoard() {
                     </div>
 
                     {/* Total Composite Score */}
-                    <div className="text-right pl-2 border-l border-slate-200 dark:border-slate-700 min-w-[70px]">
+                    <div className="text-right pl-3 border-l border-slate-200 dark:border-slate-700 min-w-[68px]">
                       <span className="block text-[9px] uppercase font-black tracking-wider text-slate-400">Composite</span>
-                      <span className="text-base font-black text-[#5B4BFF] tracking-tight">
+                      <span className="text-base sm:text-lg font-black text-[#F36C21] tracking-tight">
                         {st.compositeScore || (st.attendancePct * 0.4 + (st.theoryScore || 80) * 0.6).toFixed(1)}
                       </span>
                     </div>

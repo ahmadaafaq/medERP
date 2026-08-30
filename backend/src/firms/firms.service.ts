@@ -127,9 +127,14 @@ export class FirmsService {
   }
 
   /**
-   * List all firms
+   * List all firms (optionally only active for public)
    */
-  async findAll() {
+  async findAll(isPublic = false) {
+    if (isPublic) {
+      return await this.dataSource.query(
+        `SELECT * FROM public.firms WHERE status IN ('ACTIVE', 'TRIAL') ORDER BY created_at DESC`,
+      );
+    }
     return await this.dataSource.query(
       `SELECT * FROM public.firms ORDER BY created_at DESC`,
     );
@@ -248,17 +253,58 @@ export class FirmsService {
       ).catch(() => {});
     }
 
+    if (dto.logo_url !== undefined) {
+      await this.dataSource.query(
+        `ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS logo_url TEXT;
+         UPDATE public.tenants SET logo_url = $1, updated_at = NOW() WHERE LOWER(slug) = LOWER($2) OR id = $3`,
+        [dto.logo_url, cleanSlug, firm.id],
+      ).catch(() => {});
+    }
+
     if (dto.status) {
-      if (dto.status === 'SUSPENDED') {
+      const isTenantActive = dto.status === 'ACTIVE' || dto.status === 'TRIAL';
+      await this.dataSource.query(
+        `UPDATE public.tenants SET is_active = $1, updated_at = NOW() WHERE LOWER(slug) = LOWER($2) OR id = $3`,
+        [isTenantActive, cleanSlug, firm.id],
+      ).catch(() => {});
+
+      if (dto.status === FirmStatus.SUSPENDED || (dto.status as string) === 'INACTIVE') {
         await this.dataSource.query(`UPDATE public.license_keys SET status = 'SUSPENDED', updated_at = NOW() WHERE firm_id = $1`, [firm.id]);
-      } else if (dto.status === 'EXPIRED') {
+      } else if (dto.status === FirmStatus.EXPIRED) {
         await this.dataSource.query(`UPDATE public.license_keys SET status = 'EXPIRED', updated_at = NOW() WHERE firm_id = $1`, [firm.id]);
-      } else if (dto.status === 'ACTIVE') {
+      } else if (dto.status === FirmStatus.ACTIVE) {
         await this.dataSource.query(`UPDATE public.license_keys SET status = 'ACTIVE', updated_at = NOW() WHERE firm_id = $1 AND expires_at > NOW()`, [firm.id]);
       }
     }
 
     return rows[0];
+  }
+
+  /**
+   * Toggle firm Active / Suspended state
+   */
+  async toggleActive(idOrSlug: string) {
+    const firm = await this.findOne(idOrSlug);
+    const isCurrentlyActive = firm.status === 'ACTIVE' || firm.status === 'TRIAL';
+    const newStatus = isCurrentlyActive ? 'SUSPENDED' : 'ACTIVE';
+    const newTenantActive = !isCurrentlyActive;
+
+    const rows = await this.dataSource.query(
+      `UPDATE public.firms SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [newStatus, firm.id],
+    );
+    await this.dataSource.query(
+      `UPDATE public.tenants SET is_active = $1, updated_at = NOW() WHERE LOWER(slug) = LOWER($2) OR id = $3`,
+      [newTenantActive, firm.slug, firm.id],
+    ).catch(() => {});
+
+    if (newStatus === 'SUSPENDED') {
+      await this.dataSource.query(`UPDATE public.license_keys SET status = 'SUSPENDED', updated_at = NOW() WHERE firm_id = $1`, [firm.id]).catch(() => {});
+    } else if (newStatus === 'ACTIVE') {
+      await this.dataSource.query(`UPDATE public.license_keys SET status = 'ACTIVE', updated_at = NOW() WHERE firm_id = $1 AND expires_at > NOW()`, [firm.id]).catch(() => {});
+    }
+
+    return rows[0] || { id: firm.id, slug: firm.slug, status: newStatus, isActive: newTenantActive };
   }
 
   /**

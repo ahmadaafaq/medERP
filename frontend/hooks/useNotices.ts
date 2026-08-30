@@ -78,12 +78,47 @@ export function useNotices() {
   const getHeaders = useCallback(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const tenantSlug = getTenantSlug();
+    let userId = '';
+    let userRole = '';
+    if (typeof window !== 'undefined') {
+      try {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          userId = u.id || u.sub || u.userId || u.registration_no || u.username || '';
+          userRole = u.role || '';
+        }
+      } catch {}
+    }
     return {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
       'x-tenant-slug': tenantSlug,
+      'x-user-id': userId,
+      'x-user-role': userRole,
     };
   }, [getTenantSlug]);
+
+  const getReadCache = (): Set<string> => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const cached = localStorage.getItem('read_notices');
+      if (cached) return new Set(JSON.parse(cached));
+    } catch {}
+    return new Set();
+  };
+
+  const addNoticeToReadCache = (noticeId: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const cached = localStorage.getItem('read_notices');
+      const ids: string[] = cached ? JSON.parse(cached) : [];
+      if (!ids.includes(noticeId)) {
+        ids.push(noticeId);
+        localStorage.setItem('read_notices', JSON.stringify(ids));
+      }
+    } catch {}
+  };
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -94,7 +129,15 @@ export function useNotices() {
       if (res.ok) {
         const json = await res.json();
         if (json.data) {
-          setUnreadCount(json.data);
+          const readCache = getReadCache();
+          if (readCache.size > 0) {
+            setUnreadCount((prev) => ({
+              ...json.data,
+              totalUnread: Math.max(0, json.data.totalUnread - readCache.size),
+            }));
+          } else {
+            setUnreadCount(json.data);
+          }
         }
       }
     } catch (err) {
@@ -125,8 +168,24 @@ export function useNotices() {
 
         if (res.ok) {
           const json = await res.json();
-          const list = json.data || json || [];
-          setNotices(Array.isArray(list) ? list : []);
+          const list: NoticeItem[] = json.data || json || [];
+          const readCache = getReadCache();
+          const mergedList = (Array.isArray(list) ? list : []).map((n) => {
+            if (readCache.has(n.id)) {
+              return { ...n, is_read: true };
+            }
+            return n;
+          });
+          setNotices(mergedList);
+
+          // Update unread count based on merged read state
+          const unreadItems = mergedList.filter((n) => !n.is_read);
+          setUnreadCount({
+            totalUnread: unreadItems.length,
+            urgentUnread: unreadItems.filter((n) => n.priority === 'urgent').length,
+            importantUnread: unreadItems.filter((n) => n.priority === 'important').length,
+            normalUnread: unreadItems.filter((n) => n.priority === 'normal').length,
+          });
         }
       } catch (err) {
         console.error('Failed to fetch role notices:', err);
@@ -138,46 +197,64 @@ export function useNotices() {
   );
 
   const markAsRead = async (noticeId: string) => {
+    addNoticeToReadCache(noticeId);
+    setNotices((prev) => {
+      const updated = prev.map((n) =>
+        n.id === noticeId ? { ...n, is_read: true, read_at: new Date().toISOString() } : n,
+      );
+      const unreadItems = updated.filter((n) => !n.is_read);
+      setUnreadCount({
+        totalUnread: unreadItems.length,
+        urgentUnread: unreadItems.filter((n) => n.priority === 'urgent').length,
+        importantUnread: unreadItems.filter((n) => n.priority === 'important').length,
+        normalUnread: unreadItems.filter((n) => n.priority === 'normal').length,
+      });
+      return updated;
+    });
+
     try {
       const slug = getTenantSlug();
       await fetch(`${API_BASE}/notices/${noticeId}/read?tenant=${slug}`, {
         method: 'PATCH',
         headers: getHeaders(),
       });
-      setNotices((prev) =>
-        prev.map((n) => (n.id === noticeId ? { ...n, is_read: true, read_at: new Date().toISOString() } : n)),
-      );
-      fetchUnreadCount();
     } catch (err) {
-      console.error('Failed to mark notice as read:', err);
+      console.error('Failed to mark notice as read on server:', err);
     }
   };
 
   const acknowledgeNotice = async (noticeId: string) => {
+    addNoticeToReadCache(noticeId);
+    setNotices((prev) => {
+      const updated = prev.map((n) =>
+        n.id === noticeId
+          ? {
+              ...n,
+              is_read: true,
+              read_at: n.read_at || new Date().toISOString(),
+              acknowledged: true,
+              acknowledged_at: new Date().toISOString(),
+            }
+          : n,
+      );
+      const unreadItems = updated.filter((n) => !n.is_read);
+      setUnreadCount({
+        totalUnread: unreadItems.length,
+        urgentUnread: unreadItems.filter((n) => n.priority === 'urgent').length,
+        importantUnread: unreadItems.filter((n) => n.priority === 'important').length,
+        normalUnread: unreadItems.filter((n) => n.priority === 'normal').length,
+      });
+      return updated;
+    });
+
     try {
       const slug = getTenantSlug();
-      const res = await fetch(`${API_BASE}/notices/${noticeId}/acknowledge?tenant=${slug}`, {
+      await fetch(`${API_BASE}/notices/${noticeId}/acknowledge?tenant=${slug}`, {
         method: 'PATCH',
         headers: getHeaders(),
       });
-      if (res.ok) {
-        setNotices((prev) =>
-          prev.map((n) =>
-            n.id === noticeId
-              ? {
-                  ...n,
-                  is_read: true,
-                  read_at: n.read_at || new Date().toISOString(),
-                  acknowledged: true,
-                  acknowledged_at: new Date().toISOString(),
-                }
-              : n,
-          ),
-        );
-        fetchUnreadCount();
-      }
     } catch (err) {
-      console.error('Failed to acknowledge notice:', err);
+      console.error('Failed to acknowledge notice on server:', err);
     }
   };
 

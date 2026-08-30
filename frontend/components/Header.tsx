@@ -187,15 +187,6 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
       data.photoUrl ||
       '';
 
-    const photoUrl =
-      rawPhoto && rawPhoto !== 'undefined' && rawPhoto !== 'null' && !rawPhoto.includes('undefined') && !rawPhoto.includes('null')
-        ? rawPhoto
-        : (!isStudentRole && (nameStr.toLowerCase().includes('sanjay') || empId.includes('DR/07/026'))
-          ? '/avatars/dr_sanjay_singh.png'
-          : !isStudentRole && (nameStr.toLowerCase().includes('sarah') || nameStr.toLowerCase().includes('aparna'))
-            ? '/avatars/dr_sarah_sharma.png'
-            : '');
-
     const registrationNo =
       p.registration_no ||
       p.registrationNo ||
@@ -204,6 +195,17 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
       '';
 
     const rollno = p.rollno || data.rollno || '';
+
+    const photoUrl =
+      rawPhoto && rawPhoto !== 'undefined' && rawPhoto !== 'null' && !rawPhoto.includes('undefined') && !rawPhoto.includes('null')
+        ? rawPhoto
+        : (isStudentRole && registrationNo
+          ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${registrationNo}/${registrationNo}.JPG`
+          : (!isStudentRole && (nameStr.toLowerCase().includes('sanjay') || empId.includes('DR/07/026'))
+            ? '/avatars/dr_sanjay_singh.png'
+            : !isStudentRole && (nameStr.toLowerCase().includes('sarah') || nameStr.toLowerCase().includes('aparna'))
+              ? '/avatars/dr_sarah_sharma.png'
+              : ''));
 
     const designation = isStudentRole ? 'Student' : (p.designation || data.designation || '');
     const specialization = isStudentRole ? '' : (p.specialization || data.specialization || '');
@@ -1166,7 +1168,10 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
           setIsNoticeDetailOpen(false);
           setSelectedAlertNotice(null);
         }}
-        onAcknowledge={acknowledgeNotice}
+        onAcknowledge={async (id) => {
+          await acknowledgeNotice(id);
+          setDismissedAlertIds((prev) => [...prev, id]);
+        }}
       />
     </>
   );

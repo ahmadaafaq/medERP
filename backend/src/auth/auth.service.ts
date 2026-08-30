@@ -169,6 +169,17 @@ export class AuthService {
     }
 
     if (resolvedSlug) {
+      // ── Check if Tenant is explicitly deactivated in public.tenants ──
+      const tenantCheck = await this.ds.query(
+        `SELECT id, name, slug, is_active FROM public.tenants WHERE LOWER(slug) = $1 LIMIT 1`,
+        [resolvedSlug.toLowerCase()],
+      ).catch(() => []);
+      if (tenantCheck.length > 0 && tenantCheck[0].is_active === false) {
+        throw new UnauthorizedException(
+          `Access Denied: The institution "${tenantCheck[0].name || resolvedSlug}" is currently deactivated by SuperAdmin. Please contact support.`,
+        );
+      }
+
       // ── Strict Firm License Check ──
       let firmCheck: any[] = [];
       try {
@@ -218,9 +229,9 @@ export class AuthService {
 
       if (firmCheck.length > 0) {
         const firm = firmCheck[0];
-        if (firm.status === 'SUSPENDED') {
+        if (firm.status === 'SUSPENDED' || firm.status === 'INACTIVE') {
           throw new UnauthorizedException(
-            `Access Suspended: "${firm.title}" has been deactivated by the platform owner. Please contact owner support.`,
+            `Access Suspended: Institution "${firm.title}" has been deactivated by SuperAdmin. Please contact support.`,
           );
         }
 
@@ -258,7 +269,8 @@ export class AuthService {
         `SELECT u.id, u.email, u.password_hash, u.role, u.is_active, u.must_change_password,
                 u.failed_login_count, u.locked_until, u.last_login_at, u.usr_id, u.devicecd, u.loc_cd, u.department,
                 s.name AS student_name, s.registration_no, s.rollno,
-                f.id AS faculty_id, f.name AS faculty_name, f.emp_id, f.photo_url, f.designation, f.specialization,
+                COALESCE(s.photo_url, CASE WHEN s.registration_no IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/', s.registration_no, '/', s.registration_no, '.JPG') ELSE NULL END, f.photo_url) AS photo_url,
+                f.id AS faculty_id, f.name AS faculty_name, f.emp_id, f.designation, f.specialization,
                 f.qualification, f.phone, f.gender, f.experience, f.joining_date, f.staff_type,
                 f.department_id, f.subject_id
          FROM "${schema}".users u
@@ -514,6 +526,48 @@ export class AuthService {
         await this.handleFailedLogin(user.id, schema, user.failed_login_count ?? 0);
       }
       throw new UnauthorizedException('Invalid credentials. Please check your ID / Username and Password.');
+    }
+
+    // ── ROLE CROSS-ACCESS ENFORCEMENT ──
+    const userRole = String(user.role || '').toUpperCase();
+    const requestedRole = String(dto.role || '').toUpperCase();
+
+    if (requestedRole) {
+      // 1. CLERK RESTRICTION: Clerk cannot login through role faculty, admin, or student
+      if (userRole === 'CLERK' || userRole === UserRole.CLERK) {
+        if (['FACULTY', 'ADMIN', 'COLLEGE_ADMIN', 'SUPER_ADMIN', 'STUDENT'].includes(requestedRole)) {
+          throw new ForbiddenException(
+            'Access Denied: Clerk accounts cannot sign in through Student, Faculty, or Admin portals. Please select the Clerk tab to sign in.',
+          );
+        }
+      }
+
+      // 2. FACULTY RESTRICTION: Faculty only access faculty
+      if (userRole === 'FACULTY' || userRole === UserRole.FACULTY || userRole === 'HOD' || userRole === 'STAFF') {
+        if (['ADMIN', 'COLLEGE_ADMIN', 'SUPER_ADMIN', 'CLERK', 'STUDENT', 'WARDEN'].includes(requestedRole)) {
+          throw new ForbiddenException(
+            'Access Denied: Faculty accounts can only access the Faculty Portal. Admin or Clerk login is restricted.',
+          );
+        }
+      }
+
+      // 3. STUDENT RESTRICTION: Student only access student
+      if (userRole === 'STUDENT' || userRole === UserRole.STUDENT) {
+        if (['ADMIN', 'COLLEGE_ADMIN', 'SUPER_ADMIN', 'FACULTY', 'CLERK', 'WARDEN'].includes(requestedRole)) {
+          throw new ForbiddenException(
+            'Access Denied: Student accounts can only access the Student Portal.',
+          );
+        }
+      }
+
+      // 4. ADMIN PRIVILEGE: Admin can login faculty and admin both!
+      if (['ADMIN', 'COLLEGE_ADMIN', 'SUPER_ADMIN'].includes(userRole)) {
+        if (requestedRole === 'FACULTY') {
+          user.role = UserRole.FACULTY;
+        } else if (['ADMIN', 'COLLEGE_ADMIN'].includes(requestedRole)) {
+          user.role = UserRole.COLLEGE_ADMIN;
+        }
+      }
     }
 
     // Reset failed attempts on success
@@ -982,13 +1036,14 @@ export class AuthService {
       if (payload.role === UserRole.STUDENT) {
         const studentUserSub = rows[0]?.id || payload.sub;
         const pRows = await this.ds.query(
-          `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url, s.course_cd,
+          `SELECT s.id, s.rollno, s.registration_no, s.name, 
+                  COALESCE(s.photo_url, CASE WHEN s.registration_no IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/', s.registration_no, '/', s.registration_no, '.JPG') ELSE NULL END) AS photo_url,
+                  s.course_cd,
                   COALESCE(b.batch_cd, s.batch_cd) AS batch_cd,
                   COALESCE(b.name, 'Batch ' || COALESCE(s.admission_year::text, '2025')) AS batch_name,
                   b.code AS batch_code,
                   b.year AS batch_year,
                   s.bio, s.github_url, s.github_followers, s.linkedin_url, s.linkedin_connections,
-                  s.cgpa, s.attendance, s.social_credits, s.current_skills, s.certificates_done,
                   s.department_id, s.batch_id, s.admission_year, s.phone, s.address, s.blood_group,
                   s.emergency_contact, s.is_active,
                   d.name AS department_name, d.code AS department_code,
@@ -1002,8 +1057,9 @@ export class AuthService {
            LEFT JOIN "${schema}".student_admissions sa ON sa.student_id::text = s.id::text
            LEFT JOIN "${schema}".student_parents sp ON sp.student_id::text = s.id::text
            WHERE (s.user_id::text = $1::text)
-              OR s.registration_no = $2
-              OR s.rollno = $2`,
+              OR (s.registration_no IS NOT NULL AND s.registration_no = $2)
+              OR (s.rollno IS NOT NULL AND s.rollno = $2)
+              OR (s.user_id::text = $2::text)`,
           [studentUserSub, payload.sub],
         );
         profile = pRows[0] ?? null;

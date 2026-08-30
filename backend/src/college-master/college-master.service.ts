@@ -1020,23 +1020,35 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   async listColleges(user?: any): Promise<any[]> {
-    await this.ds.query(`ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS code VARCHAR(50);`).catch(() => {});
-    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+    await this.ds.query(`
+      ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+      ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS logo_url TEXT;
+    `).catch(() => {});
+    const isSuperAdmin = user && (user.role === UserRole.SUPER_ADMIN || user.role === 'SUPER_ADMIN' || user.role === 'owner');
+    if (user && user.role && !isSuperAdmin && user.tenantSlug) {
       const rows = await this.ds.query(
-        `SELECT id, code, name, slug, domain, plan, primary_color, is_active, schema_provisioned, created_at
-         FROM public.tenants
-         WHERE LOWER(slug) = LOWER($1) OR code = $2
+        `SELECT t.id, t.code, t.name, t.slug, t.domain, t.plan, t.primary_color,
+                COALESCE(t.logo_url, f.logo_url) AS logo_url,
+                t.is_active, t.schema_provisioned, t.created_at
+         FROM public.tenants t
+         LEFT JOIN public.firms f ON LOWER(f.slug) = LOWER(t.slug)
+         WHERE (LOWER(t.slug) = LOWER($1) OR t.code = $2) AND t.is_active = true
          LIMIT 1`,
         [user.tenantSlug, user.colgCd || '1'],
       );
       if (rows.length > 0) return rows;
     }
+    const whereClause = isSuperAdmin ? '' : 'WHERE t.is_active = true';
     const rows = await this.ds.query(
-      `SELECT DISTINCT ON (code) id, code, name, slug, domain, plan, primary_color, is_active, schema_provisioned, created_at
-       FROM public.tenants
-       ORDER BY code, CAST(NULLIF(regexp_replace(code, '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, name ASC`,
+      `SELECT DISTINCT ON (t.code) t.id, t.code, t.name, t.slug, t.domain, t.plan, t.primary_color,
+              COALESCE(t.logo_url, f.logo_url) AS logo_url,
+              t.is_active, t.schema_provisioned, t.created_at
+       FROM public.tenants t
+       LEFT JOIN public.firms f ON LOWER(f.slug) = LOWER(t.slug)
+       ${whereClause}
+       ORDER BY t.code, CAST(NULLIF(regexp_replace(t.code, '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, t.name ASC`,
     );
-    if (rows.length === 0) {
+    if (rows.length === 0 && isSuperAdmin) {
       return this.syncExternalColleges();
     }
     return rows.sort((a: any, b: any) => (parseInt(a.code, 10) || 0) - (parseInt(b.code, 10) || 0));
@@ -1074,6 +1086,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     if (rows.length === 0) throw new NotFoundException('College not found');
 
     const targetId = rows[0].id;
+    const targetSlug = rows[0].slug;
 
     const updated = await this.ds.query(
       `UPDATE public.tenants
@@ -1089,6 +1102,15 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       [dto.code, dto.name, dto.domain, dto.plan, dto.primaryColor || dto.primary_color, dto.isActive ?? dto.is_active, targetId],
     );
 
+    if (dto.isActive !== undefined || dto.is_active !== undefined) {
+      const activeVal = dto.isActive ?? dto.is_active;
+      const firmStatus = activeVal ? 'ACTIVE' : 'SUSPENDED';
+      await this.ds.query(
+        `UPDATE public.firms SET status = $1, updated_at = NOW() WHERE LOWER(slug) = LOWER($2) OR id = $3`,
+        [firmStatus, targetSlug, targetId],
+      ).catch(() => {});
+    }
+
     return updated[0];
   }
 
@@ -1099,8 +1121,10 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     );
     if (rows.length === 0) throw new NotFoundException('College not found');
 
-    await this.ds.query(`DELETE FROM public.tenants WHERE id = $1`, [rows[0].id]);
-    return { success: true, message: `College deleted successfully.` };
+    await this.ds.query(`UPDATE public.tenants SET is_active = false, updated_at = NOW() WHERE id = $1`, [rows[0].id]);
+    await this.ds.query(`UPDATE public.firms SET status = 'SUSPENDED', updated_at = NOW() WHERE LOWER(slug) = LOWER($1) OR id = $2`, [rows[0].slug, rows[0].id]).catch(() => {});
+
+    return { success: true, message: `College ${rows[0].slug} deactivated successfully.` };
   }
 
   // ─── 2. COURSES ────────────────────────────────────────────────────────────

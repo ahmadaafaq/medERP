@@ -23,6 +23,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       : 'student');
   const [misReportsOpen, setMisReportsOpen] = useState(true);
   const [collegeDisplayName, setCollegeDisplayName] = useState<string>('SRMS CET, BAREILLY');
+  const [collegeLogoUrl, setCollegeLogoUrl] = useState<string | null>(null);
   const [enabledKeys, setEnabledKeys] = useState<string[] | null>(null);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
   const [isMedicalModule, setIsMedicalModule] = useState<boolean>(false);
@@ -126,6 +127,34 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
         setCollegeDisplayName('SRMS CET, BAREILLY');
       }
     }
+
+    // Dynamic College Logo resolution (from direct keys, tenant object, or institution presets)
+    let logoUrl: string | null = null;
+    const directLogo =
+      localStorage.getItem('college_logo') ||
+      localStorage.getItem('collegeLogo') ||
+      localStorage.getItem('colg_logo') ||
+      localStorage.getItem('logo_url') ||
+      localStorage.getItem('tenant_logo');
+    if (directLogo) {
+      logoUrl = directLogo;
+    } else {
+      try {
+        const rawColg = localStorage.getItem('college') || localStorage.getItem('selectedTenantData');
+        if (rawColg) {
+          const colgObj = JSON.parse(rawColg);
+          if (colgObj.logo_url) logoUrl = colgObj.logo_url;
+          else if (colgObj.theme_config?.logo_url) logoUrl = colgObj.theme_config.logo_url;
+        }
+      } catch {}
+    }
+
+    // Default SRMS institutional logo for all SRMS institutions
+    if (!logoUrl && (slug.startsWith('srms') || slug === '1' || slug === '2' || slug === '11' || !slug)) {
+      logoUrl = '/srms-logo.png';
+    }
+
+    setCollegeLogoUrl(logoUrl);
 
     if (role !== 'owner') {
       const rawSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '';
@@ -302,9 +331,20 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
           {/* Brand Header & Mobile Close Button */}
           <div className="flex items-center justify-between gap-3 px-2 pt-1 pb-3 border-b border-slate-200 dark:border-white/10 min-w-0">
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-tr from-[#F36C21] via-orange-500 to-amber-500 flex items-center justify-center font-black text-white text-base shadow-md shadow-orange-500/20 border border-orange-400/30">
-                {collegeDisplayName ? collegeDisplayName.trim().charAt(0).toUpperCase() : 'N'}
-              </div>
+              {collegeLogoUrl ? (
+                <div className="w-9 h-9 shrink-0 rounded-xl bg-white p-1 shadow-sm border border-slate-200 dark:border-slate-800 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={collegeLogoUrl}
+                    alt={collegeDisplayName}
+                    className="w-full h-full object-contain"
+                    onError={() => setCollegeLogoUrl(null)}
+                  />
+                </div>
+              ) : (
+                <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-tr from-[#F36C21] via-orange-500 to-amber-500 flex items-center justify-center font-black text-white text-base shadow-md shadow-orange-500/20 border border-orange-400/30">
+                  {collegeDisplayName ? collegeDisplayName.trim().charAt(0).toUpperCase() : 'N'}
+                </div>
+              )}
               <div className="min-w-0 flex-1 overflow-hidden">
                 <h1 
                   className="font-black text-sm text-[#11141A] dark:text-white tracking-wide uppercase truncate block" 
@@ -385,6 +425,13 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
                 <span>Firm Module Rights</span>
+              </Link>
+
+              <Link href="/dashboard/superadmin/clean-data" data-active={isLinkActive('/dashboard/superadmin/clean-data') ? 'true' : undefined} className={getLinkClass('/dashboard/superadmin/clean-data')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-rose-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>🧹 Tenant Data Cleaner</span>
               </Link>
 
               <Link href="/owner/theme-studio" data-active={isLinkActive('/owner/theme-studio') ? 'true' : undefined} className={getLinkClass('/owner/theme-studio')}>

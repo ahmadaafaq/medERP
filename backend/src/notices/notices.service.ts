@@ -86,7 +86,7 @@ export class NoticesService implements OnModuleInit {
         CREATE TABLE IF NOT EXISTS notice_recipients (
           id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           notice_id       UUID REFERENCES notices(id) ON DELETE CASCADE,
-          user_id         UUID,
+          user_id         VARCHAR(255),
           is_read         BOOLEAN DEFAULT false,
           read_at         TIMESTAMPTZ,
           acknowledged    BOOLEAN DEFAULT false,
@@ -94,6 +94,9 @@ export class NoticesService implements OnModuleInit {
           created_at      TIMESTAMPTZ DEFAULT NOW(),
           UNIQUE(notice_id, user_id)
         );
+
+        -- Safe column type migration in case table was created with UUID user_id
+        ALTER TABLE notice_recipients ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR(255);
 
         CREATE TABLE IF NOT EXISTS notice_group_templates (
           id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -811,17 +814,7 @@ export class NoticesService implements OnModuleInit {
     const slug = this.resolveTenantSlug(tenantSlug);
     await this.ensureTables(slug);
 
-    if (!userId) {
-      const all = await this.getRoleScopedNotices(undefined, userRole || 'ADMIN', undefined, slug);
-      return {
-        totalUnread: all.length,
-        urgentUnread: all.filter((n) => n.priority === 'urgent').length,
-        importantUnread: all.filter((n) => n.priority === 'important').length,
-        normalUnread: all.filter((n) => n.priority === 'normal').length,
-      };
-    }
-
-    const notices = await this.getRoleScopedNotices(userId, userRole, undefined, slug);
+    const notices = await this.getRoleScopedNotices(userId, userRole || 'STUDENT', undefined, slug);
     const unread = notices.filter((n) => !n.is_read);
 
     return {
@@ -891,27 +884,55 @@ export class NoticesService implements OnModuleInit {
     return notice;
   }
 
-  async markAsRead(noticeId: string, userId: string, tenantSlug?: string) {
+  async markAsRead(noticeId: string, userId?: string, tenantSlug?: string) {
     const slug = this.resolveTenantSlug(tenantSlug);
-    await this.tenantSchemaService.queryInTenant(
-      slug,
-      `UPDATE notice_recipients
-       SET is_read = true, read_at = NOW()
-       WHERE notice_id = $1 AND user_id = $2`,
-      [noticeId, userId],
-    );
+    await this.ensureTables(slug);
+    const uid = userId && userId.trim() ? userId.trim() : 'anonymous';
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO notice_recipients (notice_id, user_id, is_read, read_at)
+         VALUES ($1, $2, true, NOW())
+         ON CONFLICT (notice_id, user_id)
+         DO UPDATE SET is_read = true, read_at = COALESCE(notice_recipients.read_at, NOW())`,
+        [noticeId, uid],
+      );
+    } catch (err) {
+      console.warn('markAsRead fallback update:', err);
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE notice_recipients
+         SET is_read = true, read_at = NOW()
+         WHERE notice_id = $1 AND user_id = $2`,
+        [noticeId, uid],
+      );
+    }
     return { success: true, message: 'Notice marked as read' };
   }
 
-  async acknowledgeNotice(noticeId: string, userId: string, tenantSlug?: string) {
+  async acknowledgeNotice(noticeId: string, userId?: string, tenantSlug?: string) {
     const slug = this.resolveTenantSlug(tenantSlug);
-    await this.tenantSchemaService.queryInTenant(
-      slug,
-      `UPDATE notice_recipients
-       SET is_read = true, read_at = COALESCE(read_at, NOW()), acknowledged = true, acknowledged_at = NOW()
-       WHERE notice_id = $1 AND user_id = $2`,
-      [noticeId, userId],
-    );
+    await this.ensureTables(slug);
+    const uid = userId && userId.trim() ? userId.trim() : 'anonymous';
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO notice_recipients (notice_id, user_id, is_read, read_at, acknowledged, acknowledged_at)
+         VALUES ($1, $2, true, NOW(), true, NOW())
+         ON CONFLICT (notice_id, user_id)
+         DO UPDATE SET is_read = true, read_at = COALESCE(notice_recipients.read_at, NOW()), acknowledged = true, acknowledged_at = NOW()`,
+        [noticeId, uid],
+      );
+    } catch (err) {
+      console.warn('acknowledgeNotice fallback update:', err);
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE notice_recipients
+         SET is_read = true, read_at = COALESCE(read_at, NOW()), acknowledged = true, acknowledged_at = NOW()
+         WHERE notice_id = $1 AND user_id = $2`,
+        [noticeId, uid],
+      );
+    }
     return { success: true, message: 'Notice acknowledged successfully' };
   }
 

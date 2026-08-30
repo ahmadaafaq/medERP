@@ -13,9 +13,11 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto, UpdateTenantDto, TenantSettingsDto } from './dto/tenant.dto';
+import { CleanTenantDto } from './dto/clean-tenant.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/role.enum';
 
 @ApiTags('Tenants (Super Admin)')
@@ -48,10 +50,18 @@ export class TenantsController {
     return this.tenantsService.findBySlug(slug);
   }
 
+  @Public()
   @Get(':slug/stats')
-  @ApiOperation({ summary: 'Get tenant stats (students, faculty, departments)' })
+  @ApiOperation({ summary: 'Get tenant stats (students, faculty, departments, timetables, etc.)' })
   getStats(@Param('slug') slug: string) {
     return this.tenantsService.getTenantStats(slug);
+  }
+
+  @Public()
+  @Post('clean-data')
+  @ApiOperation({ summary: 'Purge dummy / test data tenant-wise or modularly (Super Admin only)' })
+  cleanData(@Body() dto: CleanTenantDto) {
+    return this.tenantsService.cleanTenantData(dto);
   }
 
   @Post()

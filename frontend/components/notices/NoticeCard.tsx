@@ -76,10 +76,14 @@ export default function NoticeCard({ notice, onClick, onAcknowledge }: NoticeCar
             <span>{notice.category}</span>
           </span>
 
-          {/* Unread Status Tag */}
-          {isUnread && (
+          {/* Read / Unread Status Tag */}
+          {isUnread ? (
             <span className="text-[10px] font-black text-[#F36C21] bg-orange-50 dark:bg-orange-950 px-2 py-0.5 rounded-full border border-[#F36C21]/30">
               NEW
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold text-[#00C48C] bg-emerald-50 dark:bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+              ✓ Read
             </span>
           )}
         </div>

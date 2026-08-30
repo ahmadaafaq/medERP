@@ -79,7 +79,9 @@ export default function FacultyRepositoryPage() {
       if (res.ok) {
         const json = await res.json();
         const rawData = json.data?.data || json.data || json;
-        setRepositories(Array.isArray(rawData) ? rawData : []);
+        const arr = Array.isArray(rawData) ? rawData : [];
+        const unique = Array.from(new Map(arr.map((item: any) => [item.repo_id, item])).values());
+        setRepositories(unique);
       }
     } catch (err) {
       console.error('Failed to fetch repositories:', err);

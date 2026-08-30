@@ -140,12 +140,12 @@ export class RepositoryService {
     }
 
     const sql = `
-      SELECT r.*,
-             COALESCE(s.photo_url, '') AS student_photo,
-             COALESCE(s.rollno, r.student_reg_no) AS rollno,
-             COALESCE(crs.name, r.course_cd, 'B.Tech.') AS course_name,
-             COALESCE(dep.name, r.branch_cd, 'Computer Science & Engineering') AS branch_name,
-             COALESCE(bth.name, r.batch_cd, 'Batch 2022-26') AS batch_name,
+      SELECT DISTINCT ON (r.repo_id) r.*,
+             COALESCE(stu.photo_url, '') AS student_photo,
+             COALESCE(stu.rollno, r.student_reg_no) AS rollno,
+             COALESCE(crs.crs_name, r.course_cd, 'B.Tech.') AS course_name,
+             COALESCE(dep.dep_name, r.branch_cd, 'Computer Science & Engineering') AS branch_name,
+             COALESCE(bth.bth_name, r.batch_cd, 'Batch 2022-26') AS batch_name,
              rev.faculty_name,
              rev.faculty_empid,
              rev.faculty_photo,
@@ -154,10 +154,30 @@ export class RepositoryService {
              rev.reviewed_at AS faculty_reviewed_at,
              (SELECT COUNT(*) FROM "${schema}".repository_reviews rev2 WHERE rev2.repo_id = r.repo_id)::int AS review_count
       FROM "${schema}".repositories r
-      LEFT JOIN "${schema}".students s ON (r.student_reg_no = s.registration_no OR r.student_reg_no = s.rollno)
-      LEFT JOIN "${schema}".courses crs ON (r.course_cd = crs.code OR r.course_cd = crs.course_cd OR r.course_cd = crs.id::text)
-      LEFT JOIN "${schema}".departments dep ON (r.branch_cd = dep.code OR r.branch_cd = dep.id::text)
-      LEFT JOIN "${schema}".batches bth ON (r.batch_cd = bth.code OR r.batch_cd = bth.id::text)
+      LEFT JOIN LATERAL (
+        SELECT s.photo_url, s.rollno
+        FROM "${schema}".students s
+        WHERE s.registration_no = r.student_reg_no OR s.rollno = r.student_reg_no
+        LIMIT 1
+      ) stu ON true
+      LEFT JOIN LATERAL (
+        SELECT c.name AS crs_name
+        FROM "${schema}".courses c
+        WHERE c.code = r.course_cd OR c.course_cd = r.course_cd OR c.id::text = r.course_cd
+        LIMIT 1
+      ) crs ON true
+      LEFT JOIN LATERAL (
+        SELECT d.name AS dep_name
+        FROM "${schema}".departments d
+        WHERE d.code = r.branch_cd OR d.id::text = r.branch_cd
+        LIMIT 1
+      ) dep ON true
+      LEFT JOIN LATERAL (
+        SELECT b.name AS bth_name
+        FROM "${schema}".batches b
+        WHERE b.code = r.batch_cd OR b.id::text = r.batch_cd
+        LIMIT 1
+      ) bth ON true
       LEFT JOIN LATERAL (
         SELECT rw.faculty_name, 
                rw.faculty_empid, 
@@ -172,11 +192,13 @@ export class RepositoryService {
         LIMIT 1
       ) rev ON true
       WHERE ${whereConditions.join(' AND ')}
-      ORDER BY r.submitted_at DESC
+      ORDER BY r.repo_id, r.submitted_at DESC
     `;
 
-    const repositories = await this.tenantSchemaService.queryInTenant(slug, sql, params);
-    return { data: repositories, count: repositories.length };
+    const rawResults = await this.tenantSchemaService.queryInTenant(slug, sql, params);
+    // Sort by submitted_at DESC after deduplication
+    rawResults.sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
+    return { data: rawResults, count: rawResults.length };
   }
 
   /**

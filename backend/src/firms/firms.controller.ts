@@ -107,8 +107,9 @@ export class FirmsController {
    */
   @Get()
   @Public()
-  async findAll() {
-    return await this.firmsService.findAll();
+  async findAll(@Query('public') isPublic?: string) {
+    const shouldFilterPublic = isPublic === 'true' || isPublic === '1';
+    return await this.firmsService.findAll(shouldFilterPublic);
   }
 
   /**
@@ -119,6 +120,16 @@ export class FirmsController {
   @Public()
   async findOne(@Param('id') id: string) {
     return await this.firmsService.findOne(id);
+  }
+
+  /**
+   * Toggle firm active/suspended status
+   * PATCH /api/firms/:id/toggle-active
+   */
+  @Patch(':id/toggle-active')
+  @Public()
+  async toggleActive(@Param('id') id: string) {
+    return await this.firmsService.toggleActive(id);
   }
 
   /**

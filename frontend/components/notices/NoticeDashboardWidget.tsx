@@ -198,8 +198,12 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
                       <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-extrabold uppercase tracking-wide">
                         {notice.category}
                       </span>
-                      {isUnread && (
+                      {isUnread ? (
                         <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]" title="Unread" />
+                      ) : (
+                        <span className="text-[9px] font-bold text-[#00C48C] bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded">
+                          ✓ Read
+                        </span>
                       )}
                     </div>
                     <p className={`text-xs font-bold truncate transition-colors ${

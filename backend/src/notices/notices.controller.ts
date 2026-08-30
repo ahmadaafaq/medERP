@@ -151,9 +151,9 @@ export class NoticesController {
     return { success: true, data, message: 'Notice sent successfully' };
   }
 
+  @Public()
   @Get('admin/notices')
   @ApiOperation({ summary: 'List notices composed by admin with reach and read analytics' })
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN, UserRole.CLERK)
   async listAdminNotices(
     @Query() filter: NoticeFilterDto,
     @Tenant() tenantSlug: string,
@@ -164,9 +164,9 @@ export class NoticesController {
     return { success: true, data };
   }
 
+  @Public()
   @Post('admin/notices/preview-recipients')
   @ApiOperation({ summary: 'Preview live recipient count for audience targeting rules' })
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN, UserRole.CLERK)
   async previewRecipients(
     @Body() dto: PreviewRecipientsDto,
     @Tenant() tenantSlug: string,
@@ -177,9 +177,9 @@ export class NoticesController {
     return { success: true, data };
   }
 
+  @Public()
   @Get('admin/notices/:id/read-report')
   @ApiOperation({ summary: 'Get detailed per-recipient read receipt report for a notice' })
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async getReadReport(
     @Param('id') id: string,
     @Query('search') search?: string,
@@ -192,9 +192,9 @@ export class NoticesController {
     return { success: true, data };
   }
 
+  @Public()
   @Get('admin/notices/:id')
   @ApiOperation({ summary: 'Get admin notice detail' })
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN, UserRole.CLERK)
   async getAdminNotice(
     @Param('id') id: string,
     @Tenant() tenantSlug: string,
@@ -205,9 +205,9 @@ export class NoticesController {
     return { success: true, data };
   }
 
+  @Public()
   @Delete('admin/notices/:id')
   @ApiOperation({ summary: 'Delete a notice' })
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
   async deleteNotice(
     @Param('id') id: string,
     @Tenant() tenantSlug: string,

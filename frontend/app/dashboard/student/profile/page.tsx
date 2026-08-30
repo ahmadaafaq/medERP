@@ -139,7 +139,9 @@ export default function StudentProfilePage() {
         });
         if (repoRes.ok) {
           const rJson = await repoRes.json();
-          repoCount = rJson.data?.count ?? (Array.isArray(rJson.data?.data) ? rJson.data.data.length : 0);
+          const rawData = rJson.data?.data || rJson.data || [];
+          const uniqueList = Array.isArray(rawData) ? Array.from(new Map(rawData.map((x: any) => [x.repo_id || x.id, x])).values()) : [];
+          repoCount = uniqueList.length;
         }
       } catch {}
 
@@ -175,12 +177,13 @@ export default function StudentProfilePage() {
         const courseStr = meData.courseName || p.course_name || (p.course_cd === '13' ? 'BCA' : p.course_cd === '1' ? 'B.Tech' : p.course_cd || 'BCA');
         const deptStr = meData.departmentName || p.department_name || (p.course_cd === '13' ? 'BCA General' : 'Computer Science & Engineering');
 
+        const finalRegNo = p.registration_no || regNo;
         const studentData: StudentProfile = {
           id: p.id || meData.id || '',
           name: p.name || meData.name || name,
-          registration_no: p.registration_no || regNo,
+          registration_no: finalRegNo,
           rollno: p.rollno || meData.rollno || '2500141790001',
-          photo_url: p.photo_url || meData.photoUrl || meData.photo_url || '',
+          photo_url: p.photo_url || meData.photoUrl || meData.photo_url || (finalRegNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${finalRegNo}/${finalRegNo}.JPG` : ''),
           cover_url: p.cover_url || meData.coverUrl || '/campus-cover.png',
           course_name: courseStr,
           course_cd: p.course_cd || meData.courseCd || '13',
@@ -229,7 +232,7 @@ export default function StudentProfilePage() {
       name: name,
       registration_no: regNo,
       rollno: '2500141790001',
-      photo_url: '',
+      photo_url: regNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${regNo}/${regNo}.JPG` : '',
       cover_url: '/campus-cover.png',
       course_name: 'BCA',
       course_cd: '13',

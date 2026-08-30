@@ -109,6 +109,8 @@ export default function AdminDashboard() {
     status: 'Ready',
     device: 'Campus Biometric Device',
   });
+  const [punchHistory, setPunchHistory] = useState<any[]>([]);
+  const [showPunchHistoryModal, setShowPunchHistoryModal] = useState<boolean>(false);
 
   const [marksSummary, setMarksSummary] = useState<{
     totalEvaluated: number;
@@ -200,18 +202,33 @@ export default function AdminDashboard() {
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          const today = json.today || json.data[0];
-          const activeDay = today?.hasPunches ? today : json.data.find((d: any) => d.hasPunches) || today;
+          setPunchHistory(json.data);
+          
           const todayDateStr = new Date().toISOString().split('T')[0];
+          const todayDisplayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-          setPunch({
-            date: today?.date || todayDateStr,
-            displayDate: today?.displayDate || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            punchIn: activeDay?.punchIn !== '--' ? activeDay.punchIn : '--',
-            punchOut: activeDay?.punchOut !== '--' ? activeDay.punchOut : '--',
-            status: activeDay?.hasPunches ? 'Present / On Duty' : 'Present / On Duty',
-            device: activeDay?.device || 'SRMS Biometric Device',
-          });
+          // Match exact punch record for TODAY
+          const todayRecord = json.data.find((d: any) => d.date === todayDateStr);
+
+          if (todayRecord && todayRecord.hasPunches) {
+            setPunch({
+              date: todayDateStr,
+              displayDate: todayDisplayStr,
+              punchIn: todayRecord.punchIn !== '--' ? todayRecord.punchIn : '--',
+              punchOut: todayRecord.punchOut !== '--' ? todayRecord.punchOut : '--',
+              status: todayRecord.punchOut !== '--' ? 'Shift Completed' : 'Present / On Duty',
+              device: todayRecord.device || 'SRMS CET Biometric Device (Loc 7)',
+            });
+          } else {
+            setPunch({
+              date: todayDateStr,
+              displayDate: todayDisplayStr,
+              punchIn: '--',
+              punchOut: '--',
+              status: 'Ready to Punch',
+              device: 'SRMS CET Biometric Device (Loc 7)',
+            });
+          }
         }
       }
     } catch (err) {
@@ -223,28 +240,61 @@ export default function AdminDashboard() {
     setPunching(true);
     try {
       const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
       const todayStr = now.toISOString().split('T')[0];
+      const displayDateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
       if (type === 'IN') {
         setPunch((prev) => ({
           ...prev,
           date: todayStr,
+          displayDate: displayDateStr,
           punchIn: timeStr,
           status: 'Present / On Duty',
+          device: 'SRMS CET Biometric Device (Loc 7)',
         }));
-        setPunchMessage(`Biometric Punch IN marked at ${timeStr}`);
+        setPunchHistory((prev) => [
+          {
+            date: todayStr,
+            displayDate: displayDateStr,
+            punchIn: timeStr,
+            punchOut: punch.punchOut || '--',
+            intime: timeStr,
+            outtime: punch.punchOut || '--',
+            status: 'Present / On Duty',
+            hasPunches: true,
+            device: 'SRMS CET Biometric Device (Loc 7)',
+            punchlogs: `${timeStr.slice(0, 8)}{CET}`,
+          },
+          ...prev.filter((p) => p.date !== todayStr),
+        ]);
+        setPunchMessage(`Biometric Punch IN marked successfully at ${timeStr}`);
       } else {
         setPunch((prev) => ({
           ...prev,
           date: todayStr,
+          displayDate: displayDateStr,
           punchOut: timeStr,
           status: 'Shift Completed',
+          device: 'SRMS CET Biometric Device (Loc 7)',
         }));
-        setPunchMessage(`Biometric Punch OUT marked at ${timeStr}`);
+        setPunchHistory((prev) => [
+          {
+            date: todayStr,
+            displayDate: displayDateStr,
+            punchIn: punch.punchIn || timeStr,
+            punchOut: timeStr,
+            intime: punch.punchIn || timeStr,
+            outtime: timeStr,
+            status: 'Shift Completed',
+            hasPunches: true,
+            device: 'SRMS CET Biometric Device (Loc 7)',
+            punchlogs: `${punch.punchIn || timeStr}{CET}, ${timeStr}{CET}`,
+          },
+          ...prev.filter((p) => p.date !== todayStr),
+        ]);
+        setPunchMessage(`Biometric Punch OUT marked successfully at ${timeStr}`);
       }
-
-      await fetchLiveAttendancePunches();
     } catch (err) {
       console.error('Punch error:', err);
     } finally {
@@ -269,10 +319,10 @@ export default function AdminDashboard() {
         licenseStatusRes,
         licenseTxRes,
       ] = await Promise.allSettled([
-        fetch(`${API_BASE}/analytics/dashboard/college?tenant=${activeSlug}`, { headers }).then((r) => (r.ok ? r.json() : null)),
-        fetch(`${API_BASE}/exams/papers?tenant=${activeSlug}`, { headers }).then((r) => (r.ok ? r.json() : null)),
-        fetch(`${API_BASE}/placement-drive/list${activeSlug ? `?tenant=${activeSlug}` : ''}`, { headers }).then((r) => (r.ok ? r.json() : null)),
-        fetch(`${API_BASE}/repository/list${activeSlug ? `?tenant=${activeSlug}` : ''}`, { headers }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/analytics/dashboard/college?tenant=${activeSlug}`, { headers: { 'x-tenant-slug': activeSlug, ...headers } }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/exams/papers?tenant=${activeSlug}`, { headers: { 'x-tenant-slug': activeSlug, ...headers } }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/placement-drive/list${activeSlug ? `?tenant=${activeSlug}` : ''}`, { headers: { 'x-tenant-slug': activeSlug, ...headers } }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/repository/list${activeSlug ? `?tenant=${activeSlug}` : ''}`, { headers: { 'x-tenant-slug': activeSlug, ...headers } }).then((r) => (r.ok ? r.json() : null)),
         fetch(`/api/internships/list`, {
           headers: {
             'x-tenant-id': `tenant_${activeSlug}`,
@@ -342,9 +392,10 @@ export default function AdminDashboard() {
       // Apply Repository Stats
       if (repoRes.status === 'fulfilled' && repoRes.value) {
         const j = repoRes.value;
-        const list = Array.isArray(j.data) ? j.data : Array.isArray(j.data?.data) ? j.data.data : [];
+        const rawList = Array.isArray(j.data) ? j.data : Array.isArray(j.data?.data) ? j.data.data : [];
+        const list: any[] = Array.from(new Map(rawList.map((x: any) => [x.repo_id || x.id, x])).values());
         if (list.length > 0) {
-          const first = list[0] || {};
+          const first: any = list[0] || {};
           const firstTitle = first.title || '';
           const reviewedList = list.filter((x: any) => x.score !== null && x.score !== undefined);
           const pendingList = list.filter((x: any) => !x.score || x.status === 'Pending Review');
@@ -934,14 +985,20 @@ export default function AdminDashboard() {
                   <span className="text-[11px] font-black uppercase text-[#11141A] dark:text-slate-300 tracking-wider">
                     ADMIN ATTENDANCE & PUNCH
                   </span>
-                  <span className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm shadow-xs">
-                    ⏱️
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPunchHistoryModal(true)}
+                    className="px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-[#00875A] dark:text-emerald-300 font-extrabold text-[10px] border border-emerald-200 dark:border-emerald-800/60 transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                    title="View all biometric in/out logs"
+                  >
+                    <span>⏱️</span>
+                    <span>History ({punchHistory.length || 1})</span>
+                  </button>
                 </div>
                 
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                    Day ({punch.date}):
+                    Today ({punch.date}):
                   </span>
                   <span className="inline-flex items-center gap-1 font-bold text-[#00875A] dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800 text-[11px]">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#00875A] dark:bg-emerald-400 animate-pulse" />
@@ -959,22 +1016,32 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="mt-4 pt-2 flex items-center gap-2.5">
+              <div className="mt-4 pt-2 space-y-2">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handlePunchToggle('IN')}
+                    disabled={punching}
+                    className="flex-1 py-2 bg-[#00875A] hover:bg-[#00704A] text-white rounded-xl font-black text-xs transition-all disabled:opacity-50 active:scale-95 shadow-sm cursor-pointer"
+                  >
+                    {punching ? 'Marking...' : 'Punch In'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePunchToggle('OUT')}
+                    disabled={punching}
+                    className="flex-1 py-2 bg-[#E2E8F0] hover:bg-[#CBD5E1] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#1B1E28] dark:text-slate-200 rounded-xl font-black text-xs transition-all disabled:opacity-50 active:scale-95 cursor-pointer"
+                  >
+                    {punching ? 'Marking...' : 'Punch Out'}
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => handlePunchToggle('IN')}
-                  disabled={punching}
-                  className="flex-1 py-2 bg-[#00875A] hover:bg-[#00704A] text-white rounded-xl font-black text-xs transition-all disabled:opacity-50 active:scale-95 shadow-sm"
+                  onClick={() => setShowPunchHistoryModal(true)}
+                  className="w-full text-center text-[10px] font-bold text-[#5B4BFF] dark:text-indigo-400 hover:underline pt-0.5 block cursor-pointer"
                 >
-                  {punching ? 'Marking...' : 'Punch In'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePunchToggle('OUT')}
-                  disabled={punching}
-                  className="flex-1 py-2 bg-[#E2E8F0] hover:bg-[#CBD5E1] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#1B1E28] dark:text-slate-200 rounded-xl font-black text-xs transition-all disabled:opacity-50 active:scale-95"
-                >
-                  {punching ? 'Marking...' : 'Punch Out'}
+                  View In/Out Biometric History Log ➔
                 </button>
               </div>
             </div>
@@ -1267,6 +1334,120 @@ export default function AdminDashboard() {
           )}
         </main>
       </div>
+
+      {/* Biometric Attendance & In/Out Punch History Modal */}
+      {showPunchHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[28px] max-w-2xl w-full max-h-[85vh] shadow-2xl flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-[#F8FAFC] dark:bg-slate-850">
+              <div className="flex items-center gap-3">
+                <span className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg shadow-xs">
+                  ⏱️
+                </span>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white leading-tight">
+                    Biometric Punch & Attendance Log
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    Synced with SRMS Biometric Device (Loc 7) • Emp ID: {typeof window !== 'undefined' ? localStorage.getItem('empid') || 'T/99/1203' : 'T/99/1203'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPunchHistoryModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-black text-sm flex items-center justify-center transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body: Punch Records List */}
+            <div className="p-6 overflow-y-auto space-y-3 flex-1 divide-y divide-slate-100 dark:divide-slate-800/80">
+              {punchHistory.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 dark:text-slate-400 space-y-2">
+                  <p className="text-2xl">⏳</p>
+                  <p className="text-xs font-bold">No biometric punch records loaded yet</p>
+                  <button
+                    type="button"
+                    onClick={fetchLiveAttendancePunches}
+                    className="px-3 py-1 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-sm"
+                  >
+                    Sync Live Data
+                  </button>
+                </div>
+              ) : (
+                punchHistory.map((item, idx) => (
+                  <div key={idx} className="pt-3 first:pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-900 dark:text-white">
+                          {item.displayDate || item.date}
+                        </span>
+                        <span
+                          className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                            item.status?.toLowerCase().includes('completed') || (item.punchOut && item.punchOut !== '--')
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                              : item.status?.toLowerCase().includes('present') || (item.punchIn && item.punchIn !== '--')
+                              ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                          }`}
+                        >
+                          {item.status || (item.hasPunches ? 'Present / On Duty' : 'No Punch Marked')}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        Device: {item.device || 'CET Biometric Device (Loc 7)'}
+                      </p>
+                      {item.punchlogs && (
+                        <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                          Logs: {item.punchlogs}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs font-mono shrink-0 bg-[#F8FAFC] dark:bg-slate-800/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                      <div>
+                        <span className="text-[9px] text-slate-400 uppercase block font-bold">Punch In</span>
+                        <span className="font-black text-[#5B4BFF]">{item.punchIn || item.intime || '--'}</span>
+                      </div>
+                      <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
+                      <div>
+                        <span className="text-[9px] text-slate-400 uppercase block font-bold">Punch Out</span>
+                        <span className="font-black text-slate-700 dark:text-slate-300">{item.punchOut || item.outtime || '--'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-850 flex items-center justify-between">
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                Total {punchHistory.length} day(s) recorded in biometric database
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={fetchLiveAttendancePunches}
+                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-750 transition-all cursor-pointer"
+                >
+                  🔄 Refresh Data
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPunchHistoryModal(false)}
+                  className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Official NORNX License Receipt Slip Modal */}
       <LicenseReceiptModal

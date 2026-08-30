@@ -112,7 +112,10 @@ export default function AdminRepositoryPage() {
       if (res.ok) {
         const json = await res.json();
         const rawData = json.data?.data || json.data || json;
-        setRepositories(Array.isArray(rawData) ? rawData : []);
+        const arr = Array.isArray(rawData) ? rawData : [];
+        // Safeguard: Deduplicate by repo_id
+        const unique = Array.from(new Map(arr.map((item: any) => [item.repo_id, item])).values());
+        setRepositories(unique);
       }
     } catch (err) {
       console.error('Failed to fetch repositories for admin:', err);
