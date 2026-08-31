@@ -572,10 +572,9 @@ export default function FacultyMarksPage() {
           const jsonR = await resResults.json();
           const rList: any[] = Array.isArray(jsonR?.data) ? jsonR.data : Array.isArray(jsonR) ? jsonR : [];
           rList.forEach(r => {
-            if (r.student_id) savedResultsMap[r.student_id] = r;
-            if (r.rollno) savedResultsMap[r.rollno] = r;
-            if (r.registration_no) savedResultsMap[r.registration_no] = r;
-            if (r.student_name) savedResultsMap[r.student_name.toLowerCase()] = r;
+            if (r.student_id) savedResultsMap[String(r.student_id)] = r;
+            if (r.rollno) savedResultsMap[String(r.rollno)] = r;
+            if (r.registration_no) savedResultsMap[String(r.registration_no)] = r;
           });
         }
       } catch (e) {

@@ -96,6 +96,7 @@ export class NoticesService implements OnModuleInit {
         );
 
         -- Safe column type migration in case table was created with UUID user_id
+        ALTER TABLE notice_recipients DROP CONSTRAINT IF EXISTS notice_recipients_user_id_fkey;
         ALTER TABLE notice_recipients ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR(255);
 
         CREATE TABLE IF NOT EXISTS notice_group_templates (

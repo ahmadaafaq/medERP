@@ -664,14 +664,9 @@ export default function AdminAssessmentMarksPage() {
               (r.student_id && String(r.student_id) === String(st.id));
               // Note: deliberately NOT matching by student_name alone (too error-prone for common names)
 
-            // STRICT paper match — a result MUST belong to the active paper
-            // NEVER use !r.paper_id as bypass — if paper_id is missing, it means unknown paper → skip
+            // STRICT paper match — a result MUST belong to the EXACT active paper UUID
             const matchesPaper =
-              r.paper_id &&
-              (
-                (activePaper?.id && String(r.paper_id) === String(activePaper.id)) ||
-                (activePaper?.code && r.paper_code && String(r.paper_code).toLowerCase() === String(activePaper.code).toLowerCase())
-              );
+              Boolean(r.paper_id && activePaper?.id && String(r.paper_id) === String(activePaper.id));
 
             return matchesStudent && matchesPaper;
           });

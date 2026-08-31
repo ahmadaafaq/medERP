@@ -476,8 +476,8 @@ export default function AssessmentMasterPage() {
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // ─── TAB 2: Dynamic Question Design & Paper Sections State ────────────────
-  const [paperTitle, setPaperTitle] = useState('Mid Term BCA 3rd Sem Exam 2025 Batch');
-  const [paperCode, setPaperCode] = useState('WBTECHPYTHON2026-1');
+  const [paperTitle, setPaperTitle] = useState('');
+  const [paperCode, setPaperCode] = useState('');
   const [paperDuration, setPaperDuration] = useState(60);
   const [paperPassingMarks, setPaperPassingMarks] = useState(20);
   const [designedPapers, setDesignedPapers] = useState<any[]>([]);
@@ -542,6 +542,10 @@ export default function AssessmentMasterPage() {
   const [publishStartTime, setPublishStartTime] = useState('09:00');
   const [publishEndTime, setPublishEndTime] = useState('10:00');
   const [publishedExams, setPublishedExams] = useState<any[]>([]);
+  const [publishFilterCourse, setPublishFilterCourse] = useState<string>('all');
+  const [publishFilterSubject, setPublishFilterSubject] = useState<string>('all');
+  const [publishFilterBatch, setPublishFilterBatch] = useState<string>('all');
+  const [previewPaper, setPreviewPaper] = useState<any | null>(null);
 
   // Utility for foolproof array deduplication by key
   const dedupeBy = <T,>(arr: T[], keyFn: (item: T) => string): T[] => {
@@ -654,19 +658,26 @@ export default function AssessmentMasterPage() {
         const j = await papersRes.json();
         const papersList = parse(j);
         setDesignedPapers(papersList);
-        // Load previously published exams from backend papers (status-based)
+        // Load previously published exams from backend papers (status-based or with scheduled date)
         const published = papersList
-          .filter((p: any) => p.status === 'Published' || p.is_active)
+          .filter((p: any) => p.status === 'Published' || p.is_active || p.exam_date)
           .map((p: any) => ({
             id: p.id,
             paperCode: p.code || p.paper_code || '',
             paperName: p.name || p.title || 'Exam Paper',
-            batch: p.batch_code || p.target_batch || '—',
-            date: p.exam_date ? p.exam_date.slice(0, 10) : (p.created_at ? p.created_at.slice(0, 10) : ''),
-            time: p.start_time && p.end_time ? `${p.start_time} - ${p.end_time}` : '—',
+            subjectName: p.subject_name || allSubjects.find((s: any) => String(s.id) === String(p.subject_id))?.name || 'Subject',
+            subjectCode: p.subject_code || allSubjects.find((s: any) => String(s.id) === String(p.subject_id))?.code || '',
+            subjectId: p.subject_id || '',
+            courseCd: p.subject_course_cd || p.course_cd || '',
+            semester: p.subject_semester || p.semester || '',
+            batch: p.batch_code || p.target_batch || 'All Batches',
+            date: p.exam_date ? String(p.exam_date).slice(0, 10) : (p.created_at ? String(p.created_at).slice(0, 10) : ''),
+            time: p.start_time && p.end_time ? `${p.start_time} - ${p.end_time}` : '09:00 - 10:00',
+            maxMarks: p.max_marks || 40,
+            duration: p.duration_minutes || 60,
             status: 'PUBLISHED',
           }));
-        if (published.length > 0) setPublishedExams(published);
+        setPublishedExams(published);
       }
     } catch (e) {
       console.error('[AssessmentMaster] Failed to fetch Master data', e);
@@ -681,6 +692,17 @@ export default function AssessmentMasterPage() {
       fetchMetadata(selectedCollegeSlug);
     }
   }, [selectedCollegeSlug]);
+
+  // Listen for Escape key to close preview modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPreviewPaper(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // ─── Dynamic Cascading Filters (Strict RestrictAPI.md Hierarchy) ───────────
   const isMedicalCollege = selectedColgCd === '2' || selectedCollegeSlug.includes('ims');
@@ -1607,7 +1629,16 @@ export default function AssessmentMasterPage() {
 
       if (res.ok) {
         const json = await res.json();
-        setDesignedPapers([json.data || json, ...designedPapers]);
+        const savedPaper = json.data || json;
+        const mappedPaper = {
+          ...savedPaper,
+          max_marks: Number(savedPaper.max_marks || savedPaper.maxMarks || paperTotals.grandTotalMarks),
+          duration_minutes: Number(savedPaper.duration_minutes || paperDuration),
+          status: 'Ready for Publish',
+        };
+        setDesignedPapers(prev => [mappedPaper, ...prev.filter(p => p.id !== mappedPaper.id && p.code !== mappedPaper.code)]);
+        setPaperCode(mappedPaper.code || mappedPaper.id);
+        setPaperTitle(mappedPaper.name || mappedPaper.title);
       } else {
         const newPaper = {
           id: Date.now().toString(),
@@ -1618,9 +1649,11 @@ export default function AssessmentMasterPage() {
           status: 'Ready for Publish',
           sections: payload.sections,
         };
-        setDesignedPapers([newPaper, ...designedPapers]);
+        setDesignedPapers(prev => [newPaper, ...prev.filter(p => p.code !== newPaper.code)]);
+        setPaperCode(newPaper.code);
+        setPaperTitle(newPaper.name);
       }
-      setAlert({ type: 'success', message: `Assessment Paper [${paperCode}] designed with ${sections.length} sections (${paperTotals.grandTotalMarks} Marks)!` });
+      setAlert({ type: 'success', message: `Assessment Paper [${paperCode}] designed with ${sections.length} sections (${paperTotals.grandTotalMarks} Marks)! Redirected to Publish.` });
       setActiveTab('publish');
     } catch {
       const newPaper = {
@@ -1632,11 +1665,35 @@ export default function AssessmentMasterPage() {
         status: 'Ready for Publish',
         sections: payload.sections,
       };
-      setDesignedPapers([newPaper, ...designedPapers]);
-      setAlert({ type: 'success', message: `Assessment Paper [${paperCode}] saved successfully!` });
+      setDesignedPapers(prev => [newPaper, ...prev.filter(p => p.code !== newPaper.code)]);
+      setPaperCode(newPaper.code);
+      setPaperTitle(newPaper.name);
+      setAlert({ type: 'success', message: `Assessment Paper [${paperCode}] saved successfully! Redirected to Publish.` });
       setActiveTab('publish');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Delete Examination Paper
+  const handleDeletePaper = async (paperId: string) => {
+    if (!confirm('Are you sure you want to delete this examination paper?')) return;
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const h: Record<string, string> = {
+        'x-tenant-slug': selectedCollegeSlug,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      };
+      await fetch(`${API_BASE}/exams/papers/${paperId}?tenant=${selectedCollegeSlug}`, {
+        method: 'DELETE',
+        headers: h,
+      });
+      setDesignedPapers(prev => prev.filter(p => String(p.id) !== String(paperId)));
+      setPublishedExams(prev => prev.filter(p => String(p.id) !== String(paperId)));
+      setAlert({ type: 'success', message: 'Examination paper deleted successfully.' });
+    } catch (e: any) {
+      console.error('Failed to delete paper', e);
+      setAlert({ type: 'error', message: 'Failed to delete paper.' });
     }
   };
 
@@ -1651,24 +1708,24 @@ export default function AssessmentMasterPage() {
         'x-tenant-slug': selectedCollegeSlug,
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       };
-      // Update the paper with publish info
-      const selectedPaper = designedPapers.find(p => p.code === paperCode);
+      // Find selected paper
+      const selectedPaper = designedPapers.find(p => p.code === paperCode || p.id === paperCode);
       if (selectedPaper) {
-        await fetch(`${API_BASE}/exams/papers/${selectedPaper.id}?tenant=${selectedCollegeSlug}`, {
-          method: 'PATCH',
+        await fetch(`${API_BASE}/exams/publish?tenant=${selectedCollegeSlug}`, {
+          method: 'POST',
           headers: h,
           body: JSON.stringify({
-            status: 'Published',
+            paperId: selectedPaper.id,
             target_batch: publishTargetBatch,
-            exam_date: publishDate,
-            start_time: publishStartTime,
-            end_time: publishEndTime,
+            examDate: publishDate,
+            startTime: publishStartTime,
+            endTime: publishEndTime,
           }),
         }).catch(() => null);
       }
       const newExam = {
-        id: Date.now().toString(),
-        paperCode,
+        id: selectedPaper?.id || Date.now().toString(),
+        paperCode: selectedPaper?.code || paperCode,
         paperName: selectedPaper?.name || paperTitle,
         batch: publishTargetBatch,
         date: publishDate,
@@ -1676,7 +1733,7 @@ export default function AssessmentMasterPage() {
         status: 'PUBLISHED',
       };
       setPublishedExams(prev => [newExam, ...prev.filter(ex => ex.paperCode !== paperCode)]);
-      setAlert({ type: 'success', message: `Exam [${paperCode}] published to student portal for batch ${publishTargetBatch}!` });
+      setAlert({ type: 'success', message: `Exam [${selectedPaper?.code || paperCode}] published to student portal for batch ${publishTargetBatch}!` });
     } finally {
       setSaving(false);
     }
@@ -3093,14 +3150,30 @@ export default function AssessmentMasterPage() {
                           </span>
                           <button
                             type="button"
+                            onClick={() => setPreviewPaper(dp)}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center gap-1 shadow-sm transition"
+                            title="Preview & Print Question Paper (Excluding Practical)"
+                          >
+                            <span>📄 Print / PDF</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => {
                               setPaperCode(dp.code);
                               setPaperTitle(dp.name);
                               setActiveTab('publish');
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-[#5B4BFF] text-white font-bold text-[10px]"
+                            className="px-2.5 py-1 rounded-lg bg-[#5B4BFF] text-white font-bold text-[10px] hover:bg-[#4938DF] transition"
                           >
                             🚀 Publish
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePaper(dp.id)}
+                            className="px-2 py-1 rounded-lg bg-rose-500/10 text-rose-600 hover:bg-rose-600 hover:text-white border border-rose-500/20 font-bold text-[10px] transition"
+                            title="Delete Paper"
+                          >
+                            🗑️ Delete
                           </button>
                         </div>
                       </div>
@@ -3129,15 +3202,31 @@ export default function AssessmentMasterPage() {
                 <form onSubmit={handlePublishExam} className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Select Designed Paper *</label>
+                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        Select Designed Paper * ({designedPapers.length} Available)
+                      </label>
                       <select
                         value={paperCode}
-                        onChange={(e) => setPaperCode(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPaperCode(val);
+                          const found = designedPapers.find(p => p.code === val || p.id === val);
+                          if (found) {
+                            setPaperTitle(found.name || found.title || '');
+                          }
+                        }}
                         className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-[#5B4BFF] font-bold"
+                        required
                       >
-                        {designedPapers.map(p => (
-                          <option key={p.id} value={p.code}>{p.name} [{p.code}]</option>
-                        ))}
+                        <option value="">-- Choose Designed Paper to Publish --</option>
+                        {designedPapers.map(p => {
+                          const subj = p.subject_name || allSubjects.find(s => String(s.id) === String(p.subject_id) || String(s.code) === String(p.subject_code))?.name || '';
+                          return (
+                            <option key={p.id || p.code} value={p.code || p.id}>
+                              [{p.code}] {p.name} {subj ? `• ${subj}` : ''} ({p.max_marks || 40} Marks)
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
 
@@ -3217,9 +3306,20 @@ export default function AssessmentMasterPage() {
                   <div className="flex justify-end">
                     <button
                       type="submit"
-                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2"
+                      disabled={saving || !paperCode}
+                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
                     >
-                      <span>🚀</span> Publish Exam & Notify Students
+                      {saving ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Publishing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🚀</span>
+                          <span>Publish Exam & Notify Students</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>
@@ -3227,24 +3327,117 @@ export default function AssessmentMasterPage() {
 
               {/* Published Exams Ledger */}
               <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 space-y-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
-                <h3 className="text-sm font-black uppercase text-slate-900 dark:text-white tracking-wider">
-                  📢 Published Examinations Ledger ({publishedExams.length})
-                </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-black uppercase text-slate-900 dark:text-white tracking-wider flex items-center gap-2">
+                      <span>📢</span>
+                      <span>Published Examinations Ledger ({publishedExams.length})</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      All published exams categorized by subject, course, semester, and batch
+                    </p>
+                  </div>
+
+                  {/* Ledger Filters */}
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <select
+                      value={publishFilterCourse}
+                      onChange={(e) => setPublishFilterCourse(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-[11px] font-bold focus:outline-none"
+                    >
+                      <option value="all">All Courses</option>
+                      {collegeCourses.map(c => (
+                        <option key={c.id || c.code} value={c.course_cd || c.code}>{c.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={publishFilterSubject}
+                      onChange={(e) => setPublishFilterSubject(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-[11px] font-bold focus:outline-none"
+                    >
+                      <option value="all">All Subjects</option>
+                      {allSubjects.map(s => (
+                        <option key={s.id || s.code} value={s.id || s.code}>{s.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={publishFilterBatch}
+                      onChange={(e) => setPublishFilterBatch(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-[11px] font-bold focus:outline-none"
+                    >
+                      <option value="all">All Batches</option>
+                      {collegeBatches.map(b => (
+                        <option key={b.id || b.code} value={b.code}>{b.name || `Batch ${b.year}`} ({b.code})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <div className="divide-y divide-[#E7EAF3] dark:divide-slate-800 text-xs">
-                  {publishedExams.length === 0 ? (
-                    <p className="py-8 text-center text-slate-400 font-medium">No examinations published yet.</p>
+                  {publishedExams.filter(ex => {
+                    if (publishFilterCourse !== 'all' && ex.courseCd && String(ex.courseCd) !== String(publishFilterCourse)) return false;
+                    if (publishFilterSubject !== 'all' && ex.subjectId && String(ex.subjectId) !== String(publishFilterSubject) && String(ex.subjectCode) !== String(publishFilterSubject)) return false;
+                    if (publishFilterBatch !== 'all' && ex.batch && !ex.batch.includes(publishFilterBatch)) return false;
+                    return true;
+                  }).length === 0 ? (
+                    <div className="py-10 text-center space-y-2">
+                      <div className="text-2xl">📝</div>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No published examinations found for selected filters.</p>
+                      <p className="text-xs text-slate-400">Publish a designed paper using the form above to schedule student evaluations.</p>
+                    </div>
                   ) : (
-                    publishedExams.map((ex) => (
-                      <div key={ex.id} className="py-3 flex items-center justify-between">
-                        <div>
-                          <strong className="text-slate-900 dark:text-white">{ex.paperName}</strong>
-                          <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
-                            Batch: <span className="text-[#5B4BFF] font-bold">{ex.batch}</span> | Date: {ex.date} | Time: {ex.time}
+                    publishedExams.filter(ex => {
+                      if (publishFilterCourse !== 'all' && ex.courseCd && String(ex.courseCd) !== String(publishFilterCourse)) return false;
+                      if (publishFilterSubject !== 'all' && ex.subjectId && String(ex.subjectId) !== String(publishFilterSubject) && String(ex.subjectCode) !== String(publishFilterSubject)) return false;
+                      if (publishFilterBatch !== 'all' && ex.batch && !ex.batch.includes(publishFilterBatch)) return false;
+                      return true;
+                    }).map((ex) => (
+                      <div key={ex.id || ex.paperCode} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 p-3 rounded-xl transition">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-[11px] font-black text-[#F36C21] bg-[#F36C21]/10 px-2 py-0.5 rounded border border-[#F36C21]/20">
+                              [{ex.paperCode}]
+                            </span>
+                            <strong className="text-sm text-slate-900 dark:text-white font-extrabold">{ex.paperName}</strong>
+                            {ex.subjectName && (
+                              <span className="text-[11px] font-bold text-[#5B4BFF] bg-[#5B4BFF]/10 px-2 py-0.5 rounded">
+                                📚 {ex.subjectName}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-slate-500 dark:text-slate-400 text-[11px] flex items-center gap-3 flex-wrap">
+                            <span>🎓 Batch: <strong className="text-[#5B4BFF]">{ex.batch}</strong></span>
+                            <span>📅 Date: <strong>{ex.date || 'Scheduled'}</strong></span>
+                            <span>⏰ Time: <strong>{ex.time || '09:00 - 10:00'}</strong></span>
+                            <span>⏱️ Duration: <strong>{ex.duration || 60} mins</strong></span>
+                            <span>🎯 Max Marks: <strong className="text-emerald-600 dark:text-emerald-400">{ex.maxMarks || 40} Marks</strong></span>
                           </p>
                         </div>
-                        <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold border border-emerald-500/20 text-[10px] uppercase">
-                          {ex.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold border border-emerald-500/20 text-[10px] uppercase">
+                            {ex.status || 'PUBLISHED'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Find corresponding full paper object or pass ex
+                              const fullPaper = designedPapers.find(p => p.code === ex.paperCode || p.id === ex.id) || ex;
+                              setPreviewPaper(fullPaper);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition"
+                            title="Preview & Print Question Paper (Excludes Practical Section)"
+                          >
+                            <span>📄 Print / PDF</span>
+                          </button>
+                          <a
+                            href="/dashboard/admin/assessment-marks"
+                            className="px-3 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition"
+                          >
+                            <span>🎯 Evaluate Marks →</span>
+                          </a>
+                        </div>
                       </div>
                     ))
                   )}
@@ -3252,6 +3445,360 @@ export default function AssessmentMasterPage() {
               </div>
             </div>
           )}
+
+          {/* ═════════════════════════════════════════════════════════════════════════════ */}
+          {/* PRINT & PREVIEW EXAMINATION PAPER MODAL (EXCLUDES PRACTICAL SECTION) */}
+          {/* ═════════════════════════════════════════════════════════════════════════════ */}
+          {previewPaper && (
+            <div
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setPreviewPaper(null);
+              }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm no-print-bg"
+            >
+              <div
+                className="relative w-full max-w-3xl max-h-[88vh] bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+
+                {/* Modal Top Action Bar (Sticky Header) */}
+                <div className="no-print shrink-0 bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between border-b border-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-7 h-7 rounded-lg bg-[#F36C21] text-white flex items-center justify-center text-xs font-black shadow-sm">
+                      📄
+                    </span>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-white leading-tight">
+                        Question Paper Preview — <span className="font-mono text-[#F36C21]">[{previewPaper.code || previewPaper.paperCode}]</span>
+                      </h4>
+                      <p className="text-[10px] text-slate-400">
+                        Official Examination Question Paper • <strong className="text-amber-400">Theory Only (Practical Excluded)</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <span>🖨️ Print</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-3 py-1.5 bg-[#5B4BFF] hover:bg-[#4938DF] text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <span>📥 PDF</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPaper(null)}
+                      className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition font-bold text-base cursor-pointer"
+                      title="Close (ESC)"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* Printable Paper Content (Scrollable Medium Box) */}
+                <div className="overflow-y-auto flex-1 p-6 sm:p-8 space-y-6 text-slate-900 bg-white font-serif">
+                  <div id="printable-exam-paper" className="space-y-6">
+
+                    {/* 1. Official College Letterhead & Examination Header */}
+                    <div className="text-center border-b-2 border-black pb-4 space-y-1">
+                      <h1 className="text-lg sm:text-xl font-black uppercase tracking-wider text-black font-sans">
+                        SRMS COLLEGE OF ENGINEERING &amp; TECHNOLOGY, BAREILLY
+                      </h1>
+                      <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                        Faculty of Computer Science &amp; Information Technology
+                      </p>
+                      <p className="text-[10px] text-slate-600 italic">
+                        Approved by AICTE, New Delhi &amp; Affiliated to Dr. A.P.J. Abdul Kalam Technical University, Lucknow
+                      </p>
+
+                      <div className="pt-2">
+                        <h2 className="text-sm sm:text-base font-black uppercase text-black underline decoration-2 underline-offset-4">
+                          {previewPaper.name || previewPaper.paperName || 'EXAMINATION QUESTION PAPER'}
+                        </h2>
+                        <p className="text-[11px] font-bold text-slate-800 pt-0.5">
+                          Academic Session: 2025–2026 • Paper Code: <span className="font-mono font-black">[{previewPaper.code || previewPaper.paperCode}]</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* 2. Metadata Bar (Course, Subject, Batch, Duration, Max Theory Marks, Student Roll No) */}
+                    {(() => {
+                      // Extract sections from paper (filtering out PRACTICAL)
+                      const rawSections = previewPaper.sections
+                        ? (typeof previewPaper.sections === 'string' ? JSON.parse(previewPaper.sections) : previewPaper.sections)
+                        : (sections || []);
+
+                      const theorySections: PaperSection[] = Array.isArray(rawSections)
+                        ? rawSections.filter((s: any) => s.type !== 'PRACTICAL')
+                        : [];
+
+                      // Calculate Theory Max Marks
+                      let theoryMaxMarks = 0;
+                      theorySections.forEach(s => {
+                        const qList = s.selectedQuestions || (s as any).questions || [];
+                        theoryMaxMarks += qList.reduce((acc: number, q: any) => acc + Number(q.marks || 0), 0);
+                      });
+                      if (theoryMaxMarks === 0) {
+                        theoryMaxMarks = previewPaper.max_marks || previewPaper.maxMarks || 40;
+                      }
+
+                      const subjName = previewPaper.subjectName || previewPaper.subject_name || allSubjects.find(s => String(s.id) === String(previewPaper.subject_id))?.name || 'Computer Organization';
+                      const durationMins = previewPaper.duration_minutes || previewPaper.duration || 60;
+                      const batchName = previewPaper.batch || previewPaper.target_batch || 'Batch 2025 (BCA)';
+
+                      return (
+                        <>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 py-2 border-b border-black text-xs font-sans">
+                            <div>
+                              <span className="font-bold text-slate-600 block text-[10px] uppercase">Subject:</span>
+                              <span className="font-extrabold text-black">{subjName}</span>
+                            </div>
+                            <div>
+                              <span className="font-bold text-slate-600 block text-[10px] uppercase">Course &amp; Batch:</span>
+                              <span className="font-bold text-black">{batchName}</span>
+                            </div>
+                            <div>
+                              <span className="font-bold text-slate-600 block text-[10px] uppercase">Duration:</span>
+                              <span className="font-bold text-black">{durationMins} Minutes</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-bold text-slate-600 block text-[10px] uppercase">Max Marks (Theory):</span>
+                              <span className="font-black text-black text-sm">{theoryMaxMarks}.00 Marks</span>
+                            </div>
+                          </div>
+
+                          {/* Student Roll Number & Examination Instructions Box */}
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 border border-black rounded-lg text-xs font-sans bg-slate-50/80">
+                            <div className="space-y-0.5">
+                              <span className="font-bold text-black uppercase text-[11px]">General Instructions:</span>
+                              <ul className="list-disc list-inside text-[11px] text-slate-700 space-y-0.5">
+                                <li>Attempt all questions from Section A and Section B.</li>
+                                <li>Figures to the right indicate full marks for each question.</li>
+                                <li>Use of mobile phones or electronic communication devices is strictly prohibited.</li>
+                              </ul>
+                            </div>
+                            <div className="p-2 border border-black rounded text-center min-w-[180px] bg-white">
+                              <span className="text-[10px] font-bold uppercase block text-slate-500">Student Roll Number</span>
+                              <span className="font-mono font-bold tracking-widest text-slate-400">____________________</span>
+                            </div>
+                          </div>
+
+                          {/* 3. Render Theory Sections (Section A: MCQs & Section B: Descriptive) */}
+                          {theorySections.length === 0 ? (
+                            /* Fallback: If paper has no embedded sections, render standard questions for this subject */
+                            <div className="space-y-6 pt-2">
+                              {/* Section A */}
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between border-b border-black pb-1">
+                                  <h3 className="font-bold text-xs uppercase text-black font-sans">
+                                    SECTION A: MULTIPLE CHOICE QUESTIONS (MCQs)
+                                  </h3>
+                                  <span className="font-mono font-bold text-xs">[20 x 1.0 = 20 Marks]</span>
+                                </div>
+                                <p className="text-xs italic text-slate-600 font-sans">
+                                  Choose the correct option for each question. Each question carries 1.0 mark.
+                                </p>
+
+                                <div className="space-y-2.5 font-sans text-xs">
+                                  {questions.filter(q => q.mode === 'MCQ').slice(0, 10).map((q, idx) => (
+                                    <div key={q.id || idx} className="space-y-1">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <p className="font-bold text-black">
+                                          Q{idx + 1}. {q.question_text}
+                                        </p>
+                                        <span className="font-mono text-[10px] text-slate-500 font-bold shrink-0">[1.0]</span>
+                                      </div>
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pl-4 text-[11px] text-slate-800">
+                                        <span>(A) {q.option_a || 'Option A'}</span>
+                                        <span>(B) {q.option_b || 'Option B'}</span>
+                                        <span>(C) {q.option_c || 'Option C'}</span>
+                                        <span>(D) {q.option_d || 'Option D'}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Section B */}
+                              <div className="space-y-3 pt-3 border-t border-slate-300">
+                                <div className="flex items-center justify-between border-b border-black pb-1">
+                                  <h3 className="font-bold text-xs uppercase text-black font-sans">
+                                    SECTION B: LONG DESCRIPTIVE QUESTIONS &amp; SUB-PARTS
+                                  </h3>
+                                  <span className="font-mono font-bold text-xs">[4 x 10.0 = 40 Marks]</span>
+                                </div>
+                                <p className="text-xs italic text-slate-600 font-sans">
+                                  Answer all questions with detailed explanations, architectural diagrams, and code snippets.
+                                </p>
+
+                                <div className="space-y-3 font-sans text-xs">
+                                  {questions.filter(q => q.mode === 'DESC').slice(0, 4).map((q, idx) => (
+                                    <div key={q.id || idx} className="space-y-1">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <p className="font-bold text-black">
+                                          Q{idx + 1}. {q.question_text}
+                                        </p>
+                                        <span className="font-mono text-[10px] text-slate-500 font-bold shrink-0">[10.0]</span>
+                                      </div>
+                                      {q.sub_questions && Array.isArray(q.sub_questions) && (
+                                        <div className="pl-4 space-y-1 text-[11px] text-slate-800">
+                                          {q.sub_questions.map((sq, sIdx) => (
+                                            <div key={sIdx} className="flex items-start justify-between">
+                                              <span><strong>{sq.label}</strong> {sq.questionText}</span>
+                                              <span className="font-mono text-slate-500 font-bold ml-2">[{sq.marks} M]</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            /* Render Actual Designed Sections */
+                            <div className="space-y-6 pt-2">
+                              {theorySections.map((sec, secIdx) => {
+                                const qList = sec.selectedQuestions || (sec as any).questions || [];
+                                const secTotal = qList.reduce((acc: number, q: any) => acc + Number(q.marks || 0), 0);
+
+                                return (
+                                  <div key={sec.id || secIdx} className="space-y-3">
+                                    <div className="flex items-center justify-between border-b border-black pb-1">
+                                      <h3 className="font-bold text-xs uppercase text-black font-sans">
+                                        {sec.title}
+                                      </h3>
+                                      <span className="font-mono font-bold text-xs">[{secTotal}.00 Marks]</span>
+                                    </div>
+                                    {sec.instructions && (
+                                      <p className="text-xs italic text-slate-600 font-sans">
+                                        {sec.instructions}
+                                      </p>
+                                    )}
+
+                                    <div className="space-y-3 font-sans text-xs">
+                                      {qList.length === 0 ? (
+                                        <p className="italic text-slate-400 py-2">No questions added in this section.</p>
+                                      ) : (
+                                        qList.map((q: any, qIdx: number) => (
+                                          <div key={q.questionId || q.id || qIdx} className="space-y-1">
+                                            <div className="flex items-start justify-between gap-2">
+                                              <p className="font-bold text-black">
+                                                Q{qIdx + 1}. {q.questionText || q.question_text}
+                                                {q.competency_code && (
+                                                  <span className="ml-2 font-mono text-[10px] text-slate-400">[{q.competency_code}]</span>
+                                                )}
+                                              </p>
+                                              <span className="font-mono text-[10px] text-slate-500 font-bold shrink-0">
+                                                [{q.marks || 1.0} Marks]
+                                              </span>
+                                            </div>
+
+                                            {/* Options for MCQ */}
+                                            {sec.type === 'MCQ' && (
+                                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pl-4 text-[11px] text-slate-800 pt-0.5">
+                                                <span>(A) {q.option_a || '—'}</span>
+                                                <span>(B) {q.option_b || '—'}</span>
+                                                <span>(C) {q.option_c || '—'}</span>
+                                                <span>(D) {q.option_d || '—'}</span>
+                                              </div>
+                                            )}
+
+                                            {/* Sub-questions for DESC */}
+                                            {sec.type === 'DESC' && q.sub_questions && Array.isArray(q.sub_questions) && (
+                                              <div className="pl-4 space-y-1 text-[11px] text-slate-800 pt-0.5">
+                                                {q.sub_questions.map((sq: any, sIdx: number) => (
+                                                  <div key={sIdx} className="flex items-start justify-between">
+                                                    <span><strong>{sq.label}</strong> {sq.questionText}</span>
+                                                    <span className="font-mono text-slate-500 font-bold ml-2">[{sq.marks} M]</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* End of Question Paper Footer */}
+                          <div className="text-center pt-6 border-t border-black text-xs font-sans text-slate-500 space-y-1">
+                            <p className="font-bold uppercase tracking-widest text-black">*** END OF QUESTION PAPER ***</p>
+                            <p className="text-[10px]">SRMS CET ERP Assessment Engine • Question Paper ID: {previewPaper.id || previewPaper.code}</p>
+                          </div>
+                        </>
+                      );
+                    })()}
+
+                  </div>
+                </div>
+
+                {/* Modal Bottom Action Bar (Sticky Footer) */}
+                <div className="no-print shrink-0 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-5 py-3 flex items-center justify-between text-xs font-sans">
+                  <span className="text-slate-500 dark:text-slate-400 text-[11px]">
+                    Press <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded font-mono text-[10px] font-bold">ESC</kbd> or click outside to close
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>🖨️ Print Paper</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPaper(null)}
+                      className="px-3.5 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-lg transition cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════════════════════════════ */}
+          {/* PRINT-SPECIFIC CSS RULES */}
+          {/* ═════════════════════════════════════════════════════════════════════════════ */}
+          <style jsx global>{`
+            @media print {
+              body {
+                background: white !important;
+                color: black !important;
+              }
+              header, aside, nav, .no-print, .no-print-bg {
+                display: none !important;
+              }
+              #printable-exam-paper {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                min-height: auto !important;
+                margin: 0 !important;
+                padding: 12mm !important;
+                background: white !important;
+                color: black !important;
+                font-size: 11pt !important;
+              }
+          `}</style>
 
         </main>
       </div>

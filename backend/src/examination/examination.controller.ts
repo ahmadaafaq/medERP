@@ -24,6 +24,12 @@ export class ExaminationController {
   }
 
   @Public()
+  @Delete('papers/:id')
+  async deletePaper(@Tenant() tenantSlug: string, @Param('id') id: string) {
+    return this.examinationService.deletePaper(tenantSlug, id);
+  }
+
+  @Public()
   @Post('results')
   async submitResult(
     @Tenant() tenantSlug: string,

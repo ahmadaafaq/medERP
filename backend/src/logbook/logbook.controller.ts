@@ -479,8 +479,12 @@ export class LogbookController {
   @Public()
   @Get('academic-structure')
   @ApiOperation({ summary: 'Get academic hierarchy options for course, branch, batch, and semester' })
-  async getAcademicStructure(@Tenant() tenantSlug: string) {
-    return this.logbookService.getAcademicStructure(tenantSlug);
+  async getAcademicStructure(
+    @Tenant() tenantSlug: string,
+    @Query('courseId') courseId?: string,
+    @Query('courseCd') courseCd?: string,
+  ) {
+    return this.logbookService.getAcademicStructure(tenantSlug, courseCd || courseId);
   }
 
   @Public()
@@ -589,6 +593,31 @@ export class LogbookController {
   async evaluateSubmission(@Tenant() tenantSlug: string, @CurrentUser() user: any, @Param('id') id: string, @Body() dto: EvaluateLogbookSubmissionDto) {
     const facultyId = user?.profile?.id || user?.userId || user?.id || user?.sub || '00000000-0000-0000-0000-000000000001';
     return this.logbookService.evaluateSubmission(tenantSlug, id, facultyId, dto);
+  }
+
+  @Public()
+  @Public()
+  @Get('admin/all-entries')
+  @ApiOperation({ summary: 'Admin view all logbook submissions, seminars, tutorials, and deliverables with faculty evaluations' })
+  async getAllAdminLogbookEntries(
+    @Tenant() tenantSlug: string,
+    @Query('courseId') courseId?: string,
+    @Query('branchId') branchId?: string,
+    @Query('batchId') batchId?: string,
+    @Query('semesterId') semesterId?: string,
+    @Query('category') category?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.logbookService.getAllAdminLogbookEntries(tenantSlug, {
+      courseId,
+      branchId,
+      batchId,
+      semesterId,
+      category,
+      status,
+      search,
+    });
   }
 
   @Public()

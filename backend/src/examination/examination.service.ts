@@ -146,7 +146,10 @@ export class ExaminationService {
 
       // Auto-create student in database if not yet existing
       if (!realStudentId) {
-        const studentRoll = roll || reg || '2500141790001';
+        if (!roll && !reg) {
+          throw new BadRequestException('Student roll number or registration number is required.');
+        }
+        const studentRoll = roll || reg;
         const studentReg = reg || studentRoll;
         const studentName = name || 'Student';
         const insertSt = await this.tenantSchemaService.queryInTenant(
@@ -449,6 +452,22 @@ export class ExaminationService {
     return { success: true, message: 'Question removed successfully' };
   }
 
+  async deletePaper(tenantSlug: string, id: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    // Delete any results for this paper first, then delete the paper
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM student_results WHERE paper_id::text = $1`,
+      [id],
+    );
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM examination_papers WHERE id::text = $1`,
+      [id],
+    );
+    return { success: true, message: 'Examination paper deleted successfully' };
+  }
+
   async publishPaper(tenantSlug: string, dto: any) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const res = await this.tenantSchemaService.queryInTenant(
@@ -457,7 +476,7 @@ export class ExaminationService {
        SET batch_id = COALESCE($1, batch_id),
            exam_date = COALESCE($2, exam_date),
            is_active = true
-       WHERE id = $3
+       WHERE id::text = $3
        RETURNING *`,
       [
         this.isUUID(dto.batchId) ? dto.batchId : null,
