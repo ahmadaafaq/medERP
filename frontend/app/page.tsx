@@ -161,8 +161,8 @@ export default function UniCampusBrandHomePage() {
               location: item.name?.includes('LUCKNOW')
                 ? 'Lucknow, UP'
                 : item.name?.includes('UNNAO')
-                ? 'Unnao, UP'
-                : 'Bareilly, UP',
+                  ? 'Unnao, UP'
+                  : 'Bareilly, UP',
               category: isMed ? 'MED' : 'NONMED',
               type: isMed ? 'Medical University & Hospital' : 'Engineering & Higher Education',
               icon: isMed ? '🏥' : '⚙️',
@@ -189,8 +189,8 @@ export default function UniCampusBrandHomePage() {
           const firmsList: any[] = Array.isArray(firmsJson.data)
             ? firmsJson.data
             : Array.isArray(firmsJson)
-            ? firmsJson
-            : [];
+              ? firmsJson
+              : [];
           firmsList.forEach((f) => {
             if (f.status === 'SUSPENDED' || f.status === 'INACTIVE' || f.is_active === false) {
               map.delete(f.slug);
@@ -268,15 +268,15 @@ export default function UniCampusBrandHomePage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] font-sans antialiased selection:bg-[#F36C21] selection:text-white">
-      {/* ─── 1. TOP ANNOUNCEMENT BAR (Clean & Bright) ────────────────────────── */}
-      <div className="bg-gradient-to-r from-[#FFF5ED] via-[#F0F5FF] to-[#FFF5ED] border-b border-[#FBE0D0]/60 text-xs py-2 px-4">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <span className="px-2.5 py-0.5 rounded-full bg-[#F36C21] text-white font-extrabold text-[10px] tracking-wide uppercase shadow-sm">
+      {/* ─── 1. TOP ANNOUNCEMENT BAR (Clean & Sleek) ────────────────────────── */}
+      <div className="bg-gradient-to-r from-[#FFF5ED] via-[#F0F5FF] to-[#FFF5ED] border-b border-[#FBE0D0]/60 text-xs py-1.5 px-3 sm:px-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="px-2 py-0.5 rounded-full bg-[#F36C21] text-white font-black text-[9px] sm:text-[10px] tracking-wide uppercase shadow-xs shrink-0">
               AI CLOUD v3.0
             </span>
             <p className="text-[#334155] text-xs font-semibold truncate">
-              ✨ Autonomous AI Timetables, Smart Clinical Rotations & Unified Campus Operations are now live across all institutions.
+              ✨ Autonomous AI Timetables & Smart Clinical Rotations live.
             </p>
           </div>
           <div className="flex items-center gap-4 shrink-0 text-[11px] font-bold text-[#475569]">
@@ -291,18 +291,17 @@ export default function UniCampusBrandHomePage() {
         </div>
       </div>
 
-      {/* ─── 2. STICKY LIGHT BRAND HEADER ────────────────────────────────────── */}
+      {/* ─── 2. STICKY DARK BRAND HEADER ────────────────────────────────────── */}
       <header
-        className={`sticky top-0 z-50 transition-all duration-300 ${
-          scrolled
-            ? 'bg-white/90 backdrop-blur-xl border-b border-[#E2E8F0] shadow-[0_4px_25px_rgba(0,0,0,0.03)]'
-            : 'bg-white/80 backdrop-blur-md border-b border-[#F1F5F9]'
-        }`}
+        className={`sticky top-0 z-50 transition-all duration-300 ${scrolled
+          ? 'bg-[#0B0F19]/95 backdrop-blur-xl border-b border-white/15 shadow-xl'
+          : 'bg-[#0B0F19]/85 backdrop-blur-md border-b border-white/10'
+          }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-3 sm:gap-6">
           {/* Logo & UniCampus Brand */}
-          <Link href="/" className="flex items-center gap-3.5 group">
-            <div className="w-11 h-11 rounded-2xl bg-white p-1 shadow-md border border-[#E2E8F0] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200">
+          <Link href="/" className="flex items-center gap-2.5 sm:gap-3.5 group min-w-0">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-white p-1 shadow-md border border-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200">
               <Image
                 src="/unicampus-icon.png"
                 alt="UniCampus Logo"
@@ -312,48 +311,48 @@ export default function UniCampusBrandHomePage() {
                 priority
               />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-black tracking-tight text-[#0F172A] leading-tight">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-base sm:text-xl font-black tracking-tight text-white leading-tight">
                   UniCampus
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-[#FFF5ED] border border-[#FBE0D0] text-[#F36C21] text-[10px] font-black uppercase tracking-wider">
+                <span className="px-1.5 py-0.5 rounded-full bg-[#FFF5ED] border border-[#FBE0D0] text-[#F36C21] text-[9px] sm:text-[10px] font-black uppercase tracking-wider">
                   AI CLOUD
                 </span>
               </div>
-              <p className="text-[11px] text-[#64748B] font-medium tracking-wide">
+              <p className="text-[10px] sm:text-[11px] text-[#94A3B8] font-medium tracking-wide truncate hidden xs:block">
                 Next-Gen University ERP & Healthcare OS
               </p>
             </div>
           </Link>
 
           {/* Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-8 text-xs font-extrabold text-[#475569]">
-            <a href="#solutions" className="hover:text-[#F36C21] transition-colors">
+          <nav className="hidden lg:flex items-center gap-8 text-xs font-extrabold text-[#94A3B8]">
+            <a href="#solutions" className="hover:text-white transition-colors">
               Platform Solutions
             </a>
-            <a href="#med-ai" className="hover:text-[#F36C21] transition-colors flex items-center gap-1.5">
+            <a href="#med-ai" className="hover:text-white transition-colors flex items-center gap-1.5">
               <span>🏥 MED ERP</span>
             </a>
-            <a href="#eng-ai" className="hover:text-[#F36C21] transition-colors flex items-center gap-1.5">
+            <a href="#eng-ai" className="hover:text-white transition-colors flex items-center gap-1.5">
               <span>⚙️ Engineering ERP</span>
             </a>
-            <a href="#mobile-app" className="hover:text-[#F36C21] transition-colors flex items-center gap-1.5">
+            <a href="#mobile-app" className="hover:text-white transition-colors flex items-center gap-1.5">
               <span>📱 Mobile Apps</span>
             </a>
           </nav>
 
           {/* Action CTAs */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <Link
               href="/access/superadmin"
-              className="hidden sm:inline-flex px-4 py-2.5 rounded-xl border border-[#E2E8F0] hover:border-[#CBD5E1] bg-white text-[#334155] font-extrabold text-xs shadow-sm hover:bg-[#F8FAFC] transition-all"
+              className="hidden sm:inline-flex px-4 py-2.5 rounded-xl border border-white/20 hover:border-white/40 bg-white text-[#0F172A] font-extrabold text-xs shadow-sm hover:bg-white/90 transition-all"
             >
               Owner Portal
             </Link>
             <Link
               href="/login"
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#E05A10] hover:from-[#E05A10] hover:to-[#C94A06] text-white font-extrabold text-xs shadow-md shadow-orange-500/20 hover:shadow-lg hover:shadow-orange-500/30 transition-all transform active:scale-95 flex items-center gap-2 group cursor-pointer"
+              className="px-3.5 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#E05A10] hover:from-[#E05A10] hover:to-[#C94A06] text-white font-extrabold text-[11px] sm:text-xs shadow-md shadow-orange-500/30 hover:shadow-lg hover:shadow-orange-500/40 transition-all transform active:scale-95 flex items-center gap-1.5 group cursor-pointer whitespace-nowrap"
             >
               <span>🔑 Go to Login</span>
               <span className="group-hover:translate-x-0.5 transition-transform font-mono">➔</span>
@@ -369,98 +368,85 @@ export default function UniCampusBrandHomePage() {
           - Auto-advances every 5s with smooth fade transition
           - Headline + search bar + stats overlaid on top
       ═══════════════════════════════════════════════════════════════════ */}
-      <section className="relative overflow-hidden" style={{ minHeight: '92vh' }}>
+      {/* ═══════════════════════════════════════════════════════════════════
+          3. VIBRANT BRAND ORANGE HERO CANVAS
+          - Premium solid orange gradient matching brand identity (#EA580C -> #F36C21 -> #C2410C)
+          - Geometric lighting overlay + ambient glow
+          - Rotating slide headlines + live campus search + stats strip
+      ═══════════════════════════════════════════════════════════════════ */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-[#EA580C] via-[#F36C21] to-[#C2410C] text-white min-h-[500px] sm:min-h-[75vh] lg:min-h-[82vh] flex flex-col justify-between">
 
-        {/* ── SLIDE IMAGES (stacked, crossfade) */}
-        {BANNERS.map((banner, idx) => (
-          <div
-            key={idx}
-            className="absolute inset-0 transition-opacity duration-700"
-            style={{ opacity: idx === currentBanner && !isTransitioning ? 1 : 0, zIndex: 1 }}
-          >
-            <Image
-              src={banner.src}
-              alt={banner.title}
-              fill
-              priority={idx === 0}
-              className="object-cover object-center"
-              sizes="100vw"
-            />
-          </div>
-        ))}
-
-        {/* ── MULTI-LAYER OVERLAY for text legibility */}
-        <div className="absolute inset-0 z-10 pointer-events-none">
-          {/* Dark base */}
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/75 via-slate-900/60 to-slate-950/85" />
-          {/* Bottom vignette for stats bar */}
-          <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-slate-950/90 to-transparent" />
-          {/* Left warm brand ambient */}
-          <div className="absolute top-1/4 left-0 w-96 h-96 rounded-full blur-3xl opacity-20 bg-[#F36C21]" />
-        </div>
+        {/* ── Geometric ambient lighting overlay */}
+        <div
+          className="absolute inset-0 opacity-[0.07] pointer-events-none"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1.5px 1.5px, rgba(255,255,255,1) 1.5px, transparent 0)`,
+            backgroundSize: '28px 28px',
+          }}
+        />
+        <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-white/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 -right-32 w-[500px] h-[500px] rounded-full bg-black/25 blur-3xl pointer-events-none" />
 
         {/* ── PREV / NEXT ARROWS */}
         <button
           onClick={prevBanner}
-          className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/25 backdrop-blur-md border border-white/20 text-white flex items-center justify-center text-lg font-bold transition-all hover:scale-110 shadow-lg"
+          className="absolute left-3 sm:left-8 top-1/2 -translate-y-1/2 z-30 w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur-md border border-white/25 text-white flex items-center justify-center text-base sm:text-xl font-bold transition-all hover:scale-110 shadow-lg cursor-pointer"
           aria-label="Previous"
         >
           ‹
         </button>
         <button
           onClick={nextBanner}
-          className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/25 backdrop-blur-md border border-white/20 text-white flex items-center justify-center text-lg font-bold transition-all hover:scale-110 shadow-lg"
+          className="absolute right-3 sm:right-8 top-1/2 -translate-y-1/2 z-30 w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur-md border border-white/25 text-white flex items-center justify-center text-base sm:text-xl font-bold transition-all hover:scale-110 shadow-lg cursor-pointer"
           aria-label="Next"
         >
           ›
         </button>
 
-        {/* ── SLIDE DOT INDICATORS */}
-        <div className="absolute bottom-28 sm:bottom-36 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 pointer-events-auto">
-          {BANNERS.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => goToBanner(idx)}
-              className={`transition-all duration-300 rounded-full ${
-                idx === currentBanner
-                  ? 'w-8 h-2.5 bg-[#F36C21] shadow-[0_0_8px_rgba(243,108,33,0.6)]'
-                  : 'w-2.5 h-2.5 bg-white/40 hover:bg-white/70'
-              }`}
-              aria-label={`Go to slide ${idx + 1}`}
-            />
-          ))}
-        </div>
+        {/* ── HERO MAIN CONTENT */}
+        <div className="relative z-40 flex flex-col items-center justify-center text-center px-4 sm:px-6 lg:px-8 pt-12 pb-20 sm:pt-20 sm:pb-28 my-auto">
 
-        {/* ── HERO CONTENT overlaid on banner */}
-        <div className="relative z-40 flex flex-col items-center justify-center text-center px-4 sm:px-6 lg:px-8 pt-20 pb-36 sm:pt-28 sm:pb-44" style={{ minHeight: '92vh' }}>
+          {/* Slide Badge & Elevated Slide Dots Pill */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 mb-4 sm:mb-6">
+            <div
+              key={`badge-${currentBanner}`}
+              className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full bg-white/18 backdrop-blur-md border border-white/30 text-[11px] sm:text-xs font-extrabold text-white shadow-sm animate-fade-in"
+            >
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              <span className="truncate max-w-[290px] sm:max-w-none">{BANNERS[currentBanner].badge}</span>
+            </div>
 
-          {/* Slide Badge */}
-          <div
-            key={`badge-${currentBanner}`}
-            className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/12 backdrop-blur-md border border-white/20 text-xs font-bold text-white/90 mb-6 animate-fade-in"
-          >
-            <span className="w-2 h-2 rounded-full bg-[#F36C21] animate-pulse" />
-            <span>{BANNERS[currentBanner].badge}</span>
+            {/* Elevated Slide Dot Indicators */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/15 border border-white/20 backdrop-blur-md shadow-xs">
+              {BANNERS.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => goToBanner(idx)}
+                  className={`transition-all duration-300 rounded-full cursor-pointer ${idx === currentBanner
+                    ? 'w-6 h-2 bg-white shadow-sm'
+                    : 'w-2 h-2 bg-white/40 hover:bg-white/70'
+                    }`}
+                  aria-label={`Go to slide ${idx + 1}`}
+                />
+              ))}
+            </div>
           </div>
 
           {/* Slide Headline */}
           <h1
             key={`h1-${currentBanner}`}
-            className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.08] max-w-5xl mx-auto mb-5 drop-shadow-2xl"
+            className="text-2xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-[1.12] max-w-4xl mx-auto mb-3 sm:mb-5 drop-shadow-md"
           >
             {BANNERS[currentBanner].title.split('World-Class Universities').length > 1 ? (
               <>
                 The Operating System for{' '}
-                <span className="bg-gradient-to-r from-[#F36C21] via-amber-300 to-[#F36C21] bg-clip-text text-transparent">
+                <span className="underline underline-offset-4 decoration-white/50 decoration-2">
                   World-Class Universities
                 </span>
               </>
             ) : (
               <>
-                {BANNERS[currentBanner].title.split(' ').slice(0, -2).join(' ')}{' '}
-                <span className="bg-gradient-to-r from-[#F36C21] via-amber-300 to-[#F36C21] bg-clip-text text-transparent">
-                  {BANNERS[currentBanner].title.split(' ').slice(-2).join(' ')}
-                </span>
+                {BANNERS[currentBanner].title}
               </>
             )}
           </h1>
@@ -468,40 +454,39 @@ export default function UniCampusBrandHomePage() {
           {/* Slide Subtitle */}
           <p
             key={`sub-${currentBanner}`}
-            className="text-base sm:text-lg text-white/75 max-w-2xl mx-auto font-medium leading-relaxed mb-10 drop-shadow-lg"
+            className="text-xs sm:text-base lg:text-lg text-white/90 max-w-2xl mx-auto font-medium leading-relaxed mb-6 sm:mb-8 drop-shadow-xs px-2"
           >
             {BANNERS[currentBanner].subtitle}
           </p>
 
-          {/* ─── LIVE TENANT SEARCH BAR (overlaid on banner) */}
-          <div className="w-full max-w-2xl mx-auto relative z-50">
-            <div className="bg-white/95 backdrop-blur-xl rounded-[22px] p-2 shadow-[0_20px_60px_rgba(0,0,0,0.4)] border border-white/30 flex items-center gap-2 focus-within:ring-4 focus-within:ring-[#F36C21]/30 transition-all">
-              <div className="pl-3 text-[#F36C21] text-lg font-black">🔍</div>
+          {/* ─── LIVE TENANT SEARCH BAR */}
+          {/* <div className="w-full max-w-2xl mx-auto relative z-50 px-1">
+            <div className="bg-white rounded-[18px] sm:rounded-[22px] p-1.5 sm:p-2 shadow-[0_20px_50px_rgba(0,0,0,0.25)] border border-white/40 flex items-center gap-1.5 sm:gap-2 focus-within:ring-4 focus-within:ring-white/40 transition-all">
+              <div className="pl-2 sm:pl-3 text-[#EA580C] text-base sm:text-lg font-black shrink-0">🔍</div>
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
-                placeholder="Search your college or campus tenant (e.g. SRMS CET, IMS...)"
-                className="w-full py-2.5 text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none font-semibold bg-transparent"
+                placeholder="Search college or campus tenant (e.g. SRMS CET, IMS...)"
+                className="w-full py-1.5 sm:py-2.5 text-xs sm:text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none font-semibold bg-transparent min-w-0"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="px-2 text-xs font-bold text-[#94A3B8] hover:text-[#0F172A]"
+                  className="px-1.5 text-xs font-bold text-[#94A3B8] hover:text-[#0F172A]"
                 >
                   ✕
                 </button>
               )}
               <Link
                 href="/login"
-                className="px-6 py-3 rounded-[16px] bg-[#F36C21] hover:bg-[#E05A10] text-white font-extrabold text-xs shadow-md shadow-orange-500/40 transition-all shrink-0 cursor-pointer whitespace-nowrap"
+                className="px-4 py-2 sm:px-6 sm:py-3 rounded-[14px] sm:rounded-[16px] bg-[#0F172A] hover:bg-[#1E293B] text-white font-extrabold text-[11px] sm:text-xs shadow-md transition-all shrink-0 cursor-pointer whitespace-nowrap"
               >
-                Go to Login ➔
+                <span>Find Campus ➔</span>
               </Link>
             </div>
 
-            {/* Autocomplete dropdown */}
             {isSearchFocused && quickMatches.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-[20px] shadow-[0_25px_70px_rgba(0,0,0,0.45)] border border-[#E2E8F0] overflow-hidden text-left z-[60] p-2 divide-y divide-[#F8FAFC] max-h-72 overflow-y-auto">
                 <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#94A3B8]">
@@ -533,22 +518,22 @@ export default function UniCampusBrandHomePage() {
                 ))}
               </div>
             )}
-          </div>
+          </div> */}
         </div>
 
-        {/* ── STATS STRIP pinned to the bottom of the slider */}
-        <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
-          <div className="max-w-5xl mx-auto px-4 pb-6 pointer-events-auto">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/10 rounded-[20px] overflow-hidden backdrop-blur-xl border border-white/15 shadow-2xl">
+        {/* ── STATS STRIP pinned to bottom */}
+        <div className="relative z-20 pb-4 sm:pb-6 px-3 sm:px-4">
+          <div className="max-w-5xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/20 rounded-[18px] sm:rounded-[20px] overflow-hidden backdrop-blur-xl border border-white/25 shadow-xl">
               {[
                 { value: '50,000+', label: 'Active Students & Doctors', color: 'text-white' },
-                { value: '100%', label: 'AI-Powered Operations', color: 'text-[#F36C21]' },
-                { value: 'NMC & AICTE', label: 'Compliance Architecture', color: 'text-violet-300' },
-                { value: '99.99%', label: 'Cloud High-Availability', color: 'text-emerald-400' },
+                { value: '100%', label: 'AI-Powered Operations', color: 'text-amber-200' },
+                { value: 'NMC & AICTE', label: 'Compliance Architecture', color: 'text-white' },
+                { value: '99.99%', label: 'Cloud High-Availability', color: 'text-emerald-200' },
               ].map(({ value, label, color }, i) => (
-                <div key={i} className="text-center px-4 py-5 bg-slate-950/50 space-y-1">
-                  <div className={`text-xl sm:text-2xl font-black ${color}`}>{value}</div>
-                  <div className="text-[11px] font-bold text-white/55 uppercase tracking-wider">{label}</div>
+                <div key={i} className="text-center px-2 py-3.5 sm:px-4 sm:py-5 bg-black/15 backdrop-blur-md space-y-0.5 sm:space-y-1">
+                  <div className={`text-base sm:text-2xl font-black ${color}`}>{value}</div>
+                  <div className="text-[9px] sm:text-[11px] font-extrabold text-white/90 uppercase tracking-wider leading-tight">{label}</div>
                 </div>
               ))}
             </div>
@@ -575,41 +560,37 @@ export default function UniCampusBrandHomePage() {
             <div className="flex flex-wrap justify-center gap-2 pt-4">
               <button
                 onClick={() => setActiveTab('ai')}
-                className={`px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
-                  activeTab === 'ai'
-                    ? 'bg-[#0F172A] text-white shadow-md'
-                    : 'bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9]'
-                }`}
+                className={`px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${activeTab === 'ai'
+                  ? 'bg-[#0F172A] text-white shadow-md'
+                  : 'bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9]'
+                  }`}
               >
                 🤖 AI Intelligence Core
               </button>
               <button
                 onClick={() => setActiveTab('med')}
-                className={`px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
-                  activeTab === 'med'
-                    ? 'bg-[#00C48C] text-white shadow-md'
-                    : 'bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9]'
-                }`}
+                className={`px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${activeTab === 'med'
+                  ? 'bg-[#00C48C] text-white shadow-md'
+                  : 'bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9]'
+                  }`}
               >
                 🏥 MED ERP (Medical Edition)
               </button>
               <button
                 onClick={() => setActiveTab('nonmed')}
-                className={`px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
-                  activeTab === 'nonmed'
-                    ? 'bg-[#5B4BFF] text-white shadow-md'
-                    : 'bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9]'
-                }`}
+                className={`px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${activeTab === 'nonmed'
+                  ? 'bg-[#5B4BFF] text-white shadow-md'
+                  : 'bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9]'
+                  }`}
               >
                 ⚙️ Engineering & Higher Ed
               </button>
               <button
                 onClick={() => setActiveTab('mobile')}
-                className={`px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
-                  activeTab === 'mobile'
-                    ? 'bg-[#F36C21] text-white shadow-md'
-                    : 'bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9]'
-                }`}
+                className={`px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${activeTab === 'mobile'
+                  ? 'bg-[#F36C21] text-white shadow-md'
+                  : 'bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9]'
+                  }`}
               >
                 📱 Mobile Apps Ecosystem
               </button>

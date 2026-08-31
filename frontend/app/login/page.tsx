@@ -239,7 +239,7 @@ export default function LoginPage() {
         localStorage.setItem('tenant_primary_color', currentTheme.primary);
         localStorage.setItem('tenant_sidebar_bg', currentTheme.sidebarBg);
         localStorage.setItem('tenant_card_radius', currentTheme.cardRadius);
-      } catch {}
+      } catch { }
     }
 
     const handleThemeUpdate = (e: any) => {
@@ -357,8 +357,8 @@ export default function LoginPage() {
           const firmsList: any[] = Array.isArray(firmsJson.data)
             ? firmsJson.data
             : Array.isArray(firmsJson)
-            ? firmsJson
-            : [];
+              ? firmsJson
+              : [];
           firmsList.forEach((f) => {
             if (f.status === 'SUSPENDED' || f.status === 'INACTIVE' || f.is_active === false) {
               map.delete(f.slug);
@@ -577,7 +577,7 @@ export default function LoginPage() {
           LEFT PANEL — LUXURIOUS BRAND CANVAS (ALWAYS VISIBLE ON WEB, HIDDEN ONLY ON MOBILE)
       ═══════════════════════════════════════════════════════════════════ */}
       <div className="max-md:hidden flex flex-1 h-full flex-col justify-between p-6 lg:p-8 xl:p-10 relative overflow-hidden bg-gradient-to-br from-[#EA580C] via-[#F36C21] to-[#C2410C] text-white">
-        
+
         {/* Subtle geometric lighting overlay */}
         <div
           className="absolute inset-0 opacity-[0.05] pointer-events-none"
@@ -681,7 +681,7 @@ export default function LoginPage() {
       {/* ═══════════════════════════════════════════════════════════════════
           RIGHT PANEL — MODERN HIGH-CONTRAST LOGIN PANEL (FULL WIDTH ON MOBILE)
       ═══════════════════════════════════════════════════════════════════ */}
-      <div className="w-full md:w-[440px] lg:w-[470px] xl:w-[500px] h-full flex flex-col justify-between items-center bg-white px-5 sm:px-8 lg:px-8 xl:px-12 py-4 lg:py-6 overflow-y-auto md:overflow-hidden relative shrink-0">
+      <div className="w-full md:w-[440px] lg:w-[470px] xl:w-[500px] h-full flex flex-col justify-between items-center bg-[#FAFAFA] md:bg-white px-4 sm:px-8 lg:px-8 xl:px-12 py-3 sm:py-4 lg:py-6 overflow-y-auto md:overflow-hidden relative shrink-0">
 
         {/* Subtle warm gradient ambient */}
         <div className="absolute top-0 left-0 w-32 h-full bg-gradient-to-r from-[#FFF7ED]/50 to-transparent pointer-events-none hidden lg:block" />
@@ -690,25 +690,47 @@ export default function LoginPage() {
         <div className="w-full flex items-center justify-between shrink-0 mb-2">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-xs text-[#475569] hover:text-[#0F172A] font-bold transition-all py-1 px-2.5 rounded-lg bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] shadow-xs"
+            className="inline-flex items-center gap-1.5 text-xs text-[#475569] hover:text-[#0F172A] font-bold transition-all py-1 px-2.5 rounded-lg bg-white md:bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] shadow-xs"
           >
             <span>←</span>
             <span>Campus Home</span>
           </Link>
-          <span className="text-[10px] text-[#64748B] font-mono font-bold flex items-center gap-1.5 bg-[#F8FAFC] px-2.5 py-1 rounded-full border border-[#E2E8F0] shadow-xs">
+          <span className="text-[10px] text-[#64748B] font-mono font-bold flex items-center gap-1.5 bg-white md:bg-[#F8FAFC] px-2.5 py-1 rounded-full border border-[#E2E8F0] shadow-xs">
             <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C] animate-pulse" />
             <span>ERP Secure v2.4</span>
           </span>
         </div>
 
+        {/* ── MOBILE ONLY: VIBRANT ORANGE BRAND HEADER BANNER ── */}
+        <div className="md:hidden w-full max-w-[370px] p-3.5 mb-2 rounded-2xl bg-gradient-to-br from-[#EA580C] via-[#F36C21] to-[#C2410C] text-white shadow-md relative overflow-hidden shrink-0 border border-white/20">
+          <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-white/15 blur-xl pointer-events-none" />
+          <div className="relative z-10 flex items-center justify-between gap-2 mb-1.5">
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 border border-white/30 text-[9px] font-black uppercase tracking-wider text-white">
+              UniCampus AI Cloud
+            </div>
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/20 text-[9px] font-mono font-bold text-white/95">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+              <span>CorteX AI Active</span>
+            </div>
+          </div>
+          <h1 className="text-xs font-black tracking-tight text-white leading-snug">
+            The Operating System for <span className="underline decoration-white/40 decoration-1">Modern Higher Education</span>
+          </h1>
+          <div className="mt-2 pt-1.5 border-t border-white/20 flex items-center justify-between text-[9px] font-bold text-white/90">
+            <span>⚡ 50K+ Users</span>
+            <span>🛡️ NMC & AICTE Ready</span>
+            <span>99.99% Uptime</span>
+          </div>
+        </div>
+
         {/* ── CENTER LOGIN FORM CARD ── */}
-        <div className="w-full max-w-[370px] my-auto space-y-3.5 shrink-0 py-1">
+        <div className="w-full max-w-[370px] my-auto space-y-2.5 sm:space-y-3 shrink-0 py-1">
 
           {/* College Logo & Institution Name */}
-          <div className="text-center space-y-1.5">
+          <div className="text-center space-y-1">
             <div className="flex justify-center">
               {selectedCollege.logo_url || selectedCollege.theme_config?.logo_url ? (
-                <div className="w-14 h-14 rounded-2xl bg-white p-1 shadow-[0_4px_20px_rgba(243,108,33,0.15)] border-2 border-[#F36C21]/20 flex items-center justify-center overflow-hidden">
+                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-white p-1 shadow-[0_4px_20px_rgba(243,108,33,0.15)] border-2 border-[#F36C21]/20 flex items-center justify-center overflow-hidden">
                   <img
                     src={selectedCollege.logo_url || selectedCollege.theme_config?.logo_url}
                     alt={selectedCollege.name}
@@ -716,12 +738,12 @@ export default function LoginPage() {
                   />
                 </div>
               ) : selectedCollege.slug && selectedCollege.slug.startsWith('srms') ? (
-                <div className="w-14 h-14 rounded-2xl bg-white p-1 shadow-[0_4px_20px_rgba(243,108,33,0.15)] border-2 border-[#F36C21]/20 flex items-center justify-center overflow-hidden">
+                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-white p-1 shadow-[0_4px_20px_rgba(243,108,33,0.15)] border-2 border-[#F36C21]/20 flex items-center justify-center overflow-hidden">
                   <img src="/srms-logo.png" alt={selectedCollege.name} className="w-full h-full object-contain" />
                 </div>
               ) : (
                 <div
-                  className="w-14 h-14 rounded-2xl text-white font-black text-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] flex items-center justify-center"
+                  className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl text-white font-black text-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] flex items-center justify-center"
                   style={{ backgroundColor: currentTheme.primary || '#F36C21' }}
                 >
                   {selectedCollege.name ? selectedCollege.name.charAt(0).toUpperCase() : 'U'}
@@ -744,7 +766,7 @@ export default function LoginPage() {
           <div className="relative">
             <div
               onClick={() => setIsCollegePickerOpen(!isCollegePickerOpen)}
-              className="p-2.5 rounded-xl bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] hover:border-[#F36C21]/40 cursor-pointer transition-all flex items-center justify-between gap-2 text-xs group shadow-2xs"
+              className="p-2.5 rounded-xl bg-[#FFF8F4] hover:bg-[#FFF2EA] border border-[#FBE0D0] hover:border-[#F36C21]/60 cursor-pointer transition-all flex items-center justify-between gap-2 text-xs group shadow-2xs"
             >
               <div className="flex items-center gap-2 min-w-0">
                 {selectedCollege.logo_url || selectedCollege.theme_config?.logo_url ? (
@@ -768,7 +790,7 @@ export default function LoginPage() {
                   <p className="text-[9px] font-mono font-semibold text-[#F36C21]">tenant: {selectedCollege.slug}</p>
                 </div>
               </div>
-              <span className="text-[#94A3B8] group-hover:text-[#0F172A] shrink-0 font-bold text-[10px]">
+              <span className="text-[#F36C21] group-hover:text-[#EA580C] shrink-0 font-bold text-[10px]">
                 {isCollegePickerOpen ? '▲' : '▼'}
               </span>
             </div>
@@ -790,11 +812,10 @@ export default function LoginPage() {
                       <div
                         key={colg.slug || colg.code}
                         onClick={() => handleSelectCollege(colg)}
-                        className={`p-2 rounded-xl cursor-pointer text-xs flex items-center justify-between gap-2 transition ${
-                          selectedCollege.slug === colg.slug
-                            ? 'bg-[#FFF5ED] text-[#F36C21] font-bold border border-[#FBE0D0]'
-                            : 'text-[#334155] hover:bg-[#F8FAFC] hover:text-[#0F172A]'
-                        }`}
+                        className={`p-2 rounded-xl cursor-pointer text-xs flex items-center justify-between gap-2 transition ${selectedCollege.slug === colg.slug
+                          ? 'bg-[#FFF5ED] text-[#F36C21] font-bold border border-[#FBE0D0]'
+                          : 'text-[#334155] hover:bg-[#F8FAFC] hover:text-[#0F172A]'
+                          }`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           {colgLogo ? (
@@ -826,7 +847,7 @@ export default function LoginPage() {
           </div>
 
           {/* Role Tabs */}
-          <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] text-[11px] font-bold">
+          <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-[#FFF5ED] border border-[#FBE0D0] text-[11px] font-bold">
             {(['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN'] as const).map((r) => {
               const isActive = role === r;
               const labelMap: Record<string, string> = {
@@ -837,11 +858,10 @@ export default function LoginPage() {
                   key={r}
                   type="button"
                   onClick={() => applyRolePreset(r)}
-                  className={`py-1.5 rounded-lg text-center transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-[#0F172A] text-white font-extrabold shadow-sm shadow-slate-900/30'
-                      : 'text-[#64748B] hover:text-[#0F172A] hover:bg-white/80'
-                  }`}
+                  className={`py-1.5 rounded-lg text-center transition-all cursor-pointer ${isActive
+                    ? 'bg-gradient-to-r from-[#F36C21] to-[#E05A10] text-white font-black shadow-md shadow-orange-500/25'
+                    : 'text-[#7C2D12]/75 hover:text-[#F36C21] hover:bg-white/90'
+                    }`}
                 >
                   {labelMap[r]}
                 </button>
@@ -857,19 +877,19 @@ export default function LoginPage() {
           )}
 
           {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-3">
+          <form onSubmit={handleLogin} className="space-y-2.5">
             <div className="space-y-1">
               <label className="block text-[10px] font-black uppercase tracking-wider text-[#475569]">
                 {role === 'STUDENT' ? 'Student Registration / Roll No' : role === 'FACULTY' ? 'Faculty Emp ID / Email' : 'Admin Username / Email'}
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-[#94A3B8] text-xs">👤</span>
+                <span className="absolute left-3 top-2.5 text-[#F36C21] text-xs">👤</span>
                 <input
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={role === 'STUDENT' ? 'Enter Registration / Roll No' : role === 'FACULTY' ? 'Enter Faculty ID / Email' : 'Enter Username / Email'}
-                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/15 transition placeholder-[#94A3B8]"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 transition placeholder-[#94A3B8]"
                   required
                 />
               </div>
@@ -881,19 +901,19 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="text-[10px] text-[#64748B] hover:text-[#0F172A] font-bold cursor-pointer"
+                  className="text-[10px] text-[#F36C21] hover:text-[#EA580C] font-bold cursor-pointer"
                 >
                   {showPassword ? 'Hide 👁️' : 'Show 👁️'}
                 </button>
               </div>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-[#94A3B8] text-xs">🔒</span>
+                <span className="absolute left-3 top-2.5 text-[#F36C21] text-xs">🔒</span>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/15 transition placeholder-[#94A3B8]"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 transition placeholder-[#94A3B8]"
                   required
                 />
               </div>
@@ -903,7 +923,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 mt-1 rounded-xl font-extrabold text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 bg-[#0F172A] hover:bg-[#1E293B] text-white shadow-md shadow-slate-900/20"
+              className="w-full py-3 mt-1.5 rounded-xl font-black text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 bg-gradient-to-r from-[#F36C21] via-[#E05A10] to-[#C94A06] hover:from-[#E05A10] hover:via-[#C94A06] hover:to-[#B33E00] text-white shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40"
             >
               {loading ? (
                 <>

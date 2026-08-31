@@ -570,10 +570,10 @@ export class NoticesService implements OnModuleInit {
         n.requires_acknowledgement,
         n.created_at,
         n.updated_at,
-        COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id = n.id), 0) AS total_recipients,
-        COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id = n.id AND nr.is_read = true), 0) AS read_count,
-        COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id = n.id AND nr.is_read = false), 0) AS unread_count,
-        COALESCE((SELECT COUNT(*) FROM notice_attachments na WHERE na.notice_id = n.id), 0) AS attachments_count,
+        COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id::text = n.id::text), 0) AS total_recipients,
+        COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id::text = n.id::text AND nr.is_read = true), 0) AS read_count,
+        COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id::text = n.id::text AND nr.is_read = false), 0) AS unread_count,
+        COALESCE((SELECT COUNT(*) FROM notice_attachments na WHERE na.notice_id::text = n.id::text), 0) AS attachments_count,
         COALESCE(
           (
             SELECT JSON_AGG(
@@ -584,7 +584,7 @@ export class NoticesService implements OnModuleInit {
               )
             )
             FROM notice_targets nt
-            WHERE nt.notice_id = n.id
+            WHERE nt.notice_id::text = n.id::text
           ),
           '[]'::json
         ) AS targets
@@ -623,11 +623,11 @@ export class NoticesService implements OnModuleInit {
     const noticeRows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT n.*, 
-              COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id = n.id), 0) AS total_recipients,
-              COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id = n.id AND nr.is_read = true), 0) AS read_count,
-              COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id = n.id AND nr.is_read = false), 0) AS unread_count
+              COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id::text = n.id::text), 0) AS total_recipients,
+              COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id::text = n.id::text AND nr.is_read = true), 0) AS read_count,
+              COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id::text = n.id::text AND nr.is_read = false), 0) AS unread_count
        FROM notices n
-       WHERE n.id = $1`,
+       WHERE n.id::text = $1::text`,
       [noticeId],
     );
 
@@ -638,7 +638,7 @@ export class NoticesService implements OnModuleInit {
     const notice = noticeRows[0];
 
     // 2. Fetch Recipients List with Student / Faculty metadata
-    let recWhere = 'WHERE nr.notice_id = $1';
+    let recWhere = 'WHERE nr.notice_id::text = $1::text';
     const params: any[] = [noticeId];
 
     if (roleFilter && roleFilter !== 'all') {
@@ -671,10 +671,10 @@ export class NoticesService implements OnModuleInit {
         s.photo_url AS student_photo,
         f.photo_url AS faculty_photo
       FROM notice_recipients nr
-      JOIN users u ON u.id = nr.user_id
-      LEFT JOIN students s ON s.user_id = u.id
-      LEFT JOIN faculty f ON f.user_id = u.id
-      LEFT JOIN departments d ON d.id = f.department_id
+      JOIN users u ON u.id::text = nr.user_id::text
+      LEFT JOIN students s ON s.user_id::text = u.id::text
+      LEFT JOIN faculty f ON f.user_id::text = u.id::text
+      LEFT JOIN departments d ON d.id::text = f.department_id::text
       ${recWhere}
       ORDER BY nr.is_read DESC, nr.read_at DESC NULLS LAST, name ASC
     `;
@@ -718,15 +718,15 @@ export class NoticesService implements OnModuleInit {
       const roleIdx = params.length;
 
       whereClause += ` AND (
-        EXISTS (SELECT 1 FROM notice_recipients nr2 WHERE nr2.notice_id = n.id AND nr2.user_id = $${uidIdx})
-        OR EXISTS (SELECT 1 FROM notice_targets nt2 WHERE nt2.notice_id = n.id AND (LOWER(nt2.target_type) = 'all' OR (LOWER(nt2.target_type) = 'role' AND UPPER(nt2.target_value) = $${roleIdx})))
-        OR n.created_by = $${uidIdx}
+        EXISTS (SELECT 1 FROM notice_recipients nr2 WHERE nr2.notice_id::text = n.id::text AND nr2.user_id::text = $${uidIdx}::text)
+        OR EXISTS (SELECT 1 FROM notice_targets nt2 WHERE nt2.notice_id::text = n.id::text AND (LOWER(nt2.target_type) = 'all' OR (LOWER(nt2.target_type) = 'role' AND UPPER(nt2.target_value) = $${roleIdx})))
+        OR n.created_by::text = $${uidIdx}::text
       )`;
     }
 
     if (filter?.filter === 'unread' && userId) {
       params.push(userId);
-      whereClause += ` AND EXISTS (SELECT 1 FROM notice_recipients nr3 WHERE nr3.notice_id = n.id AND nr3.user_id = $${params.length} AND nr3.is_read = false)`;
+      whereClause += ` AND EXISTS (SELECT 1 FROM notice_recipients nr3 WHERE nr3.notice_id::text = n.id::text AND nr3.user_id::text = $${params.length}::text AND (nr3.is_read::text = 'true' OR nr3.is_read::text = '1'))`;
     } else if (filter?.filter === 'important') {
       whereClause += " AND n.priority IN ('important', 'urgent')";
     } else if (filter?.filter === 'urgent') {
@@ -753,8 +753,8 @@ export class NoticesService implements OnModuleInit {
     }
 
     const recipientJoin = userId
-      ? `LEFT JOIN notice_recipients nr ON nr.notice_id = n.id AND nr.user_id = '${userId.replace(/'/g, "''")}'`
-      : `LEFT JOIN notice_recipients nr ON nr.notice_id = n.id`;
+      ? `LEFT JOIN notice_recipients nr ON nr.notice_id::text = n.id::text AND nr.user_id::text = '${userId.replace(/'/g, "''")}'::text`
+      : `LEFT JOIN notice_recipients nr ON nr.notice_id::text = n.id::text`;
 
     const sql = `
       SELECT 
@@ -770,9 +770,9 @@ export class NoticesService implements OnModuleInit {
         n.expires_at,
         n.requires_acknowledgement,
         n.created_at,
-        COALESCE(nr.is_read, false) AS is_read,
+        (CASE WHEN nr.is_read::text = 'true' OR nr.is_read::text = '1' THEN true ELSE false END) AS is_read,
         nr.read_at,
-        COALESCE(nr.acknowledged, false) AS acknowledged,
+        (CASE WHEN nr.acknowledged::text = 'true' OR nr.acknowledged::text = '1' THEN true ELSE false END) AS acknowledged,
         nr.acknowledged_at,
         COALESCE(
           (
@@ -786,19 +786,19 @@ export class NoticesService implements OnModuleInit {
               )
             )
             FROM notice_attachments na
-            WHERE na.notice_id = n.id
+            WHERE na.notice_id::text = n.id::text
           ),
           '[]'::json
         ) AS attachments
       FROM notices n
       ${recipientJoin}
       ${whereClause}
-      GROUP BY n.id, nr.is_read, nr.read_at, nr.acknowledged, nr.acknowledged_at
+      GROUP BY n.id, n.title, n.body, n.priority, n.category, n.creator_name, n.creator_role, n.status, n.scheduled_at, n.expires_at, n.requires_acknowledgement, n.created_at, nr.is_read, nr.read_at, nr.acknowledged, nr.acknowledged_at
       ORDER BY 
         CASE 
-          WHEN COALESCE(nr.is_read, false) = false AND n.priority = 'urgent' THEN 1
-          WHEN COALESCE(nr.is_read, false) = false AND n.priority = 'important' THEN 2
-          WHEN COALESCE(nr.is_read, false) = false THEN 3
+          WHEN (nr.is_read IS NULL OR nr.is_read::text = 'false' OR nr.is_read::text = '0') AND n.priority = 'urgent' THEN 1
+          WHEN (nr.is_read IS NULL OR nr.is_read::text = 'false' OR nr.is_read::text = '0') AND n.priority = 'important' THEN 2
+          WHEN (nr.is_read IS NULL OR nr.is_read::text = 'false' OR nr.is_read::text = '0') THEN 3
           ELSE 4
         END,
         n.created_at DESC
@@ -847,7 +847,7 @@ export class NoticesService implements OnModuleInit {
                     )
                   )
                   FROM notice_attachments na
-                  WHERE na.notice_id = n.id
+                  WHERE na.notice_id::text = n.id::text
                 ),
                 '[]'::json
               ) AS attachments,
@@ -861,12 +861,12 @@ export class NoticesService implements OnModuleInit {
                     )
                   )
                   FROM notice_targets nt
-                  WHERE nt.notice_id = n.id
+                  WHERE nt.notice_id::text = n.id::text
                 ),
                 '[]'::json
               ) AS targets
        FROM notices n
-       WHERE n.id = $1`,
+       WHERE n.id::text = $1::text`,
       [noticeId],
     );
 

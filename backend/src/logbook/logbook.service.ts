@@ -43,6 +43,59 @@ export class LogbookService {
       await this.tenantSchemaService.queryInTenant(
         tenantSlug,
         `
+        CREATE TABLE IF NOT EXISTS "${schema}".logbook_categories (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          code VARCHAR(50) NOT NULL,
+          name VARCHAR(200) NOT NULL,
+          course_id VARCHAR(50),
+          department_id VARCHAR(50),
+          description TEXT,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS "${schema}".logbook_topics (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          category_id UUID,
+          faculty_id UUID,
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          submission_deadline TIMESTAMPTZ,
+          max_marks NUMERIC DEFAULT 20,
+          course_id VARCHAR(50),
+          branch_id VARCHAR(50),
+          batch_id VARCHAR(50),
+          semester_id VARCHAR(50),
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS "${schema}".logbook_submissions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          topic_id UUID,
+          student_id UUID,
+          submission_text TEXT,
+          attachment_url TEXT,
+          attachment_name VARCHAR(255),
+          status VARCHAR(50) DEFAULT 'SUBMITTED',
+          submitted_at TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS "${schema}".logbook_evaluations (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          submission_id UUID,
+          evaluator_id UUID,
+          marks_obtained NUMERIC DEFAULT 0,
+          feedback TEXT,
+          signature_stamp TEXT,
+          evaluated_at TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
         CREATE TABLE IF NOT EXISTS "${schema}".logbook_mini_projects (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           student_id UUID,
@@ -1539,12 +1592,13 @@ export class LogbookService {
   // ==========================================
   async getCategories(tenantSlug: string, query: { courseId?: string; departmentId?: string } = {}) {
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
+    await this.ensureTables(tenantSlug);
     const params: any[] = [];
     let sql = `SELECT id, code, name, course_id, department_id, description, is_active, created_at FROM "${schema}".logbook_categories WHERE is_active = true`;
     if (query.courseId && query.courseId !== 'all') { params.push(query.courseId); sql += ` AND (course_id IS NULL OR course_id = $${params.length})`; }
     if (query.departmentId && query.departmentId !== 'all') { params.push(query.departmentId); sql += ` AND (department_id IS NULL OR department_id = $${params.length})`; }
     sql += ` ORDER BY name ASC`;
-    return this.tenantSchemaService.queryInTenant(tenantSlug, sql, params);
+    return this.tenantSchemaService.queryInTenant(tenantSlug, sql, params).catch(() => []);
   }
 
   async createCategory(tenantSlug: string, dto: CreateLogbookCategoryDto) {
@@ -1944,6 +1998,7 @@ export class LogbookService {
     tenantSlug: string,
     query: { categoryId?: string; courseId?: string; branchId?: string; batchId?: string; semesterId?: string; limit?: number } = {},
   ) {
+    await this.ensureTables(tenantSlug);
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
     const limit = Math.min(Number(query.limit) || 20, 100);
     const params: any[] = [];
@@ -1971,9 +2026,9 @@ export class LogbookService {
                t.max_marks,
                ROUND((e.marks_obtained / NULLIF(t.max_marks, 0)) * 100, 2) AS score_pct
         FROM "${schema}".logbook_submissions s
-        JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
-        LEFT JOIN "${schema}".logbook_categories c ON c.id = t.category_id
-        JOIN "${schema}".logbook_evaluations e ON e.submission_id = s.id
+        JOIN "${schema}".logbook_topics t ON t.id::text = s.topic_id::text
+        LEFT JOIN "${schema}".logbook_categories c ON c.id::text = t.category_id::text
+        JOIN "${schema}".logbook_evaluations e ON e.submission_id::text = s.id::text
         JOIN "${schema}".students st ON st.id::text = s.student_id::text
         LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = t.course_id::text OR cr.course_cd::text = t.course_id::text)
         LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR b.id::text = t.batch_id::text OR (b.batch_cd::text = st.batch_cd::text AND b.course_cd::text = st.course_cd::text))
@@ -1999,7 +2054,7 @@ export class LogbookService {
       LIMIT $${params.length};
     `;
 
-    const rows = await this.tenantSchemaService.queryInTenant(tenantSlug, rawSql, params);
+    const rows = await this.tenantSchemaService.queryInTenant(tenantSlug, rawSql, params).catch(() => []);
 
     return {
       success: true,

@@ -382,9 +382,22 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         },
       ];
 
-      // Ensure unique index on tenants & firms slug
-      await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_slug ON public.tenants (slug);`).catch(() => {});
-      await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_firms_slug ON public.firms (slug);`).catch(() => {});
+      // Ensure unique index on tenants & firms slug (deduplicating existing records first)
+      try {
+        await runner.query(`
+          DELETE FROM public.tenants a USING public.tenants b 
+          WHERE a.ctid < b.ctid AND a.slug = b.slug;
+        `);
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_slug ON public.tenants (slug);`);
+      } catch {}
+
+      try {
+        await runner.query(`
+          DELETE FROM public.firms a USING public.firms b 
+          WHERE a.ctid < b.ctid AND a.slug = b.slug;
+        `);
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_firms_slug ON public.firms (slug);`);
+      } catch {}
 
       for (const f of defaultFirms) {
         // Insert tenant
@@ -826,9 +839,23 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
       // ── Student Phase Progressions (Promotion History) ────────────────────
       await runner.query(`
+        DO $$ BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'students') THEN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints 
+              WHERE table_schema = '${schema}' AND table_name = 'students' 
+              AND constraint_type IN ('PRIMARY KEY', 'UNIQUE')
+            ) THEN
+              ALTER TABLE "${schema}".students ADD CONSTRAINT "pk_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_students_id" PRIMARY KEY (id);
+            END IF;
+          END IF;
+        END $$;
+      `).catch(() => {});
+
+      await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_phase_progressions (
           id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-          student_id       UUID        REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+          student_id       UUID,
           batch_id         VARCHAR(50),
           from_phase_id    VARCHAR(50),
           from_phase_name  VARCHAR(200),
@@ -838,7 +865,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           is_active        BOOLEAN     DEFAULT true,
           promoted_at      TIMESTAMPTZ DEFAULT NOW()
         );
-      `);
+      `).catch(() => {});
+
+      await runner.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE table_schema = '${schema}' AND table_name = 'student_phase_progressions' AND constraint_type = 'FOREIGN KEY'
+          ) THEN
+            ALTER TABLE "${schema}".student_phase_progressions 
+            ADD CONSTRAINT "fk_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_spp_student" FOREIGN KEY (student_id) REFERENCES "${schema}".students(id) ON DELETE CASCADE;
+          END IF;
+        END $$;
+      `).catch(() => {});
 
       // ── Delivery Types Master ──
       await runner.query(`
@@ -867,48 +906,26 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".subject_offerings (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          subject_id UUID NOT NULL REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
-          prof_id UUID NOT NULL REFERENCES "${schema}".professional_phases(id) ON DELETE CASCADE,
-          dtype_id UUID NOT NULL REFERENCES "${schema}".delivery_types(id) ON DELETE CASCADE,
+          subject_id UUID,
+          prof_id UUID,
+          dtype_id UUID,
           batch_year INTEGER NOT NULL,
           hours_allotted INTEGER DEFAULT 0 NOT NULL,
-          is_active BOOLEAN DEFAULT true NOT NULL,
-          CONSTRAINT uq_subject_offering UNIQUE (subject_id, prof_id, dtype_id, batch_year)
+          is_active BOOLEAN DEFAULT true NOT NULL
         );
-      `);
-
-      // Alter attendance_sessions table to add offering_id column with ON DELETE SET NULL to preserve attendance
-      await runner.query(`
-        ALTER TABLE "${schema}".attendance_sessions 
-        ADD COLUMN IF NOT EXISTS offering_id UUID REFERENCES "${schema}".subject_offerings(id) ON DELETE SET NULL;
-      `);
-
-      // Ensure existing offering_id constraints use ON DELETE SET NULL to protect attendance records
-      await runner.query(`
-        DO $$
-        DECLARE
-          r RECORD;
-        BEGIN
-          FOR r IN (
-            SELECT tc.constraint_name
-            FROM information_schema.table_constraints tc
-            JOIN information_schema.referential_constraints rc ON tc.constraint_name = rc.constraint_name
-            JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
-            WHERE tc.table_schema = '${schema}' 
-              AND tc.table_name = 'attendance_sessions' 
-              AND kcu.column_name = 'offering_id'
-              AND rc.delete_rule = 'CASCADE'
-          ) LOOP
-            EXECUTE 'ALTER TABLE "${schema}".attendance_sessions DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name);
-            EXECUTE 'ALTER TABLE "${schema}".attendance_sessions ADD CONSTRAINT ' || quote_ident(r.constraint_name) || ' FOREIGN KEY (offering_id) REFERENCES "${schema}".subject_offerings(id) ON DELETE SET NULL';
-          END LOOP;
-        END $$;
       `).catch(() => {});
 
-      // Alter subjects table to add is_longitudinal column
+      // Alter attendance_sessions & subjects tables inside safe PL/pgSQL block
       await runner.query(`
-        ALTER TABLE "${schema}".subjects 
-        ADD COLUMN IF NOT EXISTS is_longitudinal BOOLEAN DEFAULT false;
+        DO $$ BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'attendance_sessions') THEN
+            ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS offering_id UUID;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'subjects') THEN
+            ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS is_longitudinal BOOLEAN DEFAULT false;
+          END IF;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END $$;
       `);
 
       // ── Units Master (Medical Curriculum) ──
@@ -995,13 +1012,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".faculty_subjects (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          faculty_id UUID NOT NULL REFERENCES "${schema}".faculty(id) ON DELETE CASCADE,
-          subject_id UUID NOT NULL REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
+          faculty_id UUID NOT NULL,
+          subject_id UUID NOT NULL,
           is_active BOOLEAN DEFAULT true,
           created_at TIMESTAMPTZ DEFAULT NOW(),
           CONSTRAINT uq_faculty_subject UNIQUE (faculty_id, subject_id)
         );
-      `);
+      `).catch(() => {});
 
       // ── My Repository Tables ────────────────────────────────────────────────
       await runner.query(`
@@ -1140,7 +1157,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       await runner.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_noticerec 
         ON "${schema}".notice_recipients (notice_id, user_id);
-      `);
+      `).catch(() => {});
 
       await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".notice_group_templates (
@@ -1314,17 +1331,17 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         name        VARCHAR(200) NOT NULL,
         code        VARCHAR(50)  NOT NULL,
         type        VARCHAR(50)  DEFAULT 'ACADEMIC',
-        hod_user_id UUID        REFERENCES "${schema}".users(id),
+        hod_user_id UUID,
         is_active   BOOLEAN      DEFAULT true,
         created_at  TIMESTAMPTZ  DEFAULT NOW()
       );
-      DROP INDEX IF EXISTS "${schema}".departments_code_idx;
-      ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_key;
-      ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_idx;
-      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
-      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
-      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
-      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+      DO $$ BEGIN
+        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
     `);
 
     // ── Faculty ────────────────────────────────────────────────────────────
@@ -1642,15 +1659,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".subject_offerings (
         id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        subject_id     UUID        NOT NULL REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
-        prof_id        UUID        NOT NULL REFERENCES "${schema}".professional_phases(id) ON DELETE CASCADE,
-        dtype_id       UUID        NOT NULL REFERENCES "${schema}".delivery_types(id) ON DELETE CASCADE,
+        subject_id     UUID,
+        prof_id        UUID,
+        dtype_id       UUID,
         batch_year     INTEGER     NOT NULL,
         hours_allotted INTEGER     DEFAULT 0 NOT NULL,
-        is_active      BOOLEAN     DEFAULT true NOT NULL,
-        CONSTRAINT uq_subject_offering UNIQUE (subject_id, prof_id, dtype_id, batch_year)
+        is_active      BOOLEAN     DEFAULT true NOT NULL
       )
-    `);
+    `).catch(() => {});
 
     // ── Attendance Sessions ────────────────────────────────────────────────
     await runner.query(`
@@ -2144,7 +2160,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".student_phase_progressions (
         id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        student_id       UUID        REFERENCES "${schema}".students(id) ON DELETE CASCADE,
+        student_id       UUID,
         batch_id         VARCHAR(50),
         from_phase_id    VARCHAR(50),
         from_phase_name  VARCHAR(200),
@@ -2154,7 +2170,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         is_active        BOOLEAN     DEFAULT true,
         promoted_at      TIMESTAMPTZ DEFAULT NOW()
       )
-    `);
+    `).catch(() => {});
+
+    await runner.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.table_constraints 
+          WHERE table_schema = '${schema}' AND table_name = 'student_phase_progressions' AND constraint_type = 'FOREIGN KEY'
+        ) THEN
+          ALTER TABLE "${schema}".student_phase_progressions 
+          ADD CONSTRAINT "fk_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_spp_student" FOREIGN KEY (student_id) REFERENCES "${schema}".students(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `).catch(() => {});
 
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".lessons (
@@ -2372,12 +2400,12 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     if (isMedicalTenant) {
       // 4. Medical Faculty (Dr. Sanjay Singh & Dr. Aparna Tyagi)
       try {
-        const facRes1 = await runner.query(`
+        let facRes1 = await runner.query(`
           INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-          VALUES ('sanjay.singh@srms.edu', $1, 'FACULTY', true, false)
-          ON CONFLICT (email) DO NOTHING
+          SELECT 'sanjay.singh@srms.edu', $1, 'FACULTY', true, false
+          WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE LOWER(email) = 'sanjay.singh@srms.edu')
           RETURNING id;
-        `, [defaultPasswordHash]);
+        `, [defaultPasswordHash]).catch(() => []);
 
         const facUserId1 = facRes1[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='sanjay.singh@srms.edu'`))[0]?.id;
         if (facUserId1) {
@@ -2385,15 +2413,15 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
             VALUES ($1, 'EMP1001', 'Dr. Sanjay Singh', 'Professor & HOD', 'Physiology & Biophysics', '/avatars/dr_sanjay_singh.png')
             ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-          `, [facUserId1]);
+          `, [facUserId1]).catch(() => {});
         }
 
-        const facRes2 = await runner.query(`
+        let facRes2 = await runner.query(`
           INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-          VALUES ('aparna.tyagi@srms.edu', $1, 'FACULTY', true, false)
-          ON CONFLICT (email) DO NOTHING
+          SELECT 'aparna.tyagi@srms.edu', $1, 'FACULTY', true, false
+          WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE LOWER(email) = 'aparna.tyagi@srms.edu')
           RETURNING id;
-        `, [defaultPasswordHash]);
+        `, [defaultPasswordHash]).catch(() => []);
 
         const facUserId2 = facRes2[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='aparna.tyagi@srms.edu'`))[0]?.id;
         if (facUserId2) {
@@ -2403,19 +2431,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
               INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
               VALUES ($1, 'EMP1002', 'Dr. Aparna Tyagi', 'Associate Professor', 'Human Anatomy & Histology', '/avatars/dr_sarah_sharma.png')
               ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, designation = EXCLUDED.designation, specialization = EXCLUDED.specialization, photo_url = EXCLUDED.photo_url;
-            `, [facUserId2]);
+            `, [facUserId2]).catch(() => {});
           }
         }
       } catch (e) {}
 
       // 5. Medical Students (Rahul Verma & Kabir Rao Deshmukh)
       try {
-        const studRes = await runner.query(`
+        let studRes = await runner.query(`
           INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-          VALUES ('rahul.verma@srms.edu', $1, 'STUDENT', true, false)
-          ON CONFLICT (email) DO NOTHING
+          SELECT 'rahul.verma@srms.edu', $1, 'STUDENT', true, false
+          WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE LOWER(email) = 'rahul.verma@srms.edu')
           RETURNING id;
-        `, [defaultPasswordHash]);
+        `, [defaultPasswordHash]).catch(() => []);
 
         const studUserId = studRes[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE email='rahul.verma@srms.edu'`))[0]?.id;
         if (studUserId) {
@@ -2454,10 +2482,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           if (!uId) {
             const createRes = await runner.query(`
               INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
-              VALUES ($1, $2, 'FACULTY', true, false)
-              ON CONFLICT (email) DO NOTHING
+              SELECT $1, $2, 'FACULTY', true, false
+              WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE LOWER(email) = $1)
               RETURNING id;
-            `, [f.email.toLowerCase(), defaultPasswordHash]);
+            `, [f.email.toLowerCase(), defaultPasswordHash]).catch(() => []);
             uId = createRes[0]?.id || (await runner.query(`SELECT id FROM "${schema}".users WHERE LOWER(email) = $1`, [f.email.toLowerCase()]))[0]?.id;
           }
 
@@ -2546,13 +2574,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       if (isMedical) {
         // Medical Courses
         await runner.query(`
-          INSERT INTO "${schema}".courses (code, name, type, duration_years, is_active)
+          INSERT INTO "${schema}".courses (code, name, is_active)
           SELECT * FROM (VALUES
-            ('MBBS', 'Bachelor of Medicine and Bachelor of Surgery', 'MEDICAL', 5, true),
-            ('BAMS', 'Bachelor of Ayurvedic Medicine and Surgery', 'AYUSH', 5, true),
-            ('MD-MED', 'Doctor of Medicine (General Medicine)', 'POSTGRADUATE', 3, true),
-            ('MS-SUR', 'Master of Surgery (General Surgery)', 'POSTGRADUATE', 3, true)
-          ) AS v(code, name, type, duration_years, is_active)
+            ('MBBS', 'Bachelor of Medicine and Bachelor of Surgery', true),
+            ('BAMS', 'Bachelor of Ayurvedic Medicine and Surgery', true),
+            ('MD-MED', 'Doctor of Medicine (General Medicine)', true),
+            ('MS-SUR', 'Master of Surgery (General Surgery)', true)
+          ) AS v(code, name, is_active)
           WHERE NOT EXISTS (
             SELECT 1 FROM "${schema}".courses c WHERE c.code = v.code
           );
@@ -2636,38 +2664,38 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
         if (anaSubId) {
           await runner.query(`
-            INSERT INTO "${schema}".units (subject_id, unit_number, name, description)
-            SELECT $1, v.unit_number, v.name, v.description FROM (VALUES
+            INSERT INTO "${schema}".units (subject_id, unit_order, name, description)
+            SELECT $1, v.unit_order, v.name, v.description FROM (VALUES
               (1, 'General Anatomy & Musculoskeletal System', 'Basic anatomy principles, bones, joints and muscles'),
               (2, 'Upper Limb Anatomy & Neurovasculature', 'Pectoral region, axilla, arm, forearm, hand and nerve plexuses'),
               (3, 'Thorax & Cardiovascular Anatomy', 'Thoracic wall, mediastinum, heart and lungs'),
               (4, 'Head, Neck & Neuroanatomy', 'Cranial cavity, brain, spinal cord and autonomic nervous system')
-            ) AS v(unit_number, name, description)
+            ) AS v(unit_order, name, description)
             WHERE NOT EXISTS (
-              SELECT 1 FROM "${schema}".units u WHERE u.subject_id = $1 AND u.unit_number = v.unit_number
+              SELECT 1 FROM "${schema}".units u WHERE u.subject_id = $1 AND (u.unit_order = v.unit_order OR u.code = 'U' || v.unit_order)
             );
           `, [anaSubId]).catch(() => {});
         }
 
         if (phySubId) {
           await runner.query(`
-            INSERT INTO "${schema}".units (subject_id, unit_number, name, description)
-            SELECT $1, v.unit_number, v.name, v.description FROM (VALUES
+            INSERT INTO "${schema}".units (subject_id, unit_order, name, description)
+            SELECT $1, v.unit_order, v.name, v.description FROM (VALUES
               (1, 'General Physiology & Cellular Transport', 'Cell membrane dynamics, resting membrane potential and action potential'),
               (2, 'Nerve-Muscle Physiology & Reflexes', 'Neuromuscular transmission, muscle contraction mechanisms and reflexes'),
               (3, 'Cardiovascular System Physiology', 'Cardiac cycle, blood pressure regulation, cardiac output and ECG'),
               (4, 'Respiratory & Renal Physiology', 'Pulmonary mechanics, gas exchange, GFR and countercurrent mechanisms')
-            ) AS v(unit_number, name, description)
+            ) AS v(unit_order, name, description)
             WHERE NOT EXISTS (
-              SELECT 1 FROM "${schema}".units u WHERE u.subject_id = $1 AND u.unit_number = v.unit_number
+              SELECT 1 FROM "${schema}".units u WHERE u.subject_id = $1 AND (u.unit_order = v.unit_order OR u.code = 'U' || v.unit_order)
             );
           `, [phySubId]).catch(() => {});
         }
 
         // Seed Topics
-        const anaUnit2 = (await runner.query(`SELECT id FROM "${schema}".units WHERE subject_id = $1 AND unit_number = 2`, [anaSubId]))[0]?.id;
-        const phyUnit2 = (await runner.query(`SELECT id FROM "${schema}".units WHERE subject_id = $1 AND unit_number = 2`, [phySubId]))[0]?.id;
-        const phyUnit3 = (await runner.query(`SELECT id FROM "${schema}".units WHERE subject_id = $1 AND unit_number = 3`, [phySubId]))[0]?.id;
+        const anaUnit2 = (await runner.query(`SELECT id FROM "${schema}".units WHERE subject_id = $1 AND (unit_order = 2 OR code = 'U2') LIMIT 1`, [anaSubId]).catch(() => []))[0]?.id;
+        const phyUnit2 = (await runner.query(`SELECT id FROM "${schema}".units WHERE subject_id = $1 AND (unit_order = 2 OR code = 'U2') LIMIT 1`, [phySubId]).catch(() => []))[0]?.id;
+        const phyUnit3 = (await runner.query(`SELECT id FROM "${schema}".units WHERE subject_id = $1 AND (unit_order = 3 OR code = 'U3') LIMIT 1`, [phySubId]).catch(() => []))[0]?.id;
 
         if (anaUnit2 && anaSubId) {
           await runner.query(`

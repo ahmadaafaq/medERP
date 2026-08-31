@@ -696,7 +696,7 @@ export class TimetableService implements OnModuleInit {
     const clauses: string[] = [];
 
     if (dto.facultyId && this.isUUID(dto.facultyId)) {
-      clauses.push(`(ts.faculty_id = $${queryIndex++})`);
+      clauses.push(`(ts.faculty_id::text = $${queryIndex++}::text)`);
       params.push(dto.facultyId);
     }
     if (dto.room) {
@@ -704,7 +704,7 @@ export class TimetableService implements OnModuleInit {
       params.push(dto.room);
     }
     if (dto.batchId && this.isUUID(dto.batchId)) {
-      clauses.push(`(ts.batch_id = $${queryIndex++})`);
+      clauses.push(`(ts.batch_id::text = $${queryIndex++}::text)`);
       params.push(dto.batchId);
     }
 
@@ -718,17 +718,17 @@ export class TimetableService implements OnModuleInit {
              d.name AS department_name,
              b.code AS batch_code, b.name AS batch_name
       FROM timetable_slots ts
-      LEFT JOIN faculty f ON f.id = ts.faculty_id
-      LEFT JOIN subjects sub ON sub.id = ts.subject_id
-      LEFT JOIN departments d ON d.id = ts.department_id
-      LEFT JOIN batches b ON b.id = ts.batch_id
+      LEFT JOIN faculty f ON f.id::text = ts.faculty_id::text
+      LEFT JOIN subjects sub ON sub.id::text = ts.subject_id::text
+      LEFT JOIN departments d ON d.id::text = ts.department_id::text
+      LEFT JOIN batches b ON b.id::text = ts.batch_id::text
       WHERE ts.day_of_week = $1
         AND (ts.start_time, ts.end_time) OVERLAPS ($2::TIME, $3::TIME)
         AND (${clauses.join(' OR ')})
     `;
 
     if (excludeId && this.isUUID(excludeId)) {
-      sql += ` AND ts.id <> $${queryIndex}`;
+      sql += ` AND ts.id::text <> $${queryIndex}::text`;
       params.push(excludeId);
     }
 

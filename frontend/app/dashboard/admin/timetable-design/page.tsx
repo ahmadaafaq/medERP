@@ -1248,7 +1248,7 @@ export default function TimetableDesignPage() {
 
               const rawTitle = String(item.title || item.description || item.topic || '');
               const cleanName = rawTitle.replace(/\([^)]*\)/g, '').trim();
-              const teacher = (item.faculty_name || rawTitle.match(/\(([^)]+)\)/)?.[1] || 'Faculty Member').trim();
+              const teacher = (item.faculty_name || item.EmpName || item.emp_name || rawTitle.match(/\(([^)]+)\)/)?.[1] || 'Faculty Member').trim();
               const isLab = rawTitle.toLowerCase().includes('lab') || rawTitle.toLowerCase().includes('practical');
 
               return {
@@ -1828,7 +1828,17 @@ export default function TimetableDesignPage() {
     setSelectedCompetencies(existingCompCodes);
     setCompetencySearchTerm('');
 
-    const matchedSub = availableFormSubjects.find(s => String(s.id) === String(slot.subject_id) || String(s.code) === String(slot.subject_id) || String(s.code) === String(slot.subject_code));
+    const matchedSub = availableFormSubjects.find(s => 
+      (s.id && String(s.id) === String(slot.subject_id)) || 
+      (s.linkcd && String(s.linkcd) === String(slot.subject_id)) || 
+      (s.sub_cd && String(s.sub_cd) === String(slot.subject_id)) || 
+      (s.code && String(s.code) === String(slot.subject_id)) || 
+      (s.code && String(s.code) === String(slot.subject_code)) ||
+      (s.name && slot.subject_name && s.name.trim().toLowerCase() === slot.subject_name.trim().toLowerCase())
+    );
+    const resolvedSubjectId = matchedSub 
+      ? String(matchedSub.id || matchedSub.code || matchedSub.linkcd || matchedSub.sub_cd || '') 
+      : String(slot.subject_id || '');
     const defaultCam = camerasList.length > 0 ? String(camerasList[0].camera_id) : '0';
 
     setFormData({
@@ -1836,12 +1846,12 @@ export default function TimetableDesignPage() {
       startTime: slot.start_time,
       endTime: slot.end_time,
       departmentId: slot.department_id || selectedDept || '',
-      subjectId: slot.subject_id || '',
-      subjectCode: slot.subject_code || matchedSub?.code || '',
-      subjectTitle: slot.subject_name || matchedSub?.name || '',
-      facultyId: slot.faculty_id || '',
-      facultyEmpId: (slot as any).faculty_code || matchedSub?.empid || '',
-      facultyName: slot.faculty_name || matchedSub?.faculty_name || '',
+      subjectId: resolvedSubjectId,
+      subjectCode: slot.subject_code || matchedSub?.code || matchedSub?.sub_cd || '',
+      subjectTitle: slot.subject_name || matchedSub?.name || matchedSub?.sub_name || '',
+      facultyId: slot.faculty_id || matchedSub?.empid || '',
+      facultyEmpId: (slot as any).faculty_code || matchedSub?.empid || slot.faculty_id || '',
+      facultyName: (slot.faculty_name && slot.faculty_name !== 'Faculty Member') ? slot.faculty_name : (matchedSub?.faculty_name || matchedSub?.EmpName || ''),
       room: slot.room || '',
       cameraId: defaultCam,
       slotType: slot.slot_type || slot.slotType || 'Lecture',
@@ -2822,7 +2832,20 @@ export default function TimetableDesignPage() {
             <div className="bg-slate-50 dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
               <span className="text-slate-400 block text-[9px] uppercase font-black">Faculty</span>
               <span className="text-slate-900 dark:text-white font-extrabold truncate block mt-0.5">
-                👨‍🏫 {hoveredSlotInfo.slot.faculty_name || 'Faculty Member'}
+                👨‍🏫 {
+                  (hoveredSlotInfo.slot.faculty_name && 
+                   hoveredSlotInfo.slot.faculty_name !== 'Faculty Member' && 
+                   hoveredSlotInfo.slot.faculty_name !== 'Faculty')
+                    ? hoveredSlotInfo.slot.faculty_name
+                    : (
+                      (Array.isArray(allFaculties) ? allFaculties : []).find(f => f && (
+                        String(f.id) === String(hoveredSlotInfo.slot.faculty_id) || 
+                        String(f.emp_id) === String(hoveredSlotInfo.slot.faculty_id) || 
+                        String(f.emp_id) === String(hoveredSlotInfo.slot.faculty_code)
+                      ))?.name || 
+                      (hoveredSlotInfo.slot.topic?.match(/\(([^)]+)\)/)?.[1] || 'Faculty Member')
+                    )
+                }
               </span>
             </div>
             <div className="bg-slate-50 dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
@@ -2978,11 +3001,14 @@ export default function TimetableDesignPage() {
                     required
                   >
                     <option value="">-- Select Subject --</option>
-                    {availableFormSubjects.map(s => (
-                      <option key={s.id || s.code || s.linkcd} value={s.id || s.code || s.linkcd}>
-                        [{s.code || s.linkcd}] {s.name} {s.faculty_name ? `(${s.faculty_name})` : ''}
-                      </option>
-                    ))}
+                    {availableFormSubjects.map(s => {
+                      const valKey = String(s.id || s.code || s.linkcd || s.sub_cd || '');
+                      return (
+                        <option key={valKey} value={valKey}>
+                          [{s.code || s.sub_cd || s.linkcd}] {s.name || s.sub_name} {s.faculty_name || s.EmpName ? `(${s.faculty_name || s.EmpName})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 

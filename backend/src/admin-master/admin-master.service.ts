@@ -460,8 +460,8 @@ export class AdminMasterService {
                   COALESCE(d.branch_cd, d.code) AS branch_cd,
                   u.email as hod_email 
            FROM departments d
-           LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
-           LEFT JOIN users u ON d.hod_user_id = u.id
+           LEFT JOIN courses c ON c.course_cd::text = d.course_cd::text OR c.code::text = d.course_cd::text
+           LEFT JOIN users u ON u.id::text = d.hod_user_id::text
            ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
         ).catch(() => []);
 
@@ -498,8 +498,8 @@ export class AdminMasterService {
                   COALESCE(d.branch_cd, d.code) AS branch_cd,
                   u.email as hod_email 
            FROM departments d
-           LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
-           LEFT JOIN users u ON d.hod_user_id = u.id
+           LEFT JOIN courses c ON c.course_cd::text = d.course_cd::text OR c.code::text = d.course_cd::text
+           LEFT JOIN users u ON u.id::text = d.hod_user_id::text
            ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
         ).catch(() => []);
 
@@ -813,8 +813,8 @@ export class AdminMasterService {
                   d.name as department_name, 
                   d.code as department_code
            FROM subjects s
-           LEFT JOIN departments d ON s.department_id = d.id
-           LEFT JOIN batches b ON s.batch_id = b.id
+           LEFT JOIN departments d ON d.id::text = s.department_id::text
+           LEFT JOIN batches b ON b.id::text = s.batch_id::text
            ORDER BY s.code ASC, s.name ASC`,
         ).catch(() => []);
 
@@ -862,8 +862,8 @@ export class AdminMasterService {
                   d.name as department_name, 
                   d.code as department_code
            FROM subjects s
-           LEFT JOIN departments d ON s.department_id = d.id
-           LEFT JOIN batches b ON s.batch_id = b.id
+           LEFT JOIN departments d ON d.id::text = s.department_id::text
+           LEFT JOIN batches b ON b.id::text = s.batch_id::text
            ORDER BY s.code ASC, s.name ASC`,
         ).catch(() => []);
 
@@ -1109,9 +1109,9 @@ export class AdminMasterService {
                     COALESCE(t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
                     COALESCE(t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
              FROM topics t
-             LEFT JOIN subjects s ON (t.subject_id = s.id OR t.subject_code = s.code)
-             LEFT JOIN units u ON (t.unit_id = u.id OR t.unit_code = u.code)
-             LEFT JOIN professional_linkers l ON t.linker_id = l.id
+             LEFT JOIN subjects s ON (s.id::text = t.subject_id::text OR s.code::text = t.subject_code::text)
+             LEFT JOIN units u ON (u.id::text = t.unit_id::text OR u.code::text = t.unit_code::text)
+             LEFT JOIN professional_linkers l ON l.id::text = t.linker_id::text
              ORDER BY t.created_at DESC, t.code ASC`,
           );
           rows.forEach((r: any) => {
@@ -1146,9 +1146,9 @@ export class AdminMasterService {
               COALESCE(t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
               COALESCE(t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
        FROM topics t
-       LEFT JOIN subjects s ON (t.subject_id = s.id OR t.subject_code = s.code)
-       LEFT JOIN units u ON (t.unit_id = u.id OR t.unit_code = u.code)
-       LEFT JOIN professional_linkers l ON t.linker_id = l.id
+       LEFT JOIN subjects s ON (s.id::text = t.subject_id::text OR s.code::text = t.subject_code::text)
+       LEFT JOIN units u ON (u.id::text = t.unit_id::text OR u.code::text = t.unit_code::text)
+       LEFT JOIN professional_linkers l ON l.id::text = t.linker_id::text
        ORDER BY t.created_at DESC, t.code ASC`,
     );
 
@@ -1239,9 +1239,9 @@ export class AdminMasterService {
               u.name as unit_name, u.code as unit_code, u.bloom_level as unit_bloom_level,
               l.code as cbme_code, l.name as cbme_name
        FROM topics t
-       LEFT JOIN subjects s ON (t.subject_id = s.id OR t.subject_code = s.code)
-       LEFT JOIN units u ON (t.unit_id = u.id OR t.unit_code = u.code)
-       LEFT JOIN professional_linkers l ON t.linker_id = l.id
+       LEFT JOIN subjects s ON (s.id::text = t.subject_id::text OR s.code::text = t.subject_code::text)
+       LEFT JOIN units u ON (u.id::text = t.unit_id::text OR u.code::text = t.unit_code::text)
+       LEFT JOIN professional_linkers l ON l.id::text = t.linker_id::text
        WHERE t.id = $1`,
       [rows[0].id],
     ).catch(() => []);
@@ -1356,9 +1356,9 @@ export class AdminMasterService {
               u.name as unit_name, u.code as unit_code, u.bloom_level as unit_bloom_level,
               l.code as cbme_code, l.name as cbme_name
        FROM topics t
-       LEFT JOIN subjects s ON (t.subject_id = s.id OR t.subject_code = s.code)
-       LEFT JOIN units u ON (t.unit_id = u.id OR t.unit_code = u.code)
-       LEFT JOIN professional_linkers l ON t.linker_id = l.id
+       LEFT JOIN subjects s ON (s.id::text = t.subject_id::text OR s.code::text = t.subject_code::text)
+       LEFT JOIN units u ON (u.id::text = t.unit_id::text OR u.code::text = t.unit_code::text)
+       LEFT JOIN professional_linkers l ON l.id::text = t.linker_id::text
        WHERE t.id = $1`,
       [id],
     ).catch(() => []);
@@ -1420,10 +1420,10 @@ export class AdminMasterService {
                     COALESCE(c.course_cd::text, t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
                     COALESCE(c.branch_cd::text, t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
              FROM competencies c
-             LEFT JOIN subjects s ON (c.subject_id = s.id OR c.subject_code = s.code)
-             LEFT JOIN units u ON (c.unit_id = u.id OR c.unit_code = u.code)
-             LEFT JOIN topics t ON (c.topic_id = t.id OR c.topic_code = t.code)
-             LEFT JOIN professional_linkers l ON c.linker_id = l.id
+             LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_code::text)
+             LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
+             LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
+             LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
              ORDER BY c.created_at DESC, c.code ASC`,
           );
           rows.forEach((r: any) => {
@@ -1462,10 +1462,10 @@ export class AdminMasterService {
               COALESCE(c.course_cd::text, t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
               COALESCE(c.branch_cd::text, t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
        FROM competencies c
-       LEFT JOIN subjects s ON (c.subject_id = s.id OR c.subject_code = s.code)
-       LEFT JOIN units u ON (c.unit_id = u.id OR c.unit_code = u.code)
-       LEFT JOIN topics t ON (c.topic_id = t.id OR c.topic_code = t.code)
-       LEFT JOIN professional_linkers l ON c.linker_id = l.id
+       LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_code::text)
+       LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
+       LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
+       LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
        ORDER BY c.created_at DESC, c.code ASC`,
     );
 
@@ -1950,11 +1950,11 @@ export class AdminMasterService {
                 s.name AS subject_name, s.code AS subject_code, s.course_cd, s.course_name, s.branch_cd,
                 p.name AS prof_name, p.phase_order, p.academic_year,
                 dt.name AS dtype_name, dt.code AS dtype_code,
-                (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id = so.id OR (ass.subject_id = so.subject_id AND ass.offering_id IS NULL)) AS attendance_sessions_count
+                (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
          FROM subject_offerings so
-         LEFT JOIN subjects s ON so.subject_id = s.id
-         LEFT JOIN professional_phases p ON so.prof_id = p.id
-         LEFT JOIN delivery_types dt ON so.dtype_id = dt.id
+         LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+         LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
+         LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
          ORDER BY s.name ASC, p.phase_order ASC, dt.code ASC`,
       ).catch(() => []);
 
@@ -1978,11 +1978,11 @@ export class AdminMasterService {
                   s.name AS subject_name, s.code AS subject_code, s.course_cd, s.course_name, s.branch_cd,
                   p.name AS prof_name, p.phase_order, p.academic_year,
                   dt.name AS dtype_name, dt.code AS dtype_code,
-                  (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id = so.id OR (ass.subject_id = so.subject_id AND ass.offering_id IS NULL)) AS attendance_sessions_count
+                  (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
            FROM subject_offerings so
-           LEFT JOIN subjects s ON so.subject_id = s.id
-           LEFT JOIN professional_phases p ON so.prof_id = p.id
-           LEFT JOIN delivery_types dt ON so.dtype_id = dt.id
+           LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+           LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
+           LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
            ORDER BY s.name ASC, p.phase_order ASC, dt.code ASC`,
         ).catch(() => []);
 
@@ -2113,12 +2113,12 @@ export class AdminMasterService {
               s.name AS subject_name, s.code AS subject_code, s.course_cd, s.course_name, s.branch_cd,
               p.name AS prof_name, p.phase_order, p.academic_year,
               dt.name AS dtype_name, dt.code AS dtype_code,
-              (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id = so.id OR (ass.subject_id = so.subject_id AND ass.offering_id IS NULL)) AS attendance_sessions_count
+              (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
        FROM subject_offerings so
-       LEFT JOIN subjects s ON so.subject_id = s.id
-       LEFT JOIN professional_phases p ON so.prof_id = p.id
-       LEFT JOIN delivery_types dt ON so.dtype_id = dt.id
-       WHERE so.id = $1`,
+       LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+       LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
+       LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
+       WHERE so.id::text = $1::text`,
       [offeringId],
     ).catch(() => []);
 
@@ -2194,12 +2194,12 @@ export class AdminMasterService {
               s.name AS subject_name, s.code AS subject_code, s.course_cd, s.course_name, s.branch_cd,
               p.name AS prof_name, p.phase_order, p.academic_year,
               dt.name AS dtype_name, dt.code AS dtype_code,
-              (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id = so.id OR (ass.subject_id = so.subject_id AND ass.offering_id IS NULL)) AS attendance_sessions_count
+              (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
        FROM subject_offerings so
-       LEFT JOIN subjects s ON so.subject_id = s.id
-       LEFT JOIN professional_phases p ON so.prof_id = p.id
-       LEFT JOIN delivery_types dt ON so.dtype_id = dt.id
-       WHERE so.id = $1`,
+       LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+       LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
+       LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
+       WHERE so.id::text = $1::text`,
       [id],
     ).catch(() => []);
 
@@ -2564,10 +2564,10 @@ export class AdminMasterService {
                     s.name AS subject_name, s.code AS subject_code,
                     sd.name AS subject_department_name, sd.code AS subject_department_code
              FROM "${s}".faculty_subjects fs
-             JOIN "${s}".faculty f ON f.id = fs.faculty_id
-             LEFT JOIN "${s}".departments fd ON (fd.id = f.department_id OR fd.code = f.department_id::text)
-             JOIN "${s}".subjects s ON s.id = fs.subject_id
-             LEFT JOIN "${s}".departments sd ON (sd.id = s.department_id OR sd.code = s.department_id::text)
+             JOIN "${s}".faculty f ON f.id::text = fs.faculty_id::text
+             LEFT JOIN "${s}".departments fd ON (fd.id::text = f.department_id::text OR fd.code::text = f.department_id::text)
+             JOIN "${s}".subjects s ON s.id::text = fs.subject_id::text
+             LEFT JOIN "${s}".departments sd ON (sd.id::text = s.department_id::text OR sd.code::text = s.department_id::text)
              WHERE fs.is_active = true
              ORDER BY fs.id, fs.created_at DESC`
           );
@@ -2597,23 +2597,23 @@ export class AdminMasterService {
              s.name AS subject_name, s.code AS subject_code,
              sd.name AS subject_department_name, sd.code AS subject_department_code
       FROM "${s}".faculty_subjects fs
-      JOIN "${s}".faculty f ON f.id = fs.faculty_id
-      LEFT JOIN "${s}".departments fd ON (fd.id = f.department_id OR fd.code = f.department_id::text)
-      JOIN "${s}".subjects s ON s.id = fs.subject_id
-      LEFT JOIN "${s}".departments sd ON (sd.id = s.department_id OR sd.code = s.department_id::text)
+      JOIN "${s}".faculty f ON f.id::text = fs.faculty_id::text
+      LEFT JOIN "${s}".departments fd ON (fd.id::text = f.department_id::text OR fd.code::text = f.department_id::text)
+      JOIN "${s}".subjects s ON s.id::text = fs.subject_id::text
+      LEFT JOIN "${s}".departments sd ON (sd.id::text = s.department_id::text OR sd.code::text = s.department_id::text)
       WHERE fs.is_active = true
     `;
     if (query?.facultyId) {
       params.push(query.facultyId);
-      sql += ` AND fs.faculty_id = $${params.length}`;
+      sql += ` AND fs.faculty_id::text = $${params.length}::text`;
     }
     if (query?.subjectId) {
       params.push(query.subjectId);
-      sql += ` AND fs.subject_id = $${params.length}`;
+      sql += ` AND fs.subject_id::text = $${params.length}::text`;
     }
     if (query?.departmentId) {
       params.push(query.departmentId);
-      sql += ` AND (f.department_id = $${params.length} OR s.department_id = $${params.length} OR fd.code = $${params.length} OR sd.code = $${params.length})`;
+      sql += ` AND (f.department_id::text = $${params.length}::text OR s.department_id::text = $${params.length}::text OR fd.code::text = $${params.length}::text OR sd.code::text = $${params.length}::text)`;
     }
     sql += ` ORDER BY fs.id, fs.created_at DESC`;
     const rows = await this.ds.query(sql, params).catch(() => []);
@@ -2749,7 +2749,7 @@ export class AdminMasterService {
                 COALESCE(u.course_name, s.course_name) AS course_name,
                 COALESCE(u.branch_cd, s.branch_cd) AS branch_cd
          FROM units u
-         LEFT JOIN subjects s ON u.subject_id = s.id
+         LEFT JOIN subjects s ON s.id::text = u.subject_id::text
          ORDER BY u.unit_order ASC, u.code ASC`,
       ).catch(() => []);
 
@@ -2774,7 +2774,7 @@ export class AdminMasterService {
                   COALESCE(u.course_name, s.course_name) AS course_name,
                   COALESCE(u.branch_cd, s.branch_cd) AS branch_cd
            FROM units u
-           LEFT JOIN subjects s ON u.subject_id = s.id
+           LEFT JOIN subjects s ON s.id::text = u.subject_id::text
            ORDER BY u.unit_order ASC, u.code ASC`,
         ).catch(() => []);
 

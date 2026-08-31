@@ -24,7 +24,7 @@ export class IncubationCellService {
       try {
         const firmRes = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT id::text, slug AS code, name FROM public.firms WHERE is_active = true ORDER BY name ASC`
+          `SELECT id::text, slug AS code, COALESCE(title, slug) AS name FROM public.firms WHERE status IN ('ACTIVE', 'TRIAL') ORDER BY title ASC`
         );
         colleges = firmRes.map((f: any) => ({
           id: '1',
@@ -202,7 +202,7 @@ export class IncubationCellService {
         r.is_placement_eligible,
         COALESCE(r.incubation_status, 'Under Review') AS incubation_status,
         r.incubation_notes,
-        COALESCE(r.funding_amount, 0) AS funding_amount,
+        COALESCE(r.funding_amount::text, '0') AS funding_amount,
         r.mentor_assigned,
         r.submitted_at,
         r.updated_at,
@@ -335,32 +335,30 @@ export class IncubationCellService {
           f.designation as faculty_designation
         FROM "${schema}".logbook_mini_projects p
         LEFT JOIN "${schema}".students s ON (
-          p.student_id = s.id 
-          OR p.student_id::text = s.id::text
+          p.student_id::text = s.id::text 
           OR p.student_id::text = s.registration_no
           OR p.student_id::text = s.rollno
         )
         LEFT JOIN "${schema}".faculty f ON (
-          p.faculty_id = f.id 
-          OR p.faculty_id::text = f.id::text
+          p.faculty_id::text = f.id::text
           OR p.faculty_id::text = f.emp_id
         )
         LEFT JOIN "${schema}".courses crs ON (
-          p.course_id = crs.code 
-          OR p.course_id = crs.id::text 
-          OR s.course_cd = crs.code
+          p.course_id::text = crs.code::text 
+          OR p.course_id::text = crs.id::text 
+          OR s.course_cd::text = crs.code::text
         )
         LEFT JOIN "${schema}".departments dep ON (
-          p.branch_id = dep.code 
-          OR p.branch_id = dep.id::text 
-          OR s.branch_id = dep.code
-          OR s.department_id = dep.id
+          p.branch_id::text = dep.code::text 
+          OR p.branch_id::text = dep.id::text 
+          OR s.branch_id::text = dep.code::text
+          OR s.department_id::text = dep.id::text
         )
         LEFT JOIN "${schema}".batches bth ON (
-          p.batch_id = bth.code 
-          OR p.batch_id = bth.id::text 
-          OR s.batch_cd = bth.code
-          OR s.batch_id = bth.id
+          p.batch_id::text = bth.code::text 
+          OR p.batch_id::text = bth.id::text 
+          OR s.batch_cd::text = bth.code::text
+          OR s.batch_id::text = bth.id::text
         )
         ORDER BY p.created_at DESC
         LIMIT 50

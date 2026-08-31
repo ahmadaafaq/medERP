@@ -48,6 +48,13 @@ export class FirmsController {
     return await this.firmsService.getFirmStatusBySlug(slug);
   }
 
+  @Get('status')
+  @Public()
+  async getFirmStatusByQuery(@Query('slug') slug: string, @Query('tenant') tenant: string) {
+    const s = slug || tenant || 'srms-cet-bareilly';
+    return await this.firmsService.getFirmStatusBySlug(s);
+  }
+
   /**
    * Pre-signed / Direct upload URL for branding images (Logo, Cover, Banner)
    * POST /api/firms/upload-url

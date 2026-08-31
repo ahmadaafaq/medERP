@@ -262,7 +262,7 @@ export class InternshipsService {
              COUNT(DISTINCT CASE WHEN a.status = 'selected' THEN a.id END)::int AS selected_count,
              COUNT(DISTINCT CASE WHEN a.status = 'completed' THEN a.id END)::int AS completed_count
       FROM "${schema}".internship_programs p
-      LEFT JOIN "${schema}".internship_applications a ON p.id = a.program_id
+      LEFT JOIN "${schema}".internship_applications a ON p.id::text = a.program_id::text
       WHERE 1=1
     `;
 
@@ -291,8 +291,8 @@ export class InternshipsService {
         slug,
         `SELECT a.*, c.certificate_no, c.issued_date, c.approved_by, c.external_cert_url AS cert_external_url, c.cert_source AS certificate_source
          FROM "${schema}".internship_applications a
-         LEFT JOIN "${schema}".certificates c ON a.id = c.application_id
-         WHERE a.student_reg_no = $1 OR a.student_id = $1 OR a.student_id = $2 OR a.student_reg_no = $2`,
+         LEFT JOIN "${schema}".certificates c ON a.id::text = c.application_id::text
+         WHERE a.student_reg_no = $1 OR a.student_id::text = $1 OR a.student_id::text = $2 OR a.student_reg_no = $2`,
         [regNo, user?.id || regNo],
       );
 

@@ -1692,15 +1692,15 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       try {
         await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
         let querySql = `
-          SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
+          SELECT b.*, COALESCE(c.name, 'Course ' || b.course_cd) AS course_name,
                  b.course_cd AS course_code
           FROM batches b
-          LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
+          LEFT JOIN courses c ON c.course_cd::text = b.course_cd::text OR c.code::text = b.course_cd::text
         `;
         const queryParams: any[] = [];
         if (courseCd && courseCd !== 'all') {
           queryParams.push(courseCd);
-          querySql += ` WHERE (b.course_cd = $1 OR c.code = $1 OR c.course_cd = $1 OR b.course_name ILIKE $1)`;
+          querySql += ` WHERE (b.course_cd::text = $1::text OR c.code::text = $1::text OR c.course_cd::text = $1::text)`;
         }
         querySql += ` ORDER BY b.year DESC, b.code ASC`;
 
@@ -1737,15 +1737,15 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     for (const col of colleges) {
       try {
         let querySql = `
-          SELECT b.*, COALESCE(c.name, b.course_name, 'Course ' || b.course_cd) AS course_name,
+          SELECT b.*, COALESCE(c.name, 'Course ' || b.course_cd) AS course_name,
                  b.course_cd AS course_code
           FROM batches b
-          LEFT JOIN courses c ON c.course_cd = b.course_cd OR c.code = b.course_cd
+          LEFT JOIN courses c ON c.course_cd::text = b.course_cd::text OR c.code::text = b.course_cd::text
         `;
         const queryParams: any[] = [];
         if (courseCd && courseCd !== 'all') {
           queryParams.push(courseCd);
-          querySql += ` WHERE (b.course_cd = $1 OR c.code = $1 OR c.course_cd = $1 OR b.course_name ILIKE $1)`;
+          querySql += ` WHERE (b.course_cd::text = $1::text OR c.code::text = $1::text OR c.course_cd::text = $1::text)`;
         }
         querySql += ` ORDER BY b.year DESC, b.code ASC`;
 

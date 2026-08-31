@@ -1104,9 +1104,9 @@ export class AuthService {
           const subRows = await this.ds.query(
             `SELECT s.id, s.code, s.name, s.credits, s.type, s.department_id
              FROM "${schema}".faculty_subjects fs
-             JOIN "${schema}".subjects s ON s.id = fs.subject_id
-             WHERE fs.faculty_id = $1 AND fs.is_active = true`,
-            [profile.id],
+             JOIN "${schema}".subjects s ON s.id::text = fs.subject_id::text
+             WHERE fs.faculty_id::text = $1::text AND fs.is_active = true`,
+            [String(profile.id)],
           );
           profile.subjects = subRows.length > 0 ? subRows : (profile.primary_subject_name ? [{ id: profile.subject_id, code: profile.primary_subject_code, name: profile.primary_subject_name }] : []);
         }

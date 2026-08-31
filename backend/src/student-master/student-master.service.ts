@@ -90,7 +90,7 @@ export class StudentMasterService {
                  COALESCE(sa.group_id, s.group_id) AS group_id, sa.group_code, sa.group_name,
                  sa.branch_id, sa.branch_code
           FROM students s
-          LEFT JOIN student_admissions sa ON sa.student_id = s.id
+          LEFT JOIN student_admissions sa ON sa.student_id::text = s.id::text
           WHERE 1=1
         `;
 
@@ -103,14 +103,14 @@ export class StudentMasterService {
           const p1 = params.length;
           params.push(`%${query.courseId}%`);
           const p2 = params.length;
-          sql += ` AND (sa.course_id::text = $${p1} OR sa.course_code = $${p1} OR sa.course_code ILIKE $${p2} OR s.course_cd = $${p1})`;
+          sql += ` AND (sa.course_id::text = $${p1}::text OR sa.course_code::text = $${p1}::text OR sa.course_code ILIKE $${p2} OR s.course_cd::text = $${p1}::text)`;
         }
         if (query.batchId && query.batchId !== 'all') {
           params.push(query.batchId);
           const p1 = params.length;
           params.push(`%${query.batchId}%`);
           const p2 = params.length;
-          sql += ` AND (sa.batch_id::text = $${p1} OR sa.batch_code = $${p1} OR sa.batch_code ILIKE $${p2} OR s.batch_cd = $${p1} OR s.admission_year::text = $${p1})`;
+          sql += ` AND (sa.batch_id::text = $${p1}::text OR sa.batch_code::text = $${p1}::text OR sa.batch_code ILIKE $${p2} OR s.batch_cd::text = $${p1}::text OR s.admission_year::text = $${p1}::text)`;
         }
         if (query.branchId && query.branchId !== 'all') {
           params.push(query.branchId);
@@ -1393,7 +1393,7 @@ export class StudentMasterService {
             SELECT student_id, COUNT(*) AS logs_count
             FROM "${schema}".logbook_weekly_logs
             GROUP BY student_id
-          ) wl ON (wl.student_id = p.student_id)
+          ) wl ON (wl.student_id::text = p.student_id::text)
           GROUP BY p.student_id
         )
         SELECT sb.id, sb.name, sb.rollno, sb.registration_no, sb.course_name, sb.batch_name, sb.photo_url,
@@ -1431,10 +1431,10 @@ export class StudentMasterService {
                ) AS composite_score
         FROM student_base sb
         LEFT JOIN repo_metrics rm ON (rm.student_reg_no = sb.registration_no OR rm.student_reg_no = sb.rollno OR rm.student_name ILIKE sb.name)
-        LEFT JOIN mini_project_metrics mpm ON (mpm.student_id = sb.id OR mpm.student_id::text = sb.registration_no OR mpm.student_id::text = sb.rollno)
-        LEFT JOIN exam_metrics em ON em.student_id = sb.id
-        LEFT JOIN att_metrics am ON am.student_id = sb.id
-        LEFT JOIN chat_metrics cm ON cm.sender_id = sb.user_id
+        LEFT JOIN mini_project_metrics mpm ON (mpm.student_id::text = sb.id::text OR mpm.student_id::text = sb.registration_no OR mpm.student_id::text = sb.rollno)
+        LEFT JOIN exam_metrics em ON em.student_id::text = sb.id::text
+        LEFT JOIN att_metrics am ON am.student_id::text = sb.id::text
+        LEFT JOIN chat_metrics cm ON cm.sender_id::text = sb.user_id::text
         WHERE (rm.project_score > 0 OR em.theory_pct > 0 OR sb.srms_attd_pct > 0 OR am.total_classes > 0 OR rm.incubation_status IS NOT NULL OR mpm.has_mini_project = true)
         ORDER BY composite_score DESC, rm.project_score DESC NULLS LAST, em.theory_pct DESC NULLS LAST
         LIMIT $1

@@ -123,6 +123,17 @@ export class PlacementDriveService {
       RETURNING *
     `;
 
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT setval(
+          pg_get_serial_sequence('"${schema}".placement_drives', 'drive_id'),
+          COALESCE((SELECT MAX(drive_id) FROM "${schema}".placement_drives), 0) + 1,
+          false
+        );`
+      );
+    } catch {}
+
     const drive = await this.tenantSchemaService.queryInTenant(slug, sql, [
       dto.company_name,
       dto.role,
@@ -131,8 +142,8 @@ export class PlacementDriveService {
       dto.eligibility_course_cd,
       dto.eligibility_branch_cd || null,
       dto.eligibility_batch_cd,
-      branches,
-      batches,
+      JSON.stringify(branches),
+      JSON.stringify(batches),
       dto.logo_url || null,
       dto.min_score_required || 0.0,
       dto.drive_date,
@@ -221,8 +232,8 @@ export class PlacementDriveService {
 
     const sql = `
       SELECT pd.*,
-             (SELECT COUNT(*)::int FROM "${schema}".placement_applications pa WHERE pa.drive_id = pd.drive_id) AS total_applicants,
-             (SELECT COUNT(*)::int FROM "${schema}".placement_applications pa WHERE pa.drive_id = pd.drive_id AND pa.status = 'Selected') AS total_selected
+             (SELECT COUNT(*)::int FROM "${schema}".placement_applications pa WHERE pa.drive_id::text = pd.drive_id::text) AS total_applicants,
+             (SELECT COUNT(*)::int FROM "${schema}".placement_applications pa WHERE pa.drive_id::text = pd.drive_id::text AND pa.status = 'Selected') AS total_selected
       FROM "${schema}".placement_drives pd
       WHERE ${whereConditions.join(' AND ')}
       ORDER BY pd.drive_date ASC, pd.created_at DESC
@@ -587,13 +598,13 @@ export class PlacementDriveService {
     const CORE_HEADER_PATTERNS: Record<string, RegExp> = {
       company_name: /^(company|company[\s_-]*name|organization|employer|firm|corporate)$/i,
       role: /^(role|job[\s_-]*role|designation|profile|position|job[\s_-]*title)$/i,
-      package_ctc: /^(package|ctc|package[\s_-]*ctc|salary|package[\s_-]*lpa|lpa|stipend)$/i,
+      package_ctc: /^(package|ctc|package[\s_-]*ctc|salary|package[\s_-]*lpa|lpa|stipend|package[\s_-]*\(lpa\))$/i,
       package_min: /^(min[\s_-]*package|min[\s_-]*ctc|package[\s_-]*min)$/i,
       package_max: /^(max[\s_-]*package|max[\s_-]*ctc|package[\s_-]*max)$/i,
       eligible_branches: /^(branch|branches|eligible[\s_-]*branches|department|departments|stream)$/i,
-      eligible_batches: /^(batch|batches|eligible[\s_-]*batches|passing[\s_-]*year|year)$/i,
-      drive_date: /^(drive[\s_-]*date|date|visiting[\s_-]*date|date[\s_-]*of[\s_-]*drive|event[\s_-]*date)$/i,
-      deadline_date: /^(deadline|deadline[\s_-]*date|last[\s_-]*date|registration[\s_-]*deadline)$/i,
+      eligible_batches: /^(batch|batches|eligible[\s_-]*batches|passing[\s_-]*year|year|eligible[\s_-]*batch[\s_-]*\(passing[\s_-]*year\))$/i,
+      drive_date: /^(drive[\s_-]*date|date|visiting[\s_-]*date|date[\s_-]*of[\s_-]*drive|event[\s_-]*date|drive[\s_-]*date[\s_-]*from|drive[\s_-]*from)$/i,
+      deadline_date: /^(deadline|deadline[\s_-]*date|last[\s_-]*date|registration[\s_-]*deadline|drive[\s_-]*date[\s_-]*to|drive[\s_-]*to)$/i,
       description: /^(description|job[\s_-]*description|details|requirements|eligibility[\s_-]*criteria)$/i,
       logo_url: /^(logo|logo[\s_-]*url|icon|image)$/i,
     };
@@ -612,6 +623,30 @@ export class PlacementDriveService {
         unrecognizedCols.push(cleanH);
       }
     }
+
+    const parseExcelDateValue = (val: any): string | null => {
+      if (!val && val !== 0) return null;
+      if (val instanceof Date) return val.toISOString().split('T')[0];
+      if (typeof val === 'number' && val > 30000 && val < 60000) {
+        const dateObj = new Date(Math.round((val - 25569) * 86400 * 1000));
+        return dateObj.toISOString().split('T')[0];
+      }
+      const str = String(val).trim();
+      if (!str) return null;
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+      if (/^\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{4}/.test(str)) {
+        const parts = str.split(/[\/\.-]/);
+        if (parts[2].length === 4) {
+          const year = parts[2];
+          const month = parts[0].padStart(2, '0');
+          const day = parts[1].padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+      }
+      const parsed = Date.parse(str);
+      if (!isNaN(parsed)) return new Date(parsed).toISOString().split('T')[0];
+      return str;
+    };
 
     const previewRows = rawRows.slice(0, 100).map((row) => {
       const core: any = {
@@ -633,6 +668,9 @@ export class PlacementDriveService {
             core[mappedField] = typeof val === 'string' 
               ? val.split(/[,;\/|]/).map((s: string) => s.trim()).filter(Boolean)
               : [String(val)];
+          } else if (mappedField === 'drive_date' || mappedField === 'deadline_date') {
+            const parsed = parseExcelDateValue(val);
+            if (parsed) core[mappedField] = parsed;
           } else {
             core[mappedField] = String(val).trim();
           }
@@ -668,6 +706,30 @@ export class PlacementDriveService {
       throw new BadRequestException('No companies provided for import.');
     }
 
+    const parseExcelDateValue = (val: any): string | null => {
+      if (!val && val !== 0) return null;
+      if (val instanceof Date) return val.toISOString().split('T')[0];
+      if (typeof val === 'number' && val > 30000 && val < 60000) {
+        const dateObj = new Date(Math.round((val - 25569) * 86400 * 1000));
+        return dateObj.toISOString().split('T')[0];
+      }
+      const str = String(val).trim();
+      if (!str) return null;
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+      if (/^\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{4}/.test(str)) {
+        const parts = str.split(/[\/\.-]/);
+        if (parts[2].length === 4) {
+          const year = parts[2];
+          const month = parts[0].padStart(2, '0');
+          const day = parts[1].padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+      }
+      const parsed = Date.parse(str);
+      if (!isNaN(parsed)) return new Date(parsed).toISOString().split('T')[0];
+      return str;
+    };
+
     const insertedCompanies: any[] = [];
 
     for (const comp of dto.companies) {
@@ -675,12 +737,27 @@ export class PlacementDriveService {
       const role = comp.role || 'Associate / Engineer';
       const packageCtc = comp.package_ctc || 'As per industry standard';
       const description = comp.description || `${dto.batch_title || 'Campus Placement Drive'} for eligible candidates.`;
-      const driveDate = comp.drive_date || new Date().toISOString().split('T')[0];
-      const deadlineDate = comp.deadline_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      
+      const rawDriveDate = comp.drive_date || comp.extra_fields?.['Drive Date From'] || comp.extra_fields?.['Drive Date'];
+      const rawDeadlineDate = comp.deadline_date || comp.extra_fields?.['Drive Date To'] || comp.extra_fields?.['Registration Deadline'];
+      const driveDate = parseExcelDateValue(rawDriveDate) || new Date().toISOString().split('T')[0];
+      const deadlineDate = parseExcelDateValue(rawDeadlineDate) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
       const branches = Array.isArray(comp.eligible_branches) ? comp.eligible_branches : ['CSE', 'IT', 'ECE'];
       const batches = Array.isArray(comp.eligible_batches) ? comp.eligible_batches : ['2025', '2026'];
       const extraFields = comp.extra_fields || {};
       const logoUrl = comp.logo_url || null;
+
+      try {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT setval(
+            pg_get_serial_sequence('"${schema}".placement_drives', 'drive_id'),
+            COALESCE((SELECT MAX(drive_id) FROM "${schema}".placement_drives), 0) + 1,
+            false
+          );`
+        );
+      } catch {}
 
       const inserted = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -706,8 +783,8 @@ export class PlacementDriveService {
           '13',
           branches.join(', '),
           batches.join(', '),
-          branches,
-          batches,
+          JSON.stringify(branches),
+          JSON.stringify(batches),
           60.00,
           driveDate,
           deadlineDate,

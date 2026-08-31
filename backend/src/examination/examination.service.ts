@@ -337,15 +337,12 @@ export class ExaminationService {
     const params: any[] = [];
     let sql = `
       SELECT q.*, 
-             COALESCE(q.unit_code, 'CO1') AS unit_code,
-             COALESCE(q.unit_name, 'CO1: Introduction to Web Technology / Python') AS unit_name,
-             COALESCE(q.sub_topic_code, q.competency_code) AS sub_topic_code,
              d.name AS department_name, 
              s.name AS subject_name, 
              s.code AS subject_code
       FROM question_bank q
-      LEFT JOIN departments d ON d.id = q.department_id
-      LEFT JOIN subjects s ON s.id = q.subject_id
+      LEFT JOIN departments d ON d.id::text = q.department_id::text
+      LEFT JOIN subjects s ON s.id::text = q.subject_id::text
       WHERE q.is_active = true
     `;
     if (query.departmentId && this.isUUID(query.departmentId)) {
@@ -434,7 +431,12 @@ export class ExaminationService {
     sql += ` ORDER BY q.created_at DESC`;
 
     const results = await this.tenantSchemaService.queryInTenant(slug, sql, params);
-    return results;
+    return results.map((q: any) => ({
+      ...q,
+      unit_code: q.unit_code || 'CO1',
+      unit_name: q.unit_name || 'CO1: Introduction to Web Technology / Python',
+      sub_topic_code: q.sub_topic_code || q.competency_code || '',
+    }));
   }
 
   async deleteQuestion(tenantSlug: string, id: string) {

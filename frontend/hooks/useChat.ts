@@ -390,14 +390,17 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
     fetchGroups();
   }, []);
 
-  // Polling for live updates every 4 seconds
+  // Polling for live updates every 15 seconds (pauses when tab is hidden)
   useEffect(() => {
     const interval = setInterval(() => {
+      // Skip background polling if tab is minimized or inactive
+      if (typeof document !== 'undefined' && document.hidden) return;
+
       fetchGroups(true);
       if (activeGroupRef.current) {
         fetchMessages(activeGroupRef.current, true);
       }
-    }, 4000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [fetchGroups, fetchMessages]);
 
