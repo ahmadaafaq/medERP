@@ -93,13 +93,23 @@ export class ExaminationService {
   }
 
   async getPapers(tenantSlug: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     return this.tenantSchemaService.queryInTenant(
-      tenantSlug,
-      `SELECT p.*, s.name as subject_name, b.code as batch_code 
-       FROM examination_papers p 
-       LEFT JOIN subjects s ON p.subject_id = s.id 
-       LEFT JOIN batches b ON p.batch_id = b.id 
-       ORDER BY p.created_at DESC`,
+      slug,
+      `SELECT * FROM (
+        SELECT DISTINCT ON (p.id)
+               p.*, 
+               s.name as subject_name, 
+               s.code as subject_code, 
+               s.course_cd as subject_course_cd,
+               s.semester as subject_semester,
+               b.code as batch_code 
+        FROM examination_papers p 
+        LEFT JOIN subjects s ON p.subject_id::text = s.id::text 
+        LEFT JOIN batches b ON p.batch_id::text = b.id::text 
+        ORDER BY p.id, p.created_at DESC
+      ) sub
+      ORDER BY sub.created_at DESC`,
     );
   }
 
@@ -235,8 +245,8 @@ export class ExaminationService {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     let sql = `SELECT r.*, s.name as student_name, s.registration_no, s.rollno, s.photo_url, p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks
                FROM student_results r
-               LEFT JOIN students s ON r.student_id = s.id
-               LEFT JOIN examination_papers p ON r.paper_id = p.id
+               LEFT JOIN students s ON r.student_id::text = s.id::text
+               LEFT JOIN examination_papers p ON r.paper_id::text = p.id::text
                WHERE 1=1`;
     const params: any[] = [];
 

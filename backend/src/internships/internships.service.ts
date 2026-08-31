@@ -495,41 +495,45 @@ export class InternshipsService {
 
     return this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT a.*,
-              s.name AS student_full_name,
-              s.rollno AS student_rollno,
-              s.course_cd AS student_course_cd,
-              s.batch_cd AS student_batch_cd,
-              crs.name AS course_name,
-              bth.name AS batch_name,
-              c.certificate_no,
-              c.issued_date,
-              c.approved_by,
-              c.external_cert_url AS cert_external_url,
-              c.cert_source AS cert_origin
-       FROM "${schema}".internship_applications a
-       LEFT JOIN "${schema}".students s ON (
-         a.student_reg_no = s.registration_no 
-         OR a.student_reg_no = s.rollno 
-         OR a.student_id = s.registration_no 
-         OR a.student_id = s.rollno
-         OR a.student_id = s.user_id::text
-       )
-       LEFT JOIN "${schema}".courses crs ON (
-         s.course_cd = crs.code 
-         OR s.course_cd = crs.course_cd 
-         OR s.course_cd = crs.id::text 
-         OR a.course_cd = crs.code
-       )
-       LEFT JOIN "${schema}".batches bth ON (
-         s.batch_cd = bth.batch_cd 
-         OR s.batch_cd = bth.code 
-         OR s.batch_id = bth.id 
-         OR a.batch_cd = bth.batch_cd
-       )
-       LEFT JOIN "${schema}".certificates c ON a.id = c.application_id
-       WHERE a.program_id = $1
-       ORDER BY a.applied_at ASC`,
+      `SELECT * FROM (
+        SELECT DISTINCT ON (a.id)
+               a.*,
+               COALESCE(s.name, a.student_name) AS student_full_name,
+               COALESCE(s.rollno, a.student_reg_no) AS student_rollno,
+               COALESCE(s.course_cd, a.course_cd) AS student_course_cd,
+               COALESCE(s.batch_cd, a.batch_cd) AS student_batch_cd,
+               crs.name AS course_name,
+               bth.name AS batch_name,
+               c.certificate_no,
+               c.issued_date,
+               c.approved_by,
+               c.external_cert_url AS cert_external_url,
+               c.cert_source AS cert_origin
+        FROM "${schema}".internship_applications a
+        LEFT JOIN "${schema}".students s ON (
+          a.student_reg_no = s.registration_no 
+          OR a.student_reg_no = s.rollno 
+          OR a.student_id = s.registration_no 
+          OR a.student_id = s.rollno
+          OR a.student_id = s.user_id::text
+        )
+        LEFT JOIN "${schema}".courses crs ON (
+          s.course_cd = crs.code 
+          OR s.course_cd = crs.course_cd 
+          OR s.course_cd = crs.id::text 
+          OR a.course_cd = crs.code
+        )
+        LEFT JOIN "${schema}".batches bth ON (
+          s.batch_cd = bth.batch_cd 
+          OR s.batch_cd = bth.code 
+          OR s.batch_id::text = bth.id::text 
+          OR a.batch_cd = bth.batch_cd
+        )
+        LEFT JOIN "${schema}".certificates c ON a.id::text = c.application_id::text
+        WHERE a.program_id::text = $1::text
+        ORDER BY a.id, a.applied_at ASC
+      ) sub
+      ORDER BY sub.applied_at ASC`,
       [programId],
     );
   }

@@ -490,27 +490,25 @@ export default function FacultyMarksPage() {
     }));
   };
 
-  // Filter papers by selected subject/dept
+  // Filter papers strictly by selected subject
   const filteredPapers = useMemo(() => {
-    if (allFetchedPapers.length === 0) return [];
-    const selSubjObj = allSubjects.find(s => s.id === selectedSubject);
-    const subjCode = (selSubjObj?.code || '').toLowerCase();
-    const subjName = (selSubjObj?.name || '').toLowerCase();
-    if (!subjCode && !subjName) return allFetchedPapers;
+    if (allFetchedPapers.length === 0 || !selectedSubject) return [];
+    const selSubjObj = allSubjects.find(s => s.id === selectedSubject || s.code === selectedSubject);
+    const subjCode = (selSubjObj?.code || '').toLowerCase().trim();
+    const subjName = (selSubjObj?.name || '').toLowerCase().trim();
+    const subjId = String(selSubjObj?.id || selectedSubject || '').toLowerCase().trim();
 
-    const matched = allFetchedPapers.filter(p => {
-      if (p.subject_id === selectedSubject) return true;
-      if (!p.subject_id) return true;
+    return allFetchedPapers.filter(p => {
+      if (p.subject_id && String(p.subject_id).toLowerCase() === subjId) return true;
       const pCode = p.code.toLowerCase();
       const pName = p.name.toLowerCase();
       if (subjCode && (pCode.includes(subjCode) || pName.includes(subjName))) return true;
       return false;
     });
-    return matched.length > 0 ? matched : allFetchedPapers;
   }, [allFetchedPapers, selectedSubject, allSubjects]);
 
   const activePaper = useMemo(() =>
-    filteredPapers.find(p => p.id === selectedPaperId) || filteredPapers[0] || null,
+    filteredPapers.find(p => p.id === selectedPaperId) || null,
     [filteredPapers, selectedPaperId]
   );
 
@@ -628,39 +626,11 @@ export default function FacultyMarksPage() {
           return;
         }
       }
-    } catch {}
-
-    // Fallback rich roster with database saved results overlay
-    const theoryMax = activePaper?.max_marks || 40;
-    const practicalMax = 10;
-    const maxM = theoryMax + practicalMax; // 50 Total Marks
-    const defaultRoster: StudentRow[] = [
-      { id: 'st-1', rollno: '#20260001', name: 'Shahnawaz Ahmad', gender: 'Male', evaluated: true, marks_obtained: 88, max_marks: maxM, competencyScores: { 'PY1.1(2024)': { scored: 45, max: 50 }, 'PY2.1(2024)': { scored: 43, max: 50 } }, is_pass: true },
-      { id: 'st-2', rollno: '#20260002', name: 'Priya M Nair', gender: 'Female', evaluated: true, marks_obtained: 82.5, max_marks: maxM, competencyScores: { 'PY1.1(2024)': { scored: 42, max: 50 }, 'PY2.1(2024)': { scored: 40.5, max: 50 } }, is_pass: true },
-      { id: 'st-3', rollno: '#20260003', name: 'Kabir Rao Deshmukh', gender: 'Male', evaluated: false, marks_obtained: 0, max_marks: maxM, competencyScores: {}, is_pass: false },
-      { id: 'st-4', rollno: '#20260004', name: 'Ananya Roy', gender: 'Female', evaluated: false, marks_obtained: 0, max_marks: maxM, competencyScores: {}, is_pass: false },
-      { id: 'st-5', rollno: '#20260005', name: 'Mohammed Farhan', gender: 'Male', evaluated: false, marks_obtained: 0, max_marks: maxM, competencyScores: {}, is_pass: false },
-    ];
-
-    const mergedRoster = defaultRoster.map(s => {
-      const saved = savedResultsMap[s.id] || savedResultsMap[s.rollno] || savedResultsMap[s.name.toLowerCase()];
-      if (!saved) return s;
-      const qM = saved.question_marks ? (typeof saved.question_marks === 'string' ? JSON.parse(saved.question_marks) : saved.question_marks) : s.questionMarks;
-      const subM = saved.sub_part_marks ? (typeof saved.sub_part_marks === 'string' ? JSON.parse(saved.sub_part_marks) : saved.sub_part_marks) : s.subPartMarks;
-      return {
-        ...s,
-        evaluated: true,
-        marks_obtained: Number(saved.marks_obtained),
-        questionMarks: qM,
-        subPartMarks: subM,
-        practicalMark: Number(saved.practical_mark || 0),
-        is_pass: Boolean(saved.is_pass),
-      };
-    });
-
-    setStudents(mergedRoster);
-    setSelectedStudentId(mergedRoster[0].id);
-    setLoading(false);
+    } catch (e) {
+      console.error('fetchStudentRoster error:', e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredStudents = useMemo(() => {

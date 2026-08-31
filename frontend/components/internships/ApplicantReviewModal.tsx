@@ -92,7 +92,17 @@ export default function ApplicantReviewModal({
       const tenantSlug = getTenantSlug();
       const res = await axios.get(`/api/internships/${program.id}/applicants?tenant=${tenantSlug}`, { headers: getHeaders() });
       const list = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.data) ? res.data.data : []);
-      setApplicants(list);
+      // Deduplicate applicants by unique ID
+      const seen = new Set<string>();
+      const uniqueList: any[] = [];
+      for (const item of list) {
+        const key = item.id || `${item.student_reg_no}_${item.program_id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueList.push(item);
+        }
+      }
+      setApplicants(uniqueList);
     } catch (e) {
       console.error('Error fetching applicants:', e);
     } finally {

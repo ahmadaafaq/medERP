@@ -189,21 +189,24 @@ export default function AdminAssessmentMarksPage() {
   // ─── Step 1: 7-Level Cascading Hierarchy (RestrictAPI.md Standard) ─────────
   // Order: 1. College -> 2. Course -> 3. Branch -> 4. Batch -> 5. Semester -> 6. Department -> 7. Subject
   const [courses, setCourses] = useState<CourseItem[]>([]);
-  const [selectedCourseCd, setSelectedCourseCd] = useState<string>('13'); // default BCA
+  const [selectedCourseCd, setSelectedCourseCd] = useState<string>('');
 
   const [branches, setBranches] = useState<BranchItem[]>([]);
-  const [selectedBranchCd, setSelectedBranchCd] = useState<string>('1');
+  const [selectedBranchCd, setSelectedBranchCd] = useState<string>('');
 
   const [batches, setBatches] = useState<BatchItem[]>([]);
-  const [selectedBatchCd, setSelectedBatchCd] = useState<string>('B2026-C13-1');
+  // Batch MUST be selected by user before subjects/papers are shown
+  const [selectedBatchCd, setSelectedBatchCd] = useState<string>('');
 
-  const [selectedSemCd, setSelectedSemCd] = useState<string>('1'); // Sem 1 to 8
+  // Semester MUST be selected by user before subjects/papers are shown
+  const [selectedSemCd, setSelectedSemCd] = useState<string>('');
 
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [selectedDeptCd, setSelectedDeptCd] = useState<string>('13'); // BCA Dept
+  const [selectedDeptCd, setSelectedDeptCd] = useState<string>('');
 
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
-  const [selectedSubjectCd, setSelectedSubjectCd] = useState<string>('88534'); // Web Technology
+  // Subject defaults to '' — user MUST choose a subject before papers are shown
+  const [selectedSubjectCd, setSelectedSubjectCd] = useState<string>('');
 
   // ─── Step 2: Exam Papers ───────────────────────────────────────────────────
   const [allFetchedPapers, setAllFetchedPapers] = useState<ExamPaper[]>([]);
@@ -367,9 +370,8 @@ export default function AdminAssessmentMarksPage() {
             sections: Array.isArray(p.sections) ? p.sections : [],
           }));
         setAllFetchedPapers(mappedPapers);
-        if (mappedPapers.length > 0) {
-          setSelectedPaperCode(mappedPapers[0].code);
-        }
+        // Do not auto-select paper - user must choose paper explicitly
+        setSelectedPaperCode('');
       }
     } catch (e) {
       console.error('fetchMetadata error:', e);
@@ -402,14 +404,17 @@ export default function AdminAssessmentMarksPage() {
     return dedupeBy(list, c => String(c.course_cd || c.code || c.id));
   }, [courses, isMedicalCollege]);
 
+  // Do NOT auto-select course — user must pick manually
+  // (But if previously selected and list reloads, keep it if still valid)
   useEffect(() => {
-    if (filteredCourses.length > 0) {
+    if (filteredCourses.length > 0 && selectedCourseCd) {
       const exists = filteredCourses.some(c => String(c.course_cd) === selectedCourseCd || c.code === selectedCourseCd);
       if (!exists) {
-        setSelectedCourseCd(String(filteredCourses[0].course_cd || filteredCourses[0].code));
+        // If previous selection no longer valid, reset to empty
+        setSelectedCourseCd('');
       }
     }
-  }, [filteredCourses, selectedCourseCd]);
+  }, [filteredCourses]);
 
   // ─── Filter Branches by Selected Course ────────────────────────────────────
   const filteredBranches = useMemo(() => {
@@ -434,13 +439,13 @@ export default function AdminAssessmentMarksPage() {
   }, [branches, selectedCourseCd, isMedicalCollege]);
 
   useEffect(() => {
-    if (filteredBranches.length > 0) {
+    if (filteredBranches.length > 0 && selectedBranchCd) {
       const exists = filteredBranches.some(b => b.branch_cd === selectedBranchCd || b.code === selectedBranchCd);
       if (!exists) {
-        setSelectedBranchCd(filteredBranches[0].branch_cd || filteredBranches[0].code);
+        setSelectedBranchCd('');
       }
     }
-  }, [filteredBranches, selectedBranchCd]);
+  }, [filteredBranches]);
 
   // ─── Filter Batches by Selected Course & Branch ────────────────────────────
   const filteredBatches = useMemo(() => {
@@ -451,14 +456,19 @@ export default function AdminAssessmentMarksPage() {
     return dedupeBy(list, b => String(b.code || b.batch_cd || b.id));
   }, [batches, selectedCourseCd]);
 
+  // Do NOT auto-select batch — user must pick batch & semester before subjects load
   useEffect(() => {
-    if (filteredBatches.length > 0) {
+    if (filteredBatches.length > 0 && selectedBatchCd) {
       const exists = filteredBatches.some(b => b.code === selectedBatchCd || b.batch_cd === selectedBatchCd);
       if (!exists) {
-        setSelectedBatchCd(filteredBatches[0].code || filteredBatches[0].batch_cd);
+        setSelectedBatchCd('');
+        setSelectedSemCd('');
+        setSelectedSubjectCd('');
+        setSelectedPaperCode('');
+        setStudents([]);
       }
     }
-  }, [filteredBatches, selectedBatchCd]);
+  }, [filteredBatches]);
 
   // ─── Filter Departments (Strictly CET Engineering vs IMS Medical) ──────────
   const filteredDepartments = useMemo(() => {
@@ -478,16 +488,19 @@ export default function AdminAssessmentMarksPage() {
   }, [departments, selectedCourseCd, isMedicalCollege]);
 
   useEffect(() => {
-    if (filteredDepartments.length > 0) {
+    if (filteredDepartments.length > 0 && selectedDeptCd) {
       const exists = filteredDepartments.some(d => d.name === selectedDeptCd || d.code === selectedDeptCd || String(d.dept_cd) === selectedDeptCd);
       if (!exists) {
-        setSelectedDeptCd(filteredDepartments[0].name || filteredDepartments[0].code || String(filteredDepartments[0].dept_cd || ''));
+        setSelectedDeptCd('');
       }
     }
-  }, [filteredDepartments, selectedDeptCd]);
+  }, [filteredDepartments]);
 
-  // ─── Filter Subjects by Course, Department & Semester ──────────────────────
+  // ─── Filter Subjects by Course & Semester (only when batch+semester selected) ─
   const filteredSubjects = useMemo(() => {
+    // Require batch and semester to be selected first
+    if (!selectedBatchCd || !selectedSemCd) return [];
+
     const matched = allSubjects.filter(s => {
       // Exclude medical if CET
       const sName = (s.name || '').toLowerCase();
@@ -499,57 +512,97 @@ export default function AdminAssessmentMarksPage() {
       if (selectedCourseCd && s.course_cd && String(s.course_cd) !== String(selectedCourseCd)) {
         return false;
       }
+      // Filter by semester if subject has semester metadata
+      if (selectedSemCd && s.semester && String(s.semester) !== String(selectedSemCd)) {
+        return false;
+      }
       return true;
     });
 
-    const base = matched.length > 0 ? matched : allSubjects;
+    // If course-filtered results exist, use them; otherwise show all non-medical
+    const base = matched.length > 0 ? matched : allSubjects.filter(s => {
+      const sCode = (s.code || '').toLowerCase();
+      const sName = (s.name || '').toLowerCase();
+      return !sCode.startsWith('ana') && !sCode.startsWith('phy') && !sName.includes('anatomy') && !sName.includes('physiology');
+    });
     return dedupeBy(base, s => String(s.subject_cd || s.code || s.name || s.id));
-  }, [allSubjects, selectedCourseCd, isMedicalCollege]);
+  }, [allSubjects, selectedCourseCd, selectedBatchCd, selectedSemCd, isMedicalCollege]);
 
+  // When subject list reloads, do NOT auto-select — keep '' until user picks
   useEffect(() => {
-    if (filteredSubjects.length > 0) {
+    if (selectedSubjectCd && filteredSubjects.length > 0) {
       const exists = filteredSubjects.some(s => s.code === selectedSubjectCd || String(s.subject_cd) === selectedSubjectCd);
       if (!exists) {
-        setSelectedSubjectCd(filteredSubjects[0].code || String(filteredSubjects[0].subject_cd || ''));
+        // Previous subject no longer in filtered list — reset
+        setSelectedSubjectCd('');
+        setSelectedPaperCode('');
+        setStudents([]);
+        setSelectedStudentRollno(null);
       }
     }
-  }, [filteredSubjects, selectedSubjectCd]);
+  }, [filteredSubjects]);
 
-  // ─── Filtered Exam Papers for Subject & Semester ───────────────────────────
+  // ─── Filtered Exam Papers: Requires Batch + Semester + Subject all selected ──
   const filteredPapers = useMemo(() => {
+    // GATE: Do not show any papers until batch, semester AND subject are all selected
+    if (!selectedBatchCd || !selectedSemCd || !selectedSubjectCd) return [];
     if (allFetchedPapers.length === 0) return [];
 
-    const selSubjObj = allSubjects.find(s => s.code === selectedSubjectCd || String(s.subject_cd) === selectedSubjectCd);
-    const subjCode = selSubjObj?.code?.toLowerCase() || selectedSubjectCd.toLowerCase();
-    const subjName = selSubjObj?.name?.toLowerCase() || '';
+    const selSubjObj = allSubjects.find(s =>
+      String(s.code) === String(selectedSubjectCd) ||
+      String(s.subject_cd) === String(selectedSubjectCd) ||
+      String(s.id) === String(selectedSubjectCd)
+    );
+    const subjId   = selSubjObj?.id   ? String(selSubjObj.id).toLowerCase().trim()   : '';
+    const subjCode = (selSubjObj?.code || selectedSubjectCd || '').toLowerCase().trim();
+    const subjCd   = String(selSubjObj?.subject_cd || '').toLowerCase().trim();
+    const subjName = (selSubjObj?.name || '').toLowerCase().trim();
 
-    // Step 1: Filter by subject (if available)
-    let matched = allFetchedPapers.filter(p => {
-      if (!p.subject_code && !selectedSubjectCd) return true;
-      if (p.subject_code && p.subject_code.toLowerCase() === subjCode) return true;
-      const pCode = p.code.toLowerCase();
-      const pName = p.name.toLowerCase();
-      if (subjCode && (pCode.includes(subjCode) || (subjName && pName.includes(subjName)))) return true;
+    // Strictly match papers to this EXACT subject — no fuzzy fallback!
+    const matched = allFetchedPapers.filter(p => {
+      // Skip demo/test/placeholder papers
+      const pCode = (p.code || '').toUpperCase();
+      if (pCode === 'DEMO-PAPER-01' || pCode === 'EXAM-PAPER' || pCode === 'TEST' || pCode === 'DUMMY') return false;
+
+      // 1. Direct subject UUID match (most reliable)
+      if (p.subject_id && subjId && String(p.subject_id).toLowerCase() === subjId) return true;
+      // 2. Subject numeric code match
+      if (p.subject_code) {
+        const pSubCode = String(p.subject_code).toLowerCase().trim();
+        if (pSubCode === subjCode || (subjCd && pSubCode === subjCd)) return true;
+      }
+      // 3. Paper code contains subject code (e.g. 'WT-UNIT-2026-1' for subject code 'WT')
+      if (subjCode && subjCode.length >= 2 && p.code.toLowerCase().includes(subjCode)) return true;
+      // 4. Paper name exactly contains full subject name
+      if (subjName && subjName.length >= 5 && p.name) {
+        const pNameLower = p.name.toLowerCase();
+        if (pNameLower.includes(subjName)) return true;
+      }
+      // 5. Explicit subject_name on paper matches
+      if ((p as any).subject_name && subjName) {
+        const pSubjName = String((p as any).subject_name).toLowerCase();
+        if (pSubjName === subjName || pSubjName.includes(subjName)) return true;
+      }
       return false;
     });
 
-    // Step 2: Filter by semester (if paper has semester metadata)
-    if (selectedSemCd) {
-      const semFiltered = matched.filter(p => !(p as any).semester || String((p as any).semester) === String(selectedSemCd));
-      // Only apply semester filter if it still leaves some papers
-      if (semFiltered.length > 0) matched = semFiltered;
-    }
-
-    // Step 3: Fallback to all papers if no subject match
-    return matched.length > 0 ? matched : allFetchedPapers;
-  }, [allFetchedPapers, selectedSubjectCd, selectedSemCd, allSubjects]);
+    // Deduplicate by paper id — NEVER fallback to unrelated papers!
+    return dedupeBy(matched, p => p.id || p.code);
+  }, [allFetchedPapers, selectedSubjectCd, selectedBatchCd, selectedSemCd, allSubjects]);
 
   const activePaper = useMemo(() => {
-    return filteredPapers.find(p => p.code === selectedPaperCode) || filteredPapers[0] || allFetchedPapers[0] || null;
-  }, [filteredPapers, allFetchedPapers, selectedPaperCode]);
+    if (!selectedPaperCode) return null;
+    return filteredPapers.find(p => p.code === selectedPaperCode) || null;
+  }, [filteredPapers, selectedPaperCode]);
 
   // ─── Fetch Students Directly from PostgreSQL Student Master ─────────────────
   const fetchStudentRoster = async () => {
+    if (!activePaper || !selectedPaperCode) {
+      setStudents([]);
+      setSelectedStudentRollno(null);
+      return;
+    }
+
     setLoading(true);
     const slug = selectedCollegeSlug;
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
@@ -566,7 +619,7 @@ export default function AdminAssessmentMarksPage() {
 
       const [stMasterRes, resRes] = await Promise.all([
         fetch(studentUrl, { headers }).catch(() => null),
-        fetch(`${API_BASE}/exams/results?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/exams/results?tenant=${slug}&paperId=${encodeURIComponent(activePaper.id || activePaper.code)}`, { headers }).catch(() => null),
       ]);
 
       let rawStudents: any[] = [];
@@ -603,12 +656,25 @@ export default function AdminAssessmentMarksPage() {
           const studentRoll = st.rollno || st.registration_no || `ST-${idx + 1}`;
           const studentReg = st.registration_no || st.rollno || studentRoll;
 
-          const matchedResult = existingResults.find((r: any) =>
-            (r.rollno && (r.rollno === studentRoll || r.rollno === studentReg)) ||
-            (r.registration_no && (r.registration_no === studentReg || r.registration_no === studentRoll)) ||
-            r.student_id === st.id ||
-            r.student_name === st.name
-          );
+          const matchedResult = existingResults.find((r: any) => {
+            // Student identity check
+            const matchesStudent =
+              (r.rollno && (r.rollno === studentRoll || r.rollno === studentReg)) ||
+              (r.registration_no && (r.registration_no === studentReg || r.registration_no === studentRoll)) ||
+              (r.student_id && String(r.student_id) === String(st.id));
+              // Note: deliberately NOT matching by student_name alone (too error-prone for common names)
+
+            // STRICT paper match — a result MUST belong to the active paper
+            // NEVER use !r.paper_id as bypass — if paper_id is missing, it means unknown paper → skip
+            const matchesPaper =
+              r.paper_id &&
+              (
+                (activePaper?.id && String(r.paper_id) === String(activePaper.id)) ||
+                (activePaper?.code && r.paper_code && String(r.paper_code).toLowerCase() === String(activePaper.code).toLowerCase())
+              );
+
+            return matchesStudent && matchesPaper;
+          });
 
           const totalObt = matchedResult ? Math.max(0, Number(matchedResult.marks_obtained || 0)) : 0;
           const isEvaluated = !!matchedResult;
@@ -627,8 +693,8 @@ export default function AdminAssessmentMarksPage() {
             marks_obtained: totalObt,
             max_marks: maxPaperMarks,
             competencyScores: {
-              'CO1': { scored: isEvaluated ? Math.min(20, Math.round(totalObt * 0.35)) : 0, max: 20 },
-              'PYTH1.1': { scored: isEvaluated ? Math.min(20, Math.round(totalObt * 0.35)) : 0, max: 20 },
+              'CO1': { scored: isEvaluated ? Number(totalObt.toFixed(2)) : 0, max: maxPaperMarks },
+              'PYTH1.1': { scored: isEvaluated ? Number(totalObt.toFixed(2)) : 0, max: maxPaperMarks },
             },
             is_pass: isPass,
             questionMarks: matchedResult?.question_marks || {},
@@ -643,6 +709,9 @@ export default function AdminAssessmentMarksPage() {
           const firstPending = mapped.find(s => !s.evaluated);
           setSelectedStudentRollno(firstPending?.rollno || mapped[0].rollno);
         }
+      } else {
+        setStudents([]);
+        setSelectedStudentRollno(null);
       }
     } catch (e) {
       console.error('fetchStudentRoster error:', e);
@@ -651,9 +720,13 @@ export default function AdminAssessmentMarksPage() {
     }
   };
 
+  // Only load students when a paper is clicked/active
   useEffect(() => {
-    if (selectedCollegeSlug) {
+    if (selectedCollegeSlug && selectedPaperCode && activePaper) {
       fetchStudentRoster();
+    } else {
+      setStudents([]);
+      setSelectedStudentRollno(null);
     }
   }, [selectedCollegeSlug, selectedCourseCd, selectedBatchCd, selectedPaperCode]);
 
@@ -726,14 +799,14 @@ export default function AdminAssessmentMarksPage() {
               } else if (hasSavedSubMarks && selectedStudent.subPartMarks![sq.id] !== undefined) {
                 subMarks[subKey] = Number(selectedStudent.subPartMarks![sq.id]);
               } else {
-                subMarks[subKey] = selectedStudent.evaluated ? Number(sq.marks || 2.5) : 0;
+                subMarks[subKey] = 0;
               }
             });
           } else {
             if (hasSavedQMarks && selectedStudent.questionMarks![qId] !== undefined) {
               qMarks[qId] = Number(selectedStudent.questionMarks![qId]);
             } else {
-              qMarks[qId] = selectedStudent.evaluated ? maxQMark : 0;
+              qMarks[qId] = 0;
             }
           }
         });
@@ -969,6 +1042,9 @@ export default function AdminAssessmentMarksPage() {
                   onChange={(e) => {
                     const val = e.target.value;
                     setSelectedColgCd(val);
+                    setSelectedPaperCode('');
+                    setStudents([]);
+                    setSelectedStudentRollno(null);
                     const found = colleges.find(c => String(c.colg_cd || c.code) === val);
                     if (found) {
                       setSelectedCollegeSlug(found.slug);
@@ -994,7 +1070,12 @@ export default function AdminAssessmentMarksPage() {
                 <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">2. Course *</label>
                 <select
                   value={selectedCourseCd}
-                  onChange={(e) => setSelectedCourseCd(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedCourseCd(e.target.value);
+                    setSelectedPaperCode('');
+                    setStudents([]);
+                    setSelectedStudentRollno(null);
+                  }}
                   className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {filteredCourses.map(c => (
@@ -1010,7 +1091,12 @@ export default function AdminAssessmentMarksPage() {
                 <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">3. Branch *</label>
                 <select
                   value={selectedBranchCd}
-                  onChange={(e) => setSelectedBranchCd(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedBranchCd(e.target.value);
+                    setSelectedPaperCode('');
+                    setStudents([]);
+                    setSelectedStudentRollno(null);
+                  }}
                   className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {filteredBranches.map(b => (
@@ -1021,16 +1107,24 @@ export default function AdminAssessmentMarksPage() {
                 </select>
               </div>
 
-              {/* 4. Target Batch (batch_cd) */}
+              {/* 4. Target Batch (batch_cd) — MUST be selected before subject/papers appear */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">4. Batch *</label>
+                <label className="block text-[10px] font-bold text-[#5B4BFF] dark:text-purple-400 uppercase mb-1">4. Batch *</label>
                 <select
                   value={selectedBatchCd}
-                  onChange={(e) => setSelectedBatchCd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-black focus:outline-none focus:border-[#5B4BFF]"
+                  onChange={(e) => {
+                    setSelectedBatchCd(e.target.value);
+                    setSelectedSemCd('');
+                    setSelectedSubjectCd('');
+                    setSelectedPaperCode('');
+                    setStudents([]);
+                    setSelectedStudentRollno(null);
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-[#5B4BFF]/40 dark:border-purple-700 text-slate-900 dark:text-white font-black focus:outline-none focus:border-[#5B4BFF]"
                 >
+                  <option value="">— Select Batch —</option>
                   {filteredBatches.length === 0 ? (
-                    <option value="">No batches found</option>
+                    <option disabled value="">No batches found</option>
                   ) : (
                     filteredBatches.map(b => (
                       <option key={b.code || b.batch_cd} value={b.code || b.batch_cd}>
@@ -1041,14 +1135,22 @@ export default function AdminAssessmentMarksPage() {
                 </select>
               </div>
 
-              {/* 5. Semester (sem_cd: 1–8) */}
+              {/* 5. Semester — MUST be selected before subject/papers appear */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">5. Semester *</label>
+                <label className="block text-[10px] font-bold text-[#5B4BFF] dark:text-purple-400 uppercase mb-1">5. Semester *</label>
                 <select
                   value={selectedSemCd}
-                  onChange={(e) => setSelectedSemCd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                  onChange={(e) => {
+                    setSelectedSemCd(e.target.value);
+                    setSelectedSubjectCd('');
+                    setSelectedPaperCode('');
+                    setStudents([]);
+                    setSelectedStudentRollno(null);
+                  }}
+                  disabled={!selectedBatchCd}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-[#5B4BFF]/40 dark:border-purple-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
+                  <option value="">— Select Semester —</option>
                   {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
                     <option key={s} value={String(s)}>Semester {s}</option>
                   ))}
@@ -1060,7 +1162,12 @@ export default function AdminAssessmentMarksPage() {
                 <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">6. Department *</label>
                 <select
                   value={selectedDeptCd}
-                  onChange={(e) => setSelectedDeptCd(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedDeptCd(e.target.value);
+                    setSelectedPaperCode('');
+                    setStudents([]);
+                    setSelectedStudentRollno(null);
+                  }}
                   className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {filteredDepartments.length === 0 ? (
@@ -1075,16 +1182,26 @@ export default function AdminAssessmentMarksPage() {
                 </select>
               </div>
 
-              {/* 7. Subject (subject_cd) */}
+              {/* 7. Subject (subject_cd) — requires batch+semester first */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">7. Subject *</label>
                 <select
                   value={selectedSubjectCd}
-                  onChange={(e) => setSelectedSubjectCd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                  onChange={(e) => {
+                    setSelectedSubjectCd(e.target.value);
+                    setSelectedPaperCode('');
+                    setStudents([]);
+                    setSelectedStudentRollno(null);
+                  }}
+                  disabled={!selectedBatchCd || !selectedSemCd}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {filteredSubjects.length === 0 ? (
-                    <option value="">No subjects found</option>
+                  {/* Always show a "Select Subject" placeholder as the default (value='') */}
+                  <option value="">— Select Subject —</option>
+                  {!selectedBatchCd || !selectedSemCd ? (
+                    <option disabled value="">Select Batch &amp; Semester first</option>
+                  ) : filteredSubjects.length === 0 ? (
+                    <option disabled value="">No subjects for selected filters</option>
                   ) : (
                     filteredSubjects.map(s => (
                       <option key={s.code || s.name} value={s.code || String(s.subject_cd || '')}>
@@ -1104,19 +1221,58 @@ export default function AdminAssessmentMarksPage() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <h3 className="text-xs font-black text-[#11141A] dark:text-white uppercase tracking-wider flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-[#F36C21] text-white flex items-center justify-center text-[10px] font-bold">2</span>
-                STEP 2: ACTIVE EXAMINATION PAPERS ({filteredPapers.length} Papers)
+                STEP 2: EXAMINATION PAPERS {filteredPapers.length > 0 ? `(${filteredPapers.length} Found)` : ''}
               </h3>
-
               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400">
-                <span>Select paper to evaluate student answers</span>
+                <span>Select a paper to load student roster</span>
               </div>
             </div>
 
-            {/* Papers Grid */}
+            {/* Papers Grid — gated behind batch + semester + subject selection */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {filteredPapers.length === 0 ? (
-                <div className="col-span-3 py-8 text-center text-slate-400 text-xs font-bold">
-                  No examination papers found for this subject. Design papers in Assessment Master!
+              {/* Gate 1: Batch not selected */}
+              {!selectedBatchCd ? (
+                <div className="col-span-1 md:col-span-3 py-10 px-4 text-center rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-dashed border-purple-300 dark:border-purple-700 space-y-2">
+                  <div className="text-2xl">🎓</div>
+                  <div className="text-sm font-bold text-purple-700 dark:text-purple-300">
+                    Select a Batch first
+                  </div>
+                  <div className="text-xs text-purple-500 dark:text-purple-400 max-w-sm mx-auto">
+                    Choose the <strong>Batch</strong> (Step 1 → Field 4) to continue. Papers are designed per batch and semester.
+                  </div>
+                </div>
+              /* Gate 2: Semester not selected */
+              ) : !selectedSemCd ? (
+                <div className="col-span-1 md:col-span-3 py-10 px-4 text-center rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-dashed border-purple-300 dark:border-purple-700 space-y-2">
+                  <div className="text-2xl">📅</div>
+                  <div className="text-sm font-bold text-purple-700 dark:text-purple-300">
+                    Select a Semester
+                  </div>
+                  <div className="text-xs text-purple-500 dark:text-purple-400 max-w-sm mx-auto">
+                    Choose the <strong>Semester</strong> (Step 1 → Field 5) to filter subjects for this batch.
+                  </div>
+                </div>
+              /* Gate 3: Subject not selected */
+              ) : !selectedSubjectCd ? (
+                <div className="col-span-1 md:col-span-3 py-10 px-4 text-center rounded-2xl bg-[#F6F8FC] dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
+                  <div className="text-2xl">📚</div>
+                  <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                    Select a Subject
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    Choose a <strong>Subject</strong> (Step 1 → Field 7) to see its designed examination papers.
+                  </div>
+                </div>
+              /* Gate 4: Subject selected but no papers exist */
+              ) : filteredPapers.length === 0 ? (
+                <div className="col-span-1 md:col-span-3 py-10 px-4 text-center rounded-2xl bg-[#F6F8FC] dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
+                  <div className="text-2xl">📝</div>
+                  <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                    No examination papers for this subject yet
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                    Select another subject or design a new exam paper for <strong>{allSubjects.find(s => String(s.code) === String(selectedSubjectCd) || String(s.subject_cd) === String(selectedSubjectCd))?.name || 'this subject'}</strong> in Assessment Designer.
+                  </div>
                 </div>
               ) : (
                 filteredPapers.map((paper) => {
@@ -1128,7 +1284,7 @@ export default function AdminAssessmentMarksPage() {
                       className={`p-4 rounded-[18px] cursor-pointer transition-all duration-200 border relative ${
                         isActive
                           ? 'bg-[#F36C21]/5 dark:bg-[#F36C21]/15 border-[#F36C21] ring-2 ring-[#F36C21]/30 shadow-md'
-                          : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-slate-400'
+                          : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF] hover:shadow-sm'
                       }`}
                     >
                       <div className="flex items-start justify-between">
@@ -1138,8 +1294,8 @@ export default function AdminAssessmentMarksPage() {
                             ✓ Active Paper
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                            Select Paper
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#5B4BFF]/10 text-[#5B4BFF]">
+                            Click to Select
                           </span>
                         )}
                       </div>
@@ -1155,9 +1311,23 @@ export default function AdminAssessmentMarksPage() {
             </div>
           </div>
 
+
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* STEP 3: SPLIT VIEW — ROSTER ON LEFT & SECTION-WISE QUESTION EVALUATION ON RIGHT */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {!selectedPaperCode || !activePaper ? (
+            <div className="p-12 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-3 shadow-sm">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-[#5B4BFF]/10 text-[#5B4BFF] flex items-center justify-center text-3xl font-black">
+                📋
+              </div>
+              <h4 className="text-base font-black text-slate-900 dark:text-white">
+                No Examination Paper Selected
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                Please click on an examination paper in <strong>Step 2</strong> above. The student roster and evaluation marksheet will load once a paper is clicked.
+              </p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
             {/* Left Column: Batch Students Roster */}
@@ -1481,95 +1651,98 @@ export default function AdminAssessmentMarksPage() {
               </div>
             </div>
           </div>
+          )}
 
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* STEP 4: CBME COMPETENCY PERFORMANCE MATRIX & BATCH SUMMARY */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">4</span>
-                  STEP 4: CBME COMPETENCY MATRIX &amp; BATCH PERFORMANCE LEDGER
-                </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Live evaluated marks aggregated across question competencies.
-                </p>
+          {selectedPaperCode && activePaper && filteredStudents.length > 0 && (
+            <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">4</span>
+                    STEP 4: CBME COMPETENCY MATRIX &amp; BATCH PERFORMANCE LEDGER
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Live evaluated marks aggregated across question competencies.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-4 py-2 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+                  >
+                    🖨️ Print Matrix Report
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
-                >
-                  🖨️ Print Matrix Report
-                </button>
-              </div>
-            </div>
-
-            {/* Matrix Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider bg-[#F6F8FC] dark:bg-slate-900/50">
-                    <th className="py-3 px-3 rounded-l-xl">Roll No</th>
-                    <th className="py-3 px-3">Student Name</th>
-                    <th className="py-3 px-3 text-center">🎯 CO1 (Web Tech / Python)</th>
-                    <th className="py-3 px-3 text-center">🎯 PYTH1.1</th>
-                    <th className="py-3 px-3 text-center">Total Marks</th>
-                    <th className="py-3 px-3 text-center">Status</th>
-                    <th className="py-3 px-3 text-right rounded-r-xl">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                  {filteredStudents.map((st) => (
-                    <tr key={st.rollno || st.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition">
-                      <td className="py-3 px-3 font-mono font-bold text-[#5B4BFF]">{st.rollno}</td>
-                      <td className="py-3 px-3 font-bold text-slate-900 dark:text-white">{st.name}</td>
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                          !st.evaluated ? 'bg-slate-100 dark:bg-slate-800 text-slate-400' : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
-                        }`}>
-                          {st.evaluated ? `${st.competencyScores['CO1']?.scored || 18} / 20` : '—'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                          !st.evaluated ? 'bg-slate-100 dark:bg-slate-800 text-slate-400' : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
-                        }`}>
-                          {st.evaluated ? `${st.competencyScores['PYTH1.1']?.scored || 19} / 20` : '—'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-center font-black text-slate-900 dark:text-white">
-                        {st.evaluated ? `${Math.max(0, st.marks_obtained).toFixed(2)} / ${st.max_marks}` : '—'}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                          !st.evaluated
-                            ? 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400'
-                            : st.is_pass
-                            ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
-                            : 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400'
-                        }`}>
-                          {!st.evaluated ? 'Pending' : st.is_pass ? 'Pass' : 'Fail'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectStudent(st.rollno)}
-                          className="px-3 py-1 bg-[#5B4BFF]/10 hover:bg-[#5B4BFF] text-[#5B4BFF] hover:text-white font-bold rounded-lg text-[11px] transition"
-                        >
-                          Evaluate →
-                        </button>
-                      </td>
+              {/* Matrix Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider bg-[#F6F8FC] dark:bg-slate-900/50">
+                      <th className="py-3 px-3 rounded-l-xl">Roll No</th>
+                      <th className="py-3 px-3">Student Name</th>
+                      <th className="py-3 px-3 text-center">🎯 CO1 (Web Tech / Python)</th>
+                      <th className="py-3 px-3 text-center">🎯 PYTH1.1</th>
+                      <th className="py-3 px-3 text-center">Total Marks</th>
+                      <th className="py-3 px-3 text-center">Status</th>
+                      <th className="py-3 px-3 text-right rounded-r-xl">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                    {filteredStudents.map((st) => (
+                      <tr key={st.rollno || st.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition">
+                        <td className="py-3 px-3 font-mono font-bold text-[#5B4BFF]">{st.rollno}</td>
+                        <td className="py-3 px-3 font-bold text-slate-900 dark:text-white">{st.name}</td>
+                        <td className="py-3 px-3 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                            !st.evaluated ? 'bg-slate-100 dark:bg-slate-800 text-slate-400' : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
+                          }`}>
+                            {st.evaluated ? `${st.competencyScores['CO1']?.scored || 18} / 20` : '—'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                            !st.evaluated ? 'bg-slate-100 dark:bg-slate-800 text-slate-400' : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
+                          }`}>
+                            {st.evaluated ? `${st.competencyScores['PYTH1.1']?.scored || 19} / 20` : '—'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center font-black text-slate-900 dark:text-white">
+                          {st.evaluated ? `${Math.max(0, st.marks_obtained).toFixed(2)} / ${st.max_marks}` : '—'}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                            !st.evaluated
+                              ? 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400'
+                              : st.is_pass
+                              ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400'
+                          }`}>
+                            {!st.evaluated ? 'Pending' : st.is_pass ? 'Pass' : 'Fail'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectStudent(st.rollno)}
+                            className="px-3 py-1 bg-[#5B4BFF]/10 hover:bg-[#5B4BFF] text-[#5B4BFF] hover:text-white font-bold rounded-lg text-[11px] transition"
+                          >
+                            Evaluate →
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
         </main>
       </div>
