@@ -1051,12 +1051,12 @@ export class AuthService {
                   sa.academic_session, sa.residency_type, sa.status AS admission_status,
                   sp.father_name, sp.mother_name, sp.father_mobile, sp.mother_mobile
            FROM "${schema}".students s
-           LEFT JOIN "${schema}".departments d ON d.id::text = s.department_id::text
+           LEFT JOIN "${schema}".departments d ON (d.id = s.department_id OR d.id::text = s.department_id::text)
            LEFT JOIN "${schema}".courses c ON c.code = s.course_cd OR c.id::text = s.course_cd
-           LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
-           LEFT JOIN "${schema}".student_admissions sa ON sa.student_id::text = s.id::text
-           LEFT JOIN "${schema}".student_parents sp ON sp.student_id::text = s.id::text
-           WHERE (s.user_id::text = $1::text)
+           LEFT JOIN "${schema}".batches b ON (b.id = s.batch_id OR b.id::text = s.batch_id::text)
+           LEFT JOIN "${schema}".student_admissions sa ON (sa.student_id = s.id OR sa.student_id::text = s.id::text)
+           LEFT JOIN "${schema}".student_parents sp ON (sp.student_id = s.id OR sp.student_id::text = s.id::text)
+           WHERE (s.user_id = $1::uuid OR s.id::text = $1::text OR s.user_id::text = $1::text)
               OR (s.registration_no IS NOT NULL AND s.registration_no = $2)
               OR (s.rollno IS NOT NULL AND s.rollno = $2)
               OR (s.user_id::text = $2::text)`,

@@ -98,12 +98,10 @@ export class LogbookService {
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
 
-        await this.tenantSchemaService.queryInTenant(slug, `
-          ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS faculty_id UUID;
-          ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS remarks TEXT;
-          ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS evaluator_id UUID;
-          ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS feedback TEXT;
-        `).catch(() => {});
+        ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS faculty_id UUID;
+        ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS remarks TEXT;
+        ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS evaluator_id UUID;
+        ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS feedback TEXT;
 
         CREATE TABLE IF NOT EXISTS "${schema}".logbook_mini_projects (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2414,14 +2412,14 @@ export class LogbookService {
         e.evaluated_at,
         ef.name AS faculty_name
       FROM "${schema}".logbook_submissions s
-      JOIN "${schema}".logbook_topics t ON t.id::text = s.topic_id::text
-      LEFT JOIN "${schema}".logbook_categories c ON c.id::text = t.category_id::text
-      LEFT JOIN "${schema}".students st ON st.id::text = s.student_id::text
-      LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = st.course_cd::text OR cr.code::text = st.course_cd::text)
-      LEFT JOIN "${schema}".departments d ON (d.id::text = st.branch_id::text OR d.branch_cd::text = st.branch_id::text OR d.code::text = st.branch_id::text)
-      LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR b.batch_cd::text = st.batch_cd::text OR b.code::text = st.batch_cd::text)
-      LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id::text = s.id::text
-      LEFT JOIN "${schema}".faculty ef ON ef.id::text = e.evaluator_id::text
+      JOIN "${schema}".logbook_topics t ON (t.id = s.topic_id OR t.id::text = s.topic_id::text)
+      LEFT JOIN "${schema}".logbook_categories c ON (c.id = t.category_id OR c.id::text = t.category_id::text)
+      LEFT JOIN "${schema}".students st ON (st.id = s.student_id OR st.id::text = s.student_id::text)
+      LEFT JOIN "${schema}".courses cr ON (cr.course_cd = st.course_cd OR cr.id::text = st.course_cd::text OR cr.code = st.course_cd)
+      LEFT JOIN "${schema}".departments d ON (d.id::text = st.branch_id::text OR d.branch_cd = st.branch_id::text OR d.code = st.branch_id::text)
+      LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR b.batch_cd = st.batch_cd::text OR b.code = st.batch_cd::text)
+      LEFT JOIN "${schema}".logbook_evaluations e ON (e.submission_id = s.id OR e.submission_id::text = s.id::text)
+      LEFT JOIN "${schema}".faculty ef ON (ef.id = COALESCE(e.faculty_id, e.evaluator_id) OR ef.id::text = COALESCE(e.faculty_id, e.evaluator_id)::text)
       ORDER BY s.submitted_at DESC`,
     ).catch((err) => {
       this.logger.error('Failed to query topicSubmissions', err);
