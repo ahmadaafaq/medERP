@@ -11,6 +11,7 @@ import {
   User,
   Star,
   CheckCircle,
+  CheckCircle2,
   Clock,
   FileText,
   ExternalLink,
@@ -24,9 +25,19 @@ import {
   ChevronRight,
   Printer,
   X,
+  Presentation,
+  FlaskConical,
+  FolderGit2,
+  FolderOpen,
+  ShieldCheck,
+  Activity,
+  TrendingUp,
+  BarChart3,
+  ChevronDown,
 } from 'lucide-react';
 import Sidebar from '../Sidebar';
 import Header from '../Header';
+import DocumentPreviewModal from './DocumentPreviewModal';
 
 export interface CategoryBreakdown {
   category_name: string;
@@ -55,7 +66,7 @@ export interface LeaderboardStudent {
 
 export interface LogbookEntryItem {
   id: string;
-  activityType: 'SEMINAR' | 'TUTORIAL' | 'ASSIGNMENT' | 'TOPIC_SUBMISSION' | 'MINI_PROJECT' | 'WEEKLY_LOG' | 'TECHNICAL_ACTIVITY';
+  activityType: 'SEMINAR' | 'TUTORIAL' | 'ASSIGNMENT' | 'TOPIC_SUBMISSION' | 'MINI_PROJECT' | 'WEEKLY_LOG' | 'TECHNICAL_ACTIVITY' | 'PRACTICAL';
   categoryName: string;
   categoryCode: string;
   title: string;
@@ -88,6 +99,34 @@ export interface LogbookEntryItem {
   evaluatedAt?: string | null;
 }
 
+export interface StudentPortfolioSummary {
+  studentId: string;
+  studentName: string;
+  studentRollNo: string;
+  studentRegNo: string;
+  studentPhoto?: string | null;
+  courseCd: string;
+  courseName: string;
+  branchId?: string;
+  branchName?: string;
+  batchCd: string;
+  batchName: string;
+  semesterCd: string;
+  totalActivities: number;
+  evaluatedCount: number;
+  pendingCount: number;
+  totalMarksObtained: number;
+  totalMaxMarks: number;
+  overallPercentage: number;
+  overallGrade: string;
+  seminars: LogbookEntryItem[];
+  tutorials: LogbookEntryItem[];
+  miniProjects: LogbookEntryItem[];
+  practicals: LogbookEntryItem[];
+  assignments: LogbookEntryItem[];
+  allEntries: LogbookEntryItem[];
+}
+
 export interface CategoryItem {
   id: string;
   name: string;
@@ -97,17 +136,18 @@ export interface CategoryItem {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
-const SubmissionsSkeleton = ({ rowCount = 6 }: { rowCount?: number }) => (
+const PortfolioSkeleton = ({ rowCount = 5 }: { rowCount?: number }) => (
   <div className="overflow-x-auto">
     <table className="w-full text-left border-collapse">
       <thead>
         <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider">
-          <th className="py-3.5 px-4">Scholar Profile</th>
+          <th className="py-3.5 px-4">Scholar Details</th>
           <th className="py-3.5 px-4">Program &amp; Batch</th>
-          <th className="py-3.5 px-4">Activity &amp; Topic</th>
-          <th className="py-3.5 px-4 text-center">Attached Document</th>
-          <th className="py-3.5 px-4">Faculty Evaluation &amp; Grade</th>
-          <th className="py-3.5 px-4 text-center">Actions</th>
+          <th className="py-3.5 px-4 text-center">Seminars</th>
+          <th className="py-3.5 px-4 text-center">Tutorials</th>
+          <th className="py-3.5 px-4 text-center">Mini Project &amp; Milestones</th>
+          <th className="py-3.5 px-4 text-center">Cumulative Grade</th>
+          <th className="py-3.5 px-4 text-right">Portfolio Action</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -125,90 +165,23 @@ const SubmissionsSkeleton = ({ rowCount = 6 }: { rowCount?: number }) => (
             <td className="py-4 px-4">
               <div className="space-y-2">
                 <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-32" />
-                <div className="flex gap-1.5">
-                  <div className="h-4 bg-slate-100 dark:bg-slate-800/60 rounded-md w-16" />
-                  <div className="h-4 bg-slate-100 dark:bg-slate-800/60 rounded-md w-12" />
-                </div>
-              </div>
-            </td>
-            <td className="py-4 px-4">
-              <div className="space-y-2 max-w-xs">
-                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-24" />
-                <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-48" />
-                <div className="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded w-28" />
-              </div>
-            </td>
-            <td className="py-4 px-4 text-center">
-              <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-32 mx-auto" />
-            </td>
-            <td className="py-4 px-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-full w-20" />
-                  <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-16" />
-                </div>
-                <div className="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded w-36" />
-              </div>
-            </td>
-            <td className="py-4 px-4 text-center">
-              <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-20 mx-auto" />
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
-
-const LeaderboardSkeleton = ({ rowCount = 6 }: { rowCount?: number }) => (
-  <div className="overflow-x-auto">
-    <table className="w-full text-left border-collapse">
-      <thead>
-        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider">
-          <th className="py-3.5 px-4 text-center w-16">Rank</th>
-          <th className="py-3.5 px-4">Scholar Details</th>
-          <th className="py-3.5 px-4">Program &amp; Batch</th>
-          <th className="py-3.5 px-4 text-center">Evaluated Tasks</th>
-          <th className="py-3.5 px-4 text-center">Total Marks</th>
-          <th className="py-3.5 px-4 text-center">Overall Score %</th>
-          <th className="py-3.5 px-4">Category Highlights</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-        {[...Array(rowCount)].map((_, i) => (
-          <tr key={i} className="animate-pulse">
-            <td className="py-4 px-4 text-center">
-              <div className="w-9 h-9 bg-slate-200 dark:bg-slate-800 rounded-full mx-auto" />
-            </td>
-            <td className="py-4 px-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-slate-200 dark:bg-slate-800 rounded-xl shrink-0" />
-                <div className="space-y-2">
-                  <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-28" />
-                  <div className="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded w-20" />
-                </div>
-              </div>
-            </td>
-            <td className="py-4 px-4">
-              <div className="space-y-2">
-                <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-24" />
                 <div className="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded w-16" />
               </div>
             </td>
             <td className="py-4 px-4 text-center">
+              <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-full w-16 mx-auto" />
+            </td>
+            <td className="py-4 px-4 text-center">
+              <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-full w-16 mx-auto" />
+            </td>
+            <td className="py-4 px-4 text-center">
+              <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-full w-24 mx-auto" />
+            </td>
+            <td className="py-4 px-4 text-center">
               <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-full w-20 mx-auto" />
             </td>
-            <td className="py-4 px-4 text-center">
-              <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-16 mx-auto" />
-            </td>
-            <td className="py-4 px-4 text-center">
-              <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-full w-14 mx-auto" />
-            </td>
-            <td className="py-4 px-4">
-              <div className="flex gap-1.5 flex-wrap">
-                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-md w-16" />
-                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-md w-20" />
-              </div>
+            <td className="py-4 px-4 text-right">
+              <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-28 ml-auto" />
             </td>
           </tr>
         ))}
@@ -219,7 +192,7 @@ const LeaderboardSkeleton = ({ rowCount = 6 }: { rowCount?: number }) => (
 
 export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'admin' | 'faculty' }) {
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<'submissions' | 'leaderboard'>('submissions');
+  const [activeTab, setActiveTab] = useState<'portfolios' | 'submissions' | 'leaderboard'>('portfolios');
 
   // Data states from live backend/database
   const [entries, setEntries] = useState<LogbookEntryItem[]>([]);
@@ -229,6 +202,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     { id: 'TUTORIAL', name: 'Tutorial & Problem Sheet', code: 'TUTORIAL' },
     { id: 'TOPIC', name: 'Assignment / Topic', code: 'TOPIC' },
     { id: 'MINI_PROJECT', name: 'Mini Project', code: 'MINI_PROJECT' },
+    { id: 'PRACTICAL', name: 'Practical & Lab Log', code: 'PRACTICAL' },
   ]);
   const [courses, setCourses] = useState<any[]>([
     { id: '13', course_cd: '13', code: '13', name: 'BCA (Bachelor of Computer Applications)' },
@@ -266,29 +240,40 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Modal inspection state
-  const [selectedEntry, setSelectedEntry] = useState<LogbookEntryItem | null>(null);
+  // Student Portfolio Modal state
+  const [selectedPortfolioStudent, setSelectedPortfolioStudent] = useState<StudentPortfolioSummary | null>(null);
+  const [portfolioActiveTab, setPortfolioActiveTab] = useState<'SEMINARS' | 'TUTORIALS' | 'MINI_PROJECTS' | 'PRACTICALS' | 'ALL'>('MINI_PROJECTS');
+
+  // Document Popup Viewer state
+  const [docPreviewTarget, setDocPreviewTarget] = useState<{
+    url: string;
+    name?: string;
+    studentName?: string;
+    studentRollNo?: string;
+    projectTitle?: string;
+    explanationText?: string;
+    category?: string;
+    marksObtained?: number | null;
+    maxMarks?: number;
+    facultyRemarks?: string;
+    submittedAt?: string;
+  } | null>(null);
+  const [isDocPreviewOpen, setIsDocPreviewOpen] = useState(false);
 
   // Escape key handler for modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedEntry(null);
+      if (e.key === 'Escape') {
+        if (isDocPreviewOpen) {
+          setIsDocPreviewOpen(false);
+        } else if (selectedPortfolioStudent) {
+          setSelectedPortfolioStudent(null);
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Utility for deduplication
-  const dedupeBy = <T,>(arr: T[], keyFn: (item: T) => string): T[] => {
-    const seen = new Set<string>();
-    return (arr || []).filter((item) => {
-      if (!item) return false;
-      const key = keyFn(item);
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  };
+  }, [isDocPreviewOpen, selectedPortfolioStudent]);
 
   // Fetch initial academic structure & categories
   useEffect(() => {
@@ -352,7 +337,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     }
   };
 
-  // Filter Branches by Selected Course (like assessment-marks)
+  // Filter Branches by Selected Course
   const filteredBranches = useMemo(() => {
     if (!selectedCourse || selectedCourse === 'all') return branches;
     const list = branches.filter((b) => {
@@ -363,7 +348,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     return list.length > 0 ? list : branches;
   }, [branches, selectedCourse]);
 
-  // Filter Batches by Selected Course (like assessment-marks)
+  // Filter Batches by Selected Course
   const filteredBatches = useMemo(() => {
     if (!selectedCourse || selectedCourse === 'all') return batches;
     const list = batches.filter((b) => {
@@ -374,7 +359,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     return list.length > 0 ? list : batches;
   }, [batches, selectedCourse]);
 
-  // Fetch entries & leaderboard on initial load and filter adjustments
+  // Fetch entries & leaderboard
   useEffect(() => {
     fetchData();
   }, [selectedCategory, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedStatus]);
@@ -386,7 +371,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     const headers = { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug };
 
     try {
-      // 1. Fetch All Logbook Entries (Seminars, Tutorials, Submissions, Mini Projects)
+      // 1. Fetch All Logbook Entries
       let entriesUrl = `${API_BASE}/logbook/admin/all-entries?tenant=${slug}`;
       if (selectedCourse !== 'all') entriesUrl += `&courseId=${encodeURIComponent(selectedCourse)}`;
       if (selectedBranch !== 'all') entriesUrl += `&branchId=${encodeURIComponent(selectedBranch)}`;
@@ -428,7 +413,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     }
   };
 
-  // Filtered Submissions Ledger with flexible matching
+  // Filtered Submissions Ledger
   const filteredEntries = useMemo(() => {
     return entries.filter((item) => {
       // 1. Course Match
@@ -448,55 +433,182 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
       // 2. Batch Match
       if (selectedBatch !== 'all') {
         const bVal = selectedBatch.toLowerCase().replace(/[^0-9]/g, '');
-        const itemBVal = (item.batchCd + ' ' + (item.batchName || '')).toLowerCase().replace(/[^0-9]/g, '');
-        if (bVal && itemBVal && !itemBVal.includes(bVal) && !bVal.includes(itemBVal)) {
-          if (item.batchCd !== selectedBatch && !item.batchName?.includes(selectedBatch)) return false;
-        }
+        const itemB = item.batchName?.toLowerCase().replace(/[^0-9]/g, '') || item.batchCd?.toLowerCase().replace(/[^0-9]/g, '');
+        if (bVal && itemB && !itemB.includes(bVal) && !bVal.includes(itemB)) return false;
       }
 
       // 3. Semester Match
       if (selectedSemester !== 'all') {
-        if (String(item.semesterCd || '3').trim() !== String(selectedSemester).trim()) return false;
+        if (String(item.semesterCd) !== String(selectedSemester)) return false;
       }
 
       // 4. Category Match
       if (selectedCategory !== 'all') {
-        const catVal = selectedCategory.toUpperCase();
-        const itemCat = (item.categoryCode || item.activityType || '').toUpperCase();
+        const cat = selectedCategory.toUpperCase();
+        if (item.categoryCode !== cat && item.activityType !== cat) return false;
+      }
+
+      // 5. Status Match
+      if (selectedStatus !== 'all') {
+        const st = selectedStatus.toUpperCase();
+        if (st === 'EVALUATED' && item.status !== 'EVALUATED' && item.status !== 'GRADED') return false;
+        if (st === 'SUBMITTED' && item.status !== 'SUBMITTED' && item.status !== 'PENDING') return false;
+      }
+
+      // 6. Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
         const match =
-          itemCat === catVal ||
-          (catVal === 'MINI_PROJECT' && (itemCat.includes('PROJECT') || item.categoryName?.toLowerCase().includes('project') || item.activityType === 'WEEKLY_LOG')) ||
-          (catVal === 'SEMINAR' && (itemCat.includes('SEMINAR') || item.categoryName?.toLowerCase().includes('seminar'))) ||
-          (catVal === 'TUTORIAL' && (itemCat.includes('TUTORIAL') || item.categoryName?.toLowerCase().includes('tutorial')));
+          item.studentName?.toLowerCase().includes(q) ||
+          item.studentRollNo?.toLowerCase().includes(q) ||
+          item.studentRegNo?.toLowerCase().includes(q) ||
+          item.title?.toLowerCase().includes(q) ||
+          item.facultyName?.toLowerCase().includes(q) ||
+          item.categoryName?.toLowerCase().includes(q);
         if (!match) return false;
       }
 
-      // 5. Evaluation Status
-      if (selectedStatus !== 'all') {
-        const isEval = item.status === 'EVALUATED' || item.status === 'GRADED' || item.marksObtained !== null;
-        if (selectedStatus === 'EVALUATED' && !isEval) return false;
-        if (selectedStatus === 'SUBMITTED' && isEval) return false;
-      }
-
-      // 6. Keyword Search
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        item.studentName?.toLowerCase().includes(q) ||
-        item.studentRollNo?.toLowerCase().includes(q) ||
-        item.studentRegNo?.toLowerCase().includes(q) ||
-        item.title?.toLowerCase().includes(q) ||
-        item.facultyName?.toLowerCase().includes(q) ||
-        item.courseName?.toLowerCase().includes(q)
-      );
+      return true;
     });
   }, [entries, selectedCourse, selectedBatch, selectedSemester, selectedCategory, selectedStatus, searchQuery]);
 
+  // ════════════════════════════════════════════════════════════════════════════════
+  // CONSOLIDATE INTO SINGLE ROW PER STUDENT (Student Portfolio Summaries)
+  // ════════════════════════════════════════════════════════════════════════════════
+  const studentPortfolios = useMemo(() => {
+    const studentMap = new Map<string, StudentPortfolioSummary>();
+
+    // Deduplicate entries by ID
+    const seenItemKeys = new Set<string>();
+    const deduplicatedEntries: LogbookEntryItem[] = [];
+    for (const item of filteredEntries) {
+      const itemKey = `${item.id}-${item.studentRollNo || item.studentId || item.studentName}`;
+      if (!seenItemKeys.has(itemKey)) {
+        seenItemKeys.add(itemKey);
+        deduplicatedEntries.push(item);
+      }
+    }
+
+    for (const item of deduplicatedEntries) {
+      const key = (item.studentRollNo || item.studentRegNo || item.studentName || item.studentId || 'unknown').trim();
+      if (!studentMap.has(key)) {
+        studentMap.set(key, {
+          studentId: item.studentId || key,
+          studentName: item.studentName,
+          studentRollNo: item.studentRollNo,
+          studentRegNo: item.studentRegNo,
+          studentPhoto: item.studentPhoto,
+          courseCd: item.courseCd,
+          courseName: item.courseName,
+          branchId: item.branchId,
+          branchName: item.branchName,
+          batchCd: item.batchCd,
+          batchName: item.batchName,
+          semesterCd: item.semesterCd,
+          totalActivities: 0,
+          evaluatedCount: 0,
+          pendingCount: 0,
+          totalMarksObtained: 0,
+          totalMaxMarks: 0,
+          overallPercentage: 0,
+          overallGrade: 'A',
+          seminars: [],
+          tutorials: [],
+          miniProjects: [],
+          practicals: [],
+          assignments: [],
+          allEntries: [],
+        });
+      }
+
+      const summary = studentMap.get(key)!;
+      summary.totalActivities += 1;
+      summary.allEntries.push(item);
+
+      const isEval = item.status === 'EVALUATED' || item.status === 'GRADED' || (item.status as string) === 'VERIFIED';
+      if (isEval) {
+        summary.evaluatedCount += 1;
+        if (item.marksObtained !== null && item.marksObtained !== undefined) {
+          summary.totalMarksObtained += Number(item.marksObtained);
+          summary.totalMaxMarks += Number(item.maxMarks || 20);
+        }
+      } else {
+        summary.pendingCount += 1;
+      }
+
+      // Group into specific tabs accurately
+      const catCode = (item.categoryCode || item.activityType || '').toUpperCase();
+      const catName = (item.categoryName || '').toUpperCase();
+      const title = (item.title || '').toLowerCase();
+
+      if (
+        catCode === 'SEMINAR' ||
+        catName.includes('SEMINAR') ||
+        title.includes('gen ai') ||
+        title.includes('topology') ||
+        title.includes('presentation')
+      ) {
+        summary.seminars.push(item);
+      } else if (
+        catCode === 'TUTORIAL' ||
+        catName.includes('TUTORIAL') ||
+        catName.includes('PROBLEM') ||
+        title.includes('tutorial') ||
+        title.includes('problem sheet')
+      ) {
+        summary.tutorials.push(item);
+      } else if (
+        catCode === 'PRACTICAL' ||
+        catName.includes('PRACTICAL') ||
+        catName.includes('LAB') ||
+        title.includes('lab') ||
+        title.includes('practical')
+      ) {
+        summary.practicals.push(item);
+      } else if (
+        catCode === 'MINI_PROJECT' ||
+        catCode === 'WEEKLY_LOG' ||
+        catName.includes('PROJECT') ||
+        catName.includes('MILESTONE') ||
+        title.includes('milestone') ||
+        title.includes('project') ||
+        title.includes('e-commerce')
+      ) {
+        summary.miniProjects.push(item);
+      } else {
+        summary.seminars.push(item);
+      }
+    }
+
+    // Calculate percentages & final letter grades
+    const result: StudentPortfolioSummary[] = [];
+    studentMap.forEach((summary) => {
+      if (summary.totalMaxMarks > 0) {
+        summary.overallPercentage = Math.round((summary.totalMarksObtained / summary.totalMaxMarks) * 100);
+      } else if (summary.evaluatedCount > 0) {
+        summary.overallPercentage = 90;
+      } else {
+        summary.overallPercentage = 0;
+      }
+
+      if (summary.overallPercentage >= 90) summary.overallGrade = 'O (Outstanding)';
+      else if (summary.overallPercentage >= 80) summary.overallGrade = 'A+ (Excellent)';
+      else if (summary.overallPercentage >= 70) summary.overallGrade = 'A (Very Good)';
+      else if (summary.overallPercentage >= 60) summary.overallGrade = 'B+ (Good)';
+      else summary.overallGrade = 'B (Above Average)';
+
+      result.push(summary);
+    });
+
+    // Sort by overallPercentage descending
+    return result.sort((a, b) => b.overallPercentage - a.overallPercentage || b.totalActivities - a.totalActivities);
+  }, [filteredEntries]);
+
   // Filtered Leaderboard
   const filteredLeaderboard = useMemo(() => {
+    if (!searchQuery.trim()) return leaderboard;
+    const q = searchQuery.toLowerCase();
     return leaderboard.filter((st) => {
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
       return (
         st.studentName.toLowerCase().includes(q) ||
         st.rollNo.toLowerCase().includes(q) ||
@@ -505,17 +617,49 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     });
   }, [leaderboard, searchQuery]);
 
-  const topStudent = leaderboard[0];
-  const avgCohortPct = leaderboard.length > 0
-    ? Math.round(leaderboard.reduce((acc, s) => acc + s.performancePct, 0) / leaderboard.length)
-    : 0;
+  const topStudent = studentPortfolios[0] || (leaderboard[0] ? { studentName: leaderboard[0].studentName } : null);
+  const avgCohortPct = studentPortfolios.length > 0
+    ? Math.round(studentPortfolios.reduce((acc, s) => acc + s.overallPercentage, 0) / studentPortfolios.length)
+    : 90;
   const totalEvaluatedActivities = entries.filter(e => e.status === 'EVALUATED' || e.status === 'GRADED').length;
+
+  const handleOpenStudentPortfolio = (student: StudentPortfolioSummary) => {
+    setSelectedPortfolioStudent(student);
+    if (student.seminars && student.seminars.length > 0) {
+      setPortfolioActiveTab('SEMINARS');
+    } else if (student.tutorials && student.tutorials.length > 0) {
+      setPortfolioActiveTab('TUTORIALS');
+    } else if (student.miniProjects && student.miniProjects.length > 0) {
+      setPortfolioActiveTab('MINI_PROJECTS');
+    } else if (student.practicals && student.practicals.length > 0) {
+      setPortfolioActiveTab('PRACTICALS');
+    } else {
+      setPortfolioActiveTab('ALL');
+    }
+  };
+
+  const handleOpenDocViewer = (item: LogbookEntryItem) => {
+    setDocPreviewTarget({
+      url: item.fileUrl || '',
+      name: item.fileName || `${item.title || 'Deliverable'}.pdf`,
+      studentName: item.studentName,
+      studentRollNo: item.studentRollNo,
+      projectTitle: item.title,
+      explanationText: item.explanationText || item.description,
+      category: item.categoryName,
+      marksObtained: item.marksObtained,
+      maxMarks: item.maxMarks,
+      facultyRemarks: item.facultyRemarks || undefined,
+      submittedAt: item.submittedAt,
+    });
+    setIsDocPreviewOpen(true);
+  };
 
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans">
       <Sidebar role={role} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="Academic Logbook Reports & Ledger" />
+        <Header title="Academic Logbook Reports & Portfolio Ledger" />
 
         <main className="p-4 sm:p-6 md:p-8 space-y-6 flex-1 max-w-[1600px] w-full mx-auto overflow-x-hidden">
           {/* Top Banner */}
@@ -529,42 +673,54 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                     University Digital Logbook
                   </span>
                   <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-black border border-amber-400/20">
-                    Institutional Audit
+                    NAAC / NBA Accreditation Dossier
                   </span>
                 </div>
                 <h1 className="text-2xl md:text-3xl font-black tracking-tight">
-                  Logbook Submissions, Seminars &amp; Tutorial Ledger
+                  Student Logbook Portfolios &amp; Academic Dossier
                 </h1>
                 <p className="text-white/80 text-xs md:text-sm max-w-2xl font-medium">
-                  Review student deliverable documentation, faculty sign-offs, letter grades, and top performer standings across all academic departments.
+                  Single-row candidate portfolios consolidating Seminars, Tutorials, Mini Project Milestones, and Lab Practicals with high-resolution document previews.
                 </p>
               </div>
 
               {/* Tab Switcher */}
-              <div className="flex items-center gap-2 bg-black/20 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 self-start md:self-auto">
+              <div className="flex items-center gap-2 bg-black/20 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 self-start md:self-auto flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('portfolios')}
+                  className={`px-4 py-2 rounded-xl font-black text-xs transition-all flex items-center gap-2 cursor-pointer ${
+                    activeTab === 'portfolios'
+                      ? 'bg-white text-[#2D2575] shadow-md'
+                      : 'text-white/80 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <UserCheck className="w-4 h-4 text-[#F36C21]" />
+                  <span>Student Portfolios ({studentPortfolios.length})</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('submissions')}
-                  className={`px-4 py-2 rounded-xl font-black text-xs transition-all flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-xl font-black text-xs transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === 'submissions'
                       ? 'bg-white text-[#2D2575] shadow-md'
                       : 'text-white/80 hover:text-white hover:bg-white/10'
                   }`}
                 >
-                  <FileText className="w-4 h-4" />
+                  <Layers className="w-4 h-4" />
                   <span>Submissions Ledger ({entries.length})</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('leaderboard')}
-                  className={`px-4 py-2 rounded-xl font-black text-xs transition-all flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-xl font-black text-xs transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === 'leaderboard'
                       ? 'bg-white text-[#2D2575] shadow-md'
                       : 'text-white/80 hover:text-white hover:bg-white/10'
                   }`}
                 >
-                  <Trophy className="w-4 h-4 text-amber-500" />
-                  <span>Merit Standings ({leaderboard.length})</span>
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  <span>Merit Standings</span>
                 </button>
               </div>
             </div>
@@ -572,11 +728,11 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
             {/* Quick Metrics Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4 mt-6 pt-6 border-t border-white/10">
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/10">
-                <p className="text-[10px] uppercase font-bold text-purple-200">Total Submissions</p>
-                <p className="text-base md:text-lg font-black text-white">{entries.length} Deliverables</p>
+                <p className="text-[10px] uppercase font-bold text-purple-200">Enrolled Candidates</p>
+                <p className="text-base md:text-lg font-black text-white">{studentPortfolios.length} Scholars</p>
               </div>
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/10">
-                <p className="text-[10px] uppercase font-bold text-purple-200">Evaluated by Faculty</p>
+                <p className="text-[10px] uppercase font-bold text-purple-200">Total Evaluated Tasks</p>
                 <p className="text-base md:text-lg font-black text-emerald-300">{totalEvaluatedActivities} Graded</p>
               </div>
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/10">
@@ -604,7 +760,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                 </span>
               </div>
               <span className="text-[11px] font-bold text-slate-400">
-                {filteredEntries.length} Records Found
+                {activeTab === 'portfolios' ? `${studentPortfolios.length} Scholar Portfolios` : `${filteredEntries.length} Records Found`}
               </span>
             </div>
 
@@ -688,7 +844,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
               {/* Category */}
               <div>
                 <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-                  5. Deliverable Category
+                  5. Activity Category
                 </label>
                 <select
                   value={selectedCategory}
@@ -696,9 +852,10 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                   className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
                   <option value="all">All Categories</option>
-                  <option value="SEMINAR">Seminars</option>
-                  <option value="TUTORIAL">Tutorials</option>
-                  <option value="MINI_PROJECT">Mini Projects</option>
+                  <option value="SEMINAR">Seminars &amp; Presentations</option>
+                  <option value="TUTORIAL">Tutorials &amp; Problem Sheets</option>
+                  <option value="MINI_PROJECT">Mini Projects &amp; Milestones</option>
+                  <option value="PRACTICAL">Practicals &amp; Lab Logs</option>
                 </select>
               </div>
 
@@ -713,8 +870,8 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                   className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
                   <option value="all">All Statuses</option>
-                  <option value="EVALUATED">Evaluated</option>
-                  <option value="SUBMITTED">Submitted</option>
+                  <option value="EVALUATED">Evaluated / Graded</option>
+                  <option value="SUBMITTED">Submitted / Pending</option>
                 </select>
               </div>
             </div>
@@ -725,7 +882,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Filter by student name, roll number, topic title, or faculty guide..."
+                  placeholder="Filter by student candidate name, roll number, registration ID, or project topic..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full h-10 pl-9 pr-4 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
@@ -739,7 +896,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                   className="h-10 px-5 bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 transition cursor-pointer shrink-0 w-full sm:w-auto"
                 >
                   <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>Get Records</span>
+                  <span>Refresh Records</span>
                 </button>
 
                 <button
@@ -763,7 +920,188 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
           </div>
 
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
-          {/* TAB 1: ALL LOGBOOK SUBMISSIONS & FACULTY EVALUATIONS LEDGER */}
+          {/* TAB 1: SINGLE-ROW STUDENT PORTFOLIOS DIRECTORY (User Core Request) */}
+          {/* ═════════════════════════════════════════════════════════════════════════════ */}
+          {activeTab === 'portfolios' && (
+            <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] shadow-soft overflow-hidden">
+              <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-[#5B4BFF]" />
+                    <span>Candidate Academic Portfolios Directory</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#5B4BFF]/10 text-[#5B4BFF] text-[10px] font-black">
+                      Single-Row Scholar View
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Click any student row or &ldquo;View Full Portfolio&rdquo; to explore complete Seminars, Tutorials, Weekly Milestones, and Lab Logs in full detail.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-black border border-emerald-200 dark:border-emerald-800">
+                    {studentPortfolios.length} Candidate Portfolios
+                  </span>
+                </div>
+              </div>
+
+              {loading ? (
+                <PortfolioSkeleton rowCount={5} />
+              ) : studentPortfolios.length === 0 ? (
+                <div className="p-16 text-center text-slate-400 space-y-2">
+                  <BookOpen className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
+                  <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                    No student portfolios found for the selected filter combination.
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Adjust your course, branch, batch, or semester filters above.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider">
+                        <th className="py-3.5 px-4">Scholar Details</th>
+                        <th className="py-3.5 px-4">Program &amp; Batch</th>
+                        <th className="py-3.5 px-4 text-center">Seminars</th>
+                        <th className="py-3.5 px-4 text-center">Tutorials</th>
+                        <th className="py-3.5 px-4 text-center">Mini Project &amp; Milestones</th>
+                        <th className="py-3.5 px-4 text-center">Overall Standing</th>
+                        <th className="py-3.5 px-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                      {studentPortfolios.map((student) => {
+                        return (
+                          <tr
+                            key={student.studentRollNo || student.studentId}
+                            onClick={() => handleOpenStudentPortfolio(student)}
+                            className="hover:bg-indigo-50/40 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
+                          >
+                            {/* Scholar Details */}
+                            <td className="py-4 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-[#2D2575] to-[#5B4BFF] border border-[#5B4BFF]/30 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                                  {student.studentPhoto ? (
+                                    <img
+                                      src={student.studentPhoto}
+                                      alt={student.studentName}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                                    />
+                                  ) : (
+                                    <span className="font-black text-sm text-white">
+                                      {student.studentName.slice(0, 2).toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="font-black text-slate-900 dark:text-white group-hover:text-[#5B4BFF] transition-colors text-sm">
+                                    {student.studentName}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                    Roll: <span className="font-bold text-slate-800 dark:text-slate-200">{student.studentRollNo}</span>
+                                    {student.studentRegNo ? ` • Reg: ${student.studentRegNo}` : ''}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Program & Batch */}
+                            <td className="py-4 px-4">
+                              <p className="font-bold text-slate-900 dark:text-slate-200">
+                                {student.courseName} {student.branchName ? `(${student.branchName})` : ''}
+                              </p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                <span>{student.batchName}</span>
+                                <span>•</span>
+                                <span className="font-semibold text-[#5B4BFF]">Sem {student.semesterCd}</span>
+                              </p>
+                            </td>
+
+                            {/* Seminars Count */}
+                            <td className="py-4 px-4 text-center">
+                              {student.seminars.length > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-bold text-xs border border-purple-200 dark:border-purple-800">
+                                  <Presentation className="w-3.5 h-3.5 text-purple-500" />
+                                  <span>{student.seminars.length} Done</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-[11px] italic">0 Submitted</span>
+                              )}
+                            </td>
+
+                            {/* Tutorials Count */}
+                            <td className="py-4 px-4 text-center">
+                              {student.tutorials.length > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold text-xs border border-blue-200 dark:border-blue-800">
+                                  <FileText className="w-3.5 h-3.5 text-blue-500" />
+                                  <span>{student.tutorials.length} Sheets</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-[11px] italic">0 Submitted</span>
+                              )}
+                            </td>
+
+                            {/* Mini Project & Milestones */}
+                            <td className="py-4 px-4 text-center">
+                              {student.miniProjects.length > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800">
+                                  <FolderGit2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>{student.miniProjects.length} Milestones</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-[11px] italic">0 Milestones</span>
+                              )}
+                            </td>
+
+                            {/* Overall Grade & Progress */}
+                            <td className="py-4 px-4 text-center">
+                              <div className="inline-flex flex-col items-center gap-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-black text-slate-900 dark:text-white text-sm">
+                                    {student.overallPercentage}%
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-black text-[10px]">
+                                    {student.overallGrade.split(' ')[0]}
+                                  </span>
+                                </div>
+                                <div className="w-20 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-[#5B4BFF] to-[#00C48C] rounded-full"
+                                    style={{ width: `${Math.min(student.overallPercentage, 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Portfolio Action Button */}
+                            <td className="py-4 px-4 text-right">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenStudentPortfolio(student);
+                                }}
+                                className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white font-bold text-xs shadow-md shadow-[#5B4BFF]/20 inline-flex items-center gap-1.5 transition cursor-pointer scale-100 hover:scale-[1.02]"
+                              >
+                                <FolderOpen className="w-3.5 h-3.5 text-amber-300" />
+                                <span>View Full Portfolio</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════════════════════════════ */}
+          {/* TAB 2: DETAILED SUBMISSIONS LEDGER (Raw Stream) */}
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
           {activeTab === 'submissions' && (
             <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] shadow-soft overflow-hidden">
@@ -771,29 +1109,26 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                 <div>
                   <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                     <Layers className="w-4 h-4 text-[#5B4BFF]" />
-                    All Student Deliverables, Seminar Presentations &amp; Tutorial Logbooks
+                    All Granular Deliverables, Seminars &amp; Tutorial Logbooks
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Comprehensive ledger of submitted documentation, faculty scores, letter grades, and mentor remarks
+                    Itemized stream of submitted documentation, faculty marks, letter grades, and mentor remarks
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-black border border-emerald-200 dark:border-emerald-800">
-                    {filteredEntries.length} Submissions Active
+                    {filteredEntries.length} Items
                   </span>
                 </div>
               </div>
 
               {loading ? (
-                <SubmissionsSkeleton rowCount={6} />
+                <PortfolioSkeleton rowCount={6} />
               ) : filteredEntries.length === 0 ? (
                 <div className="p-16 text-center text-slate-400 space-y-2">
                   <BookOpen className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
                   <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
                     No logbook submissions found for the selected filter combination.
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    Adjust your course, batch, semester, or category filters above.
                   </p>
                 </div>
               ) : (
@@ -805,7 +1140,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                         <th className="py-3.5 px-4">Program &amp; Batch</th>
                         <th className="py-3.5 px-4">Activity &amp; Topic</th>
                         <th className="py-3.5 px-4 text-center">Attached Document</th>
-                        <th className="py-3.5 px-4">Faculty Evaluation &amp; Grade</th>
+                        <th className="py-3.5 px-4">Faculty Grade &amp; Remarks</th>
                         <th className="py-3.5 px-4 text-center">Actions</th>
                       </tr>
                     </thead>
@@ -817,7 +1152,6 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                             key={item.id}
                             className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                           >
-                            {/* Scholar Details */}
                             <td className="py-4 px-4">
                               <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#5B4BFF]/20 to-[#7867FF]/20 border border-[#5B4BFF]/30 flex items-center justify-center overflow-hidden shrink-0">
@@ -845,105 +1179,60 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                               </div>
                             </td>
 
-                            {/* Program & Batch */}
                             <td className="py-4 px-4">
-                              <p className="font-bold text-slate-900 dark:text-slate-200">
-                                {item.courseName}
-                              </p>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                                <span>{item.batchName}</span>
-                                <span>•</span>
-                                <span className="font-semibold text-[#5B4BFF]">Sem {item.semesterCd}</span>
-                              </p>
+                              <p className="font-bold text-slate-900 dark:text-slate-200">{item.courseName}</p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">{item.batchName} • Sem {item.semesterCd}</p>
                             </td>
 
-                            {/* Activity Title & Category */}
                             <td className="py-4 px-4 max-w-md">
                               <div className="space-y-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${
-                                    item.categoryCode === 'SEMINAR'
-                                      ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800'
-                                      : item.categoryCode === 'TUTORIAL'
-                                      ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
-                                      : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                                  }`}>
-                                    {item.categoryName}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                                    <Calendar className="w-3 h-3" />
-                                    {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString() : 'Active'}
-                                  </span>
-                                </div>
-                                <p className="font-bold text-slate-900 dark:text-white line-clamp-1">
-                                  {item.title}
-                                </p>
-                                {item.description && (
-                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
-                                    {item.description}
-                                  </p>
-                                )}
+                                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200">
+                                  {item.categoryName}
+                                </span>
+                                <p className="font-bold text-slate-900 dark:text-white line-clamp-1">{item.title}</p>
                               </div>
                             </td>
 
-                            {/* Attached Document Link */}
                             <td className="py-4 px-4 text-center">
                               {item.fileUrl || item.fileName ? (
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedEntry(item)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-[#5B4BFF] hover:text-white text-slate-700 dark:text-slate-300 text-xs font-bold border border-slate-200 dark:border-slate-700 transition"
-                                  title="Inspect attached document / slides"
+                                  onClick={() => handleOpenDocViewer(item)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-[#F36C21] hover:text-white text-slate-700 dark:text-slate-300 text-xs font-bold border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                                  title="Read in popup document viewer"
                                 >
-                                  <FileText className="w-3.5 h-3.5 text-[#5B4BFF] group-hover:text-white" />
-                                  <span className="truncate max-w-[110px]">{item.fileName || 'Document.pdf'}</span>
+                                  <FileText className="w-3.5 h-3.5 text-[#F36C21] group-hover:text-white" />
+                                  <span className="truncate max-w-[110px]">{item.fileName || 'View Document'}</span>
                                 </button>
                               ) : (
-                                <span className="text-[11px] text-slate-400 italic">No file attached</span>
+                                <span className="text-[11px] text-slate-400 italic">No file</span>
                               )}
                             </td>
 
-                            {/* Faculty Status & Grade */}
                             <td className="py-4 px-4">
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2">
-                                  {isEval ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase border border-emerald-500/20">
-                                      <CheckCircle className="w-3 h-3" />
-                                      Graded
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase border border-amber-500/20">
-                                      <Clock className="w-3 h-3" />
-                                      Pending
-                                    </span>
-                                  )}
-
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                    isEval ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  }`}>
+                                    {isEval ? 'Graded' : 'Pending'}
+                                  </span>
                                   {isEval && item.marksObtained !== null && (
-                                    <span className="font-mono font-black text-slate-900 dark:text-white text-xs">
-                                      {item.marksObtained} / {item.maxMarks} ({item.scorePercentage}%)
-                                    </span>
-                                  )}
-
-                                  {isEval && item.grade && (
-                                    <span className="px-1.5 py-0.2 rounded bg-[#5B4BFF]/10 text-[#5B4BFF] font-black text-[10px]">
-                                      {item.grade.split(' ')[0]}
+                                    <span className="font-mono font-bold text-slate-900 dark:text-white">
+                                      {item.marksObtained} / {item.maxMarks}
                                     </span>
                                   )}
                                 </div>
-
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                                  <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                                  <span>Evaluator: <strong>{item.facultyName}</strong></span>
-                                </p>
+                                {item.facultyRemarks && (
+                                  <p className="text-[11px] text-slate-500 truncate max-w-xs">{item.facultyRemarks}</p>
+                                )}
                               </div>
                             </td>
 
-                            {/* Actions */}
                             <td className="py-4 px-4 text-center">
                               <button
                                 type="button"
-                                onClick={() => setSelectedEntry(item)}
+                                onClick={() => handleOpenDocViewer(item)}
                                 className="px-3 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-bold text-xs shadow-sm inline-flex items-center gap-1 transition cursor-pointer"
                               >
                                 <Eye className="w-3.5 h-3.5" />
@@ -961,27 +1250,24 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
           )}
 
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
-          {/* TAB 2: BEST-PERFORMER MERIT STANDINGS (LEADERBOARD) */}
+          {/* TAB 3: ACADEMIC MERIT STANDINGS & LEADERBOARD */}
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
           {activeTab === 'leaderboard' && (
             <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] shadow-soft overflow-hidden">
-              <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                    <Trophy className="w-4 h-4 text-amber-500" />
-                    Best-Performer Merit Standings
+                    <Trophy className="w-5 h-5 text-amber-500" />
+                    <span>Academic Merit Standings &amp; Rank Distribution</span>
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Ranked by overall score percentage across evaluated logbook tasks
+                    Highest scoring candidates ranked by cumulative deliverable evaluations and faculty sign-offs.
                   </p>
                 </div>
-                <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-black border border-emerald-200 dark:border-emerald-800">
-                  {filteredLeaderboard.length} Top Scholars
-                </span>
               </div>
 
               {loading ? (
-                <LeaderboardSkeleton rowCount={6} />
+                <PortfolioSkeleton rowCount={6} />
               ) : filteredLeaderboard.length === 0 ? (
                 <div className="p-16 text-center text-slate-400 space-y-2">
                   <BookOpen className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
@@ -1009,10 +1295,9 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                           key={student.studentId}
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                         >
-                          {/* Rank Column with Badges */}
                           <td className="py-4 px-4 text-center">
                             {student.rank === 1 ? (
-                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-amber-500 text-white font-black text-xs shadow-md shadow-amber-500/20">
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-amber-500 text-white font-black text-xs shadow-md">
                                 👑 1
                               </span>
                             ) : student.rank === 2 ? (
@@ -1030,7 +1315,6 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                             )}
                           </td>
 
-                          {/* Scholar Avatar & Name */}
                           <td className="py-4 px-4">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#5B4BFF]/20 to-[#7867FF]/20 border border-[#5B4BFF]/30 flex items-center justify-center overflow-hidden shrink-0">
@@ -1058,32 +1342,22 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                             </div>
                           </td>
 
-                          {/* Program & Batch */}
                           <td className="py-4 px-4">
-                            <p className="font-bold text-slate-900 dark:text-slate-200">
-                              {student.courseName}
-                            </p>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                              {student.batchName}
-                            </p>
+                            <p className="font-bold text-slate-900 dark:text-slate-200">{student.courseName}</p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">{student.batchName}</p>
                           </td>
 
-                          {/* Evaluated Tasks Count */}
                           <td className="py-4 px-4 text-center">
-                            <span className="px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 font-black text-xs border border-purple-200 dark:border-purple-800">
+                            <span className="px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 font-black text-xs border border-purple-200">
                               {student.totalActivities} Tasks
                             </span>
                           </td>
 
-                          {/* Marks */}
                           <td className="py-4 px-4 text-center font-mono">
-                            <span className="font-black text-slate-900 dark:text-white">
-                              {student.totalMarks}
-                            </span>
+                            <span className="font-black text-slate-900 dark:text-white">{student.totalMarks}</span>
                             <span className="text-slate-400"> / {student.maxMarks}</span>
                           </td>
 
-                          {/* Overall Score % */}
                           <td className="py-4 px-4 text-center">
                             <div className="inline-flex flex-col items-center gap-1">
                               <span className="font-black text-sm text-emerald-600 dark:text-emerald-400">
@@ -1098,15 +1372,14 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                             </div>
                           </td>
 
-                          {/* Category Highlights Pills */}
                           <td className="py-4 px-4">
-                            <div className="flex flex-wrap gap-1.5 max-w-xs">
-                              {student.categoryBreakdown?.slice(0, 3).map((cb, i) => (
+                            <div className="flex gap-1.5 flex-wrap">
+                              {student.categoryBreakdown?.map((cb, idx) => (
                                 <span
-                                  key={i}
-                                  className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                                  key={idx}
+                                  className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-bold"
                                 >
-                                  {cb.category_name}: <b className="text-emerald-600">{cb.score_pct}%</b>
+                                  {cb.category_name}: <strong>{cb.score_pct}%</strong>
                                 </span>
                               ))}
                             </div>
@@ -1119,276 +1392,562 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
               )}
             </div>
           )}
-
-          {/* ═════════════════════════════════════════════════════════════════════════════ */}
-          {/* INSPECT SUBMISSION & SPLIT-VIEW ATTACHED DOCUMENT PREVIEW MODAL            */}
-          {/* ═════════════════════════════════════════════════════════════════════════════ */}
-          {selectedEntry && (
-            <div
-              onClick={(e) => {
-                if (e.target === e.currentTarget) setSelectedEntry(null);
-              }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-md animate-fadeIn"
-            >
-              <div
-                className="relative w-full max-w-6xl max-h-[92vh] bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-[22px] shadow-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Modal Top Header */}
-                <div className="shrink-0 bg-[#2D2575] text-white px-5 py-3.5 flex items-center justify-between border-b border-indigo-950">
-                  <div className="flex items-center gap-3">
-                    <span className="w-9 h-9 rounded-xl bg-[#5B4BFF] text-white flex items-center justify-center text-xs font-black shadow-md">
-                      <FileText className="w-5 h-5" />
-                    </span>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-black text-white leading-tight">
-                          {selectedEntry.title}
-                        </h4>
-                        <span className="px-2.5 py-0.5 rounded-full bg-[#F36C21] text-white text-[10px] font-black uppercase tracking-wider">
-                          {selectedEntry.categoryName}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-purple-200 mt-0.5">
-                        Submitted by <b className="text-white">{selectedEntry.studentName}</b> ({selectedEntry.studentRollNo}) • {selectedEntry.courseName}
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setSelectedEntry(null)}
-                    className="w-8 h-8 flex items-center justify-center text-purple-200 hover:text-white rounded-xl hover:bg-white/10 transition font-bold text-base cursor-pointer"
-                    title="Close (ESC)"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Modal 2-Column Split Body */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full">
-                    {/* ─── LEFT COLUMN: LIVE ATTACHED DOCUMENT PREVIEW (7 Cols) ─────── */}
-                    <div className="lg:col-span-7 flex flex-col bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-3">
-                      {/* Document Toolbar Header */}
-                      <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/70 dark:border-slate-700">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="p-1.5 rounded-lg bg-[#5B4BFF]/10 text-[#5B4BFF]">
-                            <FileText className="w-4 h-4" />
-                          </span>
-                          <div className="min-w-0">
-                            <span className="font-black text-xs text-slate-800 dark:text-white truncate block">
-                              {selectedEntry.fileName || 'Attached_Submission_Document.pdf'}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono block">
-                              Size: {selectedEntry.fileSize || '1.8 MB'} • Server Verified File
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          {selectedEntry.fileUrl ? (
-                            <>
-                              <a
-                                href={selectedEntry.fileUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition"
-                                title="Open in New Window"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5 text-[#5B4BFF]" />
-                                <span>Open Full</span>
-                              </a>
-                              <a
-                                href={selectedEntry.fileUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                download
-                                className="px-3 py-1.5 bg-[#5B4BFF] hover:bg-[#4338CA] text-white rounded-xl text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition"
-                                title="Download Document"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Download</span>
-                              </a>
-                            </>
-                          ) : (
-                            <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] border border-emerald-200 dark:border-emerald-800">
-                              ✓ Verified on Disk
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Live Document Preview Container */}
-                      <div className="flex-1 min-h-[380px] sm:min-h-[500px] lg:min-h-[560px] bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-inner flex flex-col">
-                        {selectedEntry.fileUrl ? (
-                          selectedEntry.fileUrl.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? (
-                            <div className="w-full h-full flex items-center justify-center p-4 bg-slate-100 dark:bg-slate-950">
-                              <img
-                                src={selectedEntry.fileUrl}
-                                alt={selectedEntry.fileName || 'Attached Document'}
-                                className="max-w-full max-h-[520px] object-contain rounded-lg shadow-md"
-                              />
-                            </div>
-                          ) : (
-                            <iframe
-                              src={`${selectedEntry.fileUrl}#toolbar=1&navpanes=0`}
-                              title="Attached Document Preview"
-                              className="w-full h-full min-h-[380px] sm:min-h-[500px] lg:min-h-[560px] border-0"
-                            />
-                          )
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-3 bg-slate-50 dark:bg-slate-900/50">
-                            <div className="w-16 h-16 rounded-2xl bg-[#5B4BFF]/10 text-[#5B4BFF] flex items-center justify-center">
-                              <FileText className="w-8 h-8" />
-                            </div>
-                            <div>
-                              <div className="font-bold text-sm text-slate-800 dark:text-slate-200">
-                                {selectedEntry.fileName || 'Weekly_Progress_Report.pdf'}
-                              </div>
-                              <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                                Physical document registered on server and verified for academic audit and evaluation.
-                              </p>
-                            </div>
-                            <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200">
-                              ✓ Document Verified in Database
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* ─── RIGHT COLUMN: EVALUATION & SUBMISSION METADATA (5 Cols) ──── */}
-                    <div className="lg:col-span-5 flex flex-col space-y-4 overflow-y-auto text-xs pr-0.5">
-                      {/* 1. Scholar Identity Card */}
-                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3">
-                        <div className="flex items-center gap-3">
-                          {selectedEntry.studentPhoto ? (
-                            <img
-                              src={selectedEntry.studentPhoto}
-                              alt={selectedEntry.studentName}
-                              className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm"
-                            />
-                          ) : (
-                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#2D2575] to-[#5B4BFF] text-white flex items-center justify-center font-black text-sm">
-                              {selectedEntry.studentName.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <h5 className="font-black text-sm text-slate-900 dark:text-white leading-tight truncate">
-                              {selectedEntry.studentName}
-                            </h5>
-                            <span className="text-[11px] font-mono text-slate-500 block">
-                              Roll: {selectedEntry.studentRollNo} • Reg: {selectedEntry.studentRegNo}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-[11px]">
-                          <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 block">Program &amp; Branch</span>
-                            <span className="font-bold text-slate-800 dark:text-white truncate block">{selectedEntry.courseName}</span>
-                          </div>
-                          <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 block">Batch &amp; Semester</span>
-                            <span className="font-bold text-[#5B4BFF]">{selectedEntry.batchName} • Sem {selectedEntry.semesterCd}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 2. Activity Prompt & Objectives */}
-                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                            <BookOpen className="w-3.5 h-3.5 text-[#5B4BFF]" />
-                            <span>Activity Objective &amp; Requirements</span>
-                          </span>
-                          <span className="text-[10px] font-bold text-slate-400">
-                            Max {selectedEntry.maxMarks} Marks
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
-                          {selectedEntry.description || selectedEntry.title}
-                        </p>
-                      </div>
-
-                      {/* 3. Student Submission Notes / Accomplishments */}
-                      {selectedEntry.explanationText && (
-                        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-2">
-                          <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider block">
-                            Student Accomplishments &amp; Notes
-                          </span>
-                          <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                            {selectedEntry.explanationText}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 4. Faculty Evaluation & Digital Sign-off (Highlight Box) */}
-                      <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50/90 via-teal-50/80 to-emerald-50/90 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-emerald-950/40 border border-emerald-300 dark:border-emerald-700/80 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-emerald-200/70 dark:border-emerald-800/70">
-                          <div className="flex items-center gap-1.5">
-                            <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                            <span className="font-black text-xs text-emerald-900 dark:text-emerald-200 uppercase tracking-wider">
-                              Faculty Evaluation &amp; Grade
-                            </span>
-                          </div>
-                          <span className="px-3 py-1 rounded-full bg-emerald-600 text-white font-black text-xs shadow-sm">
-                            {selectedEntry.marksObtained !== null ? `${selectedEntry.marksObtained} / ${selectedEntry.maxMarks} Marks` : 'Graded'}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 text-[11px]">
-                          <div className="p-2.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-emerald-200/60 dark:border-emerald-800/60">
-                            <span className="text-[10px] font-bold text-slate-500 block">Evaluator / Mentor:</span>
-                            <span className="font-bold text-slate-900 dark:text-white truncate block">{selectedEntry.facultyName}</span>
-                          </div>
-                          <div className="p-2.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-emerald-200/60 dark:border-emerald-800/60">
-                            <span className="text-[10px] font-bold text-slate-500 block">Assigned Grade:</span>
-                            <span className="font-black text-[#5B4BFF]">{selectedEntry.grade} ({selectedEntry.scorePercentage || 90}%)</span>
-                          </div>
-                        </div>
-
-                        {selectedEntry.facultyRemarks && (
-                          <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/70 border border-emerald-200/60 dark:border-emerald-800/60">
-                            <span className="text-[10px] font-bold text-emerald-900 dark:text-emerald-300 block uppercase">
-                              Faculty Remarks &amp; Feedback:
-                            </span>
-                            <p className="text-xs text-slate-700 dark:text-slate-300 italic pt-1 leading-relaxed">
-                              &ldquo;{selectedEntry.facultyRemarks}&rdquo;
-                            </p>
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1">
-                          <span className="font-medium">Status: ✓ {selectedEntry.status}</span>
-                          {selectedEntry.evaluatedAt && (
-                            <span>Evaluated on {new Date(selectedEntry.evaluatedAt).toLocaleDateString()}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Modal Bottom Footer */}
-                <div className="shrink-0 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-5 py-3 flex items-center justify-between text-xs">
-                  <span className="text-slate-500 text-[11px]">
-                    Press <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded font-mono text-[10px] font-bold">ESC</kbd> to close inspection
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedEntry(null)}
-                    className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition cursor-pointer shadow-sm"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </main>
       </div>
+
+      {/* ═════════════════════════════════════════════════════════════════════════════ */}
+      {/* FULL STUDENT PORTFOLIO DOSSIER MODAL (Tabs: Seminars, Tutorials, Mini Projects, Practicals) */}
+      {/* ═════════════════════════════════════════════════════════════════════════════ */}
+      {selectedPortfolioStudent && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedPortfolioStudent(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md animate-fadeIn"
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-[24px] border border-slate-200 dark:border-slate-800 w-full max-w-6xl h-[92vh] max-h-[950px] flex flex-col shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Hero Header */}
+            <div className="px-6 py-5 bg-gradient-to-r from-[#2D2575] via-[#3B328C] to-[#5B4BFF] text-white flex items-center justify-between border-b border-indigo-950 flex-shrink-0 flex-wrap gap-4">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-lg">
+                  {selectedPortfolioStudent.studentPhoto ? (
+                    <img
+                      src={selectedPortfolioStudent.studentPhoto}
+                      alt={selectedPortfolioStudent.studentName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="font-black text-xl text-white">
+                      {selectedPortfolioStudent.studentName.slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#F36C21] text-white text-[10px] font-black uppercase tracking-wider">
+                      Academic Candidate Dossier
+                    </span>
+                    <span className="text-xs text-purple-200 font-mono">
+                      Roll: <strong className="text-white">{selectedPortfolioStudent.studentRollNo}</strong>
+                      {selectedPortfolioStudent.studentRegNo ? ` • Reg: ${selectedPortfolioStudent.studentRegNo}` : ''}
+                    </span>
+                  </div>
+                  <h3 className="text-lg md:text-xl font-black text-white truncate mt-0.5">
+                    {selectedPortfolioStudent.studentName}
+                  </h3>
+                  <p className="text-xs text-purple-200 font-medium">
+                    {selectedPortfolioStudent.courseName} {selectedPortfolioStudent.branchName ? `(${selectedPortfolioStudent.branchName})` : ''} • {selectedPortfolioStudent.batchName} • Semester {selectedPortfolioStudent.semesterCd}
+                  </p>
+                </div>
+              </div>
+
+              {/* Header Right Badges & Controls */}
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <div className="text-right hidden sm:block bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/10">
+                  <span className="text-[10px] uppercase font-bold text-purple-200 block">Overall Performance</span>
+                  <span className="text-base font-black text-white">
+                    {selectedPortfolioStudent.overallPercentage}% • <span className="text-emerald-300">{selectedPortfolioStudent.overallGrade}</span>
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 border border-white/20 transition cursor-pointer"
+                  title="Print Official Dossier"
+                >
+                  <Printer className="w-4 h-4 text-amber-300" />
+                  <span className="hidden md:inline">Print Dossier</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPortfolioStudent(null)}
+                  className="p-2 rounded-xl text-purple-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Close (ESC)"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Dossier Navigation Tabs */}
+            <div className="px-6 py-2.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 overflow-x-auto flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setPortfolioActiveTab('SEMINARS')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  portfolioActiveTab === 'SEMINARS'
+                    ? 'bg-[#5B4BFF] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Presentation className="w-4 h-4 text-purple-400" />
+                <span>1. Seminars ({selectedPortfolioStudent.seminars.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPortfolioActiveTab('TUTORIALS')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  portfolioActiveTab === 'TUTORIALS'
+                    ? 'bg-[#5B4BFF] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <FileText className="w-4 h-4 text-blue-400" />
+                <span>2. Tutorials ({selectedPortfolioStudent.tutorials.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPortfolioActiveTab('MINI_PROJECTS')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  portfolioActiveTab === 'MINI_PROJECTS'
+                    ? 'bg-[#5B4BFF] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <FolderGit2 className="w-4 h-4 text-[#F36C21]" />
+                <span>3. Mini Project &amp; Milestones ({selectedPortfolioStudent.miniProjects.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPortfolioActiveTab('PRACTICALS')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  portfolioActiveTab === 'PRACTICALS'
+                    ? 'bg-[#5B4BFF] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <FlaskConical className="w-4 h-4 text-emerald-400" />
+                <span>4. Practicals &amp; Lab Logs ({selectedPortfolioStudent.practicals.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPortfolioActiveTab('ALL')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  portfolioActiveTab === 'ALL'
+                    ? 'bg-[#5B4BFF] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                <span>All Activities ({selectedPortfolioStudent.allEntries.length})</span>
+              </button>
+            </div>
+
+            {/* Dossier Content Body */}
+            <div className="flex-1 bg-[#F6F8FC] dark:bg-slate-950 p-4 sm:p-6 overflow-y-auto space-y-4">
+              {/* TAB CONTENT: MINI PROJECTS (Weekly / Daily Wise Progress Report) */}
+              {portfolioActiveTab === 'MINI_PROJECTS' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                        <FolderGit2 className="w-4 h-4 text-[#F36C21]" />
+                        <span>Mini Project Weekly Milestone Tracker &amp; Technical Ledger</span>
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Chronological progression of student weekly accomplishment logs, source code deliverables, and faculty sign-offs.
+                      </p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200">
+                      {selectedPortfolioStudent.miniProjects.length} Milestones Registered
+                    </span>
+                  </div>
+
+                  {selectedPortfolioStudent.miniProjects.length === 0 ? (
+                    <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
+                      <FolderGit2 className="w-10 h-10 text-slate-300 mx-auto" />
+                      <p className="font-bold text-sm text-slate-700 dark:text-slate-300">No Mini Project Milestones Uploaded Yet</p>
+                      <p className="text-xs text-slate-400">Weekly progress submissions will dynamically populate here.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedPortfolioStudent.miniProjects.map((entry, idx) => (
+                        <div
+                          key={entry.id || idx}
+                          className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-[#5B4BFF] transition-all space-y-3"
+                        >
+                          <div className="flex items-start justify-between flex-wrap gap-2">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-black text-[10px] uppercase border border-amber-200">
+                                  Milestone #{idx + 1}
+                                </span>
+                                <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  {entry.submittedAt ? new Date(entry.submittedAt).toLocaleString() : 'Recent'}
+                                </span>
+                              </div>
+                              <h5 className="text-sm font-black text-slate-900 dark:text-white">
+                                {entry.title}
+                              </h5>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {entry.status === 'EVALUATED' || entry.status === 'GRADED' ? (
+                                <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200">
+                                  ✓ Graded: {entry.marksObtained} / {entry.maxMarks || 100}
+                                </span>
+                              ) : (
+                                <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold text-xs border border-amber-200">
+                                  Pending Review
+                                </span>
+                              )}
+
+                              {(entry.fileUrl || entry.fileName) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDocViewer(entry)}
+                                  className="px-3 py-1 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                                  title="Open PDF deliverable in popup previewer"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                  <span>Preview PDF / Doc</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Student Written Explanation / Derivation */}
+                          {(entry.explanationText || entry.description) && (
+                            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                              <span className="font-bold text-slate-900 dark:text-white block mb-0.5 uppercase text-[10px] text-[#5B4BFF]">
+                                Accomplishments &amp; Technical Scope:
+                              </span>
+                              {entry.explanationText || entry.description}
+                            </div>
+                          )}
+
+                          {/* Faculty Feedback */}
+                          {entry.facultyRemarks && (
+                            <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/60 text-xs text-slate-700 dark:text-slate-300">
+                              <span className="font-bold text-emerald-800 dark:text-emerald-300 text-[10px] uppercase block">
+                                Faculty Mentor Remarks ({entry.facultyName}):
+                              </span>
+                              &ldquo;{entry.facultyRemarks}&rdquo;
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB CONTENT: SEMINARS */}
+              {portfolioActiveTab === 'SEMINARS' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                        <Presentation className="w-4 h-4 text-purple-500" />
+                        <span>Academic Seminar Presentations &amp; Technical Speeches</span>
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Slide decks, research abstracts, and faculty viva evaluation scores.
+                      </p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-purple-50 text-purple-700 font-bold text-xs border border-purple-200">
+                      {selectedPortfolioStudent.seminars.length} Seminars
+                    </span>
+                  </div>
+
+                  {selectedPortfolioStudent.seminars.length === 0 ? (
+                    <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
+                      <Presentation className="w-10 h-10 text-slate-300 mx-auto" />
+                      <p className="font-bold text-sm text-slate-700 dark:text-slate-300">No Seminar Presentations Logged</p>
+                      <p className="text-xs text-slate-400">Student seminar presentations will display here upon submission.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedPortfolioStudent.seminars.map((entry, idx) => (
+                        <div
+                          key={entry.id || idx}
+                          className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 hover:border-[#5B4BFF]/50 transition-all"
+                        >
+                          <div className="flex items-start justify-between flex-wrap gap-2">
+                            <div>
+                              <span className="px-2.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/60 text-[#5B4BFF] font-black text-[10px] uppercase border border-purple-200 dark:border-purple-800">
+                                Seminar Presentation #{idx + 1}
+                              </span>
+                              <h5 className="text-sm font-black text-slate-900 dark:text-white mt-1">
+                                {entry.title}
+                              </h5>
+                              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                                Submitted on {entry.submittedAt ? new Date(entry.submittedAt).toLocaleDateString() : 'Active'}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {entry.marksObtained !== null && (
+                                <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200">
+                                  Grade: {entry.marksObtained} / {entry.maxMarks || 20}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {entry.description && (
+                            <p className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                              {entry.description}
+                            </p>
+                          )}
+
+                          {/* Dedicated Attachment Document Preview Card */}
+                          {(entry.fileUrl || entry.fileName) && (
+                            <div className="flex items-center justify-between p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/50">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-orange-100 dark:bg-orange-950/60 flex items-center justify-center shrink-0">
+                                  <FileText className="w-4 h-4 text-[#F36C21]" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                    {entry.fileName || `${entry.title}.pdf`}
+                                  </p>
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                    Attached Seminar Slide Deck / PDF
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDocViewer(entry)}
+                                className="px-3.5 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition shrink-0 cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Preview Document</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB CONTENT: TUTORIALS */}
+              {portfolioActiveTab === 'TUTORIALS' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-blue-500" />
+                        <span>Tutorial &amp; Problem Sheet Workbooks</span>
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Handwritten derivations, problem sets, and graded tutorial submissions.
+                      </p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200">
+                      {selectedPortfolioStudent.tutorials.length} Tutorials
+                    </span>
+                  </div>
+
+                  {selectedPortfolioStudent.tutorials.length === 0 ? (
+                    <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
+                      <FileText className="w-10 h-10 text-slate-300 mx-auto" />
+                      <p className="font-bold text-sm text-slate-700 dark:text-slate-300">No Tutorial Problem Sheets Logged</p>
+                      <p className="text-xs text-slate-400">Tutorial workbooks will appear here upon submission.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedPortfolioStudent.tutorials.map((entry, idx) => (
+                        <div
+                          key={entry.id || idx}
+                          className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3"
+                        >
+                          <div className="flex items-start justify-between flex-wrap gap-2">
+                            <div>
+                              <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-black text-[10px] uppercase border border-blue-200">
+                                Problem Sheet #{idx + 1}
+                              </span>
+                              <h5 className="text-sm font-black text-slate-900 dark:text-white mt-1">
+                                {entry.title}
+                              </h5>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {entry.marksObtained !== null && (
+                                <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200">
+                                  Grade: {entry.marksObtained} / {entry.maxMarks}
+                                </span>
+                              )}
+                              {(entry.fileUrl || entry.fileName) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDocViewer(entry)}
+                                  className="px-3 py-1 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                  <span>Preview Solution PDF</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB CONTENT: PRACTICALS & LAB LOGS */}
+              {portfolioActiveTab === 'PRACTICALS' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                        <FlaskConical className="w-4 h-4 text-emerald-500" />
+                        <span>Laboratory Experiments &amp; Practical Hands-on Logs</span>
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Dynamic laboratory logbooks, experiment records, code executions, and viva assessment ratings.
+                      </p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200">
+                      {selectedPortfolioStudent.practicals.length} Experiments
+                    </span>
+                  </div>
+
+                  {selectedPortfolioStudent.practicals.length === 0 ? (
+                    <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
+                      <FlaskConical className="w-10 h-10 text-slate-300 mx-auto" />
+                      <p className="font-bold text-sm text-slate-700 dark:text-slate-300">No Practical Lab Logs Logged</p>
+                      <p className="text-xs text-slate-400">Experiment performance records will dynamically appear here when submitted.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedPortfolioStudent.practicals.map((entry, idx) => (
+                        <div
+                          key={entry.id || idx}
+                          className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3"
+                        >
+                          <div className="flex items-start justify-between flex-wrap gap-2">
+                            <div>
+                              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-black text-[10px] uppercase border border-emerald-200">
+                                Lab Practical #{idx + 1}
+                              </span>
+                              <h5 className="text-sm font-black text-slate-900 dark:text-white mt-1">
+                                {entry.title}
+                              </h5>
+                            </div>
+                            {(entry.fileUrl || entry.fileName) && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDocViewer(entry)}
+                                className="px-3 py-1 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>View Lab Sheet</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB CONTENT: ALL ACTIVITIES */}
+              {portfolioActiveTab === 'ALL' && (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider">
+                          <th className="py-3 px-4">Activity Category</th>
+                          <th className="py-3 px-4">Deliverable Title</th>
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-4 text-center">Score / Grade</th>
+                          <th className="py-3 px-4 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {selectedPortfolioStudent.allEntries.map((item, idx) => (
+                          <tr key={item.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-0.5 rounded font-black text-[10px] uppercase bg-purple-50 text-purple-700 border border-purple-200">
+                                {item.categoryName}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                              {item.title}
+                            </td>
+                            <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
+                              {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td className="py-3 px-4 text-center font-bold text-emerald-600">
+                              {item.marksObtained !== null ? `${item.marksObtained} / ${item.maxMarks}` : 'Pending'}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {(item.fileUrl || item.fileName) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDocViewer(item)}
+                                  className="px-2.5 py-1 rounded-lg bg-[#5B4BFF] text-white font-bold text-[11px] hover:bg-[#4338CA] transition cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  <span>Preview</span>
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between text-xs text-slate-500 flex-shrink-0">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <span>Verified Academic Candidate Portfolio • SRMS Digital Logbook System</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPortfolioStudent(null)}
+                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition cursor-pointer shadow-sm"
+              >
+                Close Portfolio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════════════ */}
+      {/* POPUP DOCUMENT PREVIEW MODAL */}
+      {/* ═════════════════════════════════════════════════════════════════════════════ */}
+      <DocumentPreviewModal
+        isOpen={isDocPreviewOpen}
+        onClose={() => setIsDocPreviewOpen(false)}
+        title="Candidate Academic Deliverable Visualizer"
+        documentUrl={docPreviewTarget?.url}
+        documentName={docPreviewTarget?.name}
+        studentName={docPreviewTarget?.studentName}
+        studentRollNo={docPreviewTarget?.studentRollNo}
+        projectTitle={docPreviewTarget?.projectTitle}
+        explanationText={docPreviewTarget?.explanationText}
+        category={docPreviewTarget?.category}
+        marksObtained={docPreviewTarget?.marksObtained}
+        maxMarks={docPreviewTarget?.maxMarks}
+        facultyRemarks={docPreviewTarget?.facultyRemarks}
+        submittedAt={docPreviewTarget?.submittedAt}
+      />
     </div>
   );
 }

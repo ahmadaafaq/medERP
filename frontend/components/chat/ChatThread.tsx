@@ -93,7 +93,7 @@ export default function ChatThread({
             <button
               type="button"
               onClick={onBack}
-              className="sm:hidden p-2 -ml-1 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-200 border border-[#E7EAF3] dark:border-slate-700 hover:bg-orange-50 hover:text-[#F36C21] transition-all cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0"
+              className="p-2 -ml-1 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-200 border border-[#E7EAF3] dark:border-slate-700 hover:bg-orange-50 hover:text-[#F36C21] transition-all cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0"
               title="Back to Batches"
             >
               <ArrowLeft className="w-4 h-4 text-[#F36C21]" />

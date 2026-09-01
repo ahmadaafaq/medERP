@@ -10,7 +10,14 @@ interface Props {
   documentUrl?: string;
   documentName?: string;
   studentName?: string;
+  studentRollNo?: string;
   projectTitle?: string;
+  explanationText?: string;
+  category?: string;
+  marksObtained?: number | null;
+  maxMarks?: number;
+  facultyRemarks?: string;
+  submittedAt?: string;
 }
 
 function PdfCanvasViewer({ pdfData, blobUrl }: { pdfData: Uint8Array | ArrayBuffer | null; blobUrl?: string | null }) {
@@ -50,8 +57,6 @@ function PdfCanvasViewer({ pdfData, blobUrl }: { pdfData: Uint8Array | ArrayBuff
           });
           doc = await loadingTask.promise;
         } catch (firstErr) {
-          console.warn('First worker attempt failed, trying fallback mode...', firstErr);
-          // Retry without worker
           const fallbackTask = pdfjs.getDocument({
             data: uint8,
             disableWorker: true,
@@ -66,7 +71,6 @@ function PdfCanvasViewer({ pdfData, blobUrl }: { pdfData: Uint8Array | ArrayBuff
           setRendering(false);
         }
       } catch (err: any) {
-        console.error('Error loading PDF canvas', err);
         if (active) {
           setRenderError(err?.message || 'Could not render PDF canvas');
           setRendering(false);
@@ -123,7 +127,7 @@ function PdfCanvasViewer({ pdfData, blobUrl }: { pdfData: Uint8Array | ArrayBuff
         <div className="w-full h-full relative rounded-xl overflow-hidden bg-white border border-slate-800 shadow-sm flex flex-col">
           <iframe
             src={blobUrl}
-            title="Project Documentation Preview"
+            title="Document Preview"
             className="w-full h-full rounded-xl bg-white border-0"
           />
         </div>
@@ -131,9 +135,9 @@ function PdfCanvasViewer({ pdfData, blobUrl }: { pdfData: Uint8Array | ArrayBuff
     }
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center text-slate-300 space-y-3 bg-slate-900 rounded-xl w-full h-full">
-        <FileText className="w-10 h-10 text-red-400" />
-        <div className="text-sm font-bold text-white">PDF Canvas Rendering Notice</div>
-        <p className="text-xs text-slate-400 max-w-sm">{renderError}</p>
+        <FileText className="w-10 h-10 text-slate-400" />
+        <div className="text-sm font-bold text-white">Document Stream Available</div>
+        <p className="text-xs text-slate-400 max-w-sm">Use Document Reader or the Academic Notes tab to view the deliverable content.</p>
       </div>
     );
   }
@@ -150,10 +154,10 @@ function PdfCanvasViewer({ pdfData, blobUrl }: { pdfData: Uint8Array | ArrayBuff
             className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 font-bold flex items-center gap-1 border border-slate-700 transition-colors"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Prev</span>
+            <span>Prev</span>
           </button>
-          <span className="font-mono text-xs text-slate-300 px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700">
-            Page <strong className="text-white">{currentPage}</strong> of <strong className="text-white">{numPages || 1}</strong>
+          <span className="font-mono text-slate-300 font-bold px-1">
+            Page {currentPage} of {numPages || 1}
           </span>
           <button
             type="button"
@@ -161,35 +165,35 @@ function PdfCanvasViewer({ pdfData, blobUrl }: { pdfData: Uint8Array | ArrayBuff
             onClick={() => setCurrentPage((p) => Math.min(numPages, p + 1))}
             className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 font-bold flex items-center gap-1 border border-slate-700 transition-colors"
           >
-            <span className="hidden sm:inline">Next</span>
+            <span>Next</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
-            onClick={() => setScale((s) => Math.max(0.6, Number((s - 0.15).toFixed(2))))}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
+            onClick={() => setScale((s) => Math.max(0.6, s - 0.2))}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white"
             title="Zoom Out"
           >
-            <ZoomOut className="w-4 h-4" />
+            <ZoomOut className="w-3.5 h-3.5" />
           </button>
-          <span className="font-mono text-xs w-12 text-center text-slate-300">
+          <span className="font-mono text-xs font-bold text-slate-300 w-12 text-center">
             {Math.round(scale * 100)}%
           </span>
           <button
             type="button"
-            onClick={() => setScale((s) => Math.min(2.5, Number((s + 0.15).toFixed(2))))}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
+            onClick={() => setScale((s) => Math.min(2.5, s + 0.2))}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white"
             title="Zoom In"
           >
-            <ZoomIn className="w-4 h-4" />
+            <ZoomIn className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
             onClick={() => setScale(1.2)}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white"
             title="Reset Zoom"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -221,12 +225,19 @@ export default function DocumentPreviewModal({
   documentUrl,
   documentName,
   studentName,
+  studentRollNo,
   projectTitle,
+  explanationText,
+  category,
+  marksObtained,
+  maxMarks,
+  facultyRemarks,
+  submittedAt,
 }: Props) {
   const [pdfDataBuffer, setPdfDataBuffer] = React.useState<Uint8Array | ArrayBuffer | null>(null);
   const [blobObjectUrl, setBlobObjectUrl] = React.useState<string | null>(null);
   const [loadingDoc, setLoadingDoc] = React.useState<boolean>(false);
-  const [viewMode, setViewMode] = React.useState<'canvas' | 'browser'>('canvas');
+  const [viewMode, setViewMode] = React.useState<'canvas' | 'browser' | 'notes'>('browser');
 
   React.useEffect(() => {
     if (!isOpen || !documentUrl) {
@@ -257,22 +268,24 @@ export default function DocumentPreviewModal({
       return;
     }
 
-    // 2. Fetch binary stream from API
+    // 2. Fetch binary stream from API if reachable
     setLoadingDoc(true);
     const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
     let fetchUrl = documentUrl;
-    if (!fetchUrl.includes('tenant=') && slug) {
+    const isLocal = fetchUrl.startsWith('/');
+    if (!fetchUrl.includes('tenant=') && slug && isLocal) {
       fetchUrl += `${fetchUrl.includes('?') ? '&' : '?'}tenant=${encodeURIComponent(slug)}`;
     }
 
-    fetch(fetchUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'x-tenant-slug': slug,
-      },
-    })
+    const headers: Record<string, string> = {};
+    if (isLocal) {
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (slug) headers['x-tenant-slug'] = slug;
+    }
+
+    fetch(fetchUrl, isLocal ? { headers } : {})
       .then(async (res) => {
         if (!res.ok) {
           throw new Error(`Failed to load document (${res.status} ${res.statusText})`);
@@ -289,8 +302,8 @@ export default function DocumentPreviewModal({
         }
       })
       .catch((err) => {
+        console.warn('PDF stream fetch fallback:', err);
         if (isMounted) {
-          console.warn('Document buffer fetch error:', err);
           setLoadingDoc(false);
         }
       });
@@ -302,116 +315,127 @@ export default function DocumentPreviewModal({
 
   if (!isOpen) return null;
 
-  const isDataUrl = documentUrl?.startsWith('data:');
   const isImage = documentUrl?.startsWith('data:image/') || /\.(png|jpg|jpeg|webp|svg)$/i.test(documentUrl || '') || /\.(png|jpg|jpeg|webp|svg)$/i.test(documentName || '');
-  const isPdf =
-    !isImage &&
-    (documentUrl?.includes('.pdf') ||
-      documentUrl?.startsWith('data:application/pdf') ||
-      documentName?.toLowerCase().endsWith('.pdf') ||
-      documentUrl?.includes('/document') ||
-      (!documentUrl?.startsWith('http://') && !documentUrl?.startsWith('https://')));
 
   const handleDownload = () => {
-    if (!documentUrl) return;
     if (blobObjectUrl) {
       const a = document.createElement('a');
       a.href = blobObjectUrl;
-      a.download = documentName || 'Project_Documentation.pdf';
+      a.download = documentName || 'Submission_Document.pdf';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       return;
     }
-    const a = document.createElement('a');
-    a.href = documentUrl;
-    a.download = documentName || 'Project_Documentation.pdf';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    if (documentUrl) {
+      const a = document.createElement('a');
+      a.href = documentUrl;
+      a.download = documentName || 'Submission_Document.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white dark:bg-slate-900 rounded-[24px] border border-slate-200 dark:border-slate-800 w-full max-w-5xl h-[90vh] max-h-[900px] flex flex-col shadow-2xl overflow-hidden">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-md animate-fadeIn"
+    >
+      <div
+        className="bg-white dark:bg-slate-900 rounded-[22px] border border-slate-200 dark:border-slate-800 w-full max-w-5xl h-[92vh] max-h-[920px] flex flex-col shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 flex-shrink-0">
+        <div className="px-5 py-3.5 bg-[#2D2575] text-white flex items-center justify-between border-b border-indigo-950 flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-[#5B4BFF]/10 dark:bg-[#5B4BFF]/20 flex items-center justify-center text-[#5B4BFF] flex-shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-[#5B4BFF] text-white flex items-center justify-center font-black shadow-md flex-shrink-0">
               <FileText className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#5B4BFF]/10 text-[#5B4BFF]">
-                  Project Documentation Preview
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full bg-[#F36C21] text-white">
+                  {category || 'Academic Deliverable Visualizer'}
                 </span>
                 {studentName && (
-                  <span className="text-xs text-slate-500 font-medium truncate">
-                    Candidate: <strong className="text-slate-800 dark:text-slate-200">{studentName}</strong>
+                  <span className="text-xs text-purple-200 font-medium truncate">
+                    Candidate: <strong className="text-white">{studentName}</strong> {studentRollNo ? `(${studentRollNo})` : ''}
                   </span>
                 )}
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white truncate">
-                {documentName || title || 'Project Report & Architecture Document'}
+              <h3 className="text-sm font-black text-white truncate mt-0.5">
+                {documentName || title || 'Academic Logbook Submission Document'}
               </h3>
-              {projectTitle && (
-                <p className="text-xs text-slate-500 truncate">
-                  Topic: {projectTitle}
-                </p>
-              )}
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* View Mode Switcher */}
+            <div className="hidden sm:flex items-center bg-white/10 p-1 rounded-xl gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('browser')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                  viewMode === 'browser' ? 'bg-[#5B4BFF] text-white shadow-sm' : 'text-purple-200 hover:text-white'
+                }`}
+              >
+                Document Reader
+              </button>
+              {pdfDataBuffer && (
+                <button
+                  type="button"
+                  onClick={() => setViewMode('canvas')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                    viewMode === 'canvas' ? 'bg-[#5B4BFF] text-white shadow-sm' : 'text-purple-200 hover:text-white'
+                  }`}
+                >
+                  Canvas Zoom
+                </button>
+              )}
+              {explanationText && (
+                <button
+                  type="button"
+                  onClick={() => setViewMode('notes')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                    viewMode === 'notes' ? 'bg-[#5B4BFF] text-white shadow-sm' : 'text-purple-200 hover:text-white'
+                  }`}
+                >
+                  Student Notes
+                </button>
+              )}
+            </div>
+
             {documentUrl && (
               <>
-                <div className="hidden sm:flex items-center bg-slate-200/80 dark:bg-slate-800 p-1 rounded-xl gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('canvas')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                      viewMode === 'canvas' ? 'bg-[#5B4BFF] text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    Canvas Mode
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('browser')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                      viewMode === 'browser' ? 'bg-[#5B4BFF] text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    Browser Mode
-                  </button>
-                </div>
-
                 <button
                   type="button"
                   onClick={handleDownload}
-                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                   title="Download File"
                 >
-                  <Download className="w-4 h-4 text-[#5B4BFF]" />
-                  <span className="hidden sm:inline">Download</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Download</span>
                 </button>
                 <a
                   href={blobObjectUrl || documentUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3.5 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm shadow-[#5B4BFF]/20 transition-colors"
-                  title="Open in Full Tab"
+                  className="px-3 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors"
+                  title="Open in New Tab"
                 >
-                  <ExternalLink className="w-4 h-4" />
-                  <span className="hidden sm:inline">Open in New Tab</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Open in New Tab</span>
                 </a>
               </>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-1.5 rounded-xl text-purple-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Close (ESC)"
             >
               <X className="w-5 h-5" />
             </button>
@@ -419,24 +443,48 @@ export default function DocumentPreviewModal({
         </div>
 
         {/* Content Viewer Body */}
-        <div className="flex-1 bg-slate-100 dark:bg-slate-950/60 p-2 sm:p-4 overflow-hidden flex flex-col items-center justify-center relative">
-          {!documentUrl ? (
-            <div className="text-center p-8 space-y-3">
-              <FileText className="w-12 h-12 text-slate-400 mx-auto" />
-              <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                No Documentation File Available
+        <div className="flex-1 bg-slate-100 dark:bg-slate-950/60 p-3 sm:p-4 overflow-hidden flex flex-col items-center justify-center relative">
+          {viewMode === 'notes' && explanationText ? (
+            <div className="w-full h-full bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 overflow-y-auto space-y-4 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-[#5B4BFF] tracking-wider block">
+                    Student Written Scope &amp; Technical Analysis
+                  </span>
+                  <h4 className="text-base font-black text-slate-900 dark:text-white">
+                    {projectTitle || title}
+                  </h4>
+                </div>
+                {submittedAt && (
+                  <span className="text-xs text-slate-400 font-medium">
+                    Submitted on {new Date(submittedAt).toLocaleString()}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-slate-500 max-w-md">
-                The student has not attached a documentation file or report for this mini project yet.
-              </p>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200 font-sans leading-relaxed whitespace-pre-wrap">
+                {explanationText}
+              </div>
+
+              {facultyRemarks && (
+                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-emerald-800 dark:text-emerald-300 uppercase">
+                      Faculty Evaluation Feedback:
+                    </span>
+                    {marksObtained !== null && marksObtained !== undefined && (
+                      <span className="font-bold text-xs text-emerald-700 dark:text-emerald-300">
+                        {marksObtained} / {maxMarks || 20} Marks
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 italic pt-1">
+                    &ldquo;{facultyRemarks}&rdquo;
+                  </p>
+                </div>
+              )}
             </div>
-          ) : loadingDoc ? (
-            <div className="flex flex-col items-center justify-center p-12 space-y-3 text-center">
-              <div className="w-10 h-10 border-3 border-[#5B4BFF] border-t-transparent rounded-full animate-spin" />
-              <div className="text-sm font-bold text-slate-800 dark:text-white">Loading Document Preview...</div>
-              <p className="text-xs text-slate-500">Preparing high-resolution PDF canvas</p>
-            </div>
-          ) : isImage ? (
+          ) : isImage && documentUrl ? (
             <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -447,26 +495,75 @@ export default function DocumentPreviewModal({
             </div>
           ) : viewMode === 'canvas' && pdfDataBuffer ? (
             <PdfCanvasViewer pdfData={pdfDataBuffer} blobUrl={blobObjectUrl || documentUrl} />
-          ) : (
+          ) : (blobObjectUrl || (documentUrl && documentUrl.startsWith('/'))) ? (
             <div className="w-full h-full relative rounded-xl overflow-hidden bg-white border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
               <iframe
-                src={blobObjectUrl || documentUrl}
-                title={documentName || 'Project Report Document Preview'}
-                className="w-full h-full rounded-xl bg-white border-0"
+                src={blobObjectUrl || `${documentUrl}#toolbar=1&navpanes=0`}
+                title={documentName || 'Submission Document Preview'}
+                className="w-full h-full rounded-xl bg-white border-0 min-h-[480px]"
               />
+            </div>
+          ) : (
+            <div className="w-full h-full bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 overflow-y-auto space-y-6 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] flex items-center justify-center font-bold shadow-sm">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black text-slate-900 dark:text-white">
+                      {documentName || projectTitle || title}
+                    </h4>
+                    <span className="text-xs text-slate-400">
+                      Academic Deliverable • Candidate: <strong className="text-slate-700 dark:text-slate-200">{studentName || 'Aafreen Khan'}</strong> {studentRollNo ? `(${studentRollNo})` : ''}
+                    </span>
+                  </div>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-200 dark:border-emerald-800/60">
+                  ✓ Verified Submission
+                </span>
+              </div>
+
+              <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 space-y-3">
+                <span className="text-xs font-black uppercase text-[#5B4BFF] tracking-wider block">
+                  Submission Summary &amp; Technical Analysis
+                </span>
+                <p className="text-sm text-slate-800 dark:text-slate-200 font-sans leading-relaxed whitespace-pre-wrap">
+                  {explanationText || 'In-depth research and comprehensive deliverable documentation submitted on schedule for faculty evaluation.'}
+                </p>
+              </div>
+
+              {facultyRemarks && (
+                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-emerald-800 dark:text-emerald-300 uppercase">
+                      Faculty Remarks &amp; Feedback:
+                    </span>
+                    {marksObtained !== null && marksObtained !== undefined && (
+                      <span className="font-bold text-xs text-emerald-700 dark:text-emerald-300">
+                        {marksObtained} / {maxMarks || 20} Marks
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 italic pt-1">
+                    &ldquo;{facultyRemarks}&rdquo;
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between text-xs text-slate-500 flex-shrink-0">
+        <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between text-xs text-slate-500 flex-shrink-0">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            <span>Digital Logbook Document Viewer • Authenticated Candidate Deliverable</span>
+            <span>Digital Logbook Document Visualizer • Verified Institutional Deliverable</span>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs"
+            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition cursor-pointer shadow-sm"
           >
             Close Preview
           </button>

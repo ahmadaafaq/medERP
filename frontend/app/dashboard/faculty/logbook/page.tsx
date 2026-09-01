@@ -37,6 +37,7 @@ import {
   Code2,
   Lock,
   Eye,
+  Paperclip,
 } from 'lucide-react';
 
 interface TopicItem {
@@ -65,6 +66,7 @@ interface SubmissionItem {
   photo_url?: string;
   course_name?: string;
   batch_name?: string;
+  topic_id?: string;
   topic_title: string;
   topic_type?: string;
   topic_description?: string;
@@ -72,6 +74,8 @@ interface SubmissionItem {
   category_name?: string;
   file_url?: string;
   file_name?: string;
+  attachment_url?: string;
+  attachment_name?: string;
   file_size?: string;
   explanation_text?: string;
   status: string;
@@ -100,7 +104,19 @@ export default function FacultyLogbookPage() {
 
   // Document preview state
   const [isDocPreviewOpen, setIsDocPreviewOpen] = useState(false);
-  const [docPreviewTarget, setDocPreviewTarget] = useState<{ url: string; name?: string; studentName?: string; projectTitle?: string } | null>(null);
+  const [docPreviewTarget, setDocPreviewTarget] = useState<{
+    url: string;
+    name?: string;
+    studentName?: string;
+    studentRollNo?: string;
+    projectTitle?: string;
+    explanationText?: string;
+    category?: string;
+    marksObtained?: number | null;
+    maxMarks?: number;
+    facultyRemarks?: string;
+    submittedAt?: string;
+  } | null>(null);
 
   // Modals
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -526,16 +542,31 @@ export default function FacultyLogbookPage() {
                             </td>
                             <td className="py-3.5 px-4">
                               <div className="font-semibold text-slate-800 dark:text-slate-200">{sub.topic_title}</div>
-                              {sub.file_url && (
-                                <a
-                                  href={sub.file_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-[11px] text-[#5B4BFF] hover:underline flex items-center gap-1 mt-0.5"
+                              {(sub.file_name || sub.file_url) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDocPreviewTarget({
+                                      url: sub.file_url || '',
+                                      name: sub.file_name || `${sub.topic_title || 'Submission'}.pdf`,
+                                      studentName: sub.student_name,
+                                      studentRollNo: sub.rollno || sub.registration_no,
+                                      projectTitle: sub.topic_title,
+                                      explanationText: sub.explanation_text,
+                                      category: 'Topic Deliverable',
+                                      marksObtained: sub.marks_obtained,
+                                      maxMarks: sub.max_marks || 20,
+                                      facultyRemarks: sub.remarks,
+                                      submittedAt: sub.submitted_at,
+                                    });
+                                    setIsDocPreviewOpen(true);
+                                  }}
+                                  className="text-[11px] font-bold text-[#F36C21] hover:text-[#D95510] hover:underline flex items-center gap-1 mt-0.5 cursor-pointer text-left"
+                                  title="Click to read document in popup preview modal"
                                 >
-                                  <span>{sub.file_name || 'View Attachment'}</span>
+                                  <span>{sub.file_name || 'View Deliverable'}</span>
                                   <ExternalLink className="w-3 h-3" />
-                                </a>
+                                </button>
                               )}
                             </td>
                             <td className="py-3.5 px-4 text-slate-500">
@@ -623,8 +654,10 @@ export default function FacultyLogbookPage() {
 
                 {/* List of Seminar & Tutorial Topics */}
                 {topics.filter((t) => {
-                  const isSem = t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar');
-                  const isTut = t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial');
+                  const cat = (t.category_code || t.category_name || '').toUpperCase();
+                  const title = (t.title || '').toLowerCase();
+                  const isSem = cat.includes('SEMINAR') || title.includes('gen ai') || title.includes('topology') || title.includes('seminar') || (!cat.includes('TUTORIAL') && !title.includes('tutorial'));
+                  const isTut = cat.includes('TUTORIAL') || title.includes('tutorial') || title.includes('problem');
                   if (topicTypeFilter === 'SEMINAR') return isSem;
                   if (topicTypeFilter === 'TUTORIAL') return isTut;
                   return true;
@@ -646,14 +679,18 @@ export default function FacultyLogbookPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {topics
                       .filter((t) => {
-                        const isSem = t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar');
-                        const isTut = t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial');
+                        const cat = (t.category_code || t.category_name || '').toUpperCase();
+                        const title = (t.title || '').toLowerCase();
+                        const isSem = cat.includes('SEMINAR') || title.includes('gen ai') || title.includes('topology') || title.includes('seminar') || (!cat.includes('TUTORIAL') && !title.includes('tutorial'));
+                        const isTut = cat.includes('TUTORIAL') || title.includes('tutorial') || title.includes('problem');
                         if (topicTypeFilter === 'SEMINAR') return isSem;
                         if (topicTypeFilter === 'TUTORIAL') return isTut;
                         return true;
                       })
                       .map((t) => {
-                        const isSem = t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar');
+                        const cat = (t.category_code || t.category_name || '').toUpperCase();
+                        const title = (t.title || '').toLowerCase();
+                        const isSem = cat.includes('SEMINAR') || title.includes('gen ai') || title.includes('topology') || title.includes('seminar') || (!cat.includes('TUTORIAL') && !title.includes('tutorial'));
                         return (
                           <div
                             key={t.id}
@@ -706,6 +743,57 @@ export default function FacultyLogbookPage() {
                                   </span>
                                 )}
                               </div>
+
+                              {/* Submitted Attachment Preview Pills */}
+                              {(() => {
+                                const topicSubs = submissions.filter(
+                                  (s) => String(s.topic_id || s.id) === String(t.id) || s.topic_title?.toLowerCase() === t.title?.toLowerCase()
+                                );
+                                const subsWithFiles = topicSubs.filter((s) => Boolean(s.file_url || s.file_name || s.attachment_url || s.attachment_name));
+                                if (subsWithFiles.length === 0) return null;
+                                return (
+                                  <div className="pt-2 pb-1 space-y-1.5 border-t border-dashed border-slate-200 dark:border-slate-800">
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                                      <Paperclip className="w-3 h-3 text-[#5B4BFF]" />
+                                      <span>Attached Files ({subsWithFiles.length}):</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {subsWithFiles.map((sub, sIdx) => {
+                                        const fName = sub.file_name || sub.attachment_name || `${t.title}_Document.pdf`;
+                                        const fUrl = sub.file_url || sub.attachment_url || '';
+                                        return (
+                                          <button
+                                            key={sub.id || sIdx}
+                                            type="button"
+                                            onClick={() => {
+                                              setDocPreviewTarget({
+                                                url: fUrl,
+                                                name: fName,
+                                                studentName: sub.student_name,
+                                                studentRollNo: sub.rollno || sub.registration_no,
+                                                projectTitle: t.title,
+                                                explanationText: sub.explanation_text,
+                                                category: 'Seminar / Tutorial Deliverable',
+                                                marksObtained: sub.marks_obtained,
+                                                maxMarks: t.max_marks || 20,
+                                                facultyRemarks: sub.remarks,
+                                                submittedAt: sub.submitted_at,
+                                              });
+                                              setIsDocPreviewOpen(true);
+                                            }}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/40 text-[#F36C21] border border-orange-200 dark:border-orange-800 text-[11px] font-bold transition-all cursor-pointer"
+                                            title="Click to preview submitted document in popup modal"
+                                          >
+                                            <FileText className="w-3.5 h-3.5" />
+                                            <span className="max-w-[140px] truncate">{fName}</span>
+                                            <Eye className="w-3 h-3 ml-0.5 opacity-80" />
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
 
                             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
@@ -1220,11 +1308,18 @@ export default function FacultyLogbookPage() {
       <DocumentPreviewModal
         isOpen={isDocPreviewOpen}
         onClose={() => setIsDocPreviewOpen(false)}
-        title="Candidate Project Documentation Report"
+        title="Academic Logbook Submission Document Visualizer"
         documentUrl={docPreviewTarget?.url}
         documentName={docPreviewTarget?.name}
         studentName={docPreviewTarget?.studentName}
+        studentRollNo={docPreviewTarget?.studentRollNo}
         projectTitle={docPreviewTarget?.projectTitle}
+        explanationText={docPreviewTarget?.explanationText}
+        category={docPreviewTarget?.category}
+        marksObtained={docPreviewTarget?.marksObtained}
+        maxMarks={docPreviewTarget?.maxMarks}
+        facultyRemarks={docPreviewTarget?.facultyRemarks}
+        submittedAt={docPreviewTarget?.submittedAt}
       />
     </div>
   );

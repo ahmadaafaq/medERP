@@ -44,10 +44,10 @@ export default function ChatWorkspace({ role = 'FACULTY' }: ChatWorkspaceProps) 
   }, []);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)] rounded-[22px] overflow-hidden bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-xl shadow-purple-950/5 font-sans">
+    <div className="flex flex-col h-[calc(100vh-95px)] sm:h-[calc(100vh-110px)] md:h-[calc(100vh-120px)] rounded-2xl md:rounded-[22px] overflow-hidden bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-xl shadow-purple-950/5 font-sans">
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Left Sidebar */}
-        <div className={`w-full sm:w-80 md:w-96 shrink-0 h-full ${selectedGroup ? 'hidden sm:flex' : 'flex'}`}>
+        {/* Left Sidebar (Batch Groups List) */}
+        <div className={`w-full md:w-80 lg:w-96 shrink-0 h-full ${selectedGroup ? 'hidden md:flex' : 'flex'}`}>
           <ChatSidebar
             groups={groups}
             selectedGroup={selectedGroup}
@@ -64,7 +64,7 @@ export default function ChatWorkspace({ role = 'FACULTY' }: ChatWorkspaceProps) 
         </div>
 
         {/* Right Chat Thread & Composer Area */}
-        <div className={`flex-1 flex-col min-w-0 h-full bg-[#F6F8FC] dark:bg-slate-900/60 overflow-hidden ${selectedGroup ? 'flex' : 'hidden sm:flex'}`}>
+        <div className={`flex-1 flex-col min-w-0 h-full bg-[#F6F8FC] dark:bg-slate-900/60 overflow-hidden ${selectedGroup ? 'flex' : 'hidden md:flex'}`}>
           <ChatThread
             group={selectedGroup}
             messages={messages}

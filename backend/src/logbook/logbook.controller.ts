@@ -134,6 +134,19 @@ export class LogbookController {
     return this.logbookService.streamProjectDocument(tenantSlug, id, queryStudentId, res);
   }
 
+  @Public()
+  @Get('submission/:id/document')
+  @ApiOperation({ summary: 'Stream and view/download seminar/topic submission document' })
+  async downloadSubmissionDocument(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @Query('tenant') queryTenant: string,
+    @Res() res: Response,
+  ) {
+    const slug = queryTenant || tenantSlug || 'srms-cet-bareilly';
+    return this.logbookService.streamSubmissionDocument(slug, id, res);
+  }
+
   @Delete('mini-project/:id/document')
   @ApiOperation({ summary: 'Delete attached project documentation file from disk and database' })
   async deleteProjectDocument(

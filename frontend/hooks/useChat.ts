@@ -164,9 +164,11 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
         const totalUnread = list.reduce((acc, g) => acc + (g.unread_count || 0), 0);
         setUnreadTotal(totalUnread);
 
-        // Auto select first group if none selected
+        // Auto select first group on desktop (screen width >= 768px) if none selected
         if (!activeGroupRef.current && list.length > 0) {
-          setSelectedGroup(list[0]);
+          if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+            setSelectedGroup(list[0]);
+          }
         } else if (activeGroupRef.current) {
           const matched = list.find((g) => g.id === activeGroupRef.current);
           if (matched) {
