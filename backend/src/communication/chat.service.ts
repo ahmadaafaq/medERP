@@ -327,11 +327,11 @@ export class ChatService implements OnModuleInit {
 
         if (hasJoined) {
           params.push(userId);
-          whereConditions.push(`EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id = g.id AND m.user_id::text = $${params.length})`);
+          whereConditions.push(`EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${params.length})`);
         } else if (facultyDeptId) {
           params.push(userId, facultyDeptId);
           whereConditions.push(`(
-            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id = g.id AND m.user_id::text = $${params.length - 1})
+            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${params.length - 1})
             OR g.department_id::text = $${params.length}::text
           )`);
         }
@@ -352,7 +352,7 @@ export class ChatService implements OnModuleInit {
           const sYear = String(stu.batch_year || stu.admission_year || '2025');
           params.push(userId, stu.department_id, sYear);
           whereConditions.push(`(
-            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id = g.id AND m.user_id::text = $${params.length - 2})
+            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${params.length - 2})
             OR (g.department_id::text = $${params.length - 1}::text AND g.batch_year::text = $${params.length}::text)
           )`);
         } else {
@@ -365,7 +365,7 @@ export class ChatService implements OnModuleInit {
           const hasJoined = parseInt(joinedCount[0]?.count || '0', 10) > 0;
           if (hasJoined) {
             params.push(userId);
-            whereConditions.push(`EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id = g.id AND m.user_id::text = $${params.length})`);
+            whereConditions.push(`EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${params.length})`);
           }
         }
       }

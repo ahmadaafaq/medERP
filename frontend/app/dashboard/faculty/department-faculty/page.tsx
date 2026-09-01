@@ -16,6 +16,44 @@ interface FacultyMember {
   experience: string;
 }
 
+const DepartmentFacultySkeleton = () => (
+  <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 animate-pulse">
+    {[...Array(6)].map((_, i) => (
+      <div
+        key={i}
+        className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 space-y-4 shadow-soft"
+      >
+        <div className="flex items-start gap-4">
+          <div className="w-14 h-14 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0" />
+          <div className="space-y-2 min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-lg w-36" />
+              <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-full w-20" />
+            </div>
+            <div className="h-3.5 bg-slate-100 dark:bg-slate-800/60 rounded w-28" />
+            <div className="h-3 bg-slate-100 dark:bg-slate-800/60 rounded w-40" />
+          </div>
+        </div>
+
+        <div className="border-t border-[#E7EAF3] dark:border-slate-800 pt-3 space-y-2.5">
+          <div className="flex justify-between items-center">
+            <div className="h-3 bg-slate-100 dark:bg-slate-800/60 rounded w-20" />
+            <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-44" />
+          </div>
+          <div className="flex justify-between items-center">
+            <div className="h-3 bg-slate-100 dark:bg-slate-800/60 rounded w-24" />
+            <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-32" />
+          </div>
+          <div className="flex justify-between items-center">
+            <div className="h-3 bg-slate-100 dark:bg-slate-800/60 rounded w-16" />
+            <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-20" />
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 export default function DepartmentFacultyPage() {
   const [colleagues, setColleagues] = useState<FacultyMember[]>([]);
   const [deptName, setDeptName] = useState<string>('Department');
@@ -124,9 +162,7 @@ export default function DepartmentFacultyPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {loading ? (
-              <div className="col-span-2 bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-12 text-center text-[#4E5969] dark:text-slate-400 animate-pulse text-xs font-bold">
-                Loading Department Faculty...
-              </div>
+              <DepartmentFacultySkeleton />
             ) : colleagues.map((fac) => (
               <div key={fac.id} className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 space-y-4 shadow-soft hover:shadow-md transition-all">
                 <div className="flex items-start gap-4">

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { Users, Sparkles, MessageSquare, Clock, CheckCheck, ShieldCheck } from 'lucide-react';
+import { Users, Sparkles, MessageSquare, Clock, CheckCheck, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { ChatMessage, ChatGroup } from '../../hooks/useChat';
 import ChatAttachmentChip from './ChatAttachmentChip';
 
@@ -10,6 +10,7 @@ interface ChatThreadProps {
   messages: ChatMessage[];
   loading: boolean;
   onOpenMembers: () => void;
+  onBack?: () => void;
   currentUserId?: string;
   currentUserRole?: string;
 }
@@ -19,6 +20,7 @@ export default function ChatThread({
   messages,
   loading,
   onOpenMembers,
+  onBack,
   currentUserId,
   currentUserRole,
 }: ChatThreadProps) {
@@ -85,8 +87,19 @@ export default function ChatThread({
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#F6F8FC]/50 dark:bg-slate-900/40 overflow-hidden">
       {/* Thread Header */}
-      <div className="h-16 px-6 bg-white dark:bg-slate-900 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between shrink-0 shadow-xs z-10">
-        <div className="flex items-center gap-3.5 min-w-0">
+      <div className="h-16 px-4 sm:px-6 bg-white dark:bg-slate-900 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between shrink-0 shadow-xs z-10">
+        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="sm:hidden p-2 -ml-1 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-200 border border-[#E7EAF3] dark:border-slate-700 hover:bg-orange-50 hover:text-[#F36C21] transition-all cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0"
+              title="Back to Batches"
+            >
+              <ArrowLeft className="w-4 h-4 text-[#F36C21]" />
+            </button>
+          )}
+
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#F36C21] to-amber-500 text-white flex items-center justify-center font-black text-sm shadow-md shadow-orange-500/20 shrink-0">
             {group.batch_year ? group.batch_year.slice(-2) : '25'}
           </div>

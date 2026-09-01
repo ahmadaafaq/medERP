@@ -90,7 +90,7 @@ export class TimetableService implements OnModuleInit {
       params.push(query.departmentId);
       const pIdx = params.length;
       if (this.isUUID(query.departmentId)) {
-        sql += ` AND (ts.department_id = $${pIdx} OR f.department_id = $${pIdx} OR s.department_id = $${pIdx})`;
+        sql += ` AND (ts.department_id::text = $${pIdx}::text OR f.department_id::text = $${pIdx}::text OR s.department_id::text = $${pIdx}::text)`;
       } else {
         sql += ` AND (
           d.code = $${pIdx} OR d.branch_cd = $${pIdx} OR d.id::text = $${pIdx} OR d.name ILIKE '%' || $${pIdx} || '%'
@@ -105,9 +105,9 @@ export class TimetableService implements OnModuleInit {
       params.push(query.facultyId);
       const pIdx = params.length;
       if (this.isUUID(query.facultyId)) {
-        sql += ` AND (ts.faculty_id = $${pIdx} OR f.id = $${pIdx})`;
+        sql += ` AND (ts.faculty_id::text = $${pIdx}::text OR f.id::text = $${pIdx}::text OR f.emp_id::text = $${pIdx}::text)`;
       } else {
-        sql += ` AND (f.emp_id = $${pIdx} OR f.id::text = $${pIdx} OR f.name ILIKE '%' || $${pIdx} || '%')`;
+        sql += ` AND (f.emp_id::text = $${pIdx}::text OR f.id::text = $${pIdx}::text OR f.name ILIKE '%' || $${pIdx} || '%')`;
       }
     }
 
@@ -115,9 +115,9 @@ export class TimetableService implements OnModuleInit {
       params.push(query.subjectId);
       const pIdx = params.length;
       if (this.isUUID(query.subjectId)) {
-        sql += ` AND (ts.subject_id = $${pIdx} OR s.id = $${pIdx})`;
+        sql += ` AND (ts.subject_id::text = $${pIdx}::text OR s.id::text = $${pIdx}::text)`;
       } else {
-        sql += ` AND (s.code = $${pIdx} OR s.id::text = $${pIdx} OR s.name ILIKE '%' || $${pIdx} || '%')`;
+        sql += ` AND (s.code::text = $${pIdx}::text OR s.id::text = $${pIdx}::text OR s.name ILIKE '%' || $${pIdx} || '%')`;
       }
     }
 
@@ -125,7 +125,7 @@ export class TimetableService implements OnModuleInit {
       params.push(query.batchId);
       const pIdx = params.length;
       if (this.isUUID(query.batchId)) {
-        sql += ` AND (ts.batch_id = $${pIdx} OR b.id = $${pIdx})`;
+        sql += ` AND (ts.batch_id::text = $${pIdx}::text OR b.id::text = $${pIdx}::text)`;
       } else {
         sql += ` AND (b.year::text = $${pIdx} OR b.code = $${pIdx} OR b.name = $${pIdx} OR b.name ILIKE '%' || $${pIdx} || '%' OR ts.batch_id::text = $${pIdx} OR ts.batch_cd = $${pIdx})`;
       }
@@ -303,7 +303,7 @@ export class TimetableService implements OnModuleInit {
       sessionParams.push(query.facultyId);
       const pIdx = sessionParams.length;
       if (this.isUUID(query.facultyId)) {
-        sessionWhere.push(`(s.faculty_id = $${pIdx} OR ts.faculty_id = $${pIdx})`);
+        sessionWhere.push(`(s.faculty_id::text = $${pIdx}::text OR ts.faculty_id::text = $${pIdx}::text)`);
       } else {
         sessionWhere.push(`(f.emp_id = $${pIdx} OR f.id::text = $${pIdx} OR f.name ILIKE '%' || $${pIdx} || '%')`);
       }

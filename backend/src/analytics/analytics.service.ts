@@ -55,12 +55,12 @@ export class AnalyticsService {
     const todayDateStr = todayDate.toISOString().split('T')[0];
     const todayDisplayDate = todayDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-    const punchLogs = await this.tenantSchemaService.queryInTenant(
+     const punchLogs = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT fp.id, fp.punch_time, fp.punch_type, fp.device_id,
               f.name as faculty_name, f.emp_id as faculty_code
        FROM faculty_punch_logs fp
-       LEFT JOIN faculty f ON f.id = fp.faculty_id
+       LEFT JOIN faculty f ON f.id::text = fp.faculty_id::text
        WHERE DATE(fp.punch_time) = CURRENT_DATE
        ORDER BY fp.punch_time ASC`
     ).catch(() => []);
@@ -90,8 +90,8 @@ export class AnalyticsService {
               s.name as student_name, s.rollno as roll_no,
               ep.name as paper_name, ep.code as paper_code, COALESCE(ep.max_marks, 100) as max_marks
        FROM "${schema}".student_results sr
-       LEFT JOIN "${schema}".students s ON s.id = sr.student_id
-       LEFT JOIN "${schema}".examination_papers ep ON ep.id = sr.paper_id
+       LEFT JOIN "${schema}".students s ON s.id::text = sr.student_id::text
+       LEFT JOIN "${schema}".examination_papers ep ON ep.id::text = sr.paper_id::text
        WHERE sr.eval_status = 'EVALUATED' OR sr.marks_obtained IS NOT NULL
        ORDER BY sr.created_at DESC
        LIMIT 10`
@@ -120,33 +120,49 @@ export class AnalyticsService {
     const departmentName = deptInfo[0]?.name || `${college.name} Academic Department`;
 
     const timetableRows = await this.ds.query(
-      `SELECT ts.id, ts.day_of_week, ts.start_time, ts.end_time, ts.room,
+      `SELECT DISTINCT ON (ts.day_of_week, ts.start_time, ts.subject_id, ts.faculty_id, ts.room)
+              ts.id, ts.day_of_week, ts.start_time, ts.end_time, ts.room,
               s.name as subject_name, s.code as subject_code,
               f.name as faculty_name, f.emp_id as faculty_code,
               d.name as department_name
        FROM "${schema}".timetable_slots ts
-       LEFT JOIN "${schema}".subjects s ON s.id = ts.subject_id
-       LEFT JOIN "${schema}".faculty f ON f.id = ts.faculty_id
-       LEFT JOIN "${schema}".departments d ON d.id = ts.department_id
-       ORDER BY ts.day_of_week, ts.start_time
+       LEFT JOIN "${schema}".subjects s ON s.id::text = ts.subject_id::text
+       LEFT JOIN "${schema}".faculty f ON f.id::text = ts.faculty_id::text
+       LEFT JOIN "${schema}".departments d ON d.id::text = ts.department_id::text
+       ORDER BY ts.day_of_week, ts.start_time, ts.subject_id, ts.faculty_id, ts.room, ts.id DESC
        LIMIT 20`
     ).catch(() => []);
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const formattedSlots = timetableRows.map((r: any) => ({
-      id: r.id,
-      dayName: dayNames[Number(r.day_of_week)] || `Day ${r.day_of_week}`,
-      dayOfWeek: Number(r.day_of_week),
-      startTime: String(r.start_time || '09:00').slice(0, 5),
-      endTime: String(r.end_time || '10:00').slice(0, 5),
-      timeRange: `${String(r.start_time || '09:00').slice(0, 5)} - ${String(r.end_time || '10:00').slice(0, 5)}`,
-      subjectName: r.subject_name || 'Subject Lecture',
-      subjectCode: r.subject_code || 'SUB',
-      facultyName: r.faculty_name || 'Faculty Member',
-      facultyCode: r.faculty_code || 'FAC',
-      room: r.room || 'Lecture Hall',
-      departmentName: r.department_name || departmentName,
-    }));
+    const seenSlotKeys = new Set<string>();
+    const formattedSlots: any[] = [];
+
+    for (const r of timetableRows) {
+      const dayName = dayNames[Number(r.day_of_week)] || `Day ${r.day_of_week}`;
+      const timeRange = `${String(r.start_time || '09:00').slice(0, 5)} - ${String(r.end_time || '10:00').slice(0, 5)}`;
+      const subjectName = r.subject_name || 'Subject Lecture';
+      const facultyName = r.faculty_name || 'Faculty Member';
+      const room = r.room || 'Lecture Hall';
+
+      const slotKey = `${r.day_of_week}_${timeRange}_${subjectName}_${facultyName}_${room}`;
+      if (seenSlotKeys.has(slotKey)) continue;
+      seenSlotKeys.add(slotKey);
+
+      formattedSlots.push({
+        id: r.id,
+        dayName,
+        dayOfWeek: Number(r.day_of_week),
+        startTime: String(r.start_time || '09:00').slice(0, 5),
+        endTime: String(r.end_time || '10:00').slice(0, 5),
+        timeRange,
+        subjectName,
+        subjectCode: r.subject_code || 'SUB',
+        facultyName,
+        facultyCode: r.faculty_code || 'FAC',
+        room,
+        departmentName: r.department_name || departmentName,
+      });
+    }
 
     return {
       success: true,

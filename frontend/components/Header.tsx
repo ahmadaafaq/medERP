@@ -640,24 +640,24 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
 
                 {/* Additional Metadata Subtitle */}
                 {(user?.designation || user?.departmentName || user?.courseCd) && (
-                  <div className="py-2.5 px-3 my-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-[#E5E8ED] dark:border-slate-800 text-xs space-y-1">
+                  <div className="p-3 my-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-2">
                     {user.designation && (
-                      <p className="text-slate-700 dark:text-slate-300 font-medium flex justify-between">
-                        <span className="text-slate-500 dark:text-slate-400">Designation:</span>
-                        <span className="font-bold text-[#11141A] dark:text-white">{user.designation}</span>
-                      </p>
+                      <div className="grid grid-cols-[85px_1fr] items-start gap-2 min-w-0">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium text-[11px] shrink-0 pt-0.5">Designation:</span>
+                        <span className="font-bold text-[#11141A] dark:text-white leading-snug text-right break-words min-w-0">{user.designation}</span>
+                      </div>
                     )}
                     {user.departmentName && (
-                      <p className="text-slate-700 dark:text-slate-300 font-medium flex justify-between">
-                        <span className="text-slate-500 dark:text-slate-400">Department:</span>
-                        <span className="font-bold text-[#11141A] dark:text-white">{user.departmentName}</span>
-                      </p>
+                      <div className="grid grid-cols-[85px_1fr] items-start gap-2 min-w-0">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium text-[11px] shrink-0 pt-0.5">Department:</span>
+                        <span className="font-bold text-[#11141A] dark:text-white leading-snug text-right break-words min-w-0">{user.departmentName}</span>
+                      </div>
                     )}
                     {user.courseCd && (
-                      <p className="text-slate-700 dark:text-slate-300 font-medium flex justify-between">
-                        <span className="text-slate-500 dark:text-slate-400">Course / Batch:</span>
-                        <span className="font-bold text-[#11141A] dark:text-white">{user.courseCd} ({user.batchCd || 'Current'})</span>
-                      </p>
+                      <div className="grid grid-cols-[85px_1fr] items-start gap-2 min-w-0">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium text-[11px] shrink-0 pt-0.5">Course/Batch:</span>
+                        <span className="font-bold text-[#11141A] dark:text-white leading-snug text-right break-words min-w-0">{user.courseCd} ({user.batchCd || 'Current'})</span>
+                      </div>
                     )}
                   </div>
                 )}

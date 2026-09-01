@@ -272,8 +272,8 @@ export default function FacultySchedulePage() {
                       type="button"
                       onClick={() => setSelectedDay(dayNum)}
                       className={`px-3.5 py-1.5 rounded-lg transition-all font-black ${isSelected
-                        ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/20'
-                        : 'text-[#4E5969] dark:text-slate-400 hover:text-[#1B1E28] dark:hover:text-white hover:bg-[#EEECFF]'
+                        ? 'bg-[#F36C21] text-white shadow-md shadow-[#F36C21]/20'
+                        : 'text-[#4E5969] dark:text-slate-400 hover:text-[#F36C21] dark:hover:text-white hover:bg-[#FFF4EC] dark:hover:bg-orange-950/40'
                         }`}
                     >
                       {dayName}
@@ -302,8 +302,8 @@ export default function FacultySchedulePage() {
                     type="button"
                     onClick={() => setSelectedType(tab.key)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${isTabActive
-                      ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/25 scale-[1.02]'
-                      : 'bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-[#EEECFF] dark:hover:bg-slate-700 hover:text-[#5B4BFF] border border-[#E7EAF3] dark:border-slate-700'
+                      ? 'bg-[#F36C21] text-white shadow-md shadow-[#F36C21]/25 scale-[1.02]'
+                      : 'bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 hover:bg-[#FFF4EC] dark:hover:bg-orange-950/40 hover:text-[#F36C21] border border-[#E7EAF3] dark:border-slate-700'
                       }`}
                   >
                     <span>{tab.icon}</span>

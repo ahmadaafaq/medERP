@@ -1204,7 +1204,7 @@ export class StudentMasterService {
           // 1. Admissions Table
           const admCheck = await this.tenantSchemaService.queryInTenant(
             slug,
-            `SELECT id FROM "${schema}".student_admissions WHERE student_id = $1 LIMIT 1`,
+            `SELECT student_id FROM "${schema}".student_admissions WHERE student_id = $1 LIMIT 1`,
             [studentId],
           ).catch(() => []);
 
@@ -1253,7 +1253,7 @@ export class StudentMasterService {
           if (s.father_name || s.mother_name) {
             const pCheck = await this.tenantSchemaService.queryInTenant(
               slug,
-              `SELECT id FROM "${schema}".student_parents WHERE student_id = $1 LIMIT 1`,
+              `SELECT student_id FROM "${schema}".student_parents WHERE student_id = $1 LIMIT 1`,
               [studentId],
             ).catch(() => []);
             if (pCheck.length > 0) {
@@ -1275,7 +1275,7 @@ export class StudentMasterService {
           if (s.city || s.state || s.address) {
             const aCheck = await this.tenantSchemaService.queryInTenant(
               slug,
-              `SELECT id FROM "${schema}".student_addresses WHERE student_id = $1 LIMIT 1`,
+              `SELECT student_id FROM "${schema}".student_addresses WHERE student_id = $1 LIMIT 1`,
               [studentId],
             ).catch(() => []);
             if (aCheck.length > 0) {
@@ -1297,7 +1297,7 @@ export class StudentMasterService {
           if (photoUrl) {
             const dCheck = await this.tenantSchemaService.queryInTenant(
               slug,
-              `SELECT id FROM "${schema}".student_documents WHERE student_id = $1 LIMIT 1`,
+              `SELECT student_id FROM "${schema}".student_documents WHERE student_id = $1 LIMIT 1`,
               [studentId],
             ).catch(() => []);
             if (dCheck.length > 0) {
@@ -1335,12 +1335,12 @@ export class StudentMasterService {
         WITH student_base AS (
           SELECT DISTINCT ON (COALESCE(s.registration_no, s.rollno, s.id::text))
                  s.id, s.name, s.rollno, s.registration_no, s.course_cd, s.batch_cd, s.photo_url, s.user_id::text AS user_id,
-                 COALESCE(s.attendance_percentage, 0) AS srms_attd_pct,
+                 0 AS srms_attd_pct,
                  c.name AS course_name,
                  COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, 'Batch ' || s.batch_cd, s.batch_cd) AS batch_name
           FROM "${schema}".students s
-          LEFT JOIN "${schema}".courses c ON c.course_cd = s.course_cd
-          LEFT JOIN "${schema}".batches b ON (b.id = s.batch_id OR (b.batch_cd = s.batch_cd AND b.course_cd = s.course_cd))
+          LEFT JOIN "${schema}".courses c ON (c.course_cd::text = s.course_cd::text OR c.id::text = s.course_cd::text)
+          LEFT JOIN "${schema}".batches b ON (b.id::text = s.batch_id::text OR (b.batch_cd::text = s.batch_cd::text AND b.course_cd::text = s.course_cd::text))
           ORDER BY COALESCE(s.registration_no, s.rollno, s.id::text), s.id DESC
         ),
         repo_metrics AS (
@@ -1349,20 +1349,20 @@ export class StudentMasterService {
                  r.student_reg_no,
                  r.student_name,
                  r.title AS project_title,
-                 COALESCE(r.score, 0) AS project_score,
+                 COALESCE(NULLIF(regexp_replace(r.score::text, '[^0-9.]', '', 'g'), '')::numeric, 0) AS project_score,
                  COALESCE(r.grade, 'N/A') AS project_grade,
                  r.incubation_status,
-                 COALESCE(r.funding_amount, 0) AS funding_amount,
+                 COALESCE(NULLIF(regexp_replace(r.funding_amount::text, '[^0-9.]', '', 'g'), '')::numeric, 0) AS funding_amount,
                  (r.incubation_status IN ('Incubated', 'Selected', 'Funded')) AS is_incubated
           FROM "${schema}".repositories r
-          ORDER BY COALESCE(r.student_reg_no, r.student_name), r.score DESC NULLS LAST
+          ORDER BY COALESCE(r.student_reg_no, r.student_name), NULLIF(regexp_replace(r.score::text, '[^0-9.]', '', 'g'), '')::numeric DESC NULLS LAST
         ),
         exam_metrics AS (
           SELECT sr.student_id,
                  MAX(ep.name) AS exam_name,
-                 ROUND(AVG((sr.marks_obtained / NULLIF(ep.max_marks, 0)) * 100), 1) AS theory_pct
+                 ROUND(AVG((NULLIF(regexp_replace(sr.marks_obtained::text, '[^0-9.]', '', 'g'), '')::numeric / NULLIF(NULLIF(regexp_replace(ep.max_marks::text, '[^0-9.]', '', 'g'), '')::numeric, 0)) * 100), 1) AS theory_pct
           FROM "${schema}".student_results sr
-          JOIN "${schema}".examination_papers ep ON ep.id = sr.paper_id
+          JOIN "${schema}".examination_papers ep ON ep.id::text = sr.paper_id::text
           GROUP BY sr.student_id
         ),
         att_metrics AS (
@@ -1383,7 +1383,7 @@ export class StudentMasterService {
             p.student_id,
             COUNT(p.id) AS mini_projects_count,
             MAX(p.title) AS mini_project_title,
-            MAX(COALESCE(p.final_percentage, p.guide_marks, 0)) AS mini_project_score,
+            MAX(COALESCE(NULLIF(regexp_replace(p.final_percentage::text, '[^0-9.]', '', 'g'), '')::numeric, NULLIF(regexp_replace(p.guide_marks::text, '[^0-9.]', '', 'g'), '')::numeric, 0)) AS mini_project_score,
             MAX(COALESCE(p.final_grade, 'A')) AS mini_project_grade,
             MAX(COALESCE(p.project_status, 'IN_PROGRESS')) AS mini_project_status,
             COALESCE(MAX(wl.logs_count), 0) AS mini_project_logs_count,
@@ -1412,8 +1412,8 @@ export class StudentMasterService {
                COALESCE(mpm.has_mini_project, false) AS has_mini_project,
                em.theory_pct,
                em.exam_name,
-               ROUND(COALESCE(am.attendance_pct, sb.srms_attd_pct, 0)::numeric, 1) AS attendance_pct,
-               COALESCE(am.total_classes, CASE WHEN sb.srms_attd_pct > 0 THEN 1 ELSE 0 END) AS total_classes,
+               ROUND(COALESCE(am.attendance_pct, sb.srms_attd_pct::numeric, 0), 1) AS attendance_pct,
+               COALESCE(am.total_classes, CASE WHEN sb.srms_attd_pct::numeric > 0 THEN 1 ELSE 0 END) AS total_classes,
                COALESCE(cm.chat_count, 0) AS chat_count,
                (COALESCE(cm.chat_count, 0) > 0) AS is_chat_active,
                ROUND(
@@ -1421,7 +1421,7 @@ export class StudentMasterService {
                    COALESCE(rm.project_score * 0.35, 0) +
                    COALESCE(mpm.mini_project_score * 0.15, 0) +
                    COALESCE(em.theory_pct * 0.35, 0) +
-                   COALESCE(COALESCE(am.attendance_pct, sb.srms_attd_pct, 0) * 0.10, 0) +
+                   COALESCE(COALESCE(am.attendance_pct, sb.srms_attd_pct::numeric, 0) * 0.10, 0) +
                    CASE WHEN rm.incubation_status = 'Incubated' THEN 10
                         WHEN rm.incubation_status IN ('Selected', 'Funded') THEN 8
                         WHEN rm.incubation_status = 'Under Review' THEN 4
@@ -1435,7 +1435,7 @@ export class StudentMasterService {
         LEFT JOIN exam_metrics em ON em.student_id::text = sb.id::text
         LEFT JOIN att_metrics am ON am.student_id::text = sb.id::text
         LEFT JOIN chat_metrics cm ON cm.sender_id::text = sb.user_id::text
-        WHERE (rm.project_score > 0 OR em.theory_pct > 0 OR sb.srms_attd_pct > 0 OR am.total_classes > 0 OR rm.incubation_status IS NOT NULL OR mpm.has_mini_project = true)
+        WHERE (rm.project_score > 0 OR em.theory_pct > 0 OR sb.srms_attd_pct::numeric > 0 OR am.total_classes > 0 OR rm.incubation_status IS NOT NULL OR mpm.has_mini_project = true)
         ORDER BY composite_score DESC, rm.project_score DESC NULLS LAST, em.theory_pct DESC NULLS LAST
         LIMIT $1
       `;

@@ -88,13 +88,22 @@ export class LogbookService {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           submission_id UUID,
           evaluator_id UUID,
+          faculty_id UUID,
           marks_obtained NUMERIC DEFAULT 0,
+          remarks TEXT,
           feedback TEXT,
           signature_stamp TEXT,
           evaluated_at TIMESTAMPTZ DEFAULT NOW(),
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+
+        await this.tenantSchemaService.queryInTenant(slug, `
+          ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS faculty_id UUID;
+          ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS remarks TEXT;
+          ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS evaluator_id UUID;
+          ALTER TABLE "${schema}".logbook_evaluations ADD COLUMN IF NOT EXISTS feedback TEXT;
+        `).catch(() => {});
 
         CREATE TABLE IF NOT EXISTS "${schema}".logbook_mini_projects (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1888,7 +1897,7 @@ export class LogbookService {
              COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, st.batch_cd) AS batch_name,
              t.title AS topic_title, t.max_marks, t.submission_deadline,
              c.name AS category_name, c.code AS category_code,
-             e.id AS evaluation_id, e.marks_obtained, e.remarks, e.evaluated_at,
+             e.id AS evaluation_id, e.marks_obtained, COALESCE(e.remarks, e.feedback) AS remarks, e.evaluated_at,
              ef.name AS evaluated_by_name
       FROM "${schema}".logbook_submissions s
       JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
@@ -1897,7 +1906,7 @@ export class LogbookService {
       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text)
       LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR (b.batch_cd::text = st.batch_cd::text AND b.course_cd::text = st.course_cd::text))
       LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id = s.id
-      LEFT JOIN "${schema}".faculty ef ON ef.id::text = e.faculty_id::text
+      LEFT JOIN "${schema}".faculty ef ON (ef.id::text = COALESCE(e.faculty_id, e.evaluator_id)::text)
       WHERE 1=1
     `;
 
@@ -1928,7 +1937,7 @@ export class LogbookService {
               COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, st.batch_cd) AS batch_name,
               t.title AS topic_title, t.description AS topic_description, t.max_marks, t.submission_deadline,
               c.name AS category_name, c.code AS category_code,
-              e.id AS evaluation_id, e.marks_obtained, e.remarks, e.evaluated_at,
+              e.id AS evaluation_id, e.marks_obtained, COALESCE(e.remarks, e.feedback) AS remarks, e.evaluated_at,
               ef.name AS evaluated_by_name
        FROM "${schema}".logbook_submissions s
        JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
@@ -1937,7 +1946,7 @@ export class LogbookService {
        LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text)
        LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR (b.batch_cd::text = st.batch_cd::text AND b.course_cd::text = st.course_cd::text))
        LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id = s.id
-       LEFT JOIN "${schema}".faculty ef ON ef.id::text = e.faculty_id::text
+       LEFT JOIN "${schema}".faculty ef ON (ef.id::text = COALESCE(e.faculty_id, e.evaluator_id)::text)
        WHERE s.id = $1::uuid`,
       [submissionId],
     );
@@ -2149,24 +2158,24 @@ export class LogbookService {
       ).catch(() => []);
 
       const branchWhere = courseCd && courseCd !== 'all'
-        ? `WHERE (course_cd::text = $1::text OR course_id::text = $1::text)`
+        ? `WHERE (course_cd::text = $1::text)`
         : ``;
       const batchWhere = courseCd && courseCd !== 'all'
-        ? `WHERE (course_cd::text = $1::text OR course_id::text = $1::text)`
+        ? `WHERE (course_cd::text = $1::text)`
         : ``;
       const queryParams = courseCd && courseCd !== 'all' ? [courseCd] : [];
 
       // 1. Check departments first, then branches
       let branches = await this.tenantSchemaService.queryInTenant(
         tenantSlug,
-        `SELECT id, COALESCE(branch_cd, code, id::text) as branch_cd, COALESCE(branch_cd, code, id::text) as code, name, course_id, course_cd FROM "${schema}".departments ${branchWhere} ORDER BY name ASC`,
+        `SELECT id, COALESCE(branch_cd, code, id::text) as branch_cd, COALESCE(branch_cd, code, id::text) as code, name, COALESCE(course_cd, '') as course_id, course_cd FROM "${schema}".departments ${branchWhere} ORDER BY name ASC`,
         queryParams,
       ).catch(() => []);
 
       if (branches.length === 0) {
         branches = await this.tenantSchemaService.queryInTenant(
           tenantSlug,
-          `SELECT id, COALESCE(branch_cd, code, id::text) as branch_cd, COALESCE(branch_cd, code, id::text) as code, name, course_id, course_cd FROM "${schema}".branches ${branchWhere} ORDER BY name ASC`,
+          `SELECT id, COALESCE(branch_cd, code, id::text) as branch_cd, COALESCE(branch_cd, code, id::text) as code, name, COALESCE(course_cd, '') as course_id, course_cd FROM "${schema}".branches ${branchWhere} ORDER BY name ASC`,
           queryParams,
         ).catch(() => []);
       }
@@ -2174,7 +2183,7 @@ export class LogbookService {
       // 2. Query batches
       let batches = await this.tenantSchemaService.queryInTenant(
         tenantSlug,
-        `SELECT id, COALESCE(batch_cd, code, year::text) as batch_cd, COALESCE(batch_cd, code, year::text) as code, COALESCE(name, 'Batch ' || year::text, code) as name, course_id, course_cd, year FROM "${schema}".batches ${batchWhere} ORDER BY year DESC, name DESC`,
+        `SELECT id, COALESCE(batch_cd, code, year::text) as batch_cd, COALESCE(batch_cd, code, year::text) as code, COALESCE(name, 'Batch ' || year::text, code) as name, COALESCE(course_cd, '') as course_id, course_cd, year FROM "${schema}".batches ${batchWhere} ORDER BY year DESC, name DESC`,
         queryParams,
       ).catch(() => []);
 
@@ -2405,14 +2414,14 @@ export class LogbookService {
         e.evaluated_at,
         ef.name AS faculty_name
       FROM "${schema}".logbook_submissions s
-      JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
-      LEFT JOIN "${schema}".logbook_categories c ON c.id = t.category_id
-      LEFT JOIN "${schema}".students st ON st.id = s.student_id
+      JOIN "${schema}".logbook_topics t ON t.id::text = s.topic_id::text
+      LEFT JOIN "${schema}".logbook_categories c ON c.id::text = t.category_id::text
+      LEFT JOIN "${schema}".students st ON st.id::text = s.student_id::text
       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = st.course_cd::text OR cr.code::text = st.course_cd::text)
-      LEFT JOIN "${schema}".departments d ON (d.id = st.branch_id OR d.branch_cd::text = st.branch_id::text OR d.code::text = st.branch_id::text)
-      LEFT JOIN "${schema}".batches b ON (b.id = st.batch_id OR b.batch_cd::text = st.batch_cd::text OR b.code::text = st.batch_cd::text)
-      LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id = s.id
-      LEFT JOIN "${schema}".faculty ef ON ef.id = e.evaluator_id
+      LEFT JOIN "${schema}".departments d ON (d.id::text = st.branch_id::text OR d.branch_cd::text = st.branch_id::text OR d.code::text = st.branch_id::text)
+      LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR b.batch_cd::text = st.batch_cd::text OR b.code::text = st.batch_cd::text)
+      LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id::text = s.id::text
+      LEFT JOIN "${schema}".faculty ef ON ef.id::text = e.evaluator_id::text
       ORDER BY s.submitted_at DESC`,
     ).catch((err) => {
       this.logger.error('Failed to query topicSubmissions', err);
@@ -2455,10 +2464,10 @@ export class LogbookService {
         sm.created_at AS evaluated_at,
         COALESCE(sm.faculty_advisor, 'Dr. Prabhakar Gupta') AS faculty_name
       FROM "${schema}".logbook_seminars sm
-      LEFT JOIN "${schema}".students st ON st.id = sm.student_id
+      LEFT JOIN "${schema}".students st ON st.id::text = sm.student_id::text
       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = st.course_cd::text OR cr.code::text = st.course_cd::text)
-      LEFT JOIN "${schema}".departments d ON (d.id = st.branch_id OR d.branch_cd::text = st.branch_id::text OR d.code::text = st.branch_id::text)
-      LEFT JOIN "${schema}".batches b ON (b.id = st.batch_id OR b.batch_cd::text = st.batch_cd::text OR b.code::text = st.batch_cd::text)
+      LEFT JOIN "${schema}".departments d ON (d.id::text = st.branch_id::text OR d.branch_cd::text = st.branch_id::text OR d.code::text = st.branch_id::text)
+      LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR b.batch_cd::text = st.batch_cd::text OR b.code::text = st.batch_cd::text)
       ORDER BY sm.created_at DESC`,
     ).catch((err) => {
       this.logger.error('Failed to query seminars', err);
@@ -2501,10 +2510,10 @@ export class LogbookService {
         tut.created_at AS evaluated_at,
         'Dr. Anuj Kumar' AS faculty_name
       FROM "${schema}".logbook_tutorials tut
-      LEFT JOIN "${schema}".students st ON st.id = tut.student_id
+      LEFT JOIN "${schema}".students st ON st.id::text = tut.student_id::text
       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = st.course_cd::text OR cr.code::text = st.course_cd::text)
-      LEFT JOIN "${schema}".departments d ON (d.id = st.branch_id OR d.branch_cd::text = st.branch_id::text OR d.code::text = st.branch_id::text)
-      LEFT JOIN "${schema}".batches b ON (b.id = st.batch_id OR b.batch_cd::text = st.batch_cd::text OR b.code::text = st.batch_cd::text)
+      LEFT JOIN "${schema}".departments d ON (d.id::text = st.branch_id::text OR d.branch_cd::text = st.branch_id::text OR d.code::text = st.branch_id::text)
+      LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR b.batch_cd::text = st.batch_cd::text OR b.code::text = st.batch_cd::text)
       ORDER BY tut.created_at DESC`,
     ).catch((err) => {
       this.logger.error('Failed to query tutorials', err);
@@ -2547,8 +2556,8 @@ export class LogbookService {
         p.created_at AS evaluated_at,
         COALESCE(f.name, 'Dr. Prabhakar Gupta') AS faculty_name
       FROM "${schema}".logbook_mini_projects p
-      LEFT JOIN "${schema}".students st ON st.id = p.student_id
-      LEFT JOIN "${schema}".faculty f ON f.id = p.faculty_id
+      LEFT JOIN "${schema}".students st ON st.id::text = p.student_id::text
+      LEFT JOIN "${schema}".faculty f ON f.id::text = p.faculty_id::text
       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = p.course_id::text OR cr.id::text = p.course_id::text OR cr.code::text = p.course_id::text)
       LEFT JOIN "${schema}".departments d ON (d.id::text = p.branch_id::text OR d.branch_cd::text = p.branch_id::text OR d.code::text = p.branch_id::text)
       LEFT JOIN "${schema}".batches b ON (b.id::text = p.batch_id::text OR b.batch_cd::text = p.batch_id::text OR b.code::text = p.batch_id::text)
@@ -2594,12 +2603,12 @@ export class LogbookService {
         COALESCE(w.verified_at, w.updated_at, w.created_at) AS evaluated_at,
         COALESCE(w.guide_signature, f.name, 'Dr. Shorab Ahmad') AS faculty_name
       FROM "${schema}".logbook_weekly_logs w
-      LEFT JOIN "${schema}".students st ON st.id = w.student_id
-      LEFT JOIN "${schema}".logbook_mini_projects p ON p.id = w.project_id
-      LEFT JOIN "${schema}".faculty f ON f.id = p.faculty_id
+      LEFT JOIN "${schema}".students st ON st.id::text = w.student_id::text
+      LEFT JOIN "${schema}".logbook_mini_projects p ON p.id::text = w.project_id::text
+      LEFT JOIN "${schema}".faculty f ON f.id::text = p.faculty_id::text
       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = st.course_cd::text OR cr.code::text = st.course_cd::text)
-      LEFT JOIN "${schema}".departments d ON (d.id = st.branch_id OR d.branch_cd::text = st.branch_id::text OR d.code::text = st.branch_id::text)
-      LEFT JOIN "${schema}".batches b ON (b.id = st.batch_id OR b.batch_cd::text = st.batch_cd::text OR b.code::text = st.batch_cd::text)
+      LEFT JOIN "${schema}".departments d ON (d.id::text = st.branch_id::text OR d.branch_cd::text = st.branch_id::text OR d.code::text = st.branch_id::text)
+      LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR b.batch_cd::text = st.batch_cd::text OR b.code::text = st.batch_cd::text)
       WHERE w.student_id IS NOT NULL
       ORDER BY w.week_number ASC, w.created_at DESC`,
     ).catch((err) => {

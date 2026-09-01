@@ -54,6 +54,72 @@ interface FacultyProfile {
   research_interests?: string[];
 }
 
+const FacultyProfileSkeleton = () => (
+  <div className="space-y-6 animate-pulse">
+    {/* Cover & Banner Skeleton */}
+    <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] shadow-soft overflow-hidden">
+      <div className="h-48 sm:h-56 w-full bg-slate-200 dark:bg-slate-800 relative">
+        <div className="absolute top-4 right-4 h-8 w-36 bg-slate-300 dark:bg-slate-700 rounded-full" />
+      </div>
+      <div className="p-6 pt-0 relative">
+        <div className="flex flex-col lg:flex-row items-center lg:items-end justify-between gap-6 mb-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 text-center sm:text-left">
+            <div className="-mt-14 sm:-mt-16 w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-slate-300 dark:bg-slate-700 ring-4 ring-white dark:ring-slate-900 shrink-0" />
+            <div className="space-y-2.5 pb-1">
+              <div className="h-6 bg-slate-300 dark:bg-slate-700 rounded-lg w-48 mx-auto sm:mx-0" />
+              <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-lg w-64 mx-auto sm:mx-0" />
+              <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-full w-24" />
+                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-full w-32" />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 w-full lg:w-auto">
+            <div className="h-20 bg-slate-100 dark:bg-slate-800/80 rounded-2xl flex-1 lg:w-32" />
+            <div className="h-20 bg-slate-100 dark:bg-slate-800/80 rounded-2xl flex-1 lg:w-32" />
+            <div className="h-20 bg-slate-100 dark:bg-slate-800/80 rounded-2xl flex-1 lg:w-32" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Body Grid Cards Skeleton */}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="space-y-6 lg:col-span-1">
+        <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 space-y-4 shadow-soft">
+          <div className="h-5 bg-slate-300 dark:bg-slate-700 rounded-md w-36" />
+          <div className="space-y-3 pt-2">
+            <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-full" />
+            <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-5/6" />
+            <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-4/6" />
+            <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-full" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 space-y-4 shadow-soft">
+          <div className="h-5 bg-slate-300 dark:bg-slate-700 rounded-md w-40" />
+          <div className="flex flex-wrap gap-2 pt-1">
+            <div className="h-7 bg-slate-200 dark:bg-slate-800 rounded-full w-24" />
+            <div className="h-7 bg-slate-200 dark:bg-slate-800 rounded-full w-32" />
+            <div className="h-7 bg-slate-200 dark:bg-slate-800 rounded-full w-28" />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-6 lg:col-span-2">
+        <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 space-y-4 shadow-soft">
+          <div className="h-5 bg-slate-300 dark:bg-slate-700 rounded-md w-44" />
+          <div className="space-y-3">
+            <div className="h-14 bg-slate-100 dark:bg-slate-800/80 rounded-2xl w-full" />
+            <div className="h-14 bg-slate-100 dark:bg-slate-800/80 rounded-2xl w-full" />
+            <div className="h-14 bg-slate-100 dark:bg-slate-800/80 rounded-2xl w-full" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 export default function FacultyProfilePage() {
   const [profile, setProfile] = useState<FacultyProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -388,9 +454,7 @@ export default function FacultyProfilePage() {
 
         <main className="p-6 space-y-6 flex-1 w-full max-w-full">
           {loading ? (
-            <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-12 text-center text-[#4E5969] dark:text-slate-400 animate-pulse font-bold">
-              Loading Faculty Profile...
-            </div>
+            <FacultyProfileSkeleton />
           ) : (
             <div className="space-y-6">
               {/* First Card: Cover Photo & Profile Banner Card */}

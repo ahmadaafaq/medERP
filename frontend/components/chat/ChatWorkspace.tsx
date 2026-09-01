@@ -45,29 +45,32 @@ export default function ChatWorkspace({ role = 'FACULTY' }: ChatWorkspaceProps) 
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)] rounded-[22px] overflow-hidden bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-xl shadow-purple-950/5 font-sans">
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Left Sidebar */}
-        <ChatSidebar
-          groups={groups}
-          selectedGroup={selectedGroup}
-          onSelectGroup={setSelectedGroup}
-          loading={loadingGroups}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          selectedYearFilter={selectedYearFilter}
-          onYearFilterChange={setSelectedYearFilter}
-          role={role}
-          onSync={role === 'ADMIN' ? syncGroups : undefined}
-          onOpenAddBatch={() => setIsAddBatchModalOpen(true)}
-        />
+        <div className={`w-full sm:w-80 md:w-96 shrink-0 h-full ${selectedGroup ? 'hidden sm:flex' : 'flex'}`}>
+          <ChatSidebar
+            groups={groups}
+            selectedGroup={selectedGroup}
+            onSelectGroup={setSelectedGroup}
+            loading={loadingGroups}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedYearFilter={selectedYearFilter}
+            onYearFilterChange={setSelectedYearFilter}
+            role={role}
+            onSync={role === 'ADMIN' ? syncGroups : undefined}
+            onOpenAddBatch={() => setIsAddBatchModalOpen(true)}
+          />
+        </div>
 
         {/* Right Chat Thread & Composer Area */}
-        <div className="flex-1 flex flex-col min-w-0 h-full bg-[#F6F8FC] dark:bg-slate-900/60 overflow-hidden">
+        <div className={`flex-1 flex-col min-w-0 h-full bg-[#F6F8FC] dark:bg-slate-900/60 overflow-hidden ${selectedGroup ? 'flex' : 'hidden sm:flex'}`}>
           <ChatThread
             group={selectedGroup}
             messages={messages}
             loading={loadingMessages}
             onOpenMembers={() => setIsMembersModalOpen(true)}
+            onBack={() => setSelectedGroup(null)}
             currentUserId={currentUser?.id || currentUser?.sub}
             currentUserRole={currentUser?.role || role}
           />

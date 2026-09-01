@@ -1039,7 +1039,7 @@ export class AuthService {
           `SELECT s.id, s.rollno, s.registration_no, s.name, 
                   COALESCE(s.photo_url, CASE WHEN s.registration_no IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/', s.registration_no, '/', s.registration_no, '.JPG') ELSE NULL END) AS photo_url,
                   s.course_cd,
-                  COALESCE(b.batch_cd, s.batch_cd) AS batch_cd,
+                  COALESCE(b.code, s.batch_cd) AS batch_cd,
                   COALESCE(b.name, 'Batch ' || COALESCE(s.admission_year::text, '2025')) AS batch_name,
                   b.code AS batch_code,
                   b.year AS batch_year,

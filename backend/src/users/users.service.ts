@@ -954,11 +954,11 @@ export class UsersService {
 
   async getBatches(tenantSlug: string, departmentId?: string) {
     const schema = `tenant_${tenantSlug}`;
-    const where = departmentId ? `WHERE b.department_id = $1` : '';
+    const where = departmentId ? `WHERE (b.department_id::text = $1::text)` : '';
     return this.ds.query(
       `SELECT b.*, d.name AS department_name
        FROM "${schema}".batches b
-       LEFT JOIN "${schema}".departments d ON d.id = b.department_id
+       LEFT JOIN "${schema}".departments d ON d.id::text = b.department_id::text
        ${where}
        ORDER BY b.year DESC, b.code ASC`,
       departmentId ? [departmentId] : [],

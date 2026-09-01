@@ -1254,29 +1254,39 @@ export default function AdminDashboard() {
                         </td>
                       </tr>
                     ) : (
-                      timetable.slots.map((slot) => (
-                        <tr key={slot.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                          <td className="p-3 pl-4 whitespace-nowrap">
-                            <span className="font-extrabold text-slate-900 dark:text-white block">{slot.dayName}</span>
-                            <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded border border-indigo-200/50 dark:border-indigo-800/50">
-                              {slot.timeRange}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <span className="font-bold text-slate-900 dark:text-white block">{slot.subjectName}</span>
-                            <span className="text-[10px] font-mono text-slate-500">Code: #{slot.subjectCode}</span>
-                          </td>
-                          <td className="p-3">
-                            <span className="font-extrabold text-slate-800 dark:text-slate-200 block">{slot.facultyName}</span>
-                            <span className="text-[10px] text-slate-500">{slot.departmentName}</span>
-                          </td>
-                          <td className="p-3 pr-4">
-                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold px-2 py-1 rounded-lg text-[11px] border border-slate-200 dark:border-slate-700 inline-block">
-                              📍 {slot.room}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
+                      timetable.slots
+                        .filter((slot, idx, arr) => 
+                          arr.findIndex(s => 
+                            s.dayName === slot.dayName && 
+                            s.timeRange === slot.timeRange && 
+                            s.subjectName === slot.subjectName && 
+                            s.facultyName === slot.facultyName && 
+                            s.room === slot.room
+                          ) === idx
+                        )
+                        .map((slot) => (
+                          <tr key={slot.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                            <td className="p-3 pl-4 whitespace-nowrap">
+                              <span className="font-extrabold text-slate-900 dark:text-white block">{slot.dayName}</span>
+                              <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded border border-indigo-200/50 dark:border-indigo-800/50">
+                                {slot.timeRange}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-bold text-slate-900 dark:text-white block">{slot.subjectName}</span>
+                              <span className="text-[10px] font-mono text-slate-500">Code: #{slot.subjectCode}</span>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-extrabold text-slate-800 dark:text-slate-200 block">{slot.facultyName}</span>
+                              <span className="text-[10px] text-slate-500">{slot.departmentName}</span>
+                            </td>
+                            <td className="p-3 pr-4">
+                              <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold px-2 py-1 rounded-lg text-[11px] border border-slate-200 dark:border-slate-700 inline-block">
+                                📍 {slot.room}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
                     )}
                   </tbody>
                 </table>

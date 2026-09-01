@@ -55,6 +55,7 @@ async function srmsFetch(url: string, init: RequestInit = {}): Promise<Response>
 @Injectable()
 export class AdminMasterService {
   private readonly logger = new Logger(AdminMasterService.name);
+  private ensuredSchemas = new Set<string>();
 
   constructor(
     @InjectDataSource() private readonly ds: DataSource,
@@ -87,20 +88,21 @@ export class AdminMasterService {
 
   private async ensureAdminMasterTables(slug: string): Promise<void> {
     if (!slug || slug === 'all') return;
+    if (this.ensuredSchemas.has(slug)) return;
+    this.ensuredSchemas.add(slug);
+
     const schema = `tenant_${slug}`;
     try {
-      await this.ds.query(`CREATE SCHEMA IF NOT EXISTS "${schema}";`);
+      await this.ds.query(`CREATE SCHEMA IF NOT EXISTS "${schema}";`).catch(() => {});
 
       // 0. departments schema cleanup
-      await this.ds.query(`
-        DROP INDEX IF EXISTS "${schema}".departments_code_idx;
-        ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_key;
-        ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_idx;
-        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
-        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
-        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
-        ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
-      `).catch(() => {});
+      await this.ds.query(`DROP INDEX IF EXISTS "${schema}".departments_code_idx;`).catch(() => {});
+      await this.ds.query(`ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_key;`).catch(() => {});
+      await this.ds.query(`ALTER TABLE "${schema}".departments DROP CONSTRAINT IF EXISTS departments_code_idx;`).catch(() => {});
+      await this.ds.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);`).catch(() => {});
+      await this.ds.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);`).catch(() => {});
+      await this.ds.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);`).catch(() => {});
+      await this.ds.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);`).catch(() => {});
 
       // 1. professional_linkers
       await this.ds.query(`
@@ -804,8 +806,8 @@ export class AdminMasterService {
                   COALESCE(s.course_cd, d.course_cd) as course_cd,
                   COALESCE(s.course_name, d.course_name) as course_name,
                   COALESCE(s.branch_cd, d.branch_cd, d.code) as branch_cd,
-                  COALESCE(s.batch_cd, b.code, b.batch_cd::text) as batch_code,
-                  COALESCE(s.batch_cd, b.code, b.batch_cd::text) as batch_cd,
+                  COALESCE(s.batch_cd, b.code, b.year::text) as batch_code,
+                  COALESCE(s.batch_cd, b.code, b.year::text) as batch_cd,
                   s.sem_cd,
                   s.semester,
                   s.sub_addinfo,
@@ -853,8 +855,8 @@ export class AdminMasterService {
                   COALESCE(s.course_cd, d.course_cd) as course_cd,
                   COALESCE(s.course_name, d.course_name) as course_name,
                   COALESCE(s.branch_cd, d.branch_cd, d.code) as branch_cd,
-                  COALESCE(s.batch_cd, b.code, b.batch_cd::text) as batch_code,
-                  COALESCE(s.batch_cd, b.code, b.batch_cd::text) as batch_cd,
+                  COALESCE(s.batch_cd, b.code, b.year::text) as batch_code,
+                  COALESCE(s.batch_cd, b.code, b.year::text) as batch_cd,
                   s.sem_cd,
                   s.semester,
                   s.sub_addinfo,

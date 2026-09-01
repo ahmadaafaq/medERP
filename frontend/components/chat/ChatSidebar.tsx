@@ -49,7 +49,7 @@ export default function ChatSidebar({
   };
 
   return (
-    <div className="w-full sm:w-80 md:w-96 bg-white dark:bg-slate-900 border-r border-[#E7EAF3] dark:border-slate-800 flex flex-col h-full shrink-0">
+    <div className="w-full bg-white dark:bg-slate-900 border-r border-[#E7EAF3] dark:border-slate-800 flex flex-col h-full shrink-0">
       {/* Sidebar Header */}
       <div className="p-4 border-b border-[#E7EAF3] dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-900 flex items-center justify-between gap-2">
         <div className="min-w-0">

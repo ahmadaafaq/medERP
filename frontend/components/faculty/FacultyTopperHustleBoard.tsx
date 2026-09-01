@@ -281,22 +281,24 @@ export default function FacultyTopperHustleBoard() {
             return (
               <div
                 key={st.id || st.regNo}
-                className={`p-3 sm:p-3.5 rounded-2xl border transition-all hover:shadow-md ${
+                className={`p-4 rounded-2xl border transition-all duration-200 hover:shadow-md space-y-3 ${
                   isTop3
-                    ? 'bg-gradient-to-r from-amber-50/40 via-white to-orange-50/20 dark:from-amber-950/10 dark:via-slate-900 dark:to-orange-950/10 border-amber-200/80 dark:border-amber-900/40'
-                    : 'bg-[#F9FAFD] dark:bg-slate-800/40 border-slate-100 dark:border-slate-800 hover:border-slate-200'
+                    ? 'bg-gradient-to-r from-amber-500/5 via-white to-orange-500/5 dark:from-amber-950/20 dark:via-slate-900 dark:to-orange-950/20 border-amber-300/60 dark:border-amber-700/50 shadow-xs'
+                    : 'bg-white dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-800 hover:border-slate-300'
                 }`}
               >
-                <div className="flex items-center justify-between gap-3 sm:gap-4">
-                  {/* Left: Rank & Avatar & Info */}
+                {/* SECTION 1: TOP ROW (Rank + Avatar + Name & Program + Composite Score) */}
+                <div className="flex items-center justify-between gap-3 min-w-0">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {/* Rank Badge */}
                     <div
-                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-xs ${rankBadgeColor}`}
+                      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 shadow-xs ${rankBadgeColor}`}
                     >
                       {st.rank === 1 ? '🥇' : st.rank === 2 ? '🥈' : st.rank === 3 ? '🥉' : `#${st.rank}`}
                     </div>
 
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-200 shrink-0">
+                    {/* Student Avatar */}
+                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden flex items-center justify-center text-xs font-black text-[#5B4BFF] shrink-0 shadow-xs">
                       {st.photoUrl ? (
                         <img
                           src={st.photoUrl}
@@ -308,95 +310,89 @@ export default function FacultyTopperHustleBoard() {
                         />
                       ) : (
                         st.name
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .slice(0, 2)
-                          .toUpperCase()
+                          ? st.name
+                              .split(' ')
+                              .map((n) => n[0])
+                              .join('')
+                              .slice(0, 2)
+                              .toUpperCase()
+                          : 'ST'
                       )}
                     </div>
 
+                    {/* Student Name, Roll No & Program */}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight truncate">
-                          {st.name}
-                        </span>
-                        <span className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-400 dark:text-slate-500">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-black text-slate-900 dark:text-white tracking-tight leading-tight">
+                          {st.name || 'Student Scholar'}
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-bold text-[10px] shrink-0 border border-slate-200/60 dark:border-slate-700/60">
                           {st.rollNo || st.regNo}
                         </span>
-                        {st.hustleTag && (
-                          <span className="px-2 py-0.5 rounded-md bg-amber-50/80 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[9px] font-extrabold border border-amber-200/60 dark:border-amber-800/60 inline-flex items-center gap-1">
-                            {st.hustleTag}
-                          </span>
-                        )}
                       </div>
-                      <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                        {st.course} • {st.batch}
-                      </div>
+                      <p className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                        {st.course} <span className="text-slate-300 dark:text-slate-700">•</span> {st.batch}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Right: Metrics Badges & Composite Score */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    {/* Performance Chips */}
-                    <div className="hidden lg:flex items-center gap-2 text-[10px] font-bold">
-                      {/* Attendance */}
-                      <div className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-center">
-                        <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-extrabold">Attendance</span>
-                        <span className={`font-black ${st.attendancePct >= 75 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                          {st.attendancePct}%
-                        </span>
-                      </div>
+                  {/* Composite Score Pill */}
+                  <div className="px-3.5 py-1.5 rounded-2xl bg-gradient-to-br from-[#F36C21]/15 via-orange-500/10 to-amber-500/15 border border-[#F36C21]/30 text-center shrink-0">
+                    <span className="block text-[8px] uppercase font-black tracking-wider text-[#F36C21]">Composite</span>
+                    <span className="text-base sm:text-lg font-black text-[#F36C21] tracking-tight leading-none">
+                      {st.compositeScore || (st.attendancePct * 0.4 + (st.theoryScore || 80) * 0.6).toFixed(1)}
+                    </span>
+                  </div>
+                </div>
 
-                      {/* Theory / Exam */}
-                      {st.theoryScore > 0 && (
-                        <div className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-center">
-                          <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-extrabold">Theory</span>
-                          <span className="font-black text-slate-800 dark:text-slate-200">
-                            {st.theoryScore}%
-                          </span>
-                        </div>
-                      )}
+                {/* SECTION 2: MIDDLE ROW (Hustle Tag / Achievement Badge if present) */}
+                {st.hustleTag && (
+                  <div className="pt-0.5">
+                    <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-extrabold border border-amber-500/20 inline-flex items-center gap-1.5">
+                      {st.hustleTag}
+                    </span>
+                  </div>
+                )}
 
-                      {/* Project Score */}
-                      {st.projectScorePct > 0 && (
-                        <div className="px-2.5 py-1 rounded-lg bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-center">
-                          <span className="block text-[8px] uppercase tracking-wider text-indigo-500 font-extrabold">Capstone Project</span>
-                          <span className="font-black text-[#5B4BFF]">
-                            {st.projectScorePct}% ({st.projectGrade})
-                          </span>
-                        </div>
-                      )}
+                {/* SECTION 3: BOTTOM ROW (Performance Chips Grid) */}
+                <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[10px] font-bold">
+                  {/* Attendance */}
+                  <div className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 text-center flex-1 min-w-[90px]">
+                    <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-extrabold">Attendance</span>
+                    <span className={`font-black text-xs ${st.attendancePct >= 75 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                      {st.attendancePct || 0}%
+                    </span>
+                  </div>
 
-                      {/* Mini Project Badge */}
-                      {st.hasMiniProject && (
-                        <div className="px-2.5 py-1 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 text-center">
-                          <span className="block text-[8px] uppercase tracking-wider text-emerald-500 font-extrabold">Mini-Projects</span>
-                          <span className="font-black text-emerald-600">
-                            {st.miniProjectsCovered || 1} Done
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Incubation Tag */}
-                      {st.isIncubationSelected && (
-                        <div className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-center">
-                          <span className="block text-[8px] uppercase tracking-wider text-amber-600 font-extrabold">Incubation</span>
-                          <span className="font-black text-amber-700 dark:text-amber-300">
-                            {st.fundingAmount ? `₹${(st.fundingAmount / 1000).toFixed(0)}k Grant` : st.incubationStatus || 'Selected'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Total Composite Score */}
-                    <div className="text-right pl-3 border-l border-slate-200 dark:border-slate-700 min-w-[68px]">
-                      <span className="block text-[9px] uppercase font-black tracking-wider text-slate-400">Composite</span>
-                      <span className="text-base sm:text-lg font-black text-[#F36C21] tracking-tight">
-                        {st.compositeScore || (st.attendancePct * 0.4 + (st.theoryScore || 80) * 0.6).toFixed(1)}
+                  {/* Capstone Project */}
+                  {st.projectScorePct > 0 && (
+                    <div className="px-3 py-1.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/40 text-center flex-1 min-w-[110px]">
+                      <span className="block text-[8px] uppercase tracking-wider text-indigo-500 dark:text-indigo-400 font-extrabold">Capstone Project</span>
+                      <span className="font-black text-xs text-[#5B4BFF] dark:text-indigo-300">
+                        {st.projectScorePct}% {st.projectGrade ? `(${st.projectGrade})` : ''}
                       </span>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Mini Projects */}
+                  {st.hasMiniProject && (
+                    <div className="px-3 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 text-center flex-1 min-w-[100px]">
+                      <span className="block text-[8px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-extrabold">Mini-Projects</span>
+                      <span className="font-black text-xs text-emerald-700 dark:text-emerald-300">
+                        {st.miniProjectsCovered || 1} Done
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Incubation */}
+                  {st.isIncubationSelected && (
+                    <div className="px-3 py-1.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/40 text-center flex-1 min-w-[100px]">
+                      <span className="block text-[8px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-extrabold">Incubation</span>
+                      <span className="font-black text-xs text-amber-700 dark:text-amber-300">
+                        {st.fundingAmount ? `₹${(st.fundingAmount / 1000).toFixed(0)}k Grant` : st.incubationStatus || 'Selected'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             );

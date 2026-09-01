@@ -97,6 +97,126 @@ export interface CategoryItem {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
+const SubmissionsSkeleton = ({ rowCount = 6 }: { rowCount?: number }) => (
+  <div className="overflow-x-auto">
+    <table className="w-full text-left border-collapse">
+      <thead>
+        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider">
+          <th className="py-3.5 px-4">Scholar Profile</th>
+          <th className="py-3.5 px-4">Program &amp; Batch</th>
+          <th className="py-3.5 px-4">Activity &amp; Topic</th>
+          <th className="py-3.5 px-4 text-center">Attached Document</th>
+          <th className="py-3.5 px-4">Faculty Evaluation &amp; Grade</th>
+          <th className="py-3.5 px-4 text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+        {[...Array(rowCount)].map((_, i) => (
+          <tr key={i} className="animate-pulse">
+            <td className="py-4 px-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0" />
+                <div className="space-y-2">
+                  <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-28" />
+                  <div className="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded w-20" />
+                </div>
+              </div>
+            </td>
+            <td className="py-4 px-4">
+              <div className="space-y-2">
+                <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-32" />
+                <div className="flex gap-1.5">
+                  <div className="h-4 bg-slate-100 dark:bg-slate-800/60 rounded-md w-16" />
+                  <div className="h-4 bg-slate-100 dark:bg-slate-800/60 rounded-md w-12" />
+                </div>
+              </div>
+            </td>
+            <td className="py-4 px-4">
+              <div className="space-y-2 max-w-xs">
+                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-24" />
+                <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-48" />
+                <div className="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded w-28" />
+              </div>
+            </td>
+            <td className="py-4 px-4 text-center">
+              <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-32 mx-auto" />
+            </td>
+            <td className="py-4 px-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-full w-20" />
+                  <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-16" />
+                </div>
+                <div className="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded w-36" />
+              </div>
+            </td>
+            <td className="py-4 px-4 text-center">
+              <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-20 mx-auto" />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+const LeaderboardSkeleton = ({ rowCount = 6 }: { rowCount?: number }) => (
+  <div className="overflow-x-auto">
+    <table className="w-full text-left border-collapse">
+      <thead>
+        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider">
+          <th className="py-3.5 px-4 text-center w-16">Rank</th>
+          <th className="py-3.5 px-4">Scholar Details</th>
+          <th className="py-3.5 px-4">Program &amp; Batch</th>
+          <th className="py-3.5 px-4 text-center">Evaluated Tasks</th>
+          <th className="py-3.5 px-4 text-center">Total Marks</th>
+          <th className="py-3.5 px-4 text-center">Overall Score %</th>
+          <th className="py-3.5 px-4">Category Highlights</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+        {[...Array(rowCount)].map((_, i) => (
+          <tr key={i} className="animate-pulse">
+            <td className="py-4 px-4 text-center">
+              <div className="w-9 h-9 bg-slate-200 dark:bg-slate-800 rounded-full mx-auto" />
+            </td>
+            <td className="py-4 px-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-slate-200 dark:bg-slate-800 rounded-xl shrink-0" />
+                <div className="space-y-2">
+                  <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-28" />
+                  <div className="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded w-20" />
+                </div>
+              </div>
+            </td>
+            <td className="py-4 px-4">
+              <div className="space-y-2">
+                <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-24" />
+                <div className="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded w-16" />
+              </div>
+            </td>
+            <td className="py-4 px-4 text-center">
+              <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-full w-20 mx-auto" />
+            </td>
+            <td className="py-4 px-4 text-center">
+              <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-16 mx-auto" />
+            </td>
+            <td className="py-4 px-4 text-center">
+              <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-full w-14 mx-auto" />
+            </td>
+            <td className="py-4 px-4">
+              <div className="flex gap-1.5 flex-wrap">
+                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-md w-16" />
+                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-md w-20" />
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
 export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'admin' | 'faculty' }) {
   // Navigation tab
   const [activeTab, setActiveTab] = useState<'submissions' | 'leaderboard'>('submissions');
@@ -665,10 +785,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
               </div>
 
               {loading ? (
-                <div className="p-16 text-center text-slate-400 space-y-3">
-                  <div className="w-8 h-8 border-3 border-[#5B4BFF] border-t-transparent rounded-full animate-spin mx-auto" />
-                  <p className="text-xs font-bold">Querying digital logbook entries from PostgreSQL...</p>
-                </div>
+                <SubmissionsSkeleton rowCount={6} />
               ) : filteredEntries.length === 0 ? (
                 <div className="p-16 text-center text-slate-400 space-y-2">
                   <BookOpen className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
@@ -864,10 +981,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
               </div>
 
               {loading ? (
-                <div className="p-16 text-center text-slate-400 space-y-3">
-                  <div className="w-8 h-8 border-3 border-[#5B4BFF] border-t-transparent rounded-full animate-spin mx-auto" />
-                  <p className="text-xs font-bold">Computing real-time merit standings...</p>
-                </div>
+                <LeaderboardSkeleton rowCount={6} />
               ) : filteredLeaderboard.length === 0 ? (
                 <div className="p-16 text-center text-slate-400 space-y-2">
                   <BookOpen className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />

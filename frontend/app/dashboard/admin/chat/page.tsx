@@ -10,7 +10,7 @@ export default function AdminChatPage() {
       <Sidebar role="admin" />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header title="Campus Chat & Communication Oversight" />
-        <main className="flex-1 p-6 overflow-hidden">
+        <main className="flex-1 p-3 sm:p-6 overflow-hidden">
           <ChatWorkspace role="ADMIN" />
         </main>
       </div>

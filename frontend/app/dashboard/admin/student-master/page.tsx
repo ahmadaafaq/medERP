@@ -39,29 +39,64 @@ const ActionButtons = ({ onView, onEdit, onDelete }: { onView: () => void, onEdi
   </div>
 );
 
-const TableSkeleton = ({ colCount = 6 }: { colCount?: number }) => (
-  <tbody className="divide-y divide-[var(--color-border)]">
-    {[...Array(5)].map((_, rIdx) => (
-      <tr key={rIdx} className="animate-pulse bg-[var(--color-bg-surface)]">
-        <td className="pl-5 py-4"><div className="h-4 bg-slate-200 dark:bg-slate-800/80 rounded w-6"></div></td>
-        {[...Array(colCount - 2)].map((_, cIdx) => (
-          <td key={cIdx} className="py-4 px-4">
-            <div className="space-y-2">
-              <div className="h-4 bg-slate-200 dark:bg-slate-800/80 rounded w-2/3"></div>
-              {cIdx === 0 && <div className="h-3 bg-slate-100 dark:bg-slate-900/50 rounded w-1/2"></div>}
-            </div>
+const TableSkeleton = ({ isLinker = false, rowCount = 8 }: { isLinker?: boolean; rowCount?: number }) => (
+  <>
+    {[...Array(rowCount)].map((_, rIdx) => (
+      <tr key={rIdx} className="animate-pulse bg-[var(--color-bg-surface)] border-b border-[var(--color-border)]/50">
+        {isLinker && (
+          <td className="pl-5 text-center py-3">
+            <div className="w-4 h-4 bg-slate-200 dark:bg-slate-800/80 rounded animate-pulse mx-auto"></div>
           </td>
-        ))}
-        <td className="pr-5 py-4 text-right">
+        )}
+        <td className="pl-3 py-3 text-center">
+          <div className="w-4 h-3 bg-slate-200 dark:bg-slate-800/80 rounded animate-pulse mx-auto"></div>
+        </td>
+        <td className="w-12 text-center py-2.5">
+          <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800/80 animate-pulse mx-auto"></div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="w-20 h-3.5 bg-slate-200 dark:bg-slate-800/80 rounded animate-pulse"></div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="w-24 h-3.5 bg-slate-200 dark:bg-slate-800/80 rounded animate-pulse"></div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="space-y-1.5">
+            <div className="w-32 h-3.5 bg-slate-200 dark:bg-slate-800/80 rounded animate-pulse"></div>
+            <div className="w-20 h-2.5 bg-slate-100 dark:bg-slate-900/50 rounded animate-pulse"></div>
+          </div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="w-28 h-3.5 bg-slate-200 dark:bg-slate-800/80 rounded animate-pulse"></div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="space-y-1.5">
+            <div className="w-20 h-3.5 bg-slate-200 dark:bg-slate-800/80 rounded animate-pulse"></div>
+            <div className="w-24 h-2.5 bg-slate-100 dark:bg-slate-900/50 rounded animate-pulse"></div>
+          </div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="w-16 h-3.5 bg-slate-200 dark:bg-slate-800/80 rounded animate-pulse"></div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="w-20 h-5 bg-slate-200 dark:bg-slate-800/80 rounded-full animate-pulse"></div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="w-14 h-3.5 bg-slate-200 dark:bg-slate-800/80 rounded animate-pulse"></div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="w-16 h-5 bg-slate-200 dark:bg-slate-800/80 rounded-full animate-pulse"></div>
+        </td>
+        <td className="pr-5 py-3 text-right">
           <div className="flex items-center justify-end gap-1.5">
-            <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800/80 rounded-lg animate-pulse"></div>
-            <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800/80 rounded-lg animate-pulse"></div>
-            <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800/80 rounded-lg animate-pulse"></div>
+            <div className="w-6 h-6 bg-slate-200 dark:bg-slate-800/80 rounded-lg animate-pulse"></div>
+            <div className="w-6 h-6 bg-slate-200 dark:bg-slate-800/80 rounded-lg animate-pulse"></div>
+            <div className="w-6 h-6 bg-slate-200 dark:bg-slate-800/80 rounded-lg animate-pulse"></div>
           </div>
         </td>
       </tr>
     ))}
-  </tbody>
+  </>
 );
 
 const FormSkeleton = () => (
@@ -2699,7 +2734,7 @@ export default function StudentMasterPage() {
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)] text-xs font-medium">
                   {loading ? (
-                    <TableSkeleton colCount={viewMode === 'linker' ? 13 : 12} />
+                    <TableSkeleton isLinker={viewMode === 'linker'} rowCount={8} />
                   ) : filteredStudents.length === 0 ? (
                     <tr>
                       <td colSpan={viewMode === 'linker' ? 13 : 12} className="p-12 text-center text-slate-500 font-medium">
