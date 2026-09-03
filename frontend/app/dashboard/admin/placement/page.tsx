@@ -28,9 +28,23 @@ export default function AdminPlacementPage() {
   const [companies, setCompanies] = useState<PlacementCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [branchFilter, setBranchFilter] = useState('ALL');
-  const [batchFilter, setBatchFilter] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Academic Hierarchy Cascading Filters (Matching Timetable Design)
+  const [userRole, setUserRole] = useState<string>('ADMIN');
+  const [collegesList, setCollegesList] = useState<any[]>([]);
+  const [selectedCollege, setSelectedCollege] = useState<string>('1');
+
+  const [coursesList, setCoursesList] = useState<any[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<string>('ALL');
+
+  const [branchesList, setBranchesList] = useState<any[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
+
+  const [batchesList, setBatchesList] = useState<any[]>([]);
+  const [selectedBatch, setSelectedBatch] = useState<string>('ALL');
+
+  const [selectedSemester, setSelectedSemester] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   const [selectedCompany, setSelectedCompany] = useState<PlacementCompany | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -38,14 +52,18 @@ export default function AdminPlacementPage() {
   const [creatingDrive, setCreatingDrive] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState(false);
+  const [deletingDriveId, setDeletingDriveId] = useState<number | null>(null);
+
+  const [modalBranchesList, setModalBranchesList] = useState<any[]>([]);
+  const [modalBatchesList, setModalBatchesList] = useState<any[]>([]);
 
   const [createFormData, setCreateFormData] = useState({
     company_name: '',
     role: '',
     package_ctc: '',
     eligibility_course_cd: '13',
-    eligibility_branch_cd: 'CSE',
-    eligibility_batch_cd: '2025',
+    eligibility_branch_cd: '1',
+    eligibility_batch_cd: '2',
     min_score_required: 60,
     drive_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     deadline_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -79,8 +97,191 @@ export default function AdminPlacementPage() {
     return headers;
   };
 
+  const fetchColleges = async () => {
+    try {
+      const res = await fetch('/api/srms/colleges');
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map((c: any) => ({
+            code: String(c.colg_cd || c.code || '1'),
+            name: c.name || c.colg_name || 'SRMS CET Bareilly',
+            slug: c.slug || 'srms-cet-bareilly',
+          }));
+        }
+      }
+    } catch {}
+    return [{ code: '1', name: 'SRMS College of Engineering & Technology, Bareilly', slug: 'srms-cet-bareilly' }];
+  };
+
+  const fetchCoursesForCollege = async (colgcd: string) => {
+    const cd = colgcd || '1';
+    const slug = getTenantSlug();
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((c: any) => ({
+            code: String(c.course_cd || c.code || '1'),
+            name: c.course_name || c.name || `Course ${c.course_cd}`,
+            colg_cd: String(c.colg_cd || cd),
+          }));
+          setCoursesList(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
+    setCoursesList([]);
+    return [];
+  };
+
+  const fetchBranchesForCourse = async (colgcd: string, coursecd: string) => {
+    const cd = colgcd || '1';
+    const crs = coursecd || '13';
+    const slug = getTenantSlug();
+    try {
+      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const courseObj = coursesList.find(c => String(c.code) === String(crs));
+          const courseName = courseObj?.name || 'BCA';
+          const mapped = list.map((b: any) => {
+            const rawName = (b.branch_name || b.name || '').trim();
+            const validName = (rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE')
+              ? rawName
+              : `${b.course_name || courseName} General`;
+            return {
+              id: String(b.branch_cd || b.code || '1'),
+              code: String(b.branch_cd || b.code || '1'),
+              branch_cd: String(b.branch_cd || b.code || '1'),
+              name: validName,
+              course_cd: String(b.course_cd || crs),
+              colg_cd: String(b.colg_cd || cd),
+            };
+          });
+          setBranchesList(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
+    setBranchesList([]);
+    return [];
+  };
+
+  const fetchBatchesForCourse = async (colgcd: string, coursecd: string) => {
+    const cd = colgcd || '1';
+    const crs = coursecd || '13';
+    const slug = getTenantSlug();
+    try {
+      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((b: any) => ({
+            code: String(b.batch_cd || b.code || b.batch_name || '1'),
+            name: String(b.batch_name || b.name || b.year || b.batch_cd),
+            year: Number(b.batch_name || b.year || 2025),
+            course_cd: String(b.course_cd || crs),
+            colg_cd: String(b.colg_cd || cd),
+          }));
+          setBatchesList(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
+    setBatchesList([]);
+    return [];
+  };
+
+  const handleFilterCollegeChange = async (colgCode: string) => {
+    setSelectedCollege(colgCode);
+    const courses = await fetchCoursesForCollege(colgCode);
+    if (courses.length > 0) {
+      const initialCourseCd = courses[0].code;
+      setSelectedCourse(initialCourseCd);
+      const branches = await fetchBranchesForCourse(colgCode, initialCourseCd);
+      if (branches.length > 0) setSelectedBranch(branches[0].code);
+      const batches = await fetchBatchesForCourse(colgCode, initialCourseCd);
+      if (batches.length > 0) setSelectedBatch(batches[0].code);
+    }
+  };
+
+  const handleFilterCourseChange = async (courseCode: string) => {
+    setSelectedCourse(courseCode);
+    const crs = courseCode === 'ALL' ? '13' : courseCode;
+    const branches = await fetchBranchesForCourse(selectedCollege, crs);
+    if (branches.length > 0) {
+      setSelectedBranch(branches[0].code);
+    } else {
+      setSelectedBranch('ALL');
+    }
+    const batches = await fetchBatchesForCourse(selectedCollege, crs);
+    if (batches.length > 0) {
+      setSelectedBatch(batches[0].code);
+    } else {
+      setSelectedBatch('ALL');
+    }
+  };
+
+  const handleFilterBranchChange = (branchCode: string) => {
+    setSelectedBranch(branchCode);
+  };
+
+  const handleFilterBatchChange = (batchCode: string) => {
+    setSelectedBatch(batchCode);
+  };
+
+  const handleFilterSemesterChange = (semester: string) => {
+    setSelectedSemester(semester);
+  };
+
   useEffect(() => {
-    fetchDrives();
+    const initData = async () => {
+      const role = (typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN') : 'ADMIN').toUpperCase();
+      const userColg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+      const userSlug = getTenantSlug();
+      setUserRole(role);
+
+      const allColleges = await fetchColleges();
+      let filteredColleges = allColleges;
+      if (role !== 'SUPER_ADMIN') {
+        const myCol = allColleges.find((c: any) => String(c.colg_cd || c.code) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
+        if (myCol) {
+          filteredColleges = [myCol];
+        } else {
+          filteredColleges = [{
+            code: userColg,
+            name: 'SRMS College of Engineering & Technology, Bareilly',
+            slug: userSlug,
+          }];
+        }
+      }
+      setCollegesList(filteredColleges);
+      const activeColCode = role === 'SUPER_ADMIN' ? (filteredColleges[0]?.code || '1') : userColg;
+      setSelectedCollege(activeColCode);
+
+      const courses = await fetchCoursesForCollege(activeColCode);
+      const bca = courses.find(c => c.code === '13' || c.name === 'BCA') || courses[0];
+      const initialCourseCd = bca ? bca.code : '13';
+      setSelectedCourse(initialCourseCd);
+
+      const branches = await fetchBranchesForCourse(activeColCode, initialCourseCd);
+      if (branches.length > 0) {
+        setSelectedBranch(branches[0].code);
+      }
+
+      const batches = await fetchBatchesForCourse(activeColCode, initialCourseCd);
+      const curBatch = batches.find(b => b.name === '2025' || b.year === 2025 || b.code === '2') || batches[0];
+      if (curBatch) {
+        setSelectedBatch(curBatch.code);
+      }
+
+      await fetchDrives();
+    };
+
+    initData();
   }, []);
 
   const fetchDrives = async () => {
@@ -135,6 +336,44 @@ export default function AdminPlacementPage() {
     }
   };
 
+  const handleOpenCreateModal = async () => {
+    setCreateError(null);
+    const crs = selectedCourse && selectedCourse !== 'ALL' ? selectedCourse : (coursesList[0]?.code || '13');
+    const branches = await fetchBranchesForCourse(selectedCollege, crs);
+    const batches = await fetchBatchesForCourse(selectedCollege, crs);
+    setModalBranchesList(branches);
+    setModalBatchesList(batches);
+    const defaultBranch = branches[0]?.code || '1';
+    const defaultBatch = batches.find(b => b.name === '2025' || b.year === 2025)?.code || batches[0]?.code || '2';
+
+    setCreateFormData({
+      company_name: '',
+      role: '',
+      package_ctc: '',
+      eligibility_course_cd: crs,
+      eligibility_branch_cd: defaultBranch,
+      eligibility_batch_cd: defaultBatch,
+      min_score_required: 60,
+      drive_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      deadline_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      description: '',
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleModalCourseChange = async (newCourseCd: string) => {
+    const branches = await fetchBranchesForCourse(selectedCollege, newCourseCd);
+    const batches = await fetchBatchesForCourse(selectedCollege, newCourseCd);
+    setModalBranchesList(branches);
+    setModalBatchesList(batches);
+    setCreateFormData((prev) => ({
+      ...prev,
+      eligibility_course_cd: newCourseCd,
+      eligibility_branch_cd: branches[0]?.code || '1',
+      eligibility_batch_cd: batches.find(b => b.name === '2025' || b.year === 2025)?.code || batches[0]?.code || '2',
+    }));
+  };
+
   const handleCreateDriveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createFormData.company_name.trim() || !createFormData.role.trim()) {
@@ -148,16 +387,22 @@ export default function AdminPlacementPage() {
     try {
       const tenant = getTenantSlug();
       const headers = getAuthHeaders();
+
+      const branchObj = modalBranchesList.find(b => String(b.code) === String(createFormData.eligibility_branch_cd));
+      const branchLabel = branchObj?.name || createFormData.eligibility_branch_cd;
+
+      const batchObj = modalBatchesList.find(b => String(b.code) === String(createFormData.eligibility_batch_cd));
+      const batchLabel = batchObj?.name || String(batchObj?.year || createFormData.eligibility_batch_cd);
+
       const payload = {
         ...createFormData,
         min_score_required: Number(createFormData.min_score_required) || 0,
-        eligible_branches: [createFormData.eligibility_branch_cd],
-        eligible_batches: [createFormData.eligibility_batch_cd],
+        eligible_branches: [branchLabel],
+        eligible_batches: [batchLabel],
       };
 
-      await axios.post(`/api/placement-drive/create?tenant=${tenant}`, payload, { headers }).catch(async () => {
-        return axios.post(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/create?tenant=${tenant}`, payload, { headers });
-      });
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+      await axios.post(`${backendUrl}/placement-drive/create?tenant=${tenant}`, payload, { headers });
 
       setCreateSuccess(true);
       setTimeout(() => {
@@ -168,8 +413,8 @@ export default function AdminPlacementPage() {
           role: '',
           package_ctc: '',
           eligibility_course_cd: '13',
-          eligibility_branch_cd: 'CSE',
-          eligibility_batch_cd: '2025',
+          eligibility_branch_cd: '1',
+          eligibility_batch_cd: '2',
           min_score_required: 60,
           drive_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           deadline_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -184,6 +429,27 @@ export default function AdminPlacementPage() {
     }
   };
 
+  const handleDeleteDrive = async (company: PlacementCompany) => {
+    const confirmDelete = window.confirm(
+      `Are you sure you want to permanently delete "${company.company_name}" (${company.role}) placement drive? This action cannot be undone.`
+    );
+    if (!confirmDelete) return;
+
+    setDeletingDriveId(company.drive_id);
+    try {
+      const tenant = getTenantSlug();
+      const headers = getAuthHeaders();
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+      await axios.delete(`${backendUrl}/placement-drive/${company.drive_id}?tenant=${tenant}`, { headers });
+      setCompanies((prev) => prev.filter((c) => c.drive_id !== company.drive_id));
+    } catch (err: any) {
+      console.error('Failed to delete placement drive:', err);
+      alert(err?.response?.data?.message || err?.message || 'Failed to delete placement drive.');
+    } finally {
+      setDeletingDriveId(null);
+    }
+  };
+
   const handleExportAll = async () => {
     try {
       const tenant = getTenantSlug();
@@ -191,16 +457,30 @@ export default function AdminPlacementPage() {
       const res = await axios.get(`/api/placement-drive/export?tenant=${tenant}`, { headers }).catch(async () => {
         return axios.get(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/export?tenant=${tenant}`, { headers });
       });
-      const rows = res.data?.data || res.data || [];
+      let rows = res.data?.data || res.data || [];
+      const exportType = res.data?.export_type;
+
+      // If backend returned no rows, fallback to loaded companies/drives
       if (!Array.isArray(rows) || rows.length === 0) {
-        alert('No placement records to export.');
-        return;
+        if (companies && companies.length > 0) {
+          rows = companies;
+        } else {
+          alert('No placement records or recruitment drives available to export.');
+          return;
+        }
       }
-      const fileHeaders = ['Student Name', 'Reg No', 'Course', 'Batch', 'Company', 'Role', 'Package', 'Status', 'Offer Status', 'Applied Date'];
-      const csvContent = 'data:text/csv;charset=utf-8,' +
-        [fileHeaders.join(','), ...rows.map((r: any) => [
+
+      // Check if rows represent applicant records or drive records
+      const isApplicantExport = exportType === 'applicants' || (rows[0] && (rows[0].student_name !== undefined || rows[0].student_reg_no !== undefined || rows[0].application_id !== undefined));
+
+      let fileHeaders: string[];
+      let csvRows: string[][];
+
+      if (isApplicantExport) {
+        fileHeaders = ['Student Name', 'Reg No', 'Course', 'Batch', 'Company', 'Role', 'Package (CTC)', 'Status', 'Offer Status', 'Applied Date'];
+        csvRows = rows.map((r: any) => [
           `"${r.student_name || ''}"`,
-          `"${r.registration_no || ''}"`,
+          `"${r.registration_no || r.rollno || ''}"`,
           `"${r.course_cd || ''}"`,
           `"${r.batch_cd || ''}"`,
           `"${r.company_name || ''}"`,
@@ -209,12 +489,28 @@ export default function AdminPlacementPage() {
           `"${r.status || ''}"`,
           `"${r.offer_status || ''}"`,
           `"${r.applied_at || ''}"`,
-        ].join(','))].join('\n');
+        ]);
+      } else {
+        fileHeaders = ['Company Name', 'Role', 'Package (LPA)', 'Drive Date', 'Mode', 'Eligible Branches', 'Eligible Batches', 'Status', 'Total Applicants', 'Total Selected'];
+        csvRows = rows.map((d: any) => [
+          `"${d.company_name || ''}"`,
+          `"${d.role || ''}"`,
+          `"${d.package_ctc || ''}"`,
+          `"${d.drive_date || ''}"`,
+          `"${d.mode || 'On-Campus'}"`,
+          `"${d.eligibility_branch_cd || (Array.isArray(d.branches) ? d.branches.join('; ') : d.branches) || 'All'}"`,
+          `"${d.eligibility_batch_cd || (Array.isArray(d.batches) ? d.batches.join('; ') : d.batches) || 'All'}"`,
+          `"${d.status || 'Open'}"`,
+          `"${d.total_applicants || d.applicants_count || 0}"`,
+          `"${d.total_selected || d.selected_count || 0}"`,
+        ]);
+      }
 
+      const csvContent = 'data:text/csv;charset=utf-8,' + [fileHeaders.join(','), ...csvRows.map(r => r.join(','))].join('\n');
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement('a');
       link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `Master_Placement_Report_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `Master_Placement_${isApplicantExport ? 'Applicants' : 'Drives'}_Report_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -235,6 +531,30 @@ export default function AdminPlacementPage() {
       });
       const rows = res.data?.data || res.data || [];
       if (!Array.isArray(rows) || rows.length === 0) {
+        // Fallback: download company drive details if 0 applicants
+        const comp = companies.find((c) => c.drive_id === driveId);
+        if (comp) {
+          const driveHeaders = ['Company Name', 'Role', 'Package (LPA)', 'Drive Date', 'Mode', 'Eligible Branches', 'Eligible Batches', 'Status'];
+          const driveRow = [
+            `"${comp.company_name || ''}"`,
+            `"${comp.role || ''}"`,
+            `"${comp.package_ctc || ''}"`,
+            `"${comp.drive_date || ''}"`,
+            `"${comp.mode || 'On-Campus'}"`,
+            `"${Array.isArray(comp.eligible_branches) ? comp.eligible_branches.join('; ') : Array.isArray(comp.branches) ? comp.branches.join('; ') : comp.eligible_branches || comp.branches || 'All'}"`,
+            `"${Array.isArray(comp.eligible_batches) ? comp.eligible_batches.join('; ') : Array.isArray(comp.batches) ? comp.batches.join('; ') : comp.eligible_batches || comp.batches || 'All'}"`,
+            `"${comp.status || 'Open'}"`,
+          ];
+          const csvContent = 'data:text/csv;charset=utf-8,' + [driveHeaders.join(','), driveRow.join(',')].join('\n');
+          const encodedUri = encodeURI(csvContent);
+          const link = document.createElement('a');
+          link.setAttribute('href', encodedUri);
+          link.setAttribute('download', `${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_Drive_Roster.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          return;
+        }
         alert(`No ${status || ''} applicant records found for ${companyName}.`);
         return;
       }
@@ -274,26 +594,37 @@ export default function AdminPlacementPage() {
       (c.package_ctc || '').toLowerCase().includes(s) ||
       (c.description || '').toLowerCase().includes(s);
 
+    const matchCourse =
+      selectedCourse === 'ALL' ||
+      !c.eligibility_course_cd ||
+      String(c.eligibility_course_cd) === String(selectedCourse);
+
     const matchBranch =
-      branchFilter === 'ALL' ||
+      selectedBranch === 'ALL' ||
       !c.eligible_branches ||
       (Array.isArray(c.eligible_branches) && c.eligible_branches.length === 0) ||
       (Array.isArray(c.eligible_branches)
-        ? c.eligible_branches.includes(branchFilter)
-        : String(c.eligible_branches).includes(branchFilter));
+        ? c.eligible_branches.some((b: any) => 
+            String(b).toUpperCase() === selectedBranch.toUpperCase() ||
+            (branchesList.find(br => br.code === selectedBranch)?.name || '').toUpperCase().includes(String(b).toUpperCase())
+          )
+        : String(c.eligible_branches).includes(selectedBranch));
 
     const matchBatch =
-      batchFilter === 'ALL' ||
+      selectedBatch === 'ALL' ||
       !c.eligible_batches ||
       (Array.isArray(c.eligible_batches) && c.eligible_batches.length === 0) ||
       (Array.isArray(c.eligible_batches)
-        ? c.eligible_batches.includes(batchFilter)
-        : String(c.eligible_batches).includes(batchFilter));
+        ? c.eligible_batches.some((b: any) => 
+            String(b).includes(selectedBatch) || 
+            (batchesList.find(bt => bt.code === selectedBatch)?.name || '').includes(String(b))
+          )
+        : String(c.eligible_batches).includes(selectedBatch));
 
     const matchStatus =
       statusFilter === 'ALL' || (c.status || '').toUpperCase() === statusFilter.toUpperCase();
 
-    return matchSearch && matchBranch && matchBatch && matchStatus;
+    return matchSearch && matchCourse && matchBranch && matchBatch && matchStatus;
   });
 
   return (
@@ -322,17 +653,19 @@ export default function AdminPlacementPage() {
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap items-center gap-2.5">
               <a
-                href="/templates/placement-drive-import-template.xlsx"
+                href={`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/template`}
+                target="_blank"
+                rel="noreferrer"
                 download="placement-drive-import-template.xlsx"
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-sm"
               >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
                 Download Format
               </a>
 
               <button
                 onClick={handleExportAll}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 shadow-sm"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
               >
                 <Download className="w-4 h-4 text-emerald-600" />
                 Export All Placements
@@ -347,10 +680,7 @@ export default function AdminPlacementPage() {
               </button>
 
               <button
-                onClick={() => {
-                  setCreateError(null);
-                  setIsCreateModalOpen(true);
-                }}
+                onClick={handleOpenCreateModal}
                 className="px-5 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all flex items-center gap-2 active:scale-95"
               >
                 <Plus className="w-4 h-4" />
@@ -359,57 +689,135 @@ export default function AdminPlacementPage() {
             </div>
           </div>
 
-          {/* Search & Filter Bar */}
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-[22px] border border-[#E7EAF3] dark:border-slate-700 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search company, role, package..."
-                className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-              />
-            </div>
+          {/* Academic Hierarchy Cascading Filter Bar (Matching Timetable Design Photo 1) */}
+          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-4 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              
+              {/* 1. College Selector — Locked for Non-SuperAdmins */}
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+                  <span>🏛️</span> College:
+                </span>
+                <select
+                  value={selectedCollege}
+                  disabled={userRole !== 'SUPER_ADMIN'}
+                  onChange={(e) => handleFilterCollegeChange(e.target.value)}
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer disabled:cursor-not-allowed text-xs max-w-[220px] truncate"
+                >
+                  {collegesList.map((colg, idx) => (
+                    <option key={colg.code || idx} value={colg.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      [#{colg.code}] {colg.name}
+                    </option>
+                  ))}
+                </select>
+                {userRole !== 'SUPER_ADMIN' && (
+                  <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shrink-0">
+                    🔒 Locked
+                  </span>
+                )}
+              </div>
 
-            <div>
-              <select
-                value={branchFilter}
-                onChange={(e) => setBranchFilter(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-              >
-                <option value="ALL">All Branches</option>
-                <option value="CSE">Computer Science (CSE)</option>
-                <option value="IT">Information Tech (IT)</option>
-                <option value="ECE">Electronics (ECE)</option>
-                <option value="ME">Mechanical (ME)</option>
-                <option value="EE">Electrical (EE)</option>
-                <option value="CE">Civil (CE)</option>
-              </select>
-            </div>
+              {/* 2. Course Selector */}
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+                  <span>🎓</span> Course <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({coursesList.length})</span>:
+                </span>
+                <select
+                  value={selectedCourse}
+                  onChange={(e) => handleFilterCourseChange(e.target.value)}
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
+                >
+                  {coursesList.map((crs, idx) => (
+                    <option key={crs.code || idx} value={crs.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      [#{crs.code}] {crs.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <select
-                value={batchFilter}
-                onChange={(e) => setBatchFilter(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-              >
-                <option value="ALL">All Batches</option>
-                <option value="2025">Batch 2025</option>
-                <option value="2026">Batch 2026</option>
-              </select>
-            </div>
+              {/* 3. Branch Selector */}
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+                  <span>🏢</span> Branch <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({branchesList.length})</span>:
+                </span>
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => handleFilterBranchChange(e.target.value)}
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
+                >
+                  {branchesList.map((br: any, idx: number) => (
+                    <option key={br.code || idx} value={br.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      [#{br.code}] {br.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="OPEN">Open / Active</option>
-                <option value="CLOSED">Closed</option>
-              </select>
+              {/* 4. Batch Selector */}
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-indigo-400/60 dark:border-indigo-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF] transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+                  <span>👥</span> Batch <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({batchesList.length})</span> *:
+                </span>
+                <select
+                  value={selectedBatch}
+                  onChange={(e) => handleFilterBatchChange(e.target.value)}
+                  className="bg-transparent text-slate-900 dark:text-white font-black focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
+                >
+                  {batchesList.map((batch, idx) => (
+                    <option key={batch.code || idx} value={batch.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      [#{batch.code}] Batch {batch.name || batch.year} {batch.year && batch.name !== String(batch.year) ? `(${batch.year})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 5. Semester Selector */}
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+                  <span>📖</span> Semester:
+                </span>
+                <select
+                  value={selectedSemester}
+                  onChange={(e) => handleFilterSemesterChange(e.target.value)}
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
+                >
+                  <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Semesters</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                    <option key={sem} value={String(sem)} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      [#{sem}] Semester {sem}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 6. Status Selector */}
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+                  <span>📊</span> Status:
+                </span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
+                >
+                  <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Statuses</option>
+                  <option value="OPEN" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Open / Active</option>
+                  <option value="CLOSED" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Closed</option>
+                </select>
+              </div>
+
+              {/* Search Bar Inline */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search company, role, package..."
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                />
+              </div>
+
             </div>
           </div>
 
@@ -442,8 +850,11 @@ export default function AdminPlacementPage() {
                   key={comp.drive_id}
                   company={comp}
                   role="admin"
+                  userRole={userRole}
+                  isDeleting={deletingDriveId === comp.drive_id}
                   onViewDetails={(c) => setSelectedCompany(c)}
                   onManageApplicants={(c) => handleOpenApplicants(c)}
+                  onDelete={(c) => handleDeleteDrive(c)}
                 />
               ))}
             </div>
@@ -693,7 +1104,7 @@ export default function AdminPlacementPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Offered Package (CTC)
@@ -709,33 +1120,52 @@ export default function AdminPlacementPage() {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Eligible Branch
+                      Eligible Course *
+                    </label>
+                    <select
+                      value={createFormData.eligibility_course_cd}
+                      onChange={(e) => handleModalCourseChange(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    >
+                      {coursesList.map((crs, idx) => (
+                        <option key={crs.code || idx} value={crs.code}>
+                          [#{crs.code}] {crs.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Eligible Branch * <span className="text-[#5B4BFF]">({modalBranchesList.length})</span>
                     </label>
                     <select
                       value={createFormData.eligibility_branch_cd}
                       onChange={(e) => setCreateFormData({ ...createFormData, eligibility_branch_cd: e.target.value })}
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
                     >
-                      <option value="CSE">Computer Science (CSE)</option>
-                      <option value="IT">Information Tech (IT)</option>
-                      <option value="ECE">Electronics (ECE)</option>
-                      <option value="ME">Mechanical (ME)</option>
-                      <option value="EE">Electrical (EE)</option>
-                      <option value="ALL">All Engineering Branches</option>
+                      {modalBranchesList.map((br: any, idx: number) => (
+                        <option key={br.code || idx} value={br.code}>
+                          [#{br.code}] {br.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Eligible Batch
+                      Eligible Batch * <span className="text-[#5B4BFF]">({modalBatchesList.length})</span>
                     </label>
                     <select
                       value={createFormData.eligibility_batch_cd}
                       onChange={(e) => setCreateFormData({ ...createFormData, eligibility_batch_cd: e.target.value })}
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
                     >
-                      <option value="2025">Batch 2025</option>
-                      <option value="2026">Batch 2026</option>
+                      {modalBatchesList.map((batch: any, idx: number) => (
+                        <option key={batch.code || idx} value={batch.code}>
+                          [#{batch.code}] Batch {batch.name || batch.year} {batch.year && batch.name !== String(batch.year) ? `(${batch.year})` : ''}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

@@ -86,7 +86,7 @@ export default function ChatComposer({
   };
 
   return (
-    <div className="p-4 bg-white dark:bg-slate-900 border-t border-[#E7EAF3] dark:border-slate-800 relative">
+    <div className="p-3 sm:p-4 bg-white dark:bg-slate-900 border-t border-[#E7EAF3] dark:border-slate-800 relative shrink-0 z-10">
       {/* Emoji Picker Popover */}
       {showEmojiPicker && (
         <div className="absolute bottom-20 left-6 z-30 p-3 bg-white dark:bg-slate-850 border border-[#E7EAF3] dark:border-slate-700 rounded-2xl shadow-xl animate-in zoom-in-95 duration-150">

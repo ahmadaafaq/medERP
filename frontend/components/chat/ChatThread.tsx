@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { Users, Sparkles, MessageSquare, Clock, CheckCheck, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Users, Sparkles, MessageSquare, Clock, CheckCheck, ShieldCheck, ArrowLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { ChatMessage, ChatGroup } from '../../hooks/useChat';
 import ChatAttachmentChip from './ChatAttachmentChip';
 
@@ -11,6 +11,8 @@ interface ChatThreadProps {
   loading: boolean;
   onOpenMembers: () => void;
   onBack?: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
   currentUserId?: string;
   currentUserRole?: string;
 }
@@ -21,6 +23,8 @@ export default function ChatThread({
   loading,
   onOpenMembers,
   onBack,
+  onToggleSidebar,
+  isSidebarOpen = true,
   currentUserId,
   currentUserRole,
 }: ChatThreadProps) {
@@ -70,16 +74,31 @@ export default function ChatThread({
 
   if (!group) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F6F8FC] dark:bg-slate-900/60 text-center">
-        <div className="w-16 h-16 rounded-3xl bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] flex items-center justify-center mb-4 shadow-sm">
-          <MessageSquare className="w-8 h-8" />
+      <div className="flex-1 flex flex-col min-h-0 bg-[#F6F8FC]/50 dark:bg-slate-900/40 overflow-hidden">
+        {onToggleSidebar && !isSidebarOpen && (
+          <div className="h-16 px-4 sm:px-6 bg-white dark:bg-slate-900 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center shrink-0">
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="p-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-200 border border-[#E7EAF3] dark:border-slate-700 hover:bg-orange-50 hover:text-[#F36C21] dark:hover:bg-slate-700 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold shadow-xs"
+              title="Show Batches List"
+            >
+              <PanelLeftOpen className="w-4 h-4 text-[#F36C21]" />
+              <span className="text-[11px] font-bold text-[#1B1E28] dark:text-slate-200">Show Batches</span>
+            </button>
+          </div>
+        )}
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F6F8FC] dark:bg-slate-900/60 text-center">
+          <div className="w-16 h-16 rounded-3xl bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] flex items-center justify-center mb-4 shadow-sm">
+            <MessageSquare className="w-8 h-8" />
+          </div>
+          <h3 className="text-base font-black text-[#1B1E28] dark:text-white">
+            No Batch Group Selected
+          </h3>
+          <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-1 max-w-sm">
+            Pick a department batch from the sidebar to view discussions, share lecture updates, or ask questions.
+          </p>
         </div>
-        <h3 className="text-base font-black text-[#1B1E28] dark:text-white">
-          No Batch Group Selected
-        </h3>
-        <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-1 max-w-sm">
-          Pick a department batch from the sidebar to view discussions, share lecture updates, or ask questions.
-        </p>
       </div>
     );
   }
@@ -89,14 +108,34 @@ export default function ChatThread({
       {/* Thread Header */}
       <div className="h-16 px-4 sm:px-6 bg-white dark:bg-slate-900 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between shrink-0 shadow-xs z-10">
         <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+          {/* Mobile Back button */}
           {onBack && (
             <button
               type="button"
               onClick={onBack}
-              className="p-2 -ml-1 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-200 border border-[#E7EAF3] dark:border-slate-700 hover:bg-orange-50 hover:text-[#F36C21] transition-all cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0"
+              className="md:hidden p-2 -ml-1 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-200 border border-[#E7EAF3] dark:border-slate-700 hover:bg-orange-50 hover:text-[#F36C21] transition-all cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 shadow-xs"
               title="Back to Batches"
             >
               <ArrowLeft className="w-4 h-4 text-[#F36C21]" />
+            </button>
+          )}
+
+          {/* Desktop Toggle Button */}
+          {onToggleSidebar && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="hidden md:flex p-2 -ml-1 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 text-[#4E5969] dark:text-slate-200 border border-[#E7EAF3] dark:border-slate-700 hover:bg-orange-50 hover:text-[#F36C21] dark:hover:bg-slate-700 transition-all cursor-pointer items-center gap-1.5 text-xs font-bold shrink-0 shadow-xs"
+              title={isSidebarOpen ? 'Collapse Batches List' : 'Expand Batches List'}
+            >
+              {isSidebarOpen ? (
+                <PanelLeftClose className="w-4 h-4 text-[#F36C21]" />
+              ) : (
+                <>
+                  <PanelLeftOpen className="w-4 h-4 text-[#F36C21]" />
+                  <span className="text-[11px] font-bold text-[#1B1E28] dark:text-slate-200">Batches</span>
+                </>
+              )}
             </button>
           )}
 
@@ -133,7 +172,7 @@ export default function ChatThread({
       </div>
 
       {/* Messages List */}
-      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
+      <div className="flex-1 min-h-0 p-4 sm:p-6 overflow-y-auto space-y-4">
         {loading ? (
           [...Array(6)].map((_, i) => (
             <div

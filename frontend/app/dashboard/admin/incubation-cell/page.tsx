@@ -71,6 +71,8 @@ interface DropdownItem {
 }
 
 export default function IncubationCellPage() {
+  const [userRole, setUserRole] = useState<string>('ADMIN');
+
   // Filters State
   const [selectedCollege, setSelectedCollege] = useState<string>('');
   const [selectedCourse, setSelectedCourse] = useState<string>('');
@@ -95,7 +97,7 @@ export default function IncubationCellPage() {
   const [editingProject, setEditingProject] = useState<IncubationProject | null>(null);
   const [newStatus, setNewStatus] = useState<string>('Selected');
   const [newNotes, setNewNotes] = useState<string>('');
-  const [newFunding, setNewFunding] = useState<number>(0);
+  const [newFunding, setNewFunding] = useState<string>('');
   const [newMentor, setNewMentor] = useState<string>('');
   const [updating, setUpdating] = useState<boolean>(false);
   const [modalMsg, setModalMsg] = useState<string>('');
@@ -123,24 +125,120 @@ export default function IncubationCellPage() {
     };
   };
 
+  // Fetch Courses for College
+  const fetchCourses = async (colgcd: string) => {
+    const cd = colgcd || '1';
+    const slug = getTenantSlug();
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((c: any) => ({
+            id: String(c.course_cd || c.code || '1'),
+            code: String(c.course_cd || c.code || '1'),
+            name: c.course_name || c.name || `Course ${c.course_cd}`,
+            colg_cd: String(c.colg_cd || cd),
+          }));
+          setMetaCourses(mapped);
+          return mapped;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch courses:', err);
+    }
+    return [];
+  };
+
+  // Fetch Branches for Course
+  const fetchBranches = async (colgcd: string, coursecd: string) => {
+    const cd = colgcd || '1';
+    const crs = coursecd || '';
+    const slug = getTenantSlug();
+    if (!crs) {
+      setMetaBranches([]);
+      return [];
+    }
+    try {
+      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((b: any) => ({
+            id: String(b.branch_cd || b.code || '1'),
+            code: String(b.branch_cd || b.code || '1'),
+            name: b.branch_name || b.name || `Branch ${b.branch_cd}`,
+            course_cd: String(b.course_cd || crs),
+            colg_cd: String(b.colg_cd || cd),
+          }));
+          setMetaBranches(mapped);
+          return mapped;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch branches:', err);
+    }
+    setMetaBranches([]);
+    return [];
+  };
+
+  // Fetch Batches for Course & Branch
+  const fetchBatches = async (colgcd: string, coursecd: string, branchcd: string = '') => {
+    const cd = colgcd || '1';
+    const crs = coursecd || '';
+    const slug = getTenantSlug();
+    if (!crs) {
+      setMetaBatches([]);
+      return [];
+    }
+    try {
+      const brParam = branchcd ? `&branchcd=${branchcd}` : '';
+      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}${brParam}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((b: any) => ({
+            id: String(b.batch_cd || b.code || b.batch_name || '1'),
+            code: String(b.batch_cd || b.code || b.batch_name || '1'),
+            name: String(b.batch_name || b.name || b.year || b.batch_cd),
+            course_cd: String(b.course_cd || crs),
+            colg_cd: String(b.colg_cd || cd),
+          }));
+          setMetaBatches(mapped);
+          return mapped;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch batches:', err);
+    }
+    setMetaBatches([]);
+    return [];
+  };
+
   const fetchMeta = async () => {
     setMetaLoading(true);
     try {
       const slug = getTenantSlug();
-      const res = await fetch(`/api/incubation-cell/meta?tenant=${slug}`, { headers: getHeaders() });
-      if (res.ok) {
-        const json = await res.json();
-        const data = json.data || {};
-        setMetaColleges(data.colleges || []);
-        setMetaCourses(data.courses || []);
-        setMetaBranches(data.branches || []);
-        setMetaBatches(data.batches || []);
+      const role = (typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN') : 'ADMIN').toUpperCase();
+      const userColg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+      const tenantName = typeof window !== 'undefined' 
+        ? (localStorage.getItem('tenantName') || localStorage.getItem('selectedTenantName') || localStorage.getItem('college_name') || localStorage.getItem('collegeName') || '')
+        : '';
+      setUserRole(role);
 
-        // Default select the first college so user immediately sees active projects
-        if (data.colleges && data.colleges.length > 0) {
-          setSelectedCollege(data.colleges[0].id || data.colleges[0].code);
-        }
-      }
+      const activeColCode = userColg || '1';
+      const defaultCollege = {
+        id: activeColCode,
+        code: activeColCode,
+        name: tenantName || 'SRMS College of Engineering & Technology, Bareilly',
+        slug: slug,
+      };
+
+      setMetaColleges([defaultCollege]);
+      setSelectedCollege(activeColCode);
+
+      // Load initial courses for this college
+      await fetchCourses(activeColCode);
     } catch (e) {
       console.error('Failed to load incubation metadata:', e);
     } finally {
@@ -148,42 +246,53 @@ export default function IncubationCellPage() {
     }
   };
 
-  // Cascading Filter Logic
-  const availableCourses = useMemo(() => {
-    if (!selectedCollege || selectedCollege === 'all' || selectedCollege === '1') return metaCourses;
-    return metaCourses.filter(c => !c.colg_cd || c.colg_cd === selectedCollege);
-  }, [metaCourses, selectedCollege]);
-
-  const availableBranches = useMemo(() => {
-    if (!selectedCourse || selectedCourse === 'all') return metaBranches;
-    return metaBranches.filter(b => !b.course_cd || b.course_cd === selectedCourse || b.colg_cd === selectedCollege);
-  }, [metaBranches, selectedCourse, selectedCollege]);
-
-  const availableBatches = useMemo(() => {
-    return metaBatches;
-  }, [metaBatches]);
-
-  // Handle Cascading Filter Resets
-  const handleCollegeChange = (colgId: string) => {
+  // Handle Cascading Filter Changes
+  const handleCollegeChange = async (colgId: string) => {
     setSelectedCollege(colgId);
     setSelectedCourse('');
     setSelectedBranch('');
     setSelectedBatch('');
+    await fetchCourses(colgId);
   };
 
-  const handleCourseChange = (courseId: string) => {
+  const handleCourseChange = async (courseId: string) => {
     setSelectedCourse(courseId);
     setSelectedBranch('');
+    setSelectedBatch('');
+    if (courseId) {
+      await Promise.all([
+        fetchBranches(selectedCollege, courseId),
+        fetchBatches(selectedCollege, courseId),
+      ]);
+    } else {
+      setMetaBranches([]);
+      setMetaBatches([]);
+    }
+  };
+
+  const handleBranchChange = async (branchId: string) => {
+    setSelectedBranch(branchId);
+    setSelectedBatch('');
+    if (selectedCourse) {
+      await fetchBatches(selectedCollege, selectedCourse, branchId);
+    }
+  };
+
+  const handleBatchChange = (batchId: string) => {
+    setSelectedBatch(batchId);
   };
 
   const handleResetFilters = () => {
-    setSelectedCollege('');
+    if (userRole === 'SUPER_ADMIN') {
+      setSelectedCollege('');
+    }
     setSelectedCourse('');
     setSelectedBranch('');
     setSelectedBatch('');
     setStatusFilter('');
     setSearchQuery('');
-    setProjects([]);
+    setMetaBranches([]);
+    setMetaBatches([]);
   };
 
   // Fetch Projects when filters change or on initial mount
@@ -236,17 +345,17 @@ export default function IncubationCellPage() {
       case 'Funded':
         return {
           label: 'Funded 💰',
-          class: 'bg-emerald-50 text-[#00C48C] border-[#00C48C]/30 dark:bg-emerald-950/40 dark:text-emerald-300',
+          class: 'bg-emerald-50 text-[#00C48C] border-[#00C48C]/30 dark:bg-emerald-950/40 dark:text-emerald-300 font-extrabold',
         };
       case 'Incubated':
         return {
           label: 'Incubated 🚀',
-          class: 'bg-purple-50 text-[#5B4FE9] border-[#5B4FE9]/30 dark:bg-purple-950/40 dark:text-purple-300 font-black',
+          class: 'bg-orange-50 text-[#F36C21] border-[#F36C21]/30 dark:bg-orange-950/40 dark:text-orange-300 font-black',
         };
       case 'Selected':
         return {
           label: 'Selected 🌟',
-          class: 'bg-amber-50 text-[#F0742C] border-[#F0742C]/30 dark:bg-orange-950/40 dark:text-orange-300 font-extrabold',
+          class: 'bg-amber-50 text-[#F36C21] border-[#F36C21]/30 dark:bg-orange-950/40 dark:text-orange-300 font-extrabold',
         };
       case 'Rejected':
         return {
@@ -267,7 +376,7 @@ export default function IncubationCellPage() {
     setEditingProject(proj);
     setNewStatus(proj.incubationStatus || 'Selected');
     setNewNotes(proj.incubationNotes || '');
-    setNewFunding(proj.fundingAmount || 0);
+    setNewFunding(proj.fundingAmount && proj.fundingAmount > 0 ? String(proj.fundingAmount) : '');
     setNewMentor(proj.mentorAssigned || '');
     setModalMsg('');
   };
@@ -289,7 +398,7 @@ export default function IncubationCellPage() {
         body: JSON.stringify({
           status: newStatus,
           incubation_notes: newNotes,
-          funding_amount: Number(newFunding),
+          funding_amount: newFunding ? Number(newFunding) : 0,
           mentor_assigned: newMentor,
           tenant: slug,
         }),
@@ -343,7 +452,7 @@ export default function IncubationCellPage() {
           <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-5 shadow-soft space-y-4">
             <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-[#5B4FE9]" />
+                <Filter className="w-4 h-4 text-[#F36C21]" />
                 <h2 className="text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider">
                   Academic Hierarchy Filters
                 </h2>
@@ -352,7 +461,7 @@ export default function IncubationCellPage() {
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="text-xs font-bold text-[#F0742C] hover:text-orange-600 transition-colors flex items-center gap-1 cursor-pointer"
+                className="text-xs font-bold text-[#F36C21] hover:text-orange-600 transition-colors flex items-center gap-1 cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset filters</span>
@@ -362,21 +471,29 @@ export default function IncubationCellPage() {
             {/* 4 Cascading Dropdowns */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
               
-              {/* 1. College Dropdown */}
+              {/* 1. College Dropdown — Locked for Non-SuperAdmins */}
               <div>
-                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <Building2 className="w-3.5 h-3.5 text-[#5B4FE9]" />
-                  <span>1. College / Institute *</span>
+                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-[#F36C21]" />
+                    <span>1. College / Institute *</span>
+                  </span>
+                  {userRole !== 'SUPER_ADMIN' && (
+                    <span className="text-[10px] bg-orange-50 dark:bg-orange-950/60 text-[#F36C21] font-black px-1.5 py-0.5 rounded border border-orange-200 dark:border-orange-800/60 shrink-0 inline-flex items-center gap-1">
+                      🔒 Locked
+                    </span>
+                  )}
                 </label>
                 <select
                   value={selectedCollege}
+                  disabled={userRole !== 'SUPER_ADMIN'}
                   onChange={(e) => handleCollegeChange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4FE9]"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21] disabled:opacity-90 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  <option value="">Select College</option>
+                  {userRole === 'SUPER_ADMIN' && <option value="">Select College</option>}
                   {metaColleges.map((c) => (
-                    <option key={c.id || c.code} value={c.id || c.code}>
-                      {c.name}
+                    <option key={c.id || c.code} value={c.code || c.id}>
+                      {c.code && !isNaN(Number(c.code)) ? `[#${c.code}] ${c.name}` : c.name}
                     </option>
                   ))}
                 </select>
@@ -384,19 +501,26 @@ export default function IncubationCellPage() {
 
               {/* 2. Course Dropdown (Cascading) */}
               <div>
-                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <GraduationCap className="w-3.5 h-3.5 text-[#5B4FE9]" />
-                  <span>2. Course</span>
+                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <GraduationCap className="w-3.5 h-3.5 text-[#F36C21]" />
+                    <span>2. Course</span>
+                  </span>
+                  {metaCourses.length > 0 && (
+                    <span className="text-[10px] font-extrabold text-[#F36C21]">
+                      ({metaCourses.length})
+                    </span>
+                  )}
                 </label>
                 <select
                   value={selectedCourse}
                   onChange={(e) => handleCourseChange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4FE9] cursor-pointer"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21] cursor-pointer"
                 >
                   <option value="">All Courses</option>
-                  {availableCourses.map((c) => (
+                  {metaCourses.map((c) => (
                     <option key={c.id || c.code} value={c.code || c.id}>
-                      {c.name}
+                      {c.code && !isNaN(Number(c.code)) ? `[#${c.code}] ${c.name}` : c.name}
                     </option>
                   ))}
                 </select>
@@ -404,39 +528,55 @@ export default function IncubationCellPage() {
 
               {/* 3. Branch Dropdown (Cascading) */}
               <div>
-                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <Layers className="w-3.5 h-3.5 text-[#5B4FE9]" />
-                  <span>3. Branch / Department</span>
+                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Layers className="w-3.5 h-3.5 text-[#F36C21]" />
+                    <span>3. Branch / Department</span>
+                  </span>
+                  {metaBranches.length > 0 && (
+                    <span className="text-[10px] font-extrabold text-[#F36C21]">
+                      ({metaBranches.length})
+                    </span>
+                  )}
                 </label>
                 <select
                   value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4FE9] cursor-pointer"
+                  disabled={!selectedCourse}
+                  onChange={(e) => handleBranchChange(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  <option value="">All Branches</option>
-                  {availableBranches.map((b) => (
+                  <option value="">{selectedCourse ? 'All Branches' : 'Select Course first'}</option>
+                  {metaBranches.map((b) => (
                     <option key={b.id || b.code} value={b.code || b.id}>
-                      {b.name}
+                      {b.code && !isNaN(Number(b.code)) ? `[#${b.code}] ${b.name}` : b.name}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* 4. Batch Dropdown */}
+              {/* 4. Batch Dropdown (Cascading) */}
               <div>
-                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-[#5B4FE9]" />
-                  <span>4. Batch</span>
+                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-[#F36C21]" />
+                    <span>4. Batch</span>
+                  </span>
+                  {metaBatches.length > 0 && (
+                    <span className="text-[10px] font-extrabold text-[#F36C21]">
+                      ({metaBatches.length})
+                    </span>
+                  )}
                 </label>
                 <select
                   value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4FE9] cursor-pointer"
+                  disabled={!selectedCourse}
+                  onChange={(e) => handleBatchChange(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  <option value="">All Batches</option>
-                  {availableBatches.map((b) => (
+                  <option value="">{selectedCourse ? 'All Batches' : 'Select Course first'}</option>
+                  {metaBatches.map((b) => (
                     <option key={b.id || b.code} value={b.code || b.id}>
-                      {b.name}
+                      {b.code && !isNaN(Number(b.code)) ? `[#${b.code}] ` : ''}Batch {b.name}
                     </option>
                   ))}
                 </select>
@@ -453,7 +593,7 @@ export default function IncubationCellPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && fetchProjects()}
                   placeholder="Search project title, tech stack, or student..."
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5B4FE9]"
+                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
                 />
               </div>
 
@@ -483,7 +623,7 @@ export default function IncubationCellPage() {
           {!selectedCollege ? (
             /* Disabled Empty State */
             <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-16 text-center space-y-3 shadow-soft">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4FE9] flex items-center justify-center mx-auto shadow-inner">
+              <div className="w-16 h-16 rounded-2xl bg-orange-50 dark:bg-orange-950/40 text-[#F36C21] flex items-center justify-center mx-auto shadow-inner">
                 <Filter className="w-8 h-8 opacity-60" />
               </div>
               <h3 className="text-lg font-black text-[#1B1E28] dark:text-white">
@@ -497,7 +637,7 @@ export default function IncubationCellPage() {
             /* Loading Skeleton */
             <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-8 shadow-soft space-y-4">
               <div className="flex items-center gap-3">
-                <Loader2 className="w-6 h-6 text-[#5B4FE9] animate-spin" />
+                <Loader2 className="w-6 h-6 text-[#F36C21] animate-spin" />
                 <span className="text-xs font-bold text-[#4E5969]">Loading incubation candidate projects...</span>
               </div>
               <div className="space-y-3 pt-2">
@@ -509,7 +649,7 @@ export default function IncubationCellPage() {
           ) : projects.length === 0 ? (
             /* Empty State */
             <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-16 text-center space-y-3 shadow-soft">
-              <div className="w-16 h-16 rounded-2xl bg-orange-50 dark:bg-orange-950/40 text-[#F0742C] flex items-center justify-center mx-auto">
+              <div className="w-16 h-16 rounded-2xl bg-orange-50 dark:bg-orange-950/40 text-[#F36C21] flex items-center justify-center mx-auto">
                 <Rocket className="w-8 h-8 opacity-60" />
               </div>
               <h3 className="text-lg font-black text-[#1B1E28] dark:text-white">
@@ -563,7 +703,7 @@ export default function IncubationCellPage() {
                           <React.Fragment key={proj.id}>
                             <tr
                               className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
-                                expanded ? 'bg-indigo-50/30 dark:bg-indigo-950/20' : ''
+                                expanded ? 'bg-orange-50/30 dark:bg-orange-950/20' : ''
                               }`}
                             >
                               {/* 1. Thumbnail Image */}
@@ -587,18 +727,18 @@ export default function IncubationCellPage() {
                               <td className="py-3.5 px-4 max-w-sm">
                                 <div className="flex items-start gap-3">
                                   <img
-                                    src={proj.studentPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(proj.studentName || 'Student')}&background=2D2575&color=fff&bold=true`}
+                                    src={proj.studentPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(proj.studentName || 'Student')}&background=F36C21&color=fff&bold=true`}
                                     alt={proj.studentName}
-                                    className="w-10 h-10 rounded-xl object-cover border border-purple-200 shrink-0 mt-0.5 shadow-sm"
+                                    className="w-10 h-10 rounded-xl object-cover border border-orange-200 shrink-0 mt-0.5 shadow-sm"
                                     onError={(e: any) => {
-                                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(proj.studentName)}&background=2D2575&color=fff&bold=true`;
+                                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(proj.studentName)}&background=F36C21&color=fff&bold=true`;
                                     }}
                                   />
                                   <div className="min-w-0 flex-1">
                                     <div className="font-extrabold text-[#1B1E28] dark:text-white text-[13px] line-clamp-1">
                                       {proj.title}
                                     </div>
-                                    <div className="text-[11px] font-bold text-[#5B4FE9] truncate mt-0.5">
+                                    <div className="text-[11px] font-bold text-[#F36C21] truncate mt-0.5">
                                       {proj.studentName}
                                       <span className="font-mono text-slate-400 font-medium text-[10px] ml-1">
                                         ({proj.studentRegNo})
@@ -627,10 +767,10 @@ export default function IncubationCellPage() {
                               <td className="py-3.5 px-4">
                                 <div className="space-y-1.5">
                                   <div className="flex items-center gap-2">
-                                    <div className="text-sm font-black text-[#5B4FE9]">
+                                    <div className="text-sm font-black text-[#F36C21]">
                                       {proj.percentage}%
                                     </div>
-                                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-50 dark:bg-indigo-900/40 text-[#5B4FE9] border border-[#5B4FE9]/30">
+                                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-orange-50 dark:bg-orange-950/40 text-[#F36C21] border border-[#F36C21]/30">
                                       Grade {proj.grade}
                                     </span>
                                   </div>
@@ -638,11 +778,11 @@ export default function IncubationCellPage() {
                                   {/* Faculty Evaluator Profile */}
                                   <div className="flex items-center gap-2 pt-0.5">
                                     <img
-                                      src={proj.facultyPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(proj.facultyName || 'Faculty')}&background=5B4BFF&color=fff&bold=true`}
+                                      src={proj.facultyPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(proj.facultyName || 'Faculty')}&background=F36C21&color=fff&bold=true`}
                                       alt={proj.facultyName || 'Faculty'}
-                                      className="w-6 h-6 rounded-full object-cover border border-purple-200 shrink-0"
+                                      className="w-6 h-6 rounded-full object-cover border border-orange-200 shrink-0"
                                       onError={(e: any) => {
-                                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(proj.facultyName || 'Faculty')}&background=5B4BFF&color=fff&bold=true`;
+                                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(proj.facultyName || 'Faculty')}&background=F36C21&color=fff&bold=true`;
                                       }}
                                     />
                                     <div className="min-w-0">
@@ -671,7 +811,7 @@ export default function IncubationCellPage() {
                                 <button
                                   type="button"
                                   onClick={() => openEditModal(proj)}
-                                  className="px-3 py-1.5 rounded-xl font-bold text-xs bg-[#5B4FE9] hover:bg-indigo-600 text-white shadow-xs transition-all cursor-pointer inline-flex items-center gap-1 active:scale-95"
+                                  className="px-3 py-1.5 rounded-xl font-bold text-xs bg-[#F36C21] hover:bg-[#E05A12] text-white shadow-xs shadow-orange-500/20 transition-all cursor-pointer inline-flex items-center gap-1 active:scale-95"
                                 >
                                   <span>Transfer / Update 🚀</span>
                                 </button>
@@ -683,7 +823,7 @@ export default function IncubationCellPage() {
                                   title={expanded ? 'Collapse Details' : 'Expand Details'}
                                 >
                                   {expanded ? (
-                                    <ChevronUp className="w-4 h-4 text-[#5B4FE9]" />
+                                    <ChevronUp className="w-4 h-4 text-[#F36C21]" />
                                   ) : (
                                     <ChevronDown className="w-4 h-4" />
                                   )}
@@ -746,7 +886,7 @@ export default function IncubationCellPage() {
                                           {proj.techStack.map((tech, idx) => (
                                             <span
                                               key={idx}
-                                              className="px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#5B4FE9]"
+                                              className="px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold bg-orange-50/50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/40 text-[#F36C21]"
                                             >
                                               {tech}
                                             </span>
@@ -765,7 +905,7 @@ export default function IncubationCellPage() {
                                             href={proj.repoLink}
                                             target="_blank"
                                             rel="noreferrer"
-                                            className="text-xs font-bold text-[#5B4FE9] hover:underline flex items-center gap-1 truncate"
+                                            className="text-xs font-bold text-[#F36C21] hover:underline flex items-center gap-1 truncate"
                                           >
                                             <span className="truncate">{proj.repoLink}</span>
                                             <ExternalLink className="w-3 h-3 shrink-0" />
@@ -774,7 +914,7 @@ export default function IncubationCellPage() {
 
                                         <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 space-y-1">
                                           <div className="text-[11px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                                            <Award className="w-3.5 h-3.5 text-[#F0742C]" />
+                                            <Award className="w-3.5 h-3.5 text-[#F36C21]" />
                                             <span>Faculty Evaluator Feedback</span>
                                           </div>
                                           <p className="text-xs text-[#4E5969] dark:text-slate-300 font-medium italic">
@@ -790,18 +930,18 @@ export default function IncubationCellPage() {
 
                                       {/* Incubation Notes / Funding Info */}
                                       {(proj.incubationNotes || proj.mentorAssigned) && (
-                                        <div className="p-3.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-[#5B4FE9]/30 text-xs text-[#5B4FE9] space-y-1">
-                                          <div className="font-black flex items-center gap-1.5 text-purple-900 dark:text-purple-200">
-                                            <Rocket className="w-3.5 h-3.5 text-[#F0742C]" />
+                                        <div className="p-3.5 rounded-2xl bg-orange-50 dark:bg-orange-950/40 border border-[#F36C21]/30 text-[#F36C21] space-y-1">
+                                          <div className="font-black flex items-center gap-1.5 text-orange-950 dark:text-orange-200">
+                                            <Rocket className="w-3.5 h-3.5 text-[#F36C21]" />
                                             <span>Incubation Cell Directive & Future Plan</span>
                                           </div>
                                           {proj.incubationNotes && (
-                                            <p className="text-purple-800 dark:text-purple-300 font-medium">
+                                            <p className="text-orange-900 dark:text-orange-300 font-medium">
                                               {proj.incubationNotes}
                                             </p>
                                           )}
                                           {proj.mentorAssigned && (
-                                            <div className="text-[11px] font-bold text-purple-900 dark:text-purple-200">
+                                            <div className="text-[11px] font-bold text-orange-950 dark:text-orange-200">
                                               Assigned Innovation Mentor: {proj.mentorAssigned}
                                             </div>
                                           )}
@@ -828,14 +968,14 @@ export default function IncubationCellPage() {
               <div className="bg-white dark:bg-slate-900 rounded-[28px] max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-150">
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-[#5B4FE9]">
+                    <div className="p-2.5 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-[#F36C21]">
                       <Rocket className="w-5 h-5" />
                     </div>
                     <div>
                       <h3 className="text-base font-black text-[#1B1E28] dark:text-white">
                         Incubation Cell Evaluation
                       </h3>
-                      <p className="text-xs text-[#5B4FE9] font-bold">
+                      <p className="text-xs text-[#F36C21] font-bold">
                         {editingProject.title} ({editingProject.studentName})
                       </p>
                     </div>
@@ -863,9 +1003,9 @@ export default function IncubationCellPage() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {[
                         { val: 'Under Review', label: 'Under Review', color: 'border-slate-300' },
-                        { val: 'Selected', label: '🌟 Selected', color: 'border-[#F0742C]' },
+                        { val: 'Selected', label: '🌟 Selected', color: 'border-[#F36C21]' },
                         { val: 'Funded', label: '💰 Funded', color: 'border-emerald-500' },
-                        { val: 'Incubated', label: '🚀 Incubated', color: 'border-[#5B4FE9]' },
+                        { val: 'Incubated', label: '🚀 Incubated', color: 'border-[#F36C21]' },
                         { val: 'Rejected', label: '🔴 Rejected', color: 'border-[#E4483A]' },
                       ].map((item) => (
                         <button
@@ -874,7 +1014,7 @@ export default function IncubationCellPage() {
                           onClick={() => setNewStatus(item.val)}
                           className={`py-2 px-3 rounded-xl text-xs font-black border transition-all cursor-pointer text-center ${
                             newStatus === item.val
-                              ? 'bg-[#5B4FE9] text-white border-[#5B4FE9] shadow-sm'
+                              ? 'bg-[#F36C21] text-white border-[#F36C21] shadow-sm'
                               : 'bg-slate-50 dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                           }`}
                         >
@@ -890,15 +1030,17 @@ export default function IncubationCellPage() {
                       Seed Grant / Innovation Fund Amount (₹ INR)
                     </label>
                     <div className="relative">
-                      <DollarSign className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <span className="text-slate-500 dark:text-slate-400 font-extrabold absolute left-3.5 top-1/2 -translate-y-1/2 text-sm select-none">
+                        ₹
+                      </span>
                       <input
                         type="number"
                         min="0"
                         step="5000"
                         value={newFunding}
-                        onChange={(e) => setNewFunding(Number(e.target.value))}
-                        placeholder="e.g. 150000"
-                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4FE9]"
+                        onChange={(e) => setNewFunding(e.target.value)}
+                        placeholder="0"
+                        className="w-full pl-8 pr-3 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
                       />
                     </div>
                   </div>
@@ -913,7 +1055,7 @@ export default function IncubationCellPage() {
                       value={newMentor}
                       onChange={(e) => setNewMentor(e.target.value)}
                       placeholder="e.g. Dr. R. K. Sharma (Innovation Cell Head)"
-                      className="w-full px-3.5 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4FE9]"
+                      className="w-full px-3.5 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
                     />
                   </div>
 
@@ -927,7 +1069,7 @@ export default function IncubationCellPage() {
                       value={newNotes}
                       onChange={(e) => setNewNotes(e.target.value)}
                       placeholder="Specify next milestones, angel investor demo dates, patent filing guidance..."
-                      className="w-full px-3.5 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4FE9]"
+                      className="w-full px-3.5 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
                     />
                   </div>
 
@@ -943,7 +1085,7 @@ export default function IncubationCellPage() {
                     <button
                       type="submit"
                       disabled={updating}
-                      className="px-5 py-2 rounded-xl text-xs font-black bg-[#5B4FE9] hover:bg-indigo-600 text-white shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                      className="px-5 py-2 rounded-xl text-xs font-black bg-[#F36C21] hover:bg-[#E05A12] text-white shadow-md shadow-orange-500/20 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
                     >
                       {updating ? 'Saving...' : 'Save & Publish Directives 🚀'}
                     </button>

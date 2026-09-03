@@ -1135,7 +1135,7 @@ export default function StudentMasterPage() {
   const activeModalCourse = filteredCourses.find((c) => c.course_cd === formData.courseId || c.code === formData.courseId || c.id === formData.courseId);
 
   const isFormMedicalCourse = Boolean(
-    (formData.courseId && formData.courseId.toLowerCase().includes('mbbs')) ||
+    (formData.courseId && typeof formData.courseId === 'string' && formData.courseId.toLowerCase().includes('mbbs')) ||
     (activeModalCourse?.name && activeModalCourse.name.toLowerCase().includes('mbbs')) ||
     (activeModalCourse?.name && activeModalCourse.name.toLowerCase().includes('medical')) ||
     (activeModalCollege?.name && activeModalCollege.name.toLowerCase().includes('ims')) ||
@@ -1144,9 +1144,10 @@ export default function StudentMasterPage() {
 
   useEffect(() => {
     if (isModalOpen) {
-      if (!isFormMedicalCourse && (formData.professionalPhase.includes('MBBS') || formData.professionalPhase.includes('Phase'))) {
+      const currentPhase = formData.professionalPhase || '';
+      if (!isFormMedicalCourse && (currentPhase.includes('MBBS') || currentPhase.includes('Phase'))) {
         setFormData(prev => ({ ...prev, professionalPhase: 'Semester 1 (1st Year)' }));
-      } else if (isFormMedicalCourse && formData.professionalPhase.includes('Semester')) {
+      } else if (isFormMedicalCourse && currentPhase.includes('Semester')) {
         setFormData(prev => ({ ...prev, professionalPhase: '1st Professional MBBS (Phase I)' }));
       }
     }
@@ -1296,6 +1297,7 @@ export default function StudentMasterPage() {
           ...studentData,
           photoUrl: resolvedPhoto,
           collegeId: studentData.collegeId || currentStudent?.college_name || selectedCollege || '1',
+          professionalPhase: studentData.professionalPhase || studentData.professional_phase || prev.professionalPhase || 'Semester 1 (1st Year)',
           declarationSigned: true, // Auto sign declaration for edit
         }));
 

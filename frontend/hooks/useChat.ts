@@ -213,7 +213,9 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
       if (res.ok) {
         const json = await res.json();
         const list: ChatMessage[] = json.data || [];
-        setMessages(list);
+        if (activeGroupRef.current === groupId) {
+          setMessages(list);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch messages:', err);
@@ -400,10 +402,9 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
   useEffect(() => {
     if (selectedGroup?.id) {
       fetchMessages(selectedGroup.id);
-      fetchMembers(selectedGroup.id);
       markAsRead(selectedGroup.id);
     }
-  }, [selectedGroup?.id, fetchMessages, fetchMembers, markAsRead]);
+  }, [selectedGroup?.id, fetchMessages, markAsRead]);
 
   // Initial group fetch
   useEffect(() => {
@@ -498,6 +499,7 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
     setSelectedYearFilter,
     fetchGroups,
     fetchMessages,
+    fetchMembers,
     sendMessage,
     uploadAttachment,
     markAsRead,

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, Calendar, MapPin, DollarSign, Award, ChevronRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Building2, Calendar, MapPin, DollarSign, Award, ChevronRight, CheckCircle2, AlertCircle, Trash2, Loader2 } from 'lucide-react';
 
 export interface PlacementCompany {
   drive_id: number;
@@ -16,30 +16,47 @@ export interface PlacementCompany {
   deadline_date?: string;
   logo_url?: string;
   description?: string;
+  eligibility_course_cd?: string | number;
+  eligibility_branch_cd?: string | number;
+  eligibility_batch_cd?: string | number;
+  colg_cd?: string | number;
+  min_score_required?: number;
   extra_fields?: Record<string, any>;
   status?: string;
+  mode?: string;
+  branches?: string[] | string;
+  batches?: string[] | string;
   total_applicants?: number;
   total_selected?: number;
   has_applied?: boolean;
   application_status?: string;
   offer_status?: string;
+  [key: string]: any;
 }
 
 interface CompanyCardProps {
   company: PlacementCompany;
   role: string; // 'student' | 'faculty' | 'admin' | 'clerk'
+  userRole?: string;
+  isDeleting?: boolean;
   onViewDetails: (company: PlacementCompany) => void;
   onApply?: (company: PlacementCompany) => void;
   onManageApplicants?: (company: PlacementCompany) => void;
+  onDelete?: (company: PlacementCompany) => void;
 }
 
 export default function CompanyCard({
   company,
   role,
+  userRole,
+  isDeleting,
   onViewDetails,
   onApply,
   onManageApplicants,
+  onDelete,
 }: CompanyCardProps) {
+  const normRole = (userRole || role || '').toUpperCase();
+  const canDelete = normRole === 'ADMIN' || normRole === 'SUPER_ADMIN' || normRole === 'COLLEGE_ADMIN' || role === 'admin';
   const branches = Array.isArray(company.eligible_branches)
     ? company.eligible_branches
     : typeof company.eligible_branches === 'string'
@@ -82,10 +99,30 @@ export default function CompanyCard({
             </div>
           </div>
 
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {company.status || 'Active'}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {company.status || 'Active'}
+            </span>
+            {canDelete && onDelete && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(company);
+                }}
+                disabled={isDeleting}
+                title="Delete Placement Drive"
+                className="px-2 py-1 rounded-full text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-1 shrink-0 transition-all cursor-pointer disabled:opacity-50 active:scale-95 shadow-xs"
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-3 h-3 animate-spin text-rose-600 dark:text-rose-400" />
+                ) : (
+                  <Trash2 className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Package & Drive Date Metrics */}

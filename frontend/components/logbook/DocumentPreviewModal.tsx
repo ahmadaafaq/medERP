@@ -363,7 +363,7 @@ export default function DocumentPreviewModal({
       studentRollNo || '2500141790001',
       explanationText || 'Generative Artificial Intelligence Gen AI is transforming modern institutional workflows.'
     );
-    const clientBlob = new Blob([clientBuffer], { type: 'application/pdf' });
+    const clientBlob = new Blob([clientBuffer as unknown as BlobPart], { type: 'application/pdf' });
     const initialUrl = URL.createObjectURL(clientBlob);
     setPdfDataBuffer(clientBuffer);
     setBlobObjectUrl(initialUrl);
@@ -380,7 +380,7 @@ export default function DocumentPreviewModal({
         while (n--) {
           u8arr[n] = bstr.charCodeAt(n);
         }
-        const b = new Blob([u8arr], { type: 'application/pdf' });
+        const b = new Blob([u8arr as unknown as BlobPart], { type: 'application/pdf' });
         const objUrl = URL.createObjectURL(b);
         setPdfDataBuffer(u8arr);
         setBlobObjectUrl(objUrl);
@@ -416,7 +416,7 @@ export default function DocumentPreviewModal({
         const arrayBuffer = await blob.arrayBuffer();
         if (isMounted && arrayBuffer.byteLength > 0) {
           const uint8 = new Uint8Array(arrayBuffer);
-          const pdfBlob = new Blob([uint8], { type: 'application/pdf' });
+          const pdfBlob = new Blob([uint8 as unknown as BlobPart], { type: 'application/pdf' });
           const objUrl = URL.createObjectURL(pdfBlob);
           setPdfDataBuffer(uint8);
           setBlobObjectUrl(objUrl);

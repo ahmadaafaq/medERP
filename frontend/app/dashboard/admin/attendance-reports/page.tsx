@@ -436,243 +436,327 @@ export default function MISAttendanceReportsPage() {
             </div>
           </div>
 
-          {/* REPORT VIEW 1: SUBJECT ROSTER REPORT */}
-          {reportMode === 'roster' && (
-            <div className="rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl">
-              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                <h3 className="text-xs font-black uppercase text-purple-700 dark:text-purple-400 tracking-wider flex items-center gap-2">
-                  <span>📚</span> Subject Roster Attendance Report ({filteredRoster.length} Records)
-                </h3>
-                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                  NMC Standard: 75% Theory / 80% Practical Requirement
-                </span>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs text-slate-800 dark:text-slate-300">
-                  <thead className="bg-slate-100/80 dark:bg-slate-950/80 text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
-                    <tr>
-                      <th className="p-3.5 text-center w-12">S.No</th>
-                      <th className="p-3.5">Reg No</th>
-                      <th className="p-3.5">Student Name</th>
-                      <th className="p-3.5 text-center">Conducted Classes</th>
-                      <th className="p-3.5 text-center">Attendance Status (P / A)</th>
-                      <th className="p-3.5 text-center text-amber-600 dark:text-amber-400">Late / Excused</th>
-                      <th className="p-3.5 text-center">Attendance %</th>
-                      <th className="p-3.5 text-center">NMC Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800/60 font-medium">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400 font-bold animate-pulse">
-                          Generating MIS subject attendance report...
-                        </td>
-                      </tr>
-                    ) : filteredRoster.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-500 italic">
-                          No student attendance records match the selected filter criteria.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredRoster.map((r, idx) => {
-                        const pct = parseFloat(String(r.attendance_pct || 0));
-                        const isEligible = pct >= 75.0;
-
-                        return (
-                          <tr key={r.student_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                            <td className="p-3.5 text-center font-mono text-slate-500 dark:text-slate-400 font-bold">{idx + 1}</td>
-                            <td className="p-3.5 font-mono text-indigo-600 dark:text-indigo-400 font-bold">{r.rollno || '—'}</td>
-                            <td className="p-3.5 font-bold text-slate-900 dark:text-white">{r.name}</td>
-                            <td className="p-3.5 text-center font-mono font-bold text-slate-700 dark:text-slate-300">{r.total_classes || 0}</td>
-                            
-                            {/* Attendance Status */}
-                            <td className="p-3.5 text-center">
-                              {selectedSubjectId === 'all' && Array.isArray((r as any).subject_sessions) && (r as any).subject_sessions.length > 0 ? (
-                                <div className="flex flex-wrap items-center justify-center gap-1.5 font-mono text-xs">
-                                  {(Array.from(
-                                    (r as any).subject_sessions.reduce((acc: Map<string, string>, ss: any) => {
-                                      if (ss.subject_code && ss.status) acc.set(ss.subject_code, ss.status);
-                                      return acc;
-                                    }, new Map<string, string>()).entries()
-                                  ) as [string, string][]).map(([code, status]) => {
-                                    const isP = ['PRESENT', 'LATE'].includes(status);
-                                    return (
-                                      <span
-                                        key={code}
-                                        className={`px-2 py-0.5 rounded font-black border ${
-                                          isP
-                                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-                                            : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30'
-                                        }`}
-                                      >
-                                        {code}: {isP ? 'P' : 'A'}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              ) : Number(r.total_classes || 0) <= 1 ? (
-                                Number(r.present || 0) > 0 ? (
-                                  <span className="px-3 py-1 rounded-md text-xs font-black font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
-                                    P (Present)
-                                  </span>
-                                ) : (
-                                  <span className="px-3 py-1 rounded-md text-xs font-black font-mono bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30">
-                                    A (Absent)
-                                  </span>
-                                )
-                              ) : (
-                                <div className="flex items-center justify-center gap-1.5 font-mono font-bold text-xs">
-                                  <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
-                                    P: {Number(r.present || 0)}
-                                  </span>
-                                  <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30">
-                                    A: {Number(r.absent || 0)}
-                                  </span>
-                                </div>
-                              )}
-                            </td>
-
-                            <td className="p-3.5 text-center font-mono text-amber-600 dark:text-amber-400">
-                              {(Number(r.late || 0) + Number(r.excused || 0))}
-                            </td>
-                            <td className="p-3.5 text-center">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-black font-mono border ${
-                                isEligible
-                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
-                                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40'
-                              }`}>
-                                {pct.toFixed(1)}%
-                              </span>
-                            </td>
-                            <td className="p-3.5 text-center">
-                              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border ${
-                                isEligible
-                                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-                                  : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30'
-                              }`}>
-                                {isEligible ? 'ELIGIBLE (≥ 75%)' : 'SHORTAGE (< 75%)'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+          {/* PRINTABLE ATTENDANCE REPORT SECTION */}
+          <div id="attendance-report-print-area" className="space-y-4">
+            {/* Printable Official Institutional Header (Visible ONLY during print) */}
+            <div className="hidden print:block mb-4 text-center border-b-2 border-slate-900 pb-3">
+              <h1 className="text-base font-black uppercase text-slate-900 tracking-wider">
+                SRMS COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY
+              </h1>
+              <h2 className="text-xs font-extrabold uppercase text-slate-700 tracking-tight mt-0.5">
+                MIS STUDENT ATTENDANCE & ACADEMIC COMPLIANCE REPORT
+              </h2>
+              <div className="grid grid-cols-3 text-[10px] text-slate-700 font-semibold mt-2 pt-1.5 border-t border-slate-300 text-left gap-1">
+                <div><strong>Phase / Semester:</strong> {phases.find(p => p.id === selectedPhaseId)?.name || selectedPhaseId}</div>
+                <div><strong>Batch:</strong> Batch {batches.find(b => (b.batch_cd || b.code || String(b.year) || b.id) === selectedBatchId)?.code || selectedBatchId}</div>
+                <div><strong>Duration:</strong> {fromDate} to {toDate}</div>
+                <div><strong>Report Type:</strong> {reportMode === 'roster' ? 'Subject Roster Report' : 'Cumulative Subject Matrix'}</div>
+                <div><strong>Compliance Status:</strong> {thresholdFilter === 'all' ? 'All Students' : thresholdFilter === 'shortage' ? 'Shortage (< 75%)' : thresholdFilter === 'critical' ? 'Critical (< 70%)' : 'Eligible (≥ 75%)'}</div>
+                <div><strong>Generated On:</strong> {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
               </div>
             </div>
-          )}
 
-          {/* REPORT VIEW 2: CUMULATIVE MULTI-SUBJECT MATRIX REPORT */}
-          {reportMode === 'matrix' && (
-            <div className="rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl">
-              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                <h3 className="text-xs font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-wider flex items-center gap-2">
-                  <span>📐</span> Multi-Subject Cumulative Attendance Matrix ({matrixReport?.students.length || 0} Students)
-                </h3>
-                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                  Per-subject breakdown + Cumulative %
-                </span>
-              </div>
+            {/* REPORT VIEW 1: SUBJECT ROSTER REPORT */}
+            {reportMode === 'roster' && (
+              <div className="rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl print:border-none print:shadow-none print:rounded-none">
+                <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between print:hidden">
+                  <h3 className="text-xs font-black uppercase text-purple-700 dark:text-purple-400 tracking-wider flex items-center gap-2">
+                    <span>📚</span> Subject Roster Attendance Report ({filteredRoster.length} Records)
+                  </h3>
+                  <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                    NMC Standard: 75% Theory / 80% Practical Requirement
+                  </span>
+                </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs text-slate-800 dark:text-slate-300">
-                  <thead className="bg-slate-100/80 dark:bg-slate-950/80 text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
-                    <tr>
-                      <th className="p-3.5 text-center w-12">S.No</th>
-                      <th className="p-3.5">Reg No</th>
-                      <th className="p-3.5">Student Name</th>
-                      {matrixReport?.subjects.map(s => (
-                        <th key={s.id} className="p-3.5 text-center font-black" title={s.name}>
-                          {s.name}
-                        </th>
-                      ))}
-                      <th className="p-3.5 text-center text-purple-700 dark:text-purple-300 font-extrabold">Overall %</th>
-                      <th className="p-3.5 text-center">NMC Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800/60 font-medium">
-                    {loading ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs text-slate-800 dark:text-slate-300">
+                    <thead className="bg-slate-100/80 dark:bg-slate-950/80 text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 print:bg-slate-100 print:text-slate-900">
                       <tr>
-                        <td colSpan={(matrixReport?.subjects.length || 0) + 5} className="p-8 text-center text-slate-500 dark:text-slate-400 font-bold animate-pulse">
-                          Generating cumulative attendance matrix...
-                        </td>
+                        <th className="p-3.5 text-center w-12">S.No</th>
+                        <th className="p-3.5">Reg No</th>
+                        <th className="p-3.5">Student Name</th>
+                        <th className="p-3.5 text-center">Conducted Classes</th>
+                        <th className="p-3.5 text-center">Attendance Status (P / A)</th>
+                        <th className="p-3.5 text-center text-amber-600 dark:text-amber-400 print:text-slate-900">Late / Excused</th>
+                        <th className="p-3.5 text-center">Attendance %</th>
+                        <th className="p-3.5 text-center">NMC Status</th>
                       </tr>
-                    ) : !matrixReport || matrixReport.students.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-500 italic">
-                          No matrix records available for this batch and date range.
-                        </td>
-                      </tr>
-                    ) : (
-                      matrixReport.students
-                        .filter(st => {
-                          if (thresholdFilter === 'shortage') return st.overallPct < 75;
-                          if (thresholdFilter === 'critical') return st.overallPct < 70;
-                          if (thresholdFilter === 'eligible') return st.overallPct >= 75;
-                          return true;
-                        })
-                        .map((st, idx) => {
-                          const isEligible = st.overallPct >= 75.0;
+                    </thead>
+                    <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800/60 font-medium print:divide-slate-300">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400 font-bold animate-pulse">
+                            Generating MIS subject attendance report...
+                          </td>
+                        </tr>
+                      ) : filteredRoster.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-slate-500 italic">
+                            No student attendance records match the selected filter criteria.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredRoster.map((r, idx) => {
+                          const pct = parseFloat(String(r.attendance_pct || 0));
+                          const isEligible = pct >= 75.0;
 
                           return (
-                            <tr key={st.student_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                              <td className="p-3.5 text-center font-mono text-slate-500 dark:text-slate-400 font-bold">{idx + 1}</td>
-                              <td className="p-3.5 font-mono text-indigo-600 dark:text-indigo-400 font-bold">{st.rollno || '—'}</td>
-                              <td className="p-3.5 font-bold text-slate-900 dark:text-white whitespace-nowrap">{st.name}</td>
+                            <tr key={r.student_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="p-3.5 text-center font-mono text-slate-500 dark:text-slate-400 font-bold print:text-slate-900">{idx + 1}</td>
+                              <td className="p-3.5 font-mono text-indigo-600 dark:text-indigo-400 font-bold print:text-slate-900">{r.rollno || '—'}</td>
+                              <td className="p-3.5 font-bold text-slate-900 dark:text-white print:text-black">{r.name}</td>
+                              <td className="p-3.5 text-center font-mono font-bold text-slate-700 dark:text-slate-300 print:text-slate-900">{r.total_classes || 0}</td>
                               
-                              {/* Subject Percentage Columns with Attended / Conducted (Pct%) */}
-                              {matrixReport.subjects.map(s => {
-                                const subData = st.subjects[s.id];
-                                if (!subData || subData.total === 0) {
-                                  return <td key={s.id} className="p-3.5 text-center text-slate-400 dark:text-slate-600 font-mono">—</td>;
-                                }
-                                const { present, total, pct } = subData;
-                                const isPass = pct >= 75.0;
-                                return (
-                                  <td key={s.id} className="p-3.5 text-center font-mono font-bold">
-                                    <span className={`px-2 py-0.5 rounded text-[11px] font-black ${
-                                      isPass ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20' : 'text-rose-700 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20'
-                                    }`}>
-                                      {present}/{total} ({pct.toFixed(0)}%)
+                              {/* Attendance Status */}
+                              <td className="p-3.5 text-center">
+                                {selectedSubjectId === 'all' && Array.isArray((r as any).subject_sessions) && (r as any).subject_sessions.length > 0 ? (
+                                  <div className="flex flex-wrap items-center justify-center gap-1.5 font-mono text-xs">
+                                    {(Array.from(
+                                      (r as any).subject_sessions.reduce((acc: Map<string, string>, ss: any) => {
+                                        if (ss.subject_code && ss.status) acc.set(ss.subject_code, ss.status);
+                                        return acc;
+                                      }, new Map<string, string>()).entries()
+                                    ) as [string, string][]).map(([code, status]) => {
+                                      const isP = ['PRESENT', 'LATE'].includes(status);
+                                      return (
+                                        <span
+                                          key={code}
+                                          className={`px-2 py-0.5 rounded font-black border ${
+                                            isP
+                                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 print:bg-transparent print:text-slate-900'
+                                              : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 print:bg-transparent print:text-slate-900'
+                                          }`}
+                                        >
+                                          {code}: {isP ? 'P' : 'A'}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                ) : Number(r.total_classes || 0) <= 1 ? (
+                                  Number(r.present || 0) > 0 ? (
+                                    <span className="px-3 py-1 rounded-md text-xs font-black font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 print:bg-transparent print:text-slate-900">
+                                      P (Present)
                                     </span>
-                                  </td>
-                                );
-                              })}
-
-                              {/* Overall Cumulative Percentage */}
-                              <td className="p-3.5 text-center font-mono font-black text-sm text-slate-900 dark:text-white">
-                                <span className={`px-2.5 py-1 rounded-full border ${
-                                  isEligible ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40' : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40'
-                                }`}>
-                                  {st.overallPct.toFixed(1)}%
-                                </span>
+                                  ) : (
+                                    <span className="px-3 py-1 rounded-md text-xs font-black font-mono bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30 print:bg-transparent print:text-slate-900">
+                                      A (Absent)
+                                    </span>
+                                  )
+                                ) : (
+                                  <div className="flex items-center justify-center gap-1.5 font-mono font-bold text-xs">
+                                    <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 print:bg-transparent print:text-slate-900">
+                                      P: {Number(r.present || 0)}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30 print:bg-transparent print:text-slate-900">
+                                      A: {Number(r.absent || 0)}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
 
-                              {/* Eligibility Status */}
+                              <td className="p-3.5 text-center font-mono text-amber-600 dark:text-amber-400 print:text-slate-900">
+                                {(Number(r.late || 0) + Number(r.excused || 0))}
+                              </td>
+                              <td className="p-3.5 text-center">
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-black font-mono border ${
+                                  isEligible
+                                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 print:bg-transparent print:text-slate-900'
+                                    : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40 print:bg-transparent print:text-slate-900'
+                                }`}>
+                                  {pct.toFixed(1)}%
+                                </span>
+                              </td>
                               <td className="p-3.5 text-center">
                                 <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border ${
                                   isEligible
-                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-                                    : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30'
+                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 print:bg-transparent print:text-slate-900'
+                                    : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 print:bg-transparent print:text-slate-900'
                                 }`}>
-                                  {isEligible ? 'ELIGIBLE' : 'SHORTAGE'}
+                                  {isEligible ? 'ELIGIBLE (≥ 75%)' : 'SHORTAGE (< 75%)'}
                                 </span>
                               </td>
                             </tr>
                           );
                         })
-                    )}
-                  </tbody>
-                </table>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* REPORT VIEW 2: CUMULATIVE MULTI-SUBJECT MATRIX REPORT */}
+            {reportMode === 'matrix' && (
+              <div className="rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl print:border-none print:shadow-none print:rounded-none">
+                <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between print:hidden">
+                  <h3 className="text-xs font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-wider flex items-center gap-2">
+                    <span>📐</span> Multi-Subject Cumulative Attendance Matrix ({matrixReport?.students.length || 0} Students)
+                  </h3>
+                  <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                    Per-subject breakdown + Cumulative %
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs text-slate-800 dark:text-slate-300">
+                    <thead className="bg-slate-100/80 dark:bg-slate-950/80 text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 print:bg-slate-100 print:text-slate-900">
+                      <tr>
+                        <th className="p-3.5 text-center w-12">S.No</th>
+                        <th className="p-3.5">Reg No</th>
+                        <th className="p-3.5">Student Name</th>
+                        {matrixReport?.subjects.map(s => (
+                          <th key={s.id} className="p-3.5 text-center font-black" title={s.name}>
+                            {s.name}
+                          </th>
+                        ))}
+                        <th className="p-3.5 text-center text-purple-700 dark:text-purple-300 font-extrabold print:text-slate-900">Overall %</th>
+                        <th className="p-3.5 text-center">NMC Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800/60 font-medium print:divide-slate-300">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={(matrixReport?.subjects.length || 0) + 5} className="p-8 text-center text-slate-500 dark:text-slate-400 font-bold animate-pulse">
+                            Generating cumulative attendance matrix...
+                          </td>
+                        </tr>
+                      ) : !matrixReport || matrixReport.students.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-slate-500 italic">
+                            No matrix records available for this batch and date range.
+                          </td>
+                        </tr>
+                      ) : (
+                        matrixReport.students
+                          .filter(st => {
+                            if (thresholdFilter === 'shortage') return st.overallPct < 75;
+                            if (thresholdFilter === 'critical') return st.overallPct < 70;
+                            if (thresholdFilter === 'eligible') return st.overallPct >= 75;
+                            return true;
+                          })
+                          .map((st, idx) => {
+                            const isEligible = st.overallPct >= 75.0;
+
+                            return (
+                              <tr key={st.student_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                <td className="p-3.5 text-center font-mono text-slate-500 dark:text-slate-400 font-bold print:text-slate-900">{idx + 1}</td>
+                                <td className="p-3.5 font-mono text-indigo-600 dark:text-indigo-400 font-bold print:text-slate-900">{st.rollno || '—'}</td>
+                                <td className="p-3.5 font-bold text-slate-900 dark:text-white whitespace-nowrap print:text-black">{st.name}</td>
+                                
+                                {/* Subject Percentage Columns with Attended / Conducted (Pct%) */}
+                                {matrixReport.subjects.map(s => {
+                                  const subData = st.subjects[s.id];
+                                  if (!subData || subData.total === 0) {
+                                    return <td key={s.id} className="p-3.5 text-center text-slate-400 dark:text-slate-600 font-mono">—</td>;
+                                  }
+                                  const { present, total, pct } = subData;
+                                  const isPass = pct >= 75.0;
+                                  return (
+                                    <td key={s.id} className="p-3.5 text-center font-mono font-bold">
+                                      <span className={`px-2 py-0.5 rounded text-[11px] font-black ${
+                                        isPass ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 print:bg-transparent print:text-slate-900' : 'text-rose-700 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 print:bg-transparent print:text-slate-900'
+                                      }`}>
+                                        {present}/{total} ({pct.toFixed(0)}%)
+                                      </span>
+                                    </td>
+                                  );
+                                })}
+
+                                {/* Overall Cumulative Percentage */}
+                                <td className="p-3.5 text-center font-mono font-black text-sm text-slate-900 dark:text-white print:text-black">
+                                  <span className={`px-2.5 py-1 rounded-full border ${
+                                    isEligible ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 print:bg-transparent print:text-slate-900' : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40 print:bg-transparent print:text-slate-900'
+                                  }`}>
+                                    {st.overallPct.toFixed(1)}%
+                                  </span>
+                                </td>
+
+                                {/* Eligibility Status */}
+                                <td className="p-3.5 text-center">
+                                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border ${
+                                    isEligible
+                                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 print:bg-transparent print:text-slate-900'
+                                      : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 print:bg-transparent print:text-slate-900'
+                                  }`}>
+                                    {isEligible ? 'ELIGIBLE' : 'SHORTAGE'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
 
         </main>
       </div>
+
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 6mm 8mm 6mm 8mm;
+          }
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #attendance-report-print-area, #attendance-report-print-area * {
+            visibility: visible !important;
+          }
+          #attendance-report-print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 4px 6px !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+          }
+          #attendance-report-print-area table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            font-size: 10px !important;
+          }
+          #attendance-report-print-area th, 
+          #attendance-report-print-area td {
+            border: 1px solid #cbd5e1 !important;
+            padding: 4px 6px !important;
+            color: #0f172a !important;
+            background-color: transparent !important;
+          }
+          #attendance-report-print-area thead th {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+            font-weight: 800 !important;
+          }
+          #attendance-report-print-area tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
