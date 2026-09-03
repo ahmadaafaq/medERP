@@ -3,6 +3,7 @@ import {
   Get, 
   Post, 
   Patch, 
+  Delete,
   Body, 
   Param, 
   Query, 
@@ -234,5 +235,16 @@ export class PlacementDriveController {
     @Body() dto: UpdateApplicantStatusDto,
   ) {
     return this.placementDriveService.updateApplicantStatus(tenantSlug, dto);
+  }
+
+  @Public()
+  @Delete(':id')
+  async deletePlacementDrive(
+    @TenantSlug() tenantSlug: string,
+    @Param('id') id: string,
+    @Request() req: any,
+  ) {
+    const user = this.extractUser(req);
+    return this.placementDriveService.deletePlacementDrive(tenantSlug, id, user);
   }
 }

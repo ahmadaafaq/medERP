@@ -94,6 +94,17 @@ export class UsersService {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
+    const needsDeptJoin = !!(filters.departmentId && filters.departmentId !== 'all' && filters.departmentId !== 'ALL');
+    const countSql = needsDeptJoin
+      ? `SELECT COUNT(s.id) as count FROM "${schema}".students s
+         LEFT JOIN LATERAL (
+           SELECT code FROM "${schema}".departments
+           WHERE (id::text = s.department_id::text OR code = s.branch_id OR code = s.department_id::text)
+           LIMIT 1
+         ) d ON true
+         ${where}`
+      : `SELECT COUNT(s.id) as count FROM "${schema}".students s ${where}`;
+
     const [rows, countRows] = await Promise.all([
       this.ds.query(
         `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url,
@@ -114,20 +125,10 @@ export class UsersService {
          LIMIT $${i} OFFSET $${i + 1}`,
         [...params, limit, offset],
       ),
-      this.ds.query(
-        `SELECT COUNT(DISTINCT s.id) as count FROM "${schema}".students s
-         LEFT JOIN "${schema}".users u ON u.id::text = s.user_id::text
-         LEFT JOIN LATERAL (
-           SELECT name, code FROM "${schema}".departments
-           WHERE (id::text = s.department_id::text OR code = s.branch_id OR code = s.department_id::text)
-           LIMIT 1
-         ) d ON true
-         ${where}`,
-        params,
-      ),
+      this.ds.query(countSql, params),
     ]);
 
-    return paginate(rows, parseInt(countRows[0].count, 10), pagination);
+    return paginate(rows, parseInt(countRows[0]?.count || '0', 10), pagination);
   }
 
   async getAcademicFilters(tenantSlug: string) {

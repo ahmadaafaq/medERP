@@ -79,10 +79,10 @@ export class TimetableService implements OnModuleInit {
              COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, ts.batch_cd, b.code) AS batch_name,
              b.year AS batch_year, b.batch_cd AS batch_numeric_cd
       FROM timetable_slots ts
-      LEFT JOIN faculty f ON f.id = ts.faculty_id
-      LEFT JOIN subjects s ON s.id = ts.subject_id
-      LEFT JOIN departments d ON d.id = ts.department_id
-      LEFT JOIN batches b ON b.id = ts.batch_id
+      LEFT JOIN faculty f ON f.id::text = ts.faculty_id::text
+      LEFT JOIN subjects s ON s.id::text = ts.subject_id::text
+      LEFT JOIN departments d ON d.id::text = ts.department_id::text
+      LEFT JOIN batches b ON b.id::text = ts.batch_id::text
       WHERE 1=1
     `;
 
@@ -315,8 +315,8 @@ export class TimetableService implements OnModuleInit {
         `SELECT s.id, s.timetable_slot_id, s.topic_covered AS topic, s.session_date::text AS session_date,
                 COALESCE(f.name, '') AS faculty_name
          FROM attendance_sessions s
-         LEFT JOIN timetable_slots ts ON ts.id = s.timetable_slot_id
-         LEFT JOIN faculty f ON f.id = s.faculty_id
+         LEFT JOIN timetable_slots ts ON ts.id::text = s.timetable_slot_id::text
+         LEFT JOIN faculty f ON f.id::text = s.faculty_id::text
          WHERE ${sessionWhere.join(' AND ')}
          ORDER BY s.session_date DESC`,
         sessionParams,
@@ -661,8 +661,8 @@ export class TimetableService implements OnModuleInit {
                       d.name AS department_name,
                       (CASE WHEN fs.subject_id = $1 THEN 1 ELSE 2 END) AS priority
       FROM faculty f
-      LEFT JOIN departments d ON d.id = f.department_id
-      LEFT JOIN faculty_subjects fs ON fs.faculty_id = f.id AND fs.subject_id = $1 AND fs.is_active = true
+      LEFT JOIN departments d ON d.id::text = f.department_id::text
+      LEFT JOIN faculty_subjects fs ON fs.faculty_id::text = f.id::text AND fs.subject_id::text = $1::text AND fs.is_active = true
       WHERE f.is_active = true
     `;
     params.push(resolvedSubjectId || null);
@@ -670,11 +670,11 @@ export class TimetableService implements OnModuleInit {
     const conditions: string[] = [];
     if (resolvedSubjectId) {
       // either linked via Subject Linker OR has it as their primary subject_id
-      conditions.push(`(fs.subject_id = $1 OR f.subject_id = $1)`);
+      conditions.push(`(fs.subject_id::text = $1::text OR f.subject_id::text = $1::text)`);
     }
     if (resolvedDepartmentId) {
       params.push(resolvedDepartmentId);
-      conditions.push(`f.department_id = $${params.length}`);
+      conditions.push(`f.department_id::text = $${params.length}::text`);
     }
 
     if (conditions.length > 0) {

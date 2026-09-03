@@ -24,24 +24,24 @@ export class IncubationCellService {
       try {
         const firmRes = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT id::text, slug AS code, COALESCE(title, slug) AS name FROM public.firms WHERE status IN ('ACTIVE', 'TRIAL') ORDER BY title ASC`
+          `SELECT id::text, slug, COALESCE(title, slug) AS name FROM public.firms WHERE status IN ('ACTIVE', 'TRIAL') ORDER BY (CASE WHEN slug = $1 THEN 0 ELSE 1 END), title ASC`,
+          [slug]
         );
         colleges = firmRes.map((f: any) => ({
           id: '1',
-          code: f.code || '1',
+          code: f.slug === slug ? '1' : f.slug,
           name: f.name || 'SRMS College of Engineering & Technology, Bareilly',
+          slug: f.slug,
         }));
       } catch {
         colleges = [
-          { id: '1', code: '1', name: 'SRMS College of Engineering & Technology, Bareilly' },
-          { id: '2', code: '2', name: 'SRMS Institute of Medical Sciences, Bareilly' },
-          { id: '3', code: '3', name: 'SRMS College of Nursing, Bareilly' },
+          { id: '1', code: '1', name: 'SRMS College of Engineering & Technology, Bareilly', slug: 'srms-cet-bareilly' },
         ];
       }
 
       if (colleges.length === 0) {
         colleges = [
-          { id: '1', code: '1', name: 'SRMS College of Engineering & Technology, Bareilly' },
+          { id: '1', code: '1', name: 'SRMS College of Engineering & Technology, Bareilly', slug: 'srms-cet-bareilly' },
         ];
       }
 
@@ -181,7 +181,7 @@ export class IncubationCellService {
         r.student_name ILIKE $${paramIndex} OR 
         r.student_reg_no ILIKE $${paramIndex} OR
         r.description ILIKE $${paramIndex} OR
-        array_to_string(r.tech_stack, ',') ILIKE $${paramIndex}
+        r.tech_stack::text ILIKE $${paramIndex}
       )`);
       params.push(`%${query.search.trim()}%`);
       paramIndex++;
@@ -308,14 +308,54 @@ export class IncubationCellService {
     // 2. Also query Mini Projects from logbook_mini_projects table
     let miniProjectsFormatted: any[] = [];
     try {
+      const miniConditions: string[] = [];
+      const miniParams: any[] = [];
+      let miniParamIndex = 1;
+
+      miniConditions.push(`(COALESCE(p.final_percentage, p.guide_marks, 0) >= $${miniParamIndex} OR p.project_status = 'APPROVED')`);
+      miniParams.push(minScore);
+      miniParamIndex++;
+
+      if (query.courseId && query.courseId !== 'all') {
+        miniConditions.push(`(p.course_id = $${miniParamIndex} OR crs.code = $${miniParamIndex} OR crs.id::text = $${miniParamIndex} OR crs.name ILIKE '%' || $${miniParamIndex} || '%')`);
+        miniParams.push(query.courseId);
+        miniParamIndex++;
+      }
+
+      if (query.branchId && query.branchId !== 'all') {
+        miniConditions.push(`(p.branch_id = $${miniParamIndex} OR dep.code = $${miniParamIndex} OR dep.id::text = $${miniParamIndex} OR dep.name ILIKE '%' || $${miniParamIndex} || '%')`);
+        miniParams.push(query.branchId);
+        miniParamIndex++;
+      }
+
+      if (query.batchId && query.batchId !== 'all') {
+        miniConditions.push(`(p.batch_id = $${miniParamIndex} OR bth.code = $${miniParamIndex} OR bth.name ILIKE '%' || $${miniParamIndex} || '%' OR bth.id::text = $${miniParamIndex})`);
+        miniParams.push(query.batchId);
+        miniParamIndex++;
+      }
+
+      if (query.search && query.search.trim()) {
+        miniConditions.push(`(
+          p.title ILIKE $${miniParamIndex} OR 
+          s.name ILIKE $${miniParamIndex} OR 
+          s.registration_no ILIKE $${miniParamIndex} OR
+          p.description ILIKE $${miniParamIndex} OR
+          p.technologies::text ILIKE $${miniParamIndex}
+        )`);
+        miniParams.push(`%${query.search.trim()}%`);
+        miniParamIndex++;
+      }
+
+      const miniWhereClause = miniConditions.length > 0 ? `WHERE ${miniConditions.join(' AND ')}` : '';
+
       const miniProjectsSql = `
-        SELECT 
+        SELECT DISTINCT ON (p.id)
           p.id::text as mini_id,
           p.title,
           p.description,
           COALESCE(p.repository_url, p.live_demo_url, p.zip_submission_url, '') as repo_link,
           p.technologies as tech_stack,
-          COALESCE(p.final_percentage, p.guide_marks, 88) as score,
+          COALESCE(p.final_percentage, p.guide_marks, 0) as score,
           COALESCE(p.final_grade, 'A') as grade,
           p.project_status,
           COALESCE(p.documentation_url, p.zip_submission_url, '') as doc_url,
@@ -360,11 +400,12 @@ export class IncubationCellService {
           OR s.batch_cd::text = bth.code::text
           OR s.batch_id::text = bth.id::text
         )
-        ORDER BY p.created_at DESC
+        ${miniWhereClause}
+        ORDER BY p.id, p.created_at DESC
         LIMIT 50
       `;
 
-      const rawMini = await this.tenantSchemaService.queryInTenant(slug, miniProjectsSql).catch(() => []);
+      const rawMini = await this.tenantSchemaService.queryInTenant(slug, miniProjectsSql, miniParams).catch(() => []);
 
       miniProjectsFormatted = rawMini.map((p: any, idx: number) => {
         const primaryImage = p.doc_url || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80';
@@ -408,8 +449,22 @@ export class IncubationCellService {
       console.warn('[IncubationCell] Mini projects query skipped:', err.message);
     }
 
-    // Merge and sort all projects by score descending, then date
-    const combined = [...formatted, ...miniProjectsFormatted];
+    // Merge and deduplicate all projects by unique ID and project title/student
+    const seenIds = new Set<string>();
+    const seenKeys = new Set<string>();
+    const combined: any[] = [];
+
+    for (const item of [...formatted, ...miniProjectsFormatted]) {
+      const idKey = String(item.id || item.repoId);
+      const projKey = `${item.studentRegNo || ''}_${(item.title || '').trim().toLowerCase()}`;
+
+      if (!seenIds.has(idKey) && !seenKeys.has(projKey)) {
+        seenIds.add(idKey);
+        seenKeys.add(projKey);
+        combined.push(item);
+      }
+    }
+
     combined.sort((a, b) => (b.score || 0) - (a.score || 0));
 
     return {
@@ -422,46 +477,104 @@ export class IncubationCellService {
   /**
    * Update Incubation Status (Under Review / Selected / Funded / Incubated / Rejected)
    */
-  async updateIncubationStatus(tenantSlug: string, projectId: number, dto: UpdateIncubationStatusDto, user: any) {
+  async updateIncubationStatus(tenantSlug: string, projectId: string | number, dto: UpdateIncubationStatusDto, user: any) {
     const slug = this.resolveTenantSlug(tenantSlug || dto.tenant);
     const schema = `tenant_${slug}`;
 
-    const existing = await this.tenantSchemaService.queryInTenant(
-      slug,
-      `SELECT * FROM "${schema}".repositories WHERE repo_id = $1`,
-      [projectId]
-    );
-
-    if (!existing || existing.length === 0) {
-      throw new NotFoundException(`Incubation project #${projectId} not found`);
-    }
-
     const isIncubated = dto.status === 'Incubated' || dto.status === 'Funded';
-    const incubatedAt = isIncubated ? new Date().toISOString() : existing[0].incubated_at;
     const finalNotes = dto.incubation_notes || dto.notes || null;
+    const projIdStr = String(projectId);
 
-    const updated = await this.tenantSchemaService.queryInTenant(
+    // 1. Try finding in repositories table
+    let existing = await this.tenantSchemaService.queryInTenant(
       slug,
-      `UPDATE "${schema}".repositories 
-       SET incubation_status = $1,
-           incubation_notes = COALESCE($2, incubation_notes),
-           funding_amount = COALESCE($3, funding_amount),
-           mentor_assigned = COALESCE($4, mentor_assigned),
-           incubated_at = $5,
-           updated_at = NOW()
-       WHERE repo_id = $6
-       RETURNING *`,
-      [
-        dto.status,
-        finalNotes,
-        dto.funding_amount !== undefined ? dto.funding_amount : null,
-        dto.mentor_assigned || null,
-        incubatedAt,
-        projectId,
-      ]
+      `SELECT * FROM "${schema}".repositories WHERE repo_id::text = $1`,
+      [projIdStr]
     );
 
-    const projectData = updated[0];
+    let isMini = false;
+    let projectData: any = null;
+
+    if (existing && existing.length > 0) {
+      const incubatedAt = isIncubated ? new Date().toISOString() : existing[0].incubated_at;
+      const updated = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE "${schema}".repositories 
+         SET incubation_status = $1,
+             incubation_notes = COALESCE($2, incubation_notes),
+             funding_amount = COALESCE($3, funding_amount),
+             mentor_assigned = COALESCE($4, mentor_assigned),
+             incubated_at = $5,
+             updated_at = NOW()
+         WHERE repo_id::text = $6
+         RETURNING *`,
+        [
+          dto.status,
+          finalNotes,
+          dto.funding_amount !== undefined ? dto.funding_amount : null,
+          dto.mentor_assigned || null,
+          incubatedAt,
+          projIdStr,
+        ]
+      );
+      projectData = updated[0];
+    } else {
+      // 2. Try finding in logbook_mini_projects
+      const miniId = projIdStr.replace(/^mini-/, '');
+      const miniExisting = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT p.*, s.name as student_name, s.registration_no as student_reg_no, f.emp_id as faculty_empid, f.name as faculty_name 
+         FROM "${schema}".logbook_mini_projects p
+         LEFT JOIN "${schema}".students s ON (p.student_id::text = s.id::text OR p.student_id::text = s.registration_no OR p.student_id::text = s.rollno)
+         LEFT JOIN "${schema}".faculty f ON (p.faculty_id::text = f.id::text OR p.faculty_id::text = f.emp_id)
+         WHERE p.id::text = $1`,
+        [miniId]
+      );
+
+      if (!miniExisting || miniExisting.length === 0) {
+        throw new NotFoundException(`Incubation project #${projectId} not found`);
+      }
+
+      isMini = true;
+      // Ensure columns exist on logbook_mini_projects
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS incubation_status VARCHAR(50) DEFAULT 'Under Review';
+         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS incubation_notes TEXT;
+         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS funding_amount NUMERIC DEFAULT 0;
+         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS mentor_assigned VARCHAR(255);
+         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS incubated_at TIMESTAMPTZ;`
+      ).catch(() => null);
+
+      const incubatedAt = isIncubated ? new Date().toISOString() : miniExisting[0].incubated_at;
+      const updatedMini = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE "${schema}".logbook_mini_projects
+         SET incubation_status = $1,
+             incubation_notes = COALESCE($2, incubation_notes),
+             funding_amount = COALESCE($3, funding_amount),
+             mentor_assigned = COALESCE($4, mentor_assigned),
+             incubated_at = $5,
+             updated_at = NOW()
+         WHERE id::text = $6
+         RETURNING *`,
+        [
+          dto.status,
+          finalNotes,
+          dto.funding_amount !== undefined ? dto.funding_amount : null,
+          dto.mentor_assigned || null,
+          incubatedAt,
+          miniId,
+        ]
+      );
+      projectData = {
+        ...updatedMini[0],
+        student_reg_no: miniExisting[0].student_reg_no || miniExisting[0].student_id || 'REG-2026',
+        student_name: miniExisting[0].student_name || 'Enrolled Student',
+        faculty_empid: miniExisting[0].faculty_empid,
+        faculty_name: miniExisting[0].faculty_name,
+      };
+    }
 
     // Dispatch Golden Opportunity notifications to Student & Faculty if Selected / Incubated / Funded
     if (['Selected', 'Incubated', 'Funded'].includes(dto.status)) {
@@ -513,26 +626,44 @@ export class IncubationCellService {
         }
 
         // 2. Notification for Reviewing Faculty
-        const reviews = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT faculty_empid, faculty_name FROM "${schema}".repository_reviews WHERE repo_id = $1 ORDER BY reviewed_at DESC LIMIT 1`,
-          [projectId]
-        );
+        if (isMini) {
+          const facultyId = projectData.faculty_empid || projectData.faculty_name;
+          if (facultyId) {
+            const facultyTitle = `🌟 Mentored Student Project Shortlisted for Venture Incubation`;
+            const facultyBody = `Exciting News! Student project "${projectTitle}" (Student: ${projectData.student_name}) evaluated under your guidance has been shortlisted by College Administration for Incubation & Corporate Commercialization.`;
 
-        if (reviews && reviews.length > 0) {
-          const facultyId = reviews[0].faculty_empid || reviews[0].faculty_name;
-          const facultyTitle = `🌟 Mentored Student Project Shortlisted for Venture Incubation`;
-          const facultyBody = `Exciting News! Student project "${projectTitle}" (Student: ${projectData.student_name}) evaluated under your guidance has been shortlisted by College Administration for Incubation & Corporate Commercialization.`;
-
-          await this.tenantSchemaService.queryInTenant(
+            await this.tenantSchemaService.queryInTenant(
+              slug,
+              `INSERT INTO "${schema}".notifications (
+                id, recipient_id, title, body, message, type, category, is_read, created_at
+              ) VALUES (
+                gen_random_uuid(), $1, $2, $3, $3, 'INCUBATION_FACULTY_ALERT', 'INCUBATION', false, NOW()
+              )`,
+              [facultyId, facultyTitle, facultyBody]
+            );
+          }
+        } else {
+          const reviews = await this.tenantSchemaService.queryInTenant(
             slug,
-            `INSERT INTO "${schema}".notifications (
-              id, recipient_id, title, body, message, type, category, is_read, created_at
-            ) VALUES (
-              gen_random_uuid(), $1, $2, $3, $3, 'INCUBATION_FACULTY_ALERT', 'INCUBATION', false, NOW()
-            )`,
-            [facultyId, facultyTitle, facultyBody]
+            `SELECT faculty_empid, faculty_name FROM "${schema}".repository_reviews WHERE repo_id::text = $1 ORDER BY reviewed_at DESC LIMIT 1`,
+            [projIdStr]
           );
+
+          if (reviews && reviews.length > 0) {
+            const facultyId = reviews[0].faculty_empid || reviews[0].faculty_name;
+            const facultyTitle = `🌟 Mentored Student Project Shortlisted for Venture Incubation`;
+            const facultyBody = `Exciting News! Student project "${projectTitle}" (Student: ${projectData.student_name}) evaluated under your guidance has been shortlisted by College Administration for Incubation & Corporate Commercialization.`;
+
+            await this.tenantSchemaService.queryInTenant(
+              slug,
+              `INSERT INTO "${schema}".notifications (
+                id, recipient_id, title, body, message, type, category, is_read, created_at
+              ) VALUES (
+                gen_random_uuid(), $1, $2, $3, $3, 'INCUBATION_FACULTY_ALERT', 'INCUBATION', false, NOW()
+              )`,
+              [facultyId, facultyTitle, facultyBody]
+            );
+          }
         }
       } catch (notifErr) {
         console.error('Failed to insert incubation notification:', notifErr);

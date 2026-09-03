@@ -810,18 +810,19 @@ export class ChatService implements OnModuleInit {
 
     const sql = `
       SELECT 
-        COUNT(unread_msg.id) AS total_unread,
+        COUNT(DISTINCT unread_msg.id) AS total_unread,
         COUNT(DISTINCT unread_msg.chat_group_id) AS groups_with_unread
       FROM "${schema}".chat_messages unread_msg
       JOIN "${schema}".chat_group_members mem ON mem.chat_group_id::text = unread_msg.chat_group_id::text AND mem.user_id::text = $1::text
       LEFT JOIN "${schema}".chat_read_state rs 
         ON rs.chat_group_id::text = unread_msg.chat_group_id::text AND rs.user_id::text = $1::text
+      LEFT JOIN "${schema}".chat_messages prev 
+        ON prev.id::text = rs.last_read_message_id::text
       WHERE unread_msg.sender_id::text != $1::text
         AND (
           rs.last_read_message_id IS NULL 
-          OR unread_msg.created_at > (
-            SELECT prev.created_at FROM "${schema}".chat_messages prev WHERE prev.id::text = rs.last_read_message_id::text
-          )
+          OR prev.created_at IS NULL
+          OR unread_msg.created_at > prev.created_at
         )
     `;
 

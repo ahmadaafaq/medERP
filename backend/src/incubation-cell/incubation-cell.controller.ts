@@ -75,7 +75,7 @@ export class IncubationCellController {
   @Patch('projects/:id/status')
   async updateIncubationStatus(
     @TenantSlug() tenantSlug: string,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() dto: UpdateIncubationStatusDto,
     @Request() req: any,
   ) {

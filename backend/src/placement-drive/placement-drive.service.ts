@@ -106,6 +106,34 @@ export class PlacementDriveService {
       ? dto.eligible_batches.split(',').map((s: string) => s.trim()).filter(Boolean)
       : (dto.eligibility_batch_cd ? [dto.eligibility_batch_cd] : ['2025', '2026']);
 
+    // Ensure table structure exists
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `CREATE TABLE IF NOT EXISTS "${schema}".placement_drives (
+          drive_id SERIAL PRIMARY KEY,
+          colg_cd VARCHAR(50) DEFAULT '1',
+          company_name VARCHAR(255) NOT NULL,
+          role VARCHAR(255) NOT NULL,
+          package_ctc VARCHAR(100),
+          description TEXT,
+          eligibility_course_cd VARCHAR(50),
+          eligibility_branch_cd VARCHAR(100),
+          eligibility_batch_cd VARCHAR(100),
+          eligible_branches TEXT[] DEFAULT '{}',
+          eligible_batches TEXT[] DEFAULT '{}',
+          logo_url VARCHAR(500),
+          min_score_required NUMERIC(5,2) DEFAULT 60.00,
+          drive_date DATE,
+          deadline_date TIMESTAMPTZ,
+          status VARCHAR(50) DEFAULT 'Open',
+          created_by_empid VARCHAR(100),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );`
+      );
+    } catch {}
+
     const sql = `
       INSERT INTO "${schema}".placement_drives (
         colg_cd, company_name, role, package_ctc, description,
@@ -127,7 +155,7 @@ export class PlacementDriveService {
       await this.tenantSchemaService.queryInTenant(
         slug,
         `SELECT setval(
-          pg_get_serial_sequence('"${schema}".placement_drives', 'drive_id'),
+          pg_get_serial_sequence('${schema}.placement_drives', 'drive_id'),
           COALESCE((SELECT MAX(drive_id) FROM "${schema}".placement_drives), 0) + 1,
           false
         );`
@@ -138,14 +166,14 @@ export class PlacementDriveService {
       dto.company_name,
       dto.role,
       dto.package_ctc || null,
-      dto.description,
-      dto.eligibility_course_cd,
+      dto.description || '',
+      dto.eligibility_course_cd || '13',
       dto.eligibility_branch_cd || null,
-      dto.eligibility_batch_cd,
+      dto.eligibility_batch_cd || '2025',
       JSON.stringify(branches),
       JSON.stringify(batches),
       dto.logo_url || null,
-      dto.min_score_required || 0.0,
+      Number(dto.min_score_required) || 0.0,
       dto.drive_date,
       dto.deadline_date,
       createdByEmpId,
@@ -184,21 +212,15 @@ export class PlacementDriveService {
           [noticeId, dto.eligibility_course_cd],
         );
 
-        const students = await this.tenantSchemaService.queryInTenant(
+        await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT u.id as user_id FROM "${schema}".users u WHERE UPPER(u.role) = 'STUDENT' AND u.is_active = true`,
+          `INSERT INTO "${schema}".notice_recipients (notice_id, user_id, is_read)
+           SELECT $1, u.id, false
+           FROM "${schema}".users u
+           WHERE UPPER(u.role) = 'STUDENT' AND u.is_active = true
+           ON CONFLICT DO NOTHING`,
+          [noticeId],
         );
-
-        for (const s of students) {
-          if (s.user_id) {
-            await this.tenantSchemaService.queryInTenant(
-              slug,
-              `INSERT INTO "${schema}".notice_recipients (notice_id, user_id, is_read)
-               VALUES ($1, $2, false) ON CONFLICT DO NOTHING`,
-              [noticeId, s.user_id],
-            );
-          }
-        }
       }
     } catch (noticeErr: any) {
       this.logger.warn(`Could not automatically create placement notice: ${noticeErr?.message || noticeErr}`);
@@ -309,7 +331,7 @@ export class PlacementDriveService {
          SELECT DISTINCT ON (registration_no) registration_no, course_cd, batch_cd
          FROM "${schema}".students
        ) s ON pa.student_reg_no = s.registration_no
-       WHERE pa.drive_id = $1
+       WHERE pa.drive_id::text = $1::text
        ORDER BY pa.applied_at DESC`,
       [driveId],
     );
@@ -404,7 +426,7 @@ export class PlacementDriveService {
     // Check duplicate submission
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT application_id FROM "${schema}".placement_applications WHERE drive_id = $1 AND student_reg_no = $2`,
+      `SELECT application_id FROM "${schema}".placement_applications WHERE drive_id::text = $1::text AND student_reg_no = $2`,
       [dto.drive_id, regNo],
     );
 
@@ -438,7 +460,7 @@ export class PlacementDriveService {
       slug,
       `SELECT pa.*, pd.company_name, pd.role
        FROM "${schema}".placement_applications pa
-       JOIN "${schema}".placement_drives pd ON pa.drive_id = pd.drive_id
+       JOIN "${schema}".placement_drives pd ON pa.drive_id::text = pd.drive_id::text
        WHERE pa.application_id = $1`,
       [dto.application_id],
     );
@@ -507,7 +529,7 @@ export class PlacementDriveService {
               COUNT(CASE WHEN pa.status = 'Shortlisted' THEN 1 END)::int AS shortlisted_count,
               COUNT(CASE WHEN pa.status = 'Selected' THEN 1 END)::int AS selected_count
        FROM "${schema}".placement_drives pd
-       LEFT JOIN "${schema}".placement_applications pa ON pd.drive_id = pa.drive_id
+       LEFT JOIN "${schema}".placement_applications pa ON pd.drive_id::text = pa.drive_id::text
        GROUP BY pd.drive_id, pd.company_name, pd.role, pd.package_ctc, pd.drive_date, pd.status
        ORDER BY pd.drive_date DESC`
     );
@@ -541,7 +563,7 @@ export class PlacementDriveService {
         FROM "${schema}".students s
         JOIN "${schema}".placement_applications pa_sel 
           ON s.registration_no = pa_sel.student_reg_no AND pa_sel.status = 'Selected'
-        JOIN "${schema}".placement_drives pd ON pa_sel.drive_id = pd.drive_id
+        JOIN "${schema}".placement_drives pd ON pa_sel.drive_id::text = pd.drive_id::text
         WHERE s.is_active = true
         GROUP BY s.registration_no, s.name, s.course_cd, s.batch_cd
         HAVING COUNT(pa_sel.application_id) >= 2
@@ -556,7 +578,7 @@ export class PlacementDriveService {
                STRING_AGG(CASE WHEN pa.status = 'Selected' THEN CONCAT(pd.company_name, ' (', pd.role, ')') END, ', ') AS companies_placed
         FROM "${schema}".students s
         LEFT JOIN "${schema}".placement_applications pa ON s.registration_no = pa.student_reg_no
-        LEFT JOIN "${schema}".placement_drives pd ON pa.drive_id = pd.drive_id
+        LEFT JOIN "${schema}".placement_drives pd ON pa.drive_id::text = pd.drive_id::text
         WHERE s.is_active = true
         GROUP BY s.registration_no, s.name, s.course_cd, s.batch_cd
         ORDER BY total_placements DESC, s.name ASC
@@ -843,7 +865,7 @@ export class PlacementDriveService {
               pa.offer_status, pa.applied_at, pa.updated_at,
               pd.company_name, pd.role, pd.package_ctc, pd.drive_date, pd.logo_url, pd.extra_fields
        FROM "${schema}".placement_applications pa
-       JOIN "${schema}".placement_drives pd ON pa.drive_id = pd.drive_id
+       JOIN "${schema}".placement_drives pd ON pa.drive_id::text = pd.drive_id::text
        WHERE pa.student_reg_no = $1
        ORDER BY pa.applied_at DESC`,
       [regNo],
@@ -887,7 +909,7 @@ export class PlacementDriveService {
       slug,
       `SELECT pa.*, pd.company_name, pd.role 
        FROM "${schema}".placement_applications pa
-       JOIN "${schema}".placement_drives pd ON pa.drive_id = pd.drive_id
+       JOIN "${schema}".placement_drives pd ON pa.drive_id::text = pd.drive_id::text
        WHERE pa.application_id = $1 AND pa.student_reg_no = $2`,
       [appId, regNo],
     );
@@ -938,7 +960,7 @@ export class PlacementDriveService {
              pa.applied_at,
              pa.updated_at
       FROM "${schema}".placement_applications pa
-      JOIN "${schema}".placement_drives pd ON pa.drive_id = pd.drive_id
+      JOIN "${schema}".placement_drives pd ON pa.drive_id::text = pd.drive_id::text
       LEFT JOIN "${schema}".students s ON pa.student_reg_no = s.registration_no
       WHERE 1=1
     `;
@@ -946,7 +968,7 @@ export class PlacementDriveService {
     const params: any[] = [];
     if (query.drive_id) {
       params.push(query.drive_id);
-      sql += ` AND pa.drive_id = $${params.length}`;
+      sql += ` AND pa.drive_id::text = $${params.length}::text`;
     }
 
     if (query.status) {
@@ -958,10 +980,32 @@ export class PlacementDriveService {
 
     const rows = await this.tenantSchemaService.queryInTenant(slug, sql, params);
 
+    // If no applicant records exist yet, provide the active placement drives roster as export fallback
+    let drivesFallback: any[] = [];
+    if (rows.length === 0) {
+      drivesFallback = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT pd.drive_id,
+                pd.company_name,
+                pd.role,
+                pd.package_ctc,
+                pd.drive_date,
+                pd.mode,
+                pd.eligibility_branch_cd,
+                pd.eligibility_batch_cd,
+                pd.status,
+                (SELECT COUNT(*)::int FROM "${schema}".placement_applications pa WHERE pa.drive_id::text = pd.drive_id::text) AS total_applicants,
+                (SELECT COUNT(*)::int FROM "${schema}".placement_applications pa WHERE pa.drive_id::text = pd.drive_id::text AND pa.status = 'Selected') AS total_selected
+         FROM "${schema}".placement_drives pd
+         ORDER BY pd.drive_date DESC`,
+      ).catch(() => []);
+    }
+
     return {
-      total_records: rows.length,
+      total_records: rows.length > 0 ? rows.length : drivesFallback.length,
+      export_type: rows.length > 0 ? 'applicants' : 'drives',
       filter: query,
-      data: rows,
+      data: rows.length > 0 ? rows : drivesFallback,
     };
   }
 
@@ -1006,6 +1050,34 @@ export class PlacementDriveService {
       totalStudentsPlaced: totalPlaced[0]?.cnt || 0,
       zeroPlacementCount: zeroPlacementCount[0]?.cnt || 0,
       topRecruiters,
+    };
+  }
+
+  /**
+   * Delete placement drive by drive_id
+   */
+  async deletePlacementDrive(tenantSlug: string, driveId: string | number, user: any) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `DELETE FROM "${schema}".placement_applications WHERE drive_id::text = $1::text`,
+        [String(driveId)],
+      );
+    } catch {}
+
+    const result = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM "${schema}".placement_drives WHERE drive_id::text = $1::text RETURNING *`,
+      [String(driveId)],
+    );
+
+    return {
+      success: true,
+      message: 'Placement drive deleted successfully',
+      deleted: result?.[0] || null,
     };
   }
 }

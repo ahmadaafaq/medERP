@@ -29,6 +29,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
   }
 
   private static readonly provisionedSchemas = new Set<string>();
+  private static readonly ensuredSchemas = new Set<string>();
+  private static readonly inFlightProvisioning = new Map<string, Promise<void>>();
+  private static readonly inFlightEnsureSchema = new Map<string, Promise<void>>();
 
   /**
    * Provision a new tenant schema with all required tables.
@@ -36,41 +39,54 @@ export class TenantSchemaService implements OnApplicationBootstrap {
    */
   async provisionSchema(slug: string): Promise<void> {
     const resolvedSlug = this.resolveTenantSlug(slug);
+    if (!resolvedSlug) return;
     if (TenantSchemaService.provisionedSchemas.has(resolvedSlug)) {
       return;
     }
-    const schema = `tenant_${resolvedSlug}`;
-    this.logger.log(`Provisioning schema: ${schema}`);
 
-    const runner: QueryRunner = this.dataSource.createQueryRunner();
-    await runner.connect();
-    await runner.startTransaction();
-
-    try {
-      await runner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-      await runner.query(`SET search_path TO "${schema}"`);
-
-      await this.createTenantTables(runner, schema);
-      await this.seedDefaultData(runner, slug);
-
-      await runner.commitTransaction();
-
-      TenantSchemaService.provisionedSchemas.add(resolvedSlug);
-
-      // Mark tenant schema as provisioned in public schema
-      await this.dataSource.query(
-        `UPDATE public.tenants SET schema_provisioned = true, updated_at = NOW() WHERE slug = $1`,
-        [slug],
-      );
-
-      this.logger.log(`Schema provisioned successfully: ${schema}`);
-    } catch (err) {
-      await runner.rollbackTransaction();
-      this.logger.error(`Failed to provision schema ${schema}:`, err);
-      throw err;
-    } finally {
-      await runner.release();
+    if (TenantSchemaService.inFlightProvisioning.has(resolvedSlug)) {
+      return await TenantSchemaService.inFlightProvisioning.get(resolvedSlug);
     }
+
+    const promise = (async () => {
+      const schema = `tenant_${resolvedSlug}`;
+      this.logger.log(`Provisioning schema: ${schema}`);
+
+      const runner: QueryRunner = this.dataSource.createQueryRunner();
+      await runner.connect();
+      await runner.startTransaction();
+
+      try {
+        await runner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+        await runner.query(`SET search_path TO "${schema}"`);
+
+        await this.createTenantTables(runner, schema);
+        await this.seedDefaultData(runner, slug);
+
+        await runner.commitTransaction();
+
+        TenantSchemaService.provisionedSchemas.add(resolvedSlug);
+        TenantSchemaService.ensuredSchemas.add(resolvedSlug);
+
+        // Mark tenant schema as provisioned in public schema
+        await this.dataSource.query(
+          `UPDATE public.tenants SET schema_provisioned = true, updated_at = NOW() WHERE slug = $1`,
+          [slug],
+        );
+
+        this.logger.log(`Schema provisioned successfully: ${schema}`);
+      } catch (err) {
+        await runner.rollbackTransaction();
+        this.logger.error(`Failed to provision schema ${schema}:`, err);
+        throw err;
+      } finally {
+        await runner.release();
+        TenantSchemaService.inFlightProvisioning.delete(resolvedSlug);
+      }
+    })();
+
+    TenantSchemaService.inFlightProvisioning.set(resolvedSlug, promise);
+    return await promise;
   }
 
   /**
@@ -118,16 +134,12 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     }
 
     this.logger.log('Verifying primary tenant schema on startup...');
-    (async () => {
-      try {
-        await this.ensureLatestSchema('srms-cet-bareilly').catch((e) => {
-          this.logger.warn(`Primary schema upgrade note: ${e.message}`);
-        });
-        this.logger.log('Primary tenant schema successfully verified.');
-      } catch (err) {
-        this.logger.error('Failed to run schema validation on startup:', err);
-      }
-    })();
+    try {
+      await this.ensureLatestSchema('srms-cet-bareilly');
+      this.logger.log('Primary tenant schema successfully verified.');
+    } catch (err: any) {
+      this.logger.warn(`Primary schema upgrade note: ${err.message}`);
+    }
   }
 
   /**
@@ -458,12 +470,22 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
   async ensureLatestSchema(slug: string): Promise<void> {
     const resolvedSlug = this.resolveTenantSlug(slug);
-    const schema = `tenant_${resolvedSlug}`;
-    const runner = this.dataSource.createQueryRunner();
-    await runner.connect();
-    try {
-      await runner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-      await runner.query(`SET search_path TO "${schema}", public`);
+    if (!resolvedSlug) return;
+    if (TenantSchemaService.ensuredSchemas.has(resolvedSlug)) {
+      return;
+    }
+
+    if (TenantSchemaService.inFlightEnsureSchema.has(resolvedSlug)) {
+      return await TenantSchemaService.inFlightEnsureSchema.get(resolvedSlug);
+    }
+
+    const promise = (async () => {
+      const schema = `tenant_${resolvedSlug}`;
+      const runner = this.dataSource.createQueryRunner();
+      await runner.connect();
+      try {
+        await runner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+        await runner.query(`SET search_path TO "${schema}", public`);
 
       // 1. Check if base tables exist in tenant schema, if not create and seed them
       const usersTableExists = await runner.query(
@@ -1280,13 +1302,20 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       } catch (seedErr) {
         this.logger.warn(`Non-fatal warning in seedDefaultData for ${slug}: ${seedErr.message}`);
       }
+      TenantSchemaService.ensuredSchemas.add(resolvedSlug);
+      TenantSchemaService.provisionedSchemas.add(resolvedSlug);
     } catch (err) {
       this.logger.error(`Failed to ensure latest schema for ${slug}:`, err);
       throw err;
     } finally {
       await runner.release();
+      TenantSchemaService.inFlightEnsureSchema.delete(resolvedSlug);
     }
-  }
+  })();
+
+  TenantSchemaService.inFlightEnsureSchema.set(resolvedSlug, promise);
+  return await promise;
+}
 
   private async createTenantTables(runner: QueryRunner, schema: string): Promise<void> {
     // ── Users ──────────────────────────────────────────────────────────────
