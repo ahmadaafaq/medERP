@@ -91,13 +91,21 @@ export class TenantSchemaService implements OnApplicationBootstrap {
   async queryInTenant<T = any>(slug: string, sql: string, params: any[] = []): Promise<T[]> {
     const resolvedSlug = this.resolveTenantSlug(slug);
     const schema = `tenant_${resolvedSlug}`;
+
+    // Fast-path: If the SQL query is already explicitly schema-qualified, run directly on connection pool
+    if (sql.includes(`"${schema}"`) || (resolvedSlug && sql.includes(schema))) {
+      return await this.dataSource.query(sql, params);
+    }
+
     const runner = this.dataSource.createQueryRunner();
     await runner.connect();
     try {
       await runner.query(`SET search_path TO "${schema}", public`);
       return await runner.query(sql, params);
     } finally {
-      await runner.release();
+      try {
+        await runner.release();
+      } catch (e) {}
     }
   }
 
@@ -109,31 +117,15 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       this.logger.error('Failed to ensure public tables on startup:', err.message);
     }
 
-    this.logger.log('Checking and upgrading tenant schemas in background...');
+    this.logger.log('Verifying primary tenant schema on startup...');
     (async () => {
       try {
-        let tenants: any[] = [];
-        try {
-          tenants = await this.dataSource.query(`SELECT slug FROM public.tenants WHERE schema_provisioned = true OR slug = 'srms-ims'`);
-        } catch {
-          tenants = [{ slug: 'srms-cet-bareilly' }, { slug: 'srms-cet' }, { slug: 'srms-ims' }, { slug: 'unicamp-med' }];
-        }
-
-        const standardSlugs = ['srms-cet-bareilly', 'srms-cet', 'srms-ims', 'unicamp-med'];
-        for (const s of standardSlugs) {
-          if (!tenants.some((t) => t.slug === s)) {
-            tenants.push({ slug: s });
-          }
-        }
-
-        for (const tenant of tenants) {
-          await this.ensureLatestSchema(tenant.slug).catch((e) => {
-            this.logger.warn(`Schema upgrade skipped for ${tenant.slug}: ${e.message}`);
-          });
-        }
-        this.logger.log('All provisioned tenant schemas successfully verified/upgraded.');
+        await this.ensureLatestSchema('srms-cet-bareilly').catch((e) => {
+          this.logger.warn(`Primary schema upgrade note: ${e.message}`);
+        });
+        this.logger.log('Primary tenant schema successfully verified.');
       } catch (err) {
-        this.logger.error('Failed to run schema validation/upgrades on startup:', err);
+        this.logger.error('Failed to run schema validation on startup:', err);
       }
     })();
   }

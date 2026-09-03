@@ -239,16 +239,19 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap() {
-    // Run sync asynchronously in background to ensure instant HTTP server start
+    // Only perform initial external sync if colleges table is empty
     setTimeout(async () => {
       try {
-        await this.syncExternalColleges();
-        await this.syncExternalCourses();
-        await this.syncExternalSessions();
+        const count = await this.ds.query(`SELECT COUNT(*) FROM public.tenants WHERE code IS NOT NULL AND code != ''`).catch(() => [{ count: 0 }]);
+        if (Number(count[0]?.count || 0) === 0) {
+          await this.syncExternalColleges();
+          await this.syncExternalCourses();
+          await this.syncExternalSessions();
+        }
       } catch (err: any) {
         this.logger.error('Error during initial sync:', err?.message || err);
       }
-    }, 1000);
+    }, 5000);
   }
 
   private async resolveTenantSlug(collegeIdOrSlug?: string): Promise<string> {

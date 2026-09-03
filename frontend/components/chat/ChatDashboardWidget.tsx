@@ -26,19 +26,14 @@ export default function ChatDashboardWidget({
     }
   };
 
-  // Filter out legacy dummy batches like 2013, 2014; prioritize active 2025+ batches and active channels
+  // Only show groups that have real conversation messages!
+  // If a group has no messages, it will not clutter the dashboard widget.
   const topGroups = groups
-    .filter((g) => {
-      const by = String(g.batch_year || g.batch_code || '').trim();
-      const num = parseInt(by, 10);
-      if (!isNaN(num) && num < 2024) return false;
-      if (g.name?.includes('2013') || g.name?.includes('2014')) return false;
-      return true;
-    })
+    .filter((g) => !!g.last_message?.body)
     .sort((a, b) => {
-      if (a.last_message && !b.last_message) return -1;
-      if (!a.last_message && b.last_message) return 1;
-      return 0;
+      const aTs = a.last_message?.created_at ? new Date(a.last_message.created_at).getTime() : 0;
+      const bTs = b.last_message?.created_at ? new Date(b.last_message.created_at).getTime() : 0;
+      return bTs - aTs; // newest first
     })
     .slice(0, 3);
 
@@ -90,8 +85,8 @@ export default function ChatDashboardWidget({
         ) : topGroups.length === 0 ? (
           <div className="py-8 text-center text-[#4E5969] dark:text-slate-400 my-auto">
             <Sparkles className="w-6 h-6 mx-auto mb-1 text-[#F36C21]" />
-            <p className="text-xs font-bold text-[#1B1E28] dark:text-white">No active batch groups</p>
-            <p className="text-[11px] mt-0.5">2025 batch discussions will appear when channels are active.</p>
+            <p className="text-xs font-bold text-[#1B1E28] dark:text-white">No active discussions</p>
+            <p className="text-[11px] mt-0.5">Discussions with recent messages from your department will appear here.</p>
           </div>
         ) : (
           topGroups.map((group) => (
@@ -102,16 +97,18 @@ export default function ChatDashboardWidget({
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#2D2575] to-[#5B4BFF] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
-                  {group.batch_year ? group.batch_year.slice(-2) : '25'}
+                  {group.batch_year ? group.batch_year.slice(-2) : group.name ? group.name.slice(0, 2).toUpperCase() : 'CH'}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h4 className="text-xs font-black text-[#1B1E28] dark:text-white truncate group-hover:text-[#5B4BFF] transition-colors">
                       {group.name}
                     </h4>
-                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-orange-50 dark:bg-orange-950/60 text-[#F36C21] uppercase">
-                      {group.batch_year || '2025'}
-                    </span>
+                    {group.batch_year && (
+                      <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-orange-50 dark:bg-orange-950/60 text-[#F36C21] uppercase">
+                        {group.batch_year}
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] text-[#4E5969] dark:text-slate-400 truncate mt-0.5 font-medium">
                     {group.last_message?.body ? (

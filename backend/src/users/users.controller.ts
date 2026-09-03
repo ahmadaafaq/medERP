@@ -26,20 +26,33 @@ export class UsersController {
 
   // ─── Students ────────────────────────────────────────────────
   @Public()
+  @Get('academic-filters')
+  @ApiOperation({ summary: 'Get Course, Branch, and Batch filter options for student directory' })
+  getAcademicFilters(
+    @TenantSlug() tenantSlug: string,
+    @Query('tenant') tenant?: string,
+  ) {
+    const slug = tenant || tenantSlug || 'srms-cet-bareilly';
+    return this.usersService.getAcademicFilters(slug);
+  }
+
+  @Public()
   @Get('students')
   @ApiOperation({ summary: 'List students with filtering and pagination' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'batchId', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
+  @ApiQuery({ name: 'courseCd', required: false })
   getStudents(
     @TenantSlug() tenantSlug: string,
-    @Query() query: GetStudentsQueryDto,
+    @Query() query: any,
   ) {
     const slug = query.tenant || tenantSlug || 'srms-cet-bareilly';
     return this.usersService.getStudents(slug, query, {
       search: query.search,
       batchId: query.batchId,
       departmentId: query.departmentId,
+      courseCd: query.courseCd || query.course_cd,
     });
   }
 

@@ -13,7 +13,10 @@ import {
   UseInterceptors,
   UploadedFiles,
   BadRequestException,
+  Res,
+  NotFoundException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
@@ -118,11 +121,21 @@ export class NoticesController {
       else if (ext === '.docx' || ext === '.doc') fileType = 'docx';
       else if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) fileType = 'image';
 
+      let fileData: string | null = null;
+      try {
+        if (file.path && fs.existsSync(file.path)) {
+          fileData = fs.readFileSync(file.path).toString('base64');
+        } else if (file.buffer) {
+          fileData = file.buffer.toString('base64');
+        }
+      } catch (e) {}
+
       return {
         file_name: file.originalname,
         file_type: fileType,
-        file_url: `/uploads/notices/${file.filename}`,
+        file_url: `/api/v1/notices/attachments/${file.filename}`,
         file_size_kb: Math.round(file.size / 1024),
+        file_data: fileData,
       };
     });
 
@@ -131,6 +144,61 @@ export class NoticesController {
       data: uploaded,
       message: `${files.length} attachment(s) uploaded successfully`,
     };
+  }
+
+  @Public()
+  @Get('notices/attachments/:filename')
+  @ApiOperation({ summary: 'Stream or download notice attachment file' })
+  async serveNoticeAttachment(
+    @Param('filename') filename: string,
+    @Query('tenant') tenantQuery: string,
+    @Tenant() tenantHeader: string,
+    @Res() res: Response,
+  ) {
+    const cleanFilename = path.basename(filename);
+    const diskPath = path.join(UPLOAD_DIR, cleanFilename);
+
+    if (fs.existsSync(diskPath)) {
+      const ext = path.extname(cleanFilename).toLowerCase();
+      let mimeType = 'application/octet-stream';
+      if (ext === '.pdf') mimeType = 'application/pdf';
+      else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+      else if (ext === '.png') mimeType = 'image/png';
+      else if (ext === '.webp') mimeType = 'image/webp';
+      else if (ext === '.xlsx' || ext === '.xls') mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      else if (ext === '.docx' || ext === '.doc') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+      res.removeHeader('X-Frame-Options');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', mimeType);
+      const stream = fs.createReadStream(diskPath);
+      return stream.pipe(res);
+    }
+
+    const tenantSlug = tenantQuery || tenantHeader || 'srms-cet-bareilly';
+    const dbAtt = await this.noticesService.getNoticeAttachmentData(tenantSlug, cleanFilename);
+    if (dbAtt && dbAtt.file_data) {
+      const buffer = Buffer.from(dbAtt.file_data, 'base64');
+      const ext = path.extname(cleanFilename).toLowerCase();
+      let mimeType = 'application/octet-stream';
+      if (ext === '.pdf') mimeType = 'application/pdf';
+      else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+      else if (ext === '.png') mimeType = 'image/png';
+      else if (ext === '.webp') mimeType = 'image/webp';
+      else if (ext === '.xlsx' || ext === '.xls') mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      else if (ext === '.docx' || ext === '.doc') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+      res.removeHeader('X-Frame-Options');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Length', String(buffer.length));
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(cleanFilename)}"`);
+      return res.status(200).send(buffer);
+    }
+
+    throw new NotFoundException('Attachment not found');
   }
 
   // ──────────────────────────────────────────────────────────────────────────

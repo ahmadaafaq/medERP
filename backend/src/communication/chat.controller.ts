@@ -177,6 +177,28 @@ export class ChatController {
     const filePath = path.join(process.cwd(), 'uploads', 'chat', slug, cleanFilename);
 
     if (!fs.existsSync(filePath)) {
+      const dbAtt = await this.chatService.getAttachmentFileData(slug, cleanFilename);
+      if (dbAtt && dbAtt.file_data) {
+        const buffer = Buffer.from(dbAtt.file_data, 'base64');
+        const ext = path.extname(cleanFilename).toLowerCase();
+        let mimeType = 'application/octet-stream';
+        if (ext === '.pdf') mimeType = 'application/pdf';
+        else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+        else if (ext === '.png') mimeType = 'image/png';
+        else if (ext === '.webp') mimeType = 'image/webp';
+        else if (ext === '.doc') mimeType = 'application/msword';
+        else if (ext === '.docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        else if (ext === '.ppt') mimeType = 'application/vnd.ms-powerpoint';
+        else if (ext === '.pptx') mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+        res.removeHeader('X-Frame-Options');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Length', String(buffer.length));
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(cleanFilename)}"`);
+        return res.status(200).send(buffer);
+      }
       throw new NotFoundException('File not found');
     }
 
@@ -191,6 +213,9 @@ export class ChatController {
     else if (ext === '.ppt') mimeType = 'application/vnd.ms-powerpoint';
     else if (ext === '.pptx') mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', mimeType);
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
@@ -212,7 +237,7 @@ export class ChatController {
     @Req() req: any,
     @Body() dto: any,
   ) {
-    const user = req.user || { role: 'FACULTY', id: 'FAC001', name: 'Faculty User' };
+    const user = this.extractUser(req, dto);
     const data = await this.chatService.joinBatchGroup(tenantSlug, user, dto);
     return { success: true, data };
   }

@@ -76,12 +76,17 @@ export class UsersService {
       params.push(`%${filters.search}%`);
       i++;
     }
-    if (filters.batchId && filters.batchId !== 'all') {
+    if (filters.courseCd && filters.courseCd !== 'all' && filters.courseCd !== 'ALL') {
+      conditions.push(`(s.course_cd = $${i})`);
+      params.push(filters.courseCd);
+      i++;
+    }
+    if (filters.batchId && filters.batchId !== 'all' && filters.batchId !== 'ALL') {
       conditions.push(`(s.batch_id::text = $${i} OR s.batch_cd = $${i})`);
       params.push(filters.batchId);
       i++;
     }
-    if (filters.departmentId && filters.departmentId !== 'all') {
+    if (filters.departmentId && filters.departmentId !== 'all' && filters.departmentId !== 'ALL') {
       conditions.push(`(s.department_id::text = $${i} OR s.branch_id = $${i} OR d.code = $${i})`);
       params.push(filters.departmentId);
       i++;
@@ -92,29 +97,107 @@ export class UsersService {
     const [rows, countRows] = await Promise.all([
       this.ds.query(
         `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url,
-                COALESCE(b.code, s.batch_cd, '2025-MBBS') AS batch_cd,
+                COALESCE(b.code, s.batch_cd, '2025') AS batch_cd,
                 s.course_cd, s.phone, s.admission_year, s.batch_id, s.department_id, s.branch_id,
                 u.email, COALESCE(u.is_active, s.is_active, true) as is_active, s.created_at,
                 d.name as department_name, d.code as department_code
          FROM "${schema}".students s
          LEFT JOIN "${schema}".users u ON u.id::text = s.user_id::text
          LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
-         LEFT JOIN "${schema}".departments d ON (d.id::text = s.department_id::text OR d.code = s.branch_id OR d.code = s.department_id::text)
+         LEFT JOIN LATERAL (
+           SELECT name, code FROM "${schema}".departments
+           WHERE (id::text = s.department_id::text OR code = s.branch_id OR code = s.department_id::text)
+           LIMIT 1
+         ) d ON true
          ${where}
-         ORDER BY s.name ASC
+         ORDER BY s.rollno ASC, s.name ASC
          LIMIT $${i} OFFSET $${i + 1}`,
         [...params, limit, offset],
       ),
       this.ds.query(
-        `SELECT COUNT(*) FROM "${schema}".students s
+        `SELECT COUNT(DISTINCT s.id) as count FROM "${schema}".students s
          LEFT JOIN "${schema}".users u ON u.id::text = s.user_id::text
-         LEFT JOIN "${schema}".departments d ON (d.id::text = s.department_id::text OR d.code = s.branch_id OR d.code = s.department_id::text)
+         LEFT JOIN LATERAL (
+           SELECT name, code FROM "${schema}".departments
+           WHERE (id::text = s.department_id::text OR code = s.branch_id OR code = s.department_id::text)
+           LIMIT 1
+         ) d ON true
          ${where}`,
         params,
       ),
     ]);
 
     return paginate(rows, parseInt(countRows[0].count, 10), pagination);
+  }
+
+  async getAcademicFilters(tenantSlug: string) {
+    const resolvedSlug = await this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${resolvedSlug}`;
+
+    const [courses, branches, batches, stuBatches] = await Promise.all([
+      this.ds.query(
+        `SELECT DISTINCT id, code, name, course_cd
+         FROM "${schema}".courses
+         WHERE name IS NOT NULL AND code IS NOT NULL
+         ORDER BY name ASC`
+      ).catch(() => []),
+      this.ds.query(
+        `SELECT DISTINCT d.id, d.code, d.name, d.course_cd, d.branch_cd
+         FROM "${schema}".departments d
+         WHERE d.name IS NOT NULL
+           AND d.name NOT ILIKE '%TRANSPORT%'
+           AND d.name NOT ILIKE '%SECURITY%'
+           AND d.name NOT ILIKE '%ACCOUNT%'
+           AND d.name NOT ILIKE '%MESS%'
+           AND d.name NOT ILIKE '%STORE%'
+           AND d.name NOT ILIKE '%MAINTENANCE%'
+           AND d.name NOT ILIKE '%HOSTEL%'
+         ORDER BY d.course_cd, d.name ASC`
+      ).catch(() => []),
+      this.ds.query(
+        `SELECT DISTINCT id, code, name, year, course_cd
+         FROM "${schema}".batches
+         WHERE (year::text >= '2020' OR year IS NULL)
+         ORDER BY year DESC NULLS LAST, name ASC`
+      ).catch(() => []),
+      this.ds.query(
+        `SELECT DISTINCT s.batch_cd, s.course_cd
+         FROM "${schema}".students s
+         WHERE s.batch_cd IS NOT NULL`
+      ).catch(() => []),
+    ]);
+
+    const batchMap = new Map<string, { code: string; name: string; year?: string; course_cd?: string }>();
+    batches.forEach((b: any) => {
+      const year = b.year ? String(b.year) : b.code;
+      if (year && !batchMap.has(year)) {
+        batchMap.set(year, {
+          code: year,
+          name: `Batch ${year}`,
+          year: year,
+          course_cd: b.course_cd,
+        });
+      }
+    });
+
+    stuBatches.forEach((sb: any) => {
+      const bCode = String(sb.batch_cd);
+      if (bCode && !batchMap.has(bCode) && (bCode.startsWith('20') || ['1', '2', '15', '16', '17', '18', '19'].includes(bCode))) {
+        const yr = bCode.startsWith('20') ? bCode : bCode === '2' ? '2025' : bCode === '1' ? '2024' : `Batch ${bCode}`;
+        batchMap.set(bCode, {
+          code: bCode,
+          name: bCode.startsWith('20') ? `Batch ${bCode}` : `Batch ${yr} (${bCode})`,
+          year: yr,
+          course_cd: sb.course_cd,
+        });
+      }
+    });
+
+    return {
+      courses,
+      branches,
+      batches: Array.from(batchMap.values()),
+    };
   }
 
   async getStudentById(tenantSlug: string, id: string) {
@@ -125,7 +208,11 @@ export class UsersService {
               d.name AS department_name, b.code AS batch_code
        FROM "${schema}".students s
        LEFT JOIN "${schema}".users u ON u.id::text = s.user_id::text
-       LEFT JOIN "${schema}".departments d ON (d.id::text = s.department_id::text OR d.code = s.branch_id OR d.code = s.department_id::text)
+       LEFT JOIN LATERAL (
+         SELECT name, code FROM "${schema}".departments
+         WHERE (id::text = s.department_id::text OR code = s.branch_id OR code = s.department_id::text)
+         LIMIT 1
+       ) d ON true
        LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
        WHERE s.id::text = $1::text OR s.rollno = $1 OR s.registration_no = $1`,
       [id],

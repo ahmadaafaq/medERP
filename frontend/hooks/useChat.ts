@@ -135,29 +135,47 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
         const json = await res.json();
         let list: ChatGroup[] = json.data || [];
 
-        // When role is STUDENT, strictly filter to show only the logged-in student's registered batch
+        // When role is STUDENT, filter by student's batch if known, preserving active groups with messages
         if (role === 'STUDENT') {
-          let studentBatch = '2025';
+          let studentBatch = '';
           if (typeof window !== 'undefined') {
             try {
               const cachedStr = localStorage.getItem('user');
               if (cachedStr) {
                 const parsed = JSON.parse(cachedStr);
                 const p = parsed?.profile || parsed || {};
-                studentBatch = String(p.batch_year || p.batch_cd || parsed?.batchCd || '2025');
+                studentBatch = String(p.batch_year || p.batch_cd || parsed?.batchCd || '').trim();
               }
             } catch {}
           }
 
-          list = list.filter((g) => {
-            const groupBatch = String(g.batch_year || g.batch_code || '').trim();
-            const groupName = String(g.name || '').trim();
-            if (studentBatch.includes('2025') || studentBatch === '2') {
-              return groupBatch === '2025' || groupBatch === '2' || groupName.includes('2025');
-            }
-            return groupBatch.includes(studentBatch) || groupName.includes(studentBatch);
-          });
+          if (studentBatch) {
+            list = list.filter((g) => {
+              const groupBatch = String(g.batch_year || g.batch_code || '').trim();
+              const groupName = String(g.name || '').trim();
+              return groupBatch.includes(studentBatch) || groupName.includes(studentBatch) || !!g.last_message?.body;
+            });
+          }
         }
+
+        // ── Deduplicate: one entry per unique group name ──────────────────
+        // For students, multiple DB rows can map to the same chat group
+        // (one per batch/section). Keep the one with the latest message.
+        const seenNames = new Map<string, ChatGroup>();
+        for (const g of list) {
+          const key = (g.department_name || g.name || '').trim().toLowerCase();
+          const existing = seenNames.get(key);
+          if (!existing) {
+            seenNames.set(key, g);
+          } else {
+            // Keep whichever has the more recent last_message
+            const existTs = existing.last_message?.created_at ? new Date(existing.last_message.created_at).getTime() : 0;
+            const newTs = g.last_message?.created_at ? new Date(g.last_message.created_at).getTime() : 0;
+            if (newTs > existTs) seenNames.set(key, g);
+          }
+        }
+        list = Array.from(seenNames.values());
+        // ──────────────────────────────────────────────────────────────────
 
         setGroups(list);
 

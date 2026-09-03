@@ -98,6 +98,7 @@ export class NoticesService implements OnModuleInit {
         -- Safe column type migration in case table was created with UUID user_id
         ALTER TABLE notice_recipients DROP CONSTRAINT IF EXISTS notice_recipients_user_id_fkey;
         ALTER TABLE notice_recipients ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR(255);
+        ALTER TABLE notice_attachments ADD COLUMN IF NOT EXISTS file_data TEXT;
 
         CREATE TABLE IF NOT EXISTS notice_group_templates (
           id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -300,11 +301,12 @@ export class NoticesService implements OnModuleInit {
     // 3. Insert Attachments
     if (dto.attachments && dto.attachments.length > 0) {
       for (const att of dto.attachments) {
+        const fileData = (att as any).file_data || (att as any).data || null;
         await this.tenantSchemaService.queryInTenant(
           slug,
-          `INSERT INTO notice_attachments (notice_id, file_name, file_type, file_url, file_size_kb)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [noticeId, att.file_name, att.file_type || 'pdf', att.file_url, att.file_size_kb || 0],
+          `INSERT INTO notice_attachments (notice_id, file_name, file_type, file_url, file_size_kb, file_data)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [noticeId, att.file_name, att.file_type || 'pdf', att.file_url, att.file_size_kb || 0, fileData],
         );
       }
     }
@@ -1001,5 +1003,27 @@ export class NoticesService implements OnModuleInit {
       [id],
     );
     return { success: true, message: 'Notice group template deleted' };
+  }
+
+  /**
+   * Fetch notice attachment binary/base64 from PostgreSQL if physical file is missing from disk
+   */
+  async getNoticeAttachmentData(tenantSlug: string, filename: string) {
+    try {
+      const slug = (tenantSlug || '').replace(/^tenant_/, '');
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT file_name, file_type, file_data FROM notice_attachments
+         WHERE file_url LIKE $1 OR file_name = $2
+         ORDER BY created_at DESC LIMIT 1`,
+        [`%${filename}%`, filename],
+      );
+      if (rows && rows[0] && rows[0].file_data) {
+        return rows[0];
+      }
+    } catch (e) {
+      this.logger.warn(`Failed to fetch notice attachment from DB: ${e.message}`);
+    }
+    return null;
   }
 }

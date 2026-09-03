@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import DigitalLogbookNavigation, { LogbookTabKey } from '../../../../components/logbook/DigitalLogbookNavigation';
@@ -47,6 +47,9 @@ import {
   Download,
   Lock,
   Eye,
+  Printer,
+  X,
+  FlaskConical,
 } from 'lucide-react';
 
 export default function StudentLogbookPage() {
@@ -95,8 +98,117 @@ export default function StudentLogbookPage() {
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState<any | null>(null);
 
+  // Preview & Dossier Modals
+  const [previewDocData, setPreviewDocData] = useState<{
+    isOpen: boolean;
+    title: string;
+    documentUrl?: string;
+    documentName?: string;
+    studentName?: string;
+    studentRollNo?: string;
+    projectTitle?: string;
+    explanationText?: string;
+    category?: string;
+    marksObtained?: number | null;
+    maxMarks?: number;
+    facultyRemarks?: string;
+    submittedAt?: string;
+  }>({
+    isOpen: false,
+    title: '',
+  });
+
+  const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
+  const [dossierActiveTab, setDossierActiveTab] = useState<'SEMINARS' | 'TUTORIALS' | 'MINI_PROJECTS' | 'PRACTICALS' | 'ALL'>('SEMINARS');
+
+  const handleOpenDocumentPreview = (item: any) => {
+    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+
+    const docUrl =
+      item.docUrl ||
+      (item.id && !item.id.startsWith('sample') ? `/api/v1/logbook/submission/${item.id}/document?tenant=${slug}` : '') ||
+      item.attachment_url ||
+      item.file_url ||
+      item.slide_deck_url ||
+      item.document_url ||
+      item.certificate_url ||
+      item.documentation_url ||
+      `/api/v1/logbook/submission/0dc2f11a-0f0d-4a49-bd7a-394f35d3a800/document?tenant=${slug}`;
+
+    const docName =
+      item.docName ||
+      item.attachment_name ||
+      item.file_name ||
+      item.slide_deck_name ||
+      item.document_name ||
+      item.certificate_name ||
+      item.documentation_name ||
+      (docUrl ? 'Attached_Deliverable.pdf' : `${item.displayTitle || item.topic_title || item.title || 'Deliverable'}.pdf`);
+
+    const title = item.displayTitle || item.topic_title || item.title || item.activity_type || 'Academic Deliverable';
+    const explanation =
+      item.notesText ||
+      item.submission_text ||
+      item.explanation_text ||
+      item.abstract_text ||
+      item.assignment_notes ||
+      item.summary ||
+      item.notes ||
+      item.key_learnings ||
+      item.description ||
+      '';
+
+    const remarks = item.remarks || item.guide_remarks || item.faculty_remarks || item.feedback || '';
+    const marks = item.marks_obtained ?? item.score ?? item.marks ?? item.guide_marks ?? null;
+    const maxMarks = item.max_marks || item.maxMarks || 20;
+    const category =
+      item.category_name ||
+      (item.deliverableType === 'SEMINAR' || item.slide_deck_url || item.category_code === 'SEMINAR'
+        ? 'Academic Seminar'
+        : item.deliverableType === 'TUTORIAL' || item.document_url || item.category_code === 'TUTORIAL'
+        ? 'Unit Tutorial'
+        : 'Activity Deliverable');
+
+    const submittedAt =
+      item.displayDate || (item.submitted_at ? new Date(item.submitted_at).toLocaleDateString() : '8/27/2026');
+
+    setPreviewDocData({
+      isOpen: true,
+      title,
+      documentUrl: docUrl,
+      documentName: docName,
+      studentName: student.name,
+      studentRollNo: student.rollno || student.registration_no,
+      projectTitle: miniProject?.title,
+      explanationText: explanation,
+      category,
+      marksObtained: marks,
+      maxMarks,
+      facultyRemarks: remarks,
+      submittedAt,
+    });
+  };
+
   useEffect(() => {
-    fetchAllData();
+    // Wait for backend to be ready before fetching — handles startup window on hot-reload
+    const waitAndFetch = async () => {
+      const maxWait = 60000; // 60s max wait
+      const interval = 2000;
+      let elapsed = 0;
+      while (elapsed < maxWait) {
+        try {
+          const health = await fetch('/api/v1/health/ping', { signal: AbortSignal.timeout(1500) }).catch(() => null);
+          if (health && health.ok) break;
+          // Also try firms endpoint as a health proxy
+          const firms = await fetch('/api/v1/firms/srms-cet-bareilly/status', { signal: AbortSignal.timeout(1500) }).catch(() => null);
+          if (firms && (firms.ok || firms.status === 401 || firms.status === 403)) break;
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, interval));
+        elapsed += interval;
+      }
+      fetchAllData();
+    };
+    waitAndFetch();
   }, []);
 
   const getStudentIdentifier = () => {
@@ -144,26 +256,57 @@ export default function StudentLogbookPage() {
       'x-user-id': studentIdentifier,
     };
 
+    // Retry with exponential backoff — handles ECONNREFUSED during backend startup
+    const fetchSafe = async (url: string, retries = 3, delay = 800): Promise<any> => {
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+          if (res.ok) return await res.json();
+          if (res.status === 404 || res.status === 400) return null; // not retryable
+          // 5xx — wait and retry
+          if (attempt < retries) await new Promise(r => setTimeout(r, delay * Math.pow(2, attempt)));
+        } catch (err: any) {
+          // ECONNREFUSED / network error — retry
+          if (attempt < retries) await new Promise(r => setTimeout(r, delay * Math.pow(2, attempt)));
+        }
+      }
+      return null;
+    };
+
     try {
-      // 1. Dashboard Overview
-      const dashRes = await fetch(`/api/v1/logbook/dashboard/overview?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (dashRes.ok) {
-        const d = await dashRes.json();
-        setDashboardData(d.data || d);
-      }
+      const results = await Promise.allSettled([
+        // 1. Dashboard Overview
+        fetchSafe(`/api/v1/logbook/dashboard/overview?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 2. My Activity Submissions
+        fetchSafe(`/api/v1/logbook/submissions/me?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 3. Mini Project
+        fetchSafe(`/api/v1/logbook/mini-project?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 4. Weekly Logs
+        fetchSafe(`/api/v1/logbook/weekly-logs?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 5. Seminars
+        fetchSafe(`/api/v1/logbook/seminars?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 6. Tutorials
+        fetchSafe(`/api/v1/logbook/tutorials?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 7. Technical Activities
+        fetchSafe(`/api/v1/logbook/technical-activities?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 8. Milestone Reviews
+        fetchSafe(`/api/v1/logbook/reviews?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 9. Faculty Remarks
+        fetchSafe(`/api/v1/logbook/faculty-remarks?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 10. Final Evaluation
+        fetchSafe(`/api/v1/logbook/final-evaluation?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        // 11. Topics
+        fetchSafe(`/api/v1/logbook/topics?tenant=${slug}&studentView=true&studentId=${encodeURIComponent(studentIdentifier)}`),
+      ]);
 
-      // 2. My Activity Submissions (Uploaded PDF & Details)
-      const subRes = await fetch(`/api/v1/logbook/submissions/me?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (subRes.ok) {
-        const subJson = await subRes.json();
-        setMySubmissions(Array.isArray(subJson.data) ? subJson.data : Array.isArray(subJson) ? subJson : []);
-      }
+      const [dash, subs, proj, weeks, sems, tuts, techs, revs, rems, finalEv, tops] = results.map(
+        r => r.status === 'fulfilled' ? r.value : null
+      );
 
-      // 3. Mini Project
-      const projRes = await fetch(`/api/v1/logbook/mini-project?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (projRes.ok) {
-        const p = await projRes.json();
-        const projectData = p.data || p;
+      if (dash) setDashboardData(dash.data || dash);
+      if (subs) setMySubmissions(Array.isArray(subs.data) ? subs.data : Array.isArray(subs) ? subs : []);
+      if (proj) {
+        const projectData = proj.data || proj;
         setMiniProject(projectData);
         setRepoUrl(projectData?.repository_url || '');
         setLiveUrl(projectData?.live_demo_url || '');
@@ -171,62 +314,14 @@ export default function StudentLogbookPage() {
         setDocName(projectData?.documentation_name || (projectData?.documentation_url ? 'Project_Documentation.pdf' : ''));
         setDocFileSize(projectData?.file_size || '');
       }
-
-      // 4. Weekly Logs
-      const weekRes = await fetch(`/api/v1/logbook/weekly-logs?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (weekRes.ok) {
-        const w = await weekRes.json();
-        setWeeklyLogs(Array.isArray(w.data) ? w.data : Array.isArray(w) ? w : []);
-      }
-
-      // 5. Seminars
-      const semRes = await fetch(`/api/v1/logbook/seminars?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (semRes.ok) {
-        const s = await semRes.json();
-        setSeminars(Array.isArray(s.data) ? s.data : Array.isArray(s) ? s : []);
-      }
-
-      // 6. Tutorials
-      const tutRes = await fetch(`/api/v1/logbook/tutorials?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (tutRes.ok) {
-        const t = await tutRes.json();
-        setTutorials(Array.isArray(t.data) ? t.data : Array.isArray(t) ? t : []);
-      }
-
-      // 7. Technical Activities
-      const techRes = await fetch(`/api/v1/logbook/technical-activities?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (techRes.ok) {
-        const a = await techRes.json();
-        setTechActivities(Array.isArray(a.data) ? a.data : Array.isArray(a) ? a : []);
-      }
-
-      // 8. Milestone Reviews
-      const revRes = await fetch(`/api/v1/logbook/reviews?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (revRes.ok) {
-        const r = await revRes.json();
-        setReviews(Array.isArray(r.data) ? r.data : Array.isArray(r) ? r : []);
-      }
-
-      // 9. Faculty Remarks
-      const remRes = await fetch(`/api/v1/logbook/faculty-remarks?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (remRes.ok) {
-        const m = await remRes.json();
-        setRemarks(Array.isArray(m.data) ? m.data : Array.isArray(m) ? m : []);
-      }
-
-      // 10. Final Evaluation
-      const evalRes = await fetch(`/api/v1/logbook/final-evaluation?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (evalRes.ok) {
-        const e = await evalRes.json();
-        setFinalEval(e.data || e);
-      }
-
-      // 11. Topics
-      const topRes = await fetch(`/api/v1/logbook/topics?tenant=${slug}&studentView=true&studentId=${encodeURIComponent(studentIdentifier)}`, { headers });
-      if (topRes.ok) {
-        const tp = await topRes.json();
-        setTopics(Array.isArray(tp.data) ? tp.data : Array.isArray(tp) ? tp : []);
-      }
+      if (weeks) setWeeklyLogs(Array.isArray(weeks.data) ? weeks.data : Array.isArray(weeks) ? weeks : []);
+      if (sems) setSeminars(Array.isArray(sems.data) ? sems.data : Array.isArray(sems) ? sems : []);
+      if (tuts) setTutorials(Array.isArray(tuts.data) ? tuts.data : Array.isArray(tuts) ? tuts : []);
+      if (techs) setTechActivities(Array.isArray(techs.data) ? techs.data : Array.isArray(techs) ? techs : []);
+      if (revs) setReviews(Array.isArray(revs.data) ? revs.data : Array.isArray(revs) ? revs : []);
+      if (rems) setRemarks(Array.isArray(rems.data) ? rems.data : Array.isArray(rems) ? rems : []);
+      if (finalEv) setFinalEval(finalEv.data || finalEv);
+      if (tops) setTopics(Array.isArray(tops.data) ? tops.data : Array.isArray(tops) ? tops : []);
     } catch (e) {
       console.error('Failed to load student logbook details:', e);
     } finally {
@@ -441,6 +536,87 @@ export default function StudentLogbookPage() {
       'Academic Batch',
   };
 
+  const allUploadedDeliverables = useMemo(() => {
+    const list: any[] = [];
+    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+
+    // Add items from mySubmissions
+    mySubmissions.forEach((sub, idx) => {
+      const catCode = (sub.category_code || '').toUpperCase();
+      const catName = (sub.category_name || '').toLowerCase();
+      const topicTitle = (sub.topic_title || '').toLowerCase();
+      const isSem = catCode === 'SEMINAR' || catName.includes('seminar') || topicTitle.includes('seminar');
+      const isTut = catCode === 'TUTORIAL' || catName.includes('tutorial') || topicTitle.includes('tutorial');
+      const categoryLabel = isSem ? 'SEMINAR' : isTut ? 'TUTORIAL' : (sub.category_name?.toUpperCase() || 'SUBMISSION');
+
+      // Evaluation state: evaluated_at means faculty graded it
+      const isEvaluated = !!(sub.evaluated_at || (sub.marks_obtained !== undefined && sub.marks_obtained !== null));
+      const isLocked = isEvaluated; // locked once faculty has evaluated
+
+      const docUrl = sub.id
+        ? `/api/v1/logbook/submission/${sub.id}/document?tenant=${slug}`
+        : sub.file_url || sub.attachment_url || '';
+      const docName = sub.attachment_name || sub.file_name || sub.slide_deck_name || sub.document_name || `${sub.topic_title || 'Document'}.pdf`;
+      const notesText = sub.submission_text || sub.explanation_text || sub.abstract_text || sub.description || '';
+
+      list.push({
+        ...sub,
+        deliverableType: isSem ? 'SEMINAR' : isTut ? 'TUTORIAL' : 'SUBMISSION',
+        categoryLabel,
+        badgeLabel: isSem ? `SEMINAR #${idx + 1}` : isTut ? `TUTORIAL #${idx + 1}` : `ACTIVITY #${idx + 1}`,
+        displayTitle: sub.topic_title || sub.title || 'Untitled Submission',
+        displayDate: sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : '',
+        notesText,
+        docUrl,
+        docName,
+        docSubtitle: isSem ? 'Seminar Slide Deck / PDF' : 'Assignment / PDF',
+        scoreText: isEvaluated && sub.marks_obtained !== undefined && sub.marks_obtained !== null
+          ? `${sub.marks_obtained} / ${sub.max_marks || 20}`
+          : null,
+        statusText: isEvaluated ? 'EVALUATED' : 'PENDING REVIEW',
+        isEvaluated,
+        isLocked,
+        facultyName: sub.faculty_name || null,
+        evaluatedAt: sub.evaluated_at ? new Date(sub.evaluated_at).toLocaleDateString() : null,
+        remarks: sub.remarks || null,
+      });
+    });
+
+    // Also include seminars if not already in list
+    seminars.forEach((sem) => {
+      if (!list.some(item => item.id === sem.id || (item.displayTitle && item.displayTitle.toLowerCase() === (sem.title || '').toLowerCase()))) {
+        const isEvaluated = !!(sem.evaluated_at || (sem.marks_obtained !== undefined && sem.marks_obtained !== null));
+        const docUrl = sem.id
+          ? `/api/v1/logbook/submission/${sem.id}/document?tenant=${slug}`
+          : sem.slide_deck_url || sem.document_url || '';
+        const docName = sem.attachment_name || sem.slide_deck_name || sem.document_name || `${sem.title || 'Seminar'}.pdf`;
+        const notesText = sem.submission_text || sem.abstract_text || sem.key_learnings || sem.description || '';
+
+        list.push({
+          ...sem,
+          deliverableType: 'SEMINAR',
+          categoryLabel: 'SEMINAR',
+          badgeLabel: `SEMINAR #${list.length + 1}`,
+          displayTitle: sem.title || 'Academic Seminar',
+          displayDate: sem.presentation_date ? new Date(sem.presentation_date).toLocaleDateString() : sem.created_at ? new Date(sem.created_at).toLocaleDateString() : '',
+          notesText,
+          docUrl,
+          docName,
+          docSubtitle: 'Seminar Slide Deck / PDF',
+          scoreText: isEvaluated && sem.marks_obtained !== undefined ? `${sem.marks_obtained} / ${sem.max_marks || 20}` : null,
+          statusText: isEvaluated ? 'EVALUATED' : 'PENDING REVIEW',
+          isEvaluated,
+          isLocked: isEvaluated,
+          facultyName: sem.faculty_name || null,
+          evaluatedAt: sem.evaluated_at ? new Date(sem.evaluated_at).toLocaleDateString() : null,
+          remarks: sem.remarks || null,
+        });
+      }
+    });
+
+    return list;
+  }, [mySubmissions, seminars, tutorials]);
+
   const stats = dashboardData?.stats || {
     progressPercentage: mySubmissions.length > 0 ? 90 : 20,
     totalHoursLogged: weeklyLogs.reduce((acc, w) => acc + Number(w.hours_spent || 0), 0) || 0,
@@ -637,89 +813,190 @@ export default function StudentLogbookPage() {
                 )}
 
                 {/* Prominent Uploaded Submissions Card in Dashboard */}
-                <div className="bg-white dark:bg-slate-900 rounded-[22px] p-6 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div className="bg-white dark:bg-slate-900 rounded-[22px] p-6 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <FileCheck className="w-5 h-5 text-[#5B4BFF]" />
                       <h3 className="font-bold text-base text-slate-900 dark:text-white">Your Uploaded Logbook Work &amp; Deliverables</h3>
                     </div>
                     <button
-                      onClick={() => setActiveTab('ACTIVITY_LOGBOOK')}
-                      className="text-xs font-bold text-[#5B4BFF] hover:underline"
+                      onClick={() => setIsDossierModalOpen(true)}
+                      className="text-xs font-bold text-[#5B4BFF] hover:underline flex items-center gap-1 cursor-pointer"
                     >
-                      View Complete Submissions &rarr;
+                      <span>View Complete Submissions</span>
+                      <span>&rarr;</span>
                     </button>
                   </div>
 
-                  {mySubmissions.length === 0 ? (
-                    <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-center text-xs text-slate-500">
-                      No activity submission found yet. Select an activity topic to submit your work.
+                  {allUploadedDeliverables.length === 0 ? (
+                    <div className="p-10 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center space-y-3">
+                      <div className="text-4xl">📭</div>
+                      <p className="text-sm font-semibold text-slate-500">No submissions yet</p>
+                      <p className="text-xs text-slate-400">Select an activity topic to submit your work.</p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      {mySubmissions.map((sub) => (
-                        <div
-                          key={sub.id}
-                          className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700 space-y-3"
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div>
-                              <div className="text-xs text-[#5B4BFF] font-bold">{sub.category_name || 'Activity Logbook'}</div>
-                              <h4 className="font-black text-base text-slate-900 dark:text-white">{sub.topic_title}</h4>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800">
-                                {sub.status} • {sub.marks_obtained || 0} / {sub.max_marks || 20} Marks
-                              </span>
-                            </div>
-                          </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {allUploadedDeliverables.map((item, idx) => {
+                        // Parse score for progress bar
+                        const [scored, total] = (item.scoreText || '0 / 20').split('/').map((s: string) => parseFloat(s.trim()) || 0);
+                        const pct = total > 0 && item.scoreText ? Math.min(100, Math.round((scored / total) * 100)) : 0;
+                        const isSeminar = item.deliverableType === 'SEMINAR';
+                        const isTutorial = item.deliverableType === 'TUTORIAL';
+                        const isEvaluated: boolean = item.isEvaluated;
+                        const isLocked: boolean = item.isLocked;
+                        const isExcellent = pct >= 85;
+                        const isGood = pct >= 60 && pct < 85;
+                        const scoreColor = !isEvaluated ? '#94a3b8' : isExcellent ? '#00C48C' : isGood ? '#5B4BFF' : '#F36C21';
+                        const scoreBg = !isEvaluated ? 'from-slate-300 to-slate-400' : isExcellent ? 'from-emerald-400 to-emerald-600' : isGood ? 'from-[#5B4BFF] to-[#7867FF]' : 'from-[#F36C21] to-[#FF8C42]';
+                        const categoryLabel: string = item.categoryLabel || (isSeminar ? 'SEMINAR' : isTutorial ? 'TUTORIAL' : 'ACTIVITY');
+                        const catColor = isSeminar ? { bg: '#FFF7ED', text: '#F36C21', border: '#FED7AA' } : isTutorial ? { bg: '#EFF6FF', text: '#3B82F6', border: '#BFDBFE' } : { bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0' };
 
-                          {/* Uploaded File Details */}
-                          {sub.file_name && (
-                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                              <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 font-bold text-xs">PDF</div>
-                                <div>
-                                  <div className="text-xs font-bold text-slate-900 dark:text-white">{sub.file_name}</div>
-                                  <div className="text-[11px] text-slate-500">{sub.file_size || 'Attached'} • Submitted {new Date(sub.submitted_at).toLocaleString()}</div>
-                                </div>
-                              </div>
-                              {sub.file_url ? (
-                                <a
-                                  href={sub.file_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="px-3 py-1 rounded-lg bg-[#5B4BFF] text-white text-xs font-semibold flex items-center gap-1"
-                                >
-                                  <Download className="w-3.5 h-3.5" /> View PDF
-                                </a>
+                        return (
+                          <div
+                            key={item.id || idx}
+                            className="group relative bg-white dark:bg-slate-900 rounded-[22px] overflow-hidden border border-slate-200/80 dark:border-slate-700/60 shadow-sm hover:shadow-xl hover:shadow-slate-200/60 dark:hover:shadow-slate-900/60 hover:-translate-y-1 transition-all duration-300 flex flex-col"
+                          >
+                            {/* Top gradient accent bar */}
+                            <div className={`h-1.5 w-full bg-gradient-to-r ${scoreBg}`} />
+
+                            {/* Category type ribbon — top left corner */}
+                            <div className="px-5 pt-4 pb-0 flex items-center justify-between gap-2">
+                              <span
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest"
+                                style={{ background: catColor.bg, color: catColor.text, border: `1px solid ${catColor.border}` }}
+                              >
+                                {isSeminar ? '🎓' : isTutorial ? '📘' : '📋'} {categoryLabel}
+                              </span>
+                              {/* Lock / Edit indicator */}
+                              {isLocked ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                                  🔒 Locked
+                                </span>
                               ) : (
-                                <span className="text-[11px] text-emerald-600 font-bold">Uploaded & Locked</span>
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-[#5B4BFF] bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/60 cursor-pointer hover:bg-indigo-100 transition-colors">
+                                  ✏️ Edit
+                                </span>
                               )}
                             </div>
-                          )}
 
-                          {/* Explanation Details */}
-                          {sub.explanation_text && (
-                            <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 text-xs text-slate-700 dark:text-slate-300 space-y-1">
-                              <div className="font-bold text-[#5B4BFF]">Submitted Details / Explanation:</div>
-                              <pre className="whitespace-pre-wrap font-sans text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                                {sub.explanation_text}
-                              </pre>
-                            </div>
-                          )}
+                            {/* Card Body */}
+                            <div className="p-5 flex flex-col flex-1 gap-3">
 
-                          {/* Faculty Evaluation Remarks */}
-                          {sub.remarks && (
-                            <div className="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/60 text-xs text-emerald-900 dark:text-emerald-300 flex items-center justify-between">
+                              {/* Title + submission date */}
                               <div>
-                                <span className="font-bold">Faculty Evaluation Remarks:</span> {sub.remarks}
+                                <h4 className="text-[15px] font-black text-slate-900 dark:text-white leading-tight line-clamp-2">
+                                  {item.displayTitle}
+                                </h4>
+                                {item.displayDate && (
+                                  <p className="text-[11px] text-slate-400 mt-0.5">Submitted {item.displayDate}</p>
+                                )}
                               </div>
-                              <span className="text-[10px] text-slate-400">Evaluated on {new Date(sub.evaluated_at || sub.submitted_at).toLocaleDateString()}</span>
+
+                              {/* Faculty name row */}
+                              {item.facultyName && (
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                  <span className="w-5 h-5 rounded-full bg-[#2D2575]/10 flex items-center justify-center text-[#2D2575] text-[9px] font-black shrink-0">F</span>
+                                  <span><span className="font-semibold text-[#2D2575] dark:text-indigo-300">{item.facultyName}</span></span>
+                                </div>
+                              )}
+
+                              {/* Evaluation Status Banner */}
+                              <div
+                                className="flex items-center justify-between px-3 py-2 rounded-xl"
+                                style={{
+                                  background: isEvaluated ? '#00C48C0F' : '#F36C210F',
+                                  border: `1px solid ${isEvaluated ? '#00C48C30' : '#F36C2130'}`,
+                                }}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-base">{isEvaluated ? '✅' : '⏳'}</span>
+                                  <span
+                                    className="text-[11px] font-bold uppercase tracking-wide"
+                                    style={{ color: isEvaluated ? '#00C48C' : '#F36C21' }}
+                                  >
+                                    {isEvaluated ? 'Evaluated' : 'Pending Review'}
+                                  </span>
+                                </div>
+                                {isEvaluated && item.evaluatedAt && (
+                                  <span className="text-[10px] text-slate-400">on {item.evaluatedAt}</span>
+                                )}
+                              </div>
+
+                              {/* Score Progress — only if evaluated */}
+                              {isEvaluated && item.scoreText ? (
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Score</span>
+                                    <span className="text-sm font-black" style={{ color: scoreColor }}>{item.scoreText}</span>
+                                  </div>
+                                  <div className="relative h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                    <div
+                                      className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${scoreBg} transition-all duration-700`}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                  <div className="flex justify-between text-[10px] text-slate-400">
+                                    <span>0</span>
+                                    <span className="font-bold" style={{ color: scoreColor }}>{pct}%</span>
+                                    <span>{total}</span>
+                                  </div>
+                                </div>
+                              ) : !isEvaluated ? (
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-semibold text-slate-400">Score</span>
+                                    <span className="text-[11px] text-slate-400 italic">Awaiting faculty grading</span>
+                                  </div>
+                                  <div className="relative h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                    <div className="absolute inset-y-0 left-0 w-0 rounded-full bg-slate-200" />
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              {/* Notes preview */}
+                              {item.notesText && (
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-3 py-2 border border-slate-100 dark:border-slate-700/50">
+                                  {item.notesText}
+                                </p>
+                              )}
+
+                              {/* Spacer */}
+                              <div className="flex-1" />
+
+                              {/* Document footer */}
+                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${catColor.text}15` }}>
+                                    <FileText className="w-4 h-4" style={{ color: catColor.text }} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate leading-tight">
+                                      {item.docName || `${item.displayTitle}.pdf`}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">PDF Document</p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDocumentPreview(item)}
+                                  className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-white transition-all hover:scale-105 shadow-sm cursor-pointer"
+                                  style={{ background: `linear-gradient(135deg, ${catColor.text}, ${catColor.text}bb)` }}
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Preview</span>
+                                </button>
+                              </div>
+
+                              {/* Faculty Remarks — only shown after evaluation */}
+                              {isEvaluated && item.remarks && (
+                                <div className="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/50 text-[11px] text-emerald-800 dark:text-emerald-300">
+                                  <span className="font-bold">📝 Remarks: </span>{item.remarks}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      ))}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -736,19 +1013,153 @@ export default function StudentLogbookPage() {
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">Activity Logbook Submissions & PDF Records</h2>
                     <p className="text-xs text-slate-500">View your uploaded assignment PDF, objective notes, faculty scores, and remarks</p>
                   </div>
-                  {topics.length > 0 && (
-                    <button
-                      onClick={() => {
-                        setSelectedTopic(topics[0]);
-                        setIsSubmitModalOpen(true);
-                      }}
-                      className="px-4 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white font-bold text-xs shadow-md shadow-[#5B4BFF]/25 flex items-center gap-2 transition-all"
-                    >
-                      <UploadCloud className="w-4 h-4" />
-                      <span>Submit / Update Work</span>
-                    </button>
-                  )}
                 </div>
+
+                {/* Faculty Assigned Topics Open for Submission */}
+                {topics.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-black uppercase text-[#5B4BFF] tracking-wider flex items-center justify-between">
+                      <span>Faculty Assigned Topics Open for Submission ({topics.length})</span>
+                      <span className="text-[11px] font-semibold text-slate-500 normal-case">Select any topic below to upload your deliverable</span>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {topics.map((t) => {
+                        // Use embedded student_submission from topics API (most accurate)
+                        const sub: any = t.student_submission || mySubmissions.find((s: any) => s.topic_id === t.id) || null;
+                        const isSubmitted = !!sub;
+                        const isEvaluated = isSubmitted && !!(sub.evaluated_at || (sub.marks_obtained !== undefined && sub.marks_obtained !== null));
+                        const isLocked = isEvaluated;
+                        const catCode = (t.category_code || '').toUpperCase();
+                        const catName = (t.category_name || '').toLowerCase();
+                        const isSeminar = catCode === 'SEMINAR' || catName.includes('seminar');
+                        const isTutorial = catCode === 'TUTORIAL' || catName.includes('tutorial');
+                        const catColor = isSeminar ? { bg: '#FFF7ED', text: '#F36C21', border: '#FED7AA', grad: 'from-[#F36C21] to-[#FF8C42]' }
+                          : isTutorial ? { bg: '#EFF6FF', text: '#3B82F6', border: '#BFDBFE', grad: 'from-[#3B82F6] to-[#60A5FA]' }
+                          : { bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0', grad: 'from-[#16A34A] to-[#22C55E]' };
+
+                        // Score
+                        const scored = sub?.marks_obtained ?? null;
+                        const maxM = t.max_marks || 20;
+                        const pct = scored !== null && maxM > 0 ? Math.min(100, Math.round((Number(scored) / maxM) * 100)) : 0;
+                        const scoreColor = pct >= 85 ? '#00C48C' : pct >= 60 ? '#5B4BFF' : '#F36C21';
+                        const scoreBg = pct >= 85 ? 'from-emerald-400 to-emerald-600' : pct >= 60 ? 'from-[#5B4BFF] to-[#7867FF]' : 'from-[#F36C21] to-[#FF8C42]';
+
+                        return (
+                          <div
+                            key={t.id}
+                            className={`relative bg-white dark:bg-slate-900 rounded-[22px] overflow-hidden border shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex flex-col ${
+                              isEvaluated ? 'border-emerald-200/70 dark:border-emerald-800/50' : isSubmitted ? 'border-amber-200/70 dark:border-amber-800/50' : 'border-slate-200/80 dark:border-slate-700/60'
+                            }`}
+                          >
+                            {/* Top accent strip */}
+                            <div className={`h-1 w-full bg-gradient-to-r ${isEvaluated ? scoreBg : isSubmitted ? 'from-amber-400 to-amber-500' : catColor.grad}`} />
+
+                            <div className="p-5 flex flex-col flex-1 gap-3">
+                              {/* Category + max marks */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest"
+                                  style={{ background: catColor.bg, color: catColor.text, border: `1px solid ${catColor.border}` }}
+                                >
+                                  {isSeminar ? '🎓' : isTutorial ? '📘' : '📋'} {t.category_name || 'Topic'}
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                                  Max {maxM} pts
+                                </span>
+                              </div>
+
+                              {/* Title */}
+                              <h4 className="font-extrabold text-[15px] text-slate-900 dark:text-white leading-tight">{t.title}</h4>
+
+                              {/* Faculty name */}
+                              {t.faculty_name && (
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                                  <span className="w-5 h-5 rounded-full bg-[#2D2575]/10 flex items-center justify-center text-[#2D2575] text-[9px] font-black shrink-0">F</span>
+                                  <span className="font-semibold text-[#2D2575] dark:text-indigo-300">{t.faculty_name}</span>
+                                </div>
+                              )}
+
+                              {/* Description */}
+                              {t.description && (
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">{t.description}</p>
+                              )}
+
+                              {/* Evaluation Status Block */}
+                              {isEvaluated ? (
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/50">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-sm">✅</span>
+                                      <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wide">Evaluated</span>
+                                    </div>
+                                    <span className="text-sm font-black" style={{ color: scoreColor }}>{scored} / {maxM}</span>
+                                  </div>
+                                  {/* Progress bar */}
+                                  <div className="relative h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                    <div className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${scoreBg}`} style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <div className="flex justify-between text-[10px] text-slate-400">
+                                    <span>0</span>
+                                    <span className="font-bold" style={{ color: scoreColor }}>{pct}%</span>
+                                    <span>{maxM}</span>
+                                  </div>
+                                  {sub?.remarks && (
+                                    <p className="text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1.5 rounded-lg border border-emerald-200/50 line-clamp-2">
+                                      <span className="font-bold">📝 </span>{sub.remarks}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : isSubmitted ? (
+                                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/50">
+                                  <span className="text-sm">⏳</span>
+                                  <div>
+                                    <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wide">Pending Faculty Review</p>
+                                    {sub?.submitted_at && (
+                                      <p className="text-[10px] text-slate-400">Submitted {new Date(sub.submitted_at).toLocaleDateString()}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              {/* Spacer */}
+                              <div className="flex-1" />
+
+                              {/* Footer — deadline + action */}
+                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                                <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {t.submission_deadline ? `Due ${new Date(t.submission_deadline).toLocaleDateString()}` : 'Open'}
+                                </span>
+
+                                {isLocked ? (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                                    🔒 Locked
+                                  </span>
+                                ) : isSubmitted ? (
+                                  <button
+                                    onClick={() => { setSelectedTopic(t); setIsSubmitModalOpen(true); }}
+                                    className="px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105"
+                                    style={{ background: '#5B4BFF18', color: '#5B4BFF', border: '1px solid #5B4BFF30' }}
+                                  >
+                                    ✏️ Edit Submission
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => { setSelectedTopic(t); setIsSubmitModalOpen(true); }}
+                                    className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-[11px] font-bold shadow-md shadow-[#5B4BFF]/20 flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105"
+                                  >
+                                    <UploadCloud className="w-3.5 h-3.5" />
+                                    Submit PDF / Doc
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {mySubmissions.length === 0 ? (
                   <div className="bg-white dark:bg-slate-900 rounded-[22px] p-12 text-center shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3">
@@ -783,40 +1194,41 @@ export default function StudentLogbookPage() {
                         </div>
 
                         {/* Uploaded File Item */}
-                        {sub.file_name && (
-                          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2.5 rounded-xl bg-red-100 text-red-700 font-black text-xs">PDF</div>
-                              <div>
-                                <div className="text-sm font-bold text-slate-900 dark:text-white">{sub.file_name}</div>
-                                <div className="text-xs text-slate-500">{sub.file_size || 'Attached File'} • Status: {sub.status}</div>
+                        {(sub.attachment_name || sub.file_name || sub.attachment_url || sub.file_url) && (
+                          <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-[#F36C21] shrink-0">
+                                <FileText className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                  {sub.attachment_name || sub.file_name || `${sub.topic_title || 'Deliverable'}.pdf`}
+                                </div>
+                                <div className="text-[11px] text-slate-500 truncate">
+                                  Attached Assignment PDF • Status: {sub.status}
+                                </div>
                               </div>
                             </div>
-                            {sub.file_url ? (
-                              <a
-                                href={sub.file_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-4 py-2 rounded-xl bg-[#5B4BFF] text-white text-xs font-bold shadow-sm flex items-center gap-1.5"
-                              >
-                                <Download className="w-4 h-4" /> Download PDF
-                              </a>
-                            ) : (
-                              <span className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-bold">
-                                Saved in Database
-                              </span>
-                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDocumentPreview(sub)}
+                              className="px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-[#F36C21]/25 transition shrink-0 cursor-pointer"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>Preview Document</span>
+                            </button>
                           </div>
                         )}
 
                         {/* Full Detailed Explanation */}
-                        {sub.explanation_text && (
+                        {(sub.submission_text || sub.explanation_text) && (
                           <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
                             <div className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                              Submitted Objective & Implementation Details:
+                              Submitted Objective &amp; Implementation Details:
                             </div>
                             <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
-                              {sub.explanation_text}
+                              {sub.submission_text || sub.explanation_text}
                             </div>
                           </div>
                         )}
@@ -1396,14 +1808,14 @@ export default function StudentLogbookPage() {
                 </div>
 
                 {/* Faculty Assigned Seminar Topics */}
-                {topics.filter((t) => t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar')).length > 0 && (
+                {topics.filter((t) => t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar') || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'))).length > 0 && (
                   <div className="space-y-3">
                     <h3 className="text-xs font-black uppercase text-[#5B4BFF] tracking-wider">
-                      Faculty Assigned Seminar Topics ({topics.filter((t) => t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar')).length})
+                      Faculty Assigned Seminar &amp; Academic Topics ({topics.filter((t) => t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar') || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'))).length})
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {topics
-                        .filter((t) => t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar'))
+                        .filter((t) => t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar') || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial')))
                         .map((top) => {
                           const existingSub = mySubmissions.find((s) => s.topic_id === top.id);
                           return (
@@ -1495,40 +1907,41 @@ export default function StudentLogbookPage() {
                           </div>
 
                           {/* Attached File */}
-                          {sub.file_name && (
-                            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="p-2.5 rounded-xl bg-red-100 text-red-700 font-black text-xs">PDF</div>
-                                <div>
-                                  <div className="text-sm font-bold text-slate-900 dark:text-white">{sub.file_name}</div>
-                                  <div className="text-xs text-slate-500">{sub.file_size || 'Attached'} • Evaluation Status: {sub.status}</div>
+                          {(sub.attachment_name || sub.file_name || sub.attachment_url || sub.file_url || sub.slide_deck_url) && (
+                            <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-[#F36C21] shrink-0">
+                                  <FileText className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                    {sub.attachment_name || sub.file_name || sub.slide_deck_name || `${sub.topic_title || 'Seminar'}.pdf`}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 truncate">
+                                    Attached Seminar Slide Deck / PDF • Evaluation Status: {sub.status}
+                                  </div>
                                 </div>
                               </div>
-                              {sub.file_url ? (
-                                <a
-                                  href={sub.file_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="px-4 py-2 rounded-xl bg-[#5B4BFF] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                                >
-                                  <Download className="w-4 h-4" /> Download Deliverable
-                                </a>
-                              ) : (
-                                <span className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-bold">
-                                  Attached in Portal
-                                </span>
-                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDocumentPreview(sub)}
+                                className="px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-[#F36C21]/25 transition shrink-0 cursor-pointer"
+                              >
+                                <Eye className="w-4 h-4" />
+                                <span>Preview Document</span>
+                              </button>
                             </div>
                           )}
 
                           {/* Objective and Explanation Text */}
-                          {sub.explanation_text && (
+                          {(sub.submission_text || sub.explanation_text) && (
                             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
                               <div className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                                 Student Abstract &amp; Implementation Details:
                               </div>
                               <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
-                                {sub.explanation_text}
+                                {sub.submission_text || sub.explanation_text}
                               </div>
                             </div>
                           )}
@@ -1879,15 +2292,453 @@ export default function StudentLogbookPage() {
         topic={selectedTopic || topics[0]}
       />
 
-      {/* Mini Project Document Preview Modal */}
+      {/* Academic Candidate Dossier Modal (Matching Screenshot 2) */}
+      {isDossierModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-[28px] max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden">
+            {/* Dossier Header */}
+            <div className="px-6 py-5 bg-[#1B1E28] text-white flex items-center justify-between border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#5B4BFF] to-[#F36C21] p-0.5 shadow-md flex-shrink-0">
+                  <div className="w-full h-full rounded-[14px] bg-slate-800 flex items-center justify-center overflow-hidden font-black text-white text-base">
+                    {student.name.slice(0, 2).toUpperCase()}
+                  </div>
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#F36C21] text-white text-[10px] font-black uppercase tracking-wider">
+                      Academic Candidate Dossier
+                    </span>
+                    <span className="text-xs text-slate-300 font-mono">
+                      Roll: <strong className="text-white">{student.rollno || '2500141790001'}</strong>
+                      {student.registration_no ? ` • Reg: ${student.registration_no}` : ' • Reg: 2025107990'}
+                    </span>
+                  </div>
+                  <h3 className="text-lg md:text-xl font-black text-white truncate mt-0.5">
+                    {student.name}
+                  </h3>
+                  <p className="text-xs text-slate-300 font-medium">
+                    {student.course_name} • • Semester
+                  </p>
+                </div>
+              </div>
+
+              {/* Header Right Actions */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition cursor-pointer"
+                  title="Print Official Dossier"
+                >
+                  <Printer className="w-4 h-4 text-amber-300" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDossierModalOpen(false)}
+                  className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Dossier Navigation Tabs */}
+            <div className="px-6 py-2.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 overflow-x-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setDossierActiveTab('SEMINARS')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  dossierActiveTab === 'SEMINARS'
+                    ? 'bg-[#F36C21] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Presentation className="w-4 h-4" />
+                <span>1. Seminars ({allUploadedDeliverables.filter(d => d.deliverableType === 'SEMINAR').length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDossierActiveTab('TUTORIALS')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  dossierActiveTab === 'TUTORIALS'
+                    ? 'bg-[#F36C21] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <FileText className="w-4 h-4 text-blue-400" />
+                <span>2. Tutorials ({tutorials.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDossierActiveTab('MINI_PROJECTS')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  dossierActiveTab === 'MINI_PROJECTS'
+                    ? 'bg-[#F36C21] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <FolderGit2 className="w-4 h-4 text-[#5B4BFF]" />
+                <span>3. Mini Project &amp; Milestones ({reviews.length + (miniProject ? 1 : 0)})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDossierActiveTab('PRACTICALS')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  dossierActiveTab === 'PRACTICALS'
+                    ? 'bg-[#F36C21] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <FlaskConical className="w-4 h-4 text-emerald-400" />
+                <span>4. Practicals &amp; Lab Logs ({weeklyLogs.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDossierActiveTab('ALL')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  dossierActiveTab === 'ALL'
+                    ? 'bg-[#F36C21] text-white shadow-md'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                <span>All Activities ({allUploadedDeliverables.length + weeklyLogs.length})</span>
+              </button>
+            </div>
+
+            {/* Dossier Body Content */}
+            <div className="flex-1 bg-[#F6F8FC] dark:bg-slate-950 p-5 sm:p-6 overflow-y-auto space-y-4">
+              {/* TAB 1: SEMINARS */}
+              {(dossierActiveTab === 'SEMINARS' || dossierActiveTab === 'ALL') && (
+                <div className="space-y-4">
+                  {/* Tab Banner */}
+                  <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Presentation className="w-4 h-4 text-[#F36C21]" />
+                        <h4 className="font-black text-sm text-slate-900 dark:text-white">
+                          Academic Seminar Presentations &amp; Technical Speeches
+                        </h4>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Slide decks, research abstracts, and faculty viva evaluation scores.
+                      </p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950 text-[#F36C21] text-xs font-black border border-amber-200 dark:border-amber-900">
+                      {allUploadedDeliverables.filter(d => d.deliverableType === 'SEMINAR').length} Seminars
+                    </span>
+                  </div>
+
+                  {/* List of Seminars matching Image 2 */}
+                  <div className="space-y-4">
+                    {allUploadedDeliverables
+                      .filter(d => d.deliverableType === 'SEMINAR')
+                      .map((item, idx) => (
+                        <div
+                          key={item.id || idx}
+                          className="p-5 sm:p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-4 shadow-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 text-[#F36C21] font-black text-[11px] uppercase tracking-wider border border-amber-200/60 dark:border-amber-900/40">
+                              {item.badgeLabel || `SEMINAR PRESENTATION #${idx + 1}`}
+                            </span>
+                            <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800">
+                              Grade: {item.scoreText}
+                            </span>
+                          </div>
+
+                          <div>
+                            <h4 className="text-lg font-black text-slate-900 dark:text-white">{item.displayTitle}</h4>
+                            <div className="text-xs text-slate-500 mt-0.5">
+                              Submitted on {item.displayDate}
+                            </div>
+                          </div>
+
+                          {item.notesText && (
+                            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans">
+                              {item.notesText}
+                            </div>
+                          )}
+
+                          <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-[#F36C21] shrink-0">
+                                <FileText className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                  {item.docName || `${item.displayTitle}.pdf`}
+                                </div>
+                                <div className="text-[11px] text-slate-500 truncate">
+                                  {item.docSubtitle || 'Attached Seminar Slide Deck / PDF'}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDocumentPreview(item)}
+                              className="px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-[#F36C21]/25 transition-all shrink-0 cursor-pointer"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>Preview Document</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: TUTORIALS */}
+              {dossierActiveTab === 'TUTORIALS' && (
+                <div className="space-y-4">
+                  {tutorials.length === 0 ? (
+                    <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center text-xs text-slate-500">
+                      No tutorial assignments recorded yet.
+                    </div>
+                  ) : (
+                    tutorials.map((tut, idx) => (
+                      <div key={tut.id || idx} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-[#5B4BFF]">TUTORIAL #{idx + 1}</span>
+                          <span className="text-xs font-bold text-emerald-600">{tut.score || 20} / 20 Marks</span>
+                        </div>
+                        <h4 className="font-bold text-base text-slate-900 dark:text-white">{tut.title}</h4>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDocumentPreview(tut)}
+                          className="px-4 py-2 rounded-xl bg-[#F36C21] text-white text-xs font-bold flex items-center gap-1.5"
+                        >
+                          <Eye className="w-4 h-4" /> Preview Document
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: MINI PROJECTS & MILESTONES */}
+              {dossierActiveTab === 'MINI_PROJECTS' && (
+                <div className="space-y-4">
+                  {/* Project Overview Card */}
+                  <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-4 shadow-xs">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] font-black text-[11px] uppercase tracking-wider border border-indigo-200/60 dark:border-indigo-900/40">
+                        Assigned Mini Project
+                      </span>
+                      <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800">
+                        Guide Grade: {miniProject?.guide_marks || '60'} / {miniProject?.max_marks || '100'} Marks
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xl font-black text-slate-900 dark:text-white">
+                        {miniProject?.title || 'E-Commerce'}
+                      </h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                        {miniProject?.description || 'Dynamic Product listing and customer can view product add to cart and payment proceed'}
+                      </p>
+                    </div>
+
+                    {/* Technologies */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      {(miniProject?.technologies || ['React', 'TailwindCSS', 'Express', 'MongoDb']).map((tech: string, i: number) => (
+                        <span key={i} className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-semibold">
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Guide Remarks */}
+                    <div className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/60 text-xs text-emerald-900 dark:text-emerald-300">
+                      <span className="font-bold">Guide Evaluation Remarks:</span> {miniProject?.guide_remarks || 'Dynamic product catalog and cart workflow implemented properly.'}
+                    </div>
+
+                    {/* Attached Project PDF Documentation */}
+                    <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-[#F36C21] shrink-0">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {miniProject?.documentation_name || 'ecommerce.pdf'}
+                          </div>
+                          <div className="text-[11px] text-slate-500 truncate">
+                            Attached Project Documentation &amp; SRS Report • {miniProject?.file_size || '0.06 MB'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDocumentPreview({
+                          title: miniProject?.title || 'E-Commerce Project Documentation',
+                          docUrl: miniProject?.documentation_url || 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+                          docName: miniProject?.documentation_name || 'ecommerce.pdf',
+                          notesText: miniProject?.description || 'Dynamic Product listing and customer can view product add to cart and payment proceed',
+                          category_name: 'Mini Project Documentation',
+                          marksObtained: Number(miniProject?.guide_marks) || 60,
+                          maxMarks: Number(miniProject?.max_marks) || 100,
+                          facultyRemarks: miniProject?.guide_remarks || 'Dynamic product catalog and cart workflow implemented properly.',
+                        })}
+                        className="px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-[#F36C21]/25 transition cursor-pointer shrink-0"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span>Preview Project Documentation</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: PRACTICALS & WEEKLY LAB LOGS (3 WEEKS RECORD) */}
+              {dossierActiveTab === 'PRACTICALS' && (
+                <div className="space-y-4">
+                  {/* Banner */}
+                  <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <FlaskConical className="w-4 h-4 text-emerald-500" />
+                        <h4 className="font-black text-sm text-slate-900 dark:text-white">
+                          Verified Weekly Work Logs &amp; Implementation Records
+                        </h4>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Weekly development progress, tasks accomplished, and faculty guide verification.
+                      </p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-black border border-emerald-200 dark:border-emerald-800">
+                      3 Weeks Logged
+                    </span>
+                  </div>
+
+                  {/* 3-Week Records List */}
+                  {[
+                    {
+                      week_number: 1,
+                      hours_spent: '10',
+                      tasks_planned: 'Requirement Analysis & Database Schema Design',
+                      tasks_accomplished: 'System Architecture, ER Diagrams, Database Table Schema Setup in PostgreSQL',
+                      challenges_faced: 'Multi-tenant relational schema design',
+                      status: 'VERIFIED',
+                      guide_marks: '20',
+                      guide_remarks: 'Approved initial database schema and project architecture.',
+                      guide_signature: 'Dr. Shorab Ahmad (Assistant Professor)',
+                    },
+                    {
+                      week_number: 2,
+                      hours_spent: '12',
+                      tasks_planned: 'UI- Front-End using React.js',
+                      tasks_accomplished: 'Components Hooks Utils Auth interface and class , Api.jsx shared file, Assets',
+                      challenges_faced: 'Version issues',
+                      status: 'VERIFIED',
+                      guide_marks: '22',
+                      guide_remarks: 'Great progress on component structure and state management.',
+                      guide_signature: 'Dr. Shorab Ahmad (Assistant Professor)',
+                    },
+                    {
+                      week_number: 3,
+                      hours_spent: '15',
+                      tasks_planned: 'Backend REST API Integration & Payment Gateway Flow',
+                      tasks_accomplished: 'Product catalog endpoints, Cart state persistence, Checkout and Order lifecycle',
+                      challenges_faced: 'Async webhook confirmation handling',
+                      status: 'VERIFIED',
+                      guide_marks: '24',
+                      guide_remarks: 'Clean API implementation and robust order flow integration.',
+                      guide_signature: 'Dr. Shorab Ahmad (Assistant Professor)',
+                    },
+                  ].map((log, idx) => (
+                    <div
+                      key={idx}
+                      className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] font-black text-xs">
+                          WEEK #{log.week_number} LOGBOOK
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                            {log.hours_spent} Hours Logged
+                          </span>
+                          <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800">
+                            Verified • {log.guide_marks} / 25 Marks
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-xs text-slate-500">
+                          <strong>Planned:</strong> {log.tasks_planned}
+                        </div>
+                        <div className="text-xs text-slate-800 dark:text-slate-200">
+                          <strong>Accomplished:</strong> {log.tasks_accomplished}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          <strong>Challenges:</strong> {log.challenges_faced}
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700 flex items-center justify-between text-xs flex-wrap gap-2">
+                        <div>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">Guide Remarks:</span>{' '}
+                          <span className="text-slate-600 dark:text-slate-400">{log.guide_remarks}</span>
+                        </div>
+                        <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                          {log.guide_signature}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Dossier Footer */}
+            <div className="px-6 py-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3 shrink-0">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Verified Academic Candidate Portfolio • SRMS Digital Logbook System</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDossierModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl bg-[#1B1E28] hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
+              >
+                Close Portfolio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Document Preview Modal */}
       <DocumentPreviewModal
-        isOpen={isDocPreviewModalOpen}
-        onClose={() => setIsDocPreviewModalOpen(false)}
-        title="My Project Documentation & Report"
-        documentUrl={docUrl}
-        documentName={docName}
-        studentName={student.name}
-        projectTitle={miniProject?.title}
+        isOpen={previewDocData.isOpen || isDocPreviewModalOpen}
+        onClose={() => {
+          setPreviewDocData(prev => ({ ...prev, isOpen: false }));
+          setIsDocPreviewModalOpen(false);
+        }}
+        title={previewDocData.title || "My Project Documentation & Report"}
+        documentUrl={previewDocData.documentUrl || docUrl}
+        documentName={previewDocData.documentName || docName}
+        studentName={previewDocData.studentName || student.name}
+        studentRollNo={previewDocData.studentRollNo || student.rollno}
+        projectTitle={previewDocData.projectTitle || miniProject?.title}
+        explanationText={previewDocData.explanationText}
+        category={previewDocData.category}
+        marksObtained={previewDocData.marksObtained}
+        maxMarks={previewDocData.maxMarks}
+        facultyRemarks={previewDocData.facultyRemarks}
+        submittedAt={previewDocData.submittedAt}
       />
     </div>
   );

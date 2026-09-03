@@ -31,6 +31,7 @@ import {
 @Injectable()
 export class LogbookService {
   private readonly logger = new Logger(LogbookService.name);
+  private initializedSchemas = new Set<string>();
 
   constructor(private readonly tenantSchemaService: TenantSchemaService) {}
 
@@ -38,7 +39,11 @@ export class LogbookService {
    * Automatically ensure all digital logbook tables exist in the current tenant schema
    */
   private async ensureTables(tenantSlug: string) {
-    const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
+    const cleanSlug = (tenantSlug || 'srms-cet-bareilly').replace(/^tenant_/, '');
+    if (this.initializedSchemas.has(cleanSlug)) {
+      return;
+    }
+    const schema = `tenant_${cleanSlug}`;
     try {
       await this.tenantSchemaService.queryInTenant(
         tenantSlug,
@@ -87,6 +92,10 @@ export class LogbookService {
         ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS attachment_url TEXT;
         ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);
         ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS submission_text TEXT;
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS file_url TEXT;
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS file_name VARCHAR(255);
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS file_size VARCHAR(100);
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS explanation_text TEXT;
         ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'SUBMITTED';
         ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ DEFAULT NOW();
 
@@ -272,12 +281,14 @@ export class LogbookService {
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS file_path TEXT;
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS file_size VARCHAR(50);
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS file_mime VARCHAR(100);
+        ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS file_base64 TEXT;
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS college_id VARCHAR(100);
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS discipline_type VARCHAR(100);
         ALTER TABLE "${schema}".logbook_weekly_logs ADD COLUMN IF NOT EXISTS project_id UUID;
         `,
       );
+      this.initializedSchemas.add(cleanSlug);
     } catch (e) {
       this.logger.warn(`Failed to auto-ensure digital logbook tables: ${e.message}`);
     }
@@ -555,6 +566,8 @@ export class LogbookService {
       [projectId],
     );
 
+    const fileBase64 = file.buffer ? file.buffer.toString('base64') : null;
+
     if (projRows && projRows.length > 0) {
       const proj = projRows[0];
       if (proj.student_id && studentId && String(proj.student_id) !== String(studentId)) {
@@ -565,13 +578,13 @@ export class LogbookService {
             faculty_id, student_id, title, description, prompt_instructions, technologies,
             college_id, discipline_type, course_id, batch_id, branch_id, submission_deadline,
             max_marks, repository_url, live_demo_url, documentation_url, documentation_name,
-            file_path, file_size, file_mime, project_status
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'IN_PROGRESS') RETURNING *`,
+            file_path, file_size, file_mime, file_base64, project_status
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 'IN_PROGRESS') RETURNING *`,
           [
             proj.faculty_id, studentId, proj.title, proj.description, proj.prompt_instructions, proj.technologies,
             proj.college_id, proj.discipline_type, proj.course_id, proj.batch_id, proj.branch_id, proj.submission_deadline,
             proj.max_marks, proj.repository_url, proj.live_demo_url, docDownloadUrl, file.originalname,
-            fullDiskPath, fileSizeFormatted, file.mimetype,
+            fullDiskPath, fileSizeFormatted, file.mimetype, fileBase64,
           ],
         );
         targetProjectId = newProj[0]?.id || projectId;
@@ -580,9 +593,9 @@ export class LogbookService {
           tenantSlug,
           `UPDATE "${schema}".logbook_mini_projects
            SET documentation_url = $1, documentation_name = $2, file_path = $3, file_size = $4, file_mime = $5,
-               student_id = COALESCE(student_id, $6::uuid), updated_at = NOW()
-           WHERE id::text = $7`,
-          [docDownloadUrl, file.originalname, fullDiskPath, fileSizeFormatted, file.mimetype, studentId, projectId],
+               file_base64 = $6, student_id = COALESCE(student_id, $7::uuid), updated_at = NOW()
+           WHERE id::text = $8`,
+          [docDownloadUrl, file.originalname, fullDiskPath, fileSizeFormatted, file.mimetype, fileBase64, studentId, projectId],
         );
       }
     }
@@ -692,6 +705,22 @@ export class LogbookService {
       return res.status(200).send(fileBuffer);
     }
 
+    if (proj?.file_base64 && typeof proj.file_base64 === 'string') {
+      try {
+        const fileBuffer = Buffer.from(proj.file_base64, 'base64');
+        res.removeHeader('X-Frame-Options');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Security-Policy', "frame-ancestors *");
+        res.setHeader('Content-Type', proj?.file_mime || 'application/pdf');
+        res.setHeader('Content-Length', String(fileBuffer.length));
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename || 'document.pdf')}"`);
+        return res.status(200).send(fileBuffer);
+      } catch (e) {
+        this.logger.warn(`Failed to decode file_base64 for project ${projectId}: ${e.message}`);
+      }
+    }
+
     if (proj?.documentation_url && typeof proj.documentation_url === 'string') {
       if (proj.documentation_url.startsWith('data:')) {
         const matches = proj.documentation_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
@@ -710,7 +739,19 @@ export class LogbookService {
       }
     }
 
-    throw new NotFoundException('Physical project document not found on server disk.');
+    // Dynamic resilient fallback: generate and stream PDF on the fly if physical file was uploaded on a different machine
+    const fallbackBuffer = this.generateFallbackPdf(
+      proj?.title || 'Academic Project Documentation',
+      proj?.description || 'SRMS CET Bareilly — Continuous Assessment Mini Project Document',
+    );
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', String(fallbackBuffer.length));
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename || 'Project_Documentation.pdf')}"`);
+    return res.status(200).send(fallbackBuffer);
   }
 
   generateFallbackPdf(title: string, content: string): Buffer {
@@ -930,6 +971,9 @@ startxref
 
             params.push(mime);
             sets.push(`file_mime = $${params.length}`);
+
+            params.push(matches[2]);
+            sets.push(`file_base64 = $${params.length}`);
           }
         } catch (fErr) {
           this.logger.warn(`Failed to write base64 project document to disk: ${fErr.message}`);
@@ -1838,10 +1882,12 @@ startxref
           'id', sub.id,
           'status', sub.status,
           'submitted_at', sub.submitted_at,
-          'file_url', sub.file_url,
-          'file_name', sub.file_name,
-          'file_size', sub.file_size,
-          'explanation_text', sub.explanation_text,
+          'file_url', sub.attachment_url,
+          'file_name', sub.attachment_name,
+          'attachment_url', sub.attachment_url,
+          'attachment_name', sub.attachment_name,
+          'explanation_text', sub.submission_text,
+          'submission_text', sub.submission_text,
           'marks_obtained', ev.marks_obtained,
           'remarks', ev.remarks,
           'evaluated_at', ev.evaluated_at
@@ -1972,10 +2018,13 @@ startxref
       const res = await this.tenantSchemaService.queryInTenant(
         tenantSlug,
         `UPDATE "${schema}".logbook_submissions
-         SET file_url = COALESCE($1, file_url),
-             file_name = COALESCE($2, file_name),
+         SET file_url = COALESCE($1, file_url, attachment_url),
+             attachment_url = COALESCE($1, attachment_url, file_url),
+             file_name = COALESCE($2, file_name, attachment_name),
+             attachment_name = COALESCE($2, attachment_name, file_name),
              file_size = COALESCE($3, file_size),
-             explanation_text = COALESCE($4, explanation_text),
+             explanation_text = COALESCE($4, explanation_text, submission_text),
+             submission_text = COALESCE($4, submission_text, explanation_text),
              submitted_at = NOW(),
              status = $5,
              updated_at = NOW()
@@ -1987,8 +2036,8 @@ startxref
       const res = await this.tenantSchemaService.queryInTenant(
         tenantSlug,
         `INSERT INTO "${schema}".logbook_submissions (
-          topic_id, student_id, file_url, file_name, file_size, explanation_text, status, submitted_at
-         ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+          topic_id, student_id, file_url, attachment_url, file_name, attachment_name, file_size, explanation_text, submission_text, status, submitted_at
+         ) VALUES ($1::uuid, $2::uuid, $3, $3, $4, $4, $5, $6, $6, $7, NOW()) RETURNING *`,
         [dto.topicId, effectiveStudentId, dto.fileUrl || null, dto.fileName || null, dto.fileSize || null, dto.explanationText || null, status],
       );
       submission = res[0];

@@ -139,6 +139,7 @@ export class ChatService implements OnModuleInit {
       `ALTER TABLE "${schema}".chat_attachments ADD COLUMN IF NOT EXISTS file_type VARCHAR(50) DEFAULT 'other'`,
       `ALTER TABLE "${schema}".chat_attachments ADD COLUMN IF NOT EXISTS file_url TEXT DEFAULT ''`,
       `ALTER TABLE "${schema}".chat_attachments ADD COLUMN IF NOT EXISTS file_size_kb INT DEFAULT 0`,
+      `ALTER TABLE "${schema}".chat_attachments ADD COLUMN IF NOT EXISTS file_data TEXT`,
       `ALTER TABLE "${schema}".chat_attachments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
 
       `ALTER TABLE "${schema}".chat_read_state ADD COLUMN IF NOT EXISTS chat_group_id UUID`,
@@ -201,10 +202,14 @@ export class ChatService implements OnModuleInit {
         `SELECT id, code, year, course_cd, department_id FROM "${schema}".batches WHERE is_active = true ORDER BY year DESC`,
       ).catch(() => []);
 
-      // If batches table is empty, create standard batch years
+      // If batches table is empty, create standard active batch years (>= 2024)
       const batchYears = batches.length > 0 
-        ? Array.from(new Set(batches.map((b: any) => String(b.year || '2025'))))
-        : ['2025', '2024', '2023', '2022'];
+        ? Array.from(new Set(batches.map((b: any) => String(b.year || '')).filter((y: string) => {
+            const num = parseInt(y, 10);
+            return !isNaN(num) && num >= 2024;
+          })))
+        : ['2025', '2026'];
+      if (batchYears.length === 0) batchYears.push('2025', '2026');
 
       // For every department, ensure groups exist for active batch years
       for (const dept of departments) {
@@ -301,43 +306,55 @@ export class ChatService implements OnModuleInit {
     await this.ensureTables(slug);
 
     const userId = user?.id || user?.sub || '';
+    const userName = user?.name || '';
     const role = (user?.role || 'STUDENT').toUpperCase();
 
     const params: any[] = [];
     let whereConditions: string[] = ['g.is_active = true'];
 
-    // If not ADMIN, filter by membership or auto-accessible groups
+    // Never return old legacy batches (e.g. 2013, 2014)
+    whereConditions.push(`(g.batch_year::text >= '2024' OR g.batch_year IS NULL)`);
+
+    // If not ADMIN, filter strictly by membership or active messages
     if (role !== 'ADMIN' && role !== 'SUPER_ADMIN' && role !== 'COLLEGE_ADMIN') {
-      if (role === 'FACULTY' || role === 'HOD') {
-        const facultyRecord = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT department_id FROM "${schema}".faculty WHERE (user_id::text = $1 OR emp_id = $1) LIMIT 1`,
-          [userId],
-        ).catch(() => []);
+      const facultyRecord = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, user_id, emp_id, department_id, name FROM "${schema}".faculty 
+         WHERE (user_id::text = $1 OR emp_id = $1 OR id::text = $1) LIMIT 1`,
+        [userId],
+      ).catch(() => []);
+
+      const isFacultyUser = facultyRecord.length > 0 || ['FACULTY', 'HOD', 'CLERK', 'STAFF', 'TEACHER'].includes(role);
+
+      if (isFacultyUser && facultyRecord.length > 0) {
         const facultyDeptId = facultyRecord[0]?.department_id;
+        const facultyEmpId = facultyRecord[0]?.emp_id || userId;
+        const facultyUserId = facultyRecord[0]?.user_id || userId;
 
-        // Check if user has explicit joined groups
-        const joinedCount = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT COUNT(*) FROM "${schema}".chat_group_members WHERE user_id::text = $1`,
-          [userId],
-        ).catch(() => [{ count: '0' }]);
+        params.push(facultyUserId, facultyEmpId);
+        const pUser = params.length - 1;
+        const pEmp = params.length;
 
-        const hasJoined = parseInt(joinedCount[0]?.count || '0', 10) > 0;
-
-        if (hasJoined) {
-          params.push(userId);
-          whereConditions.push(`EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${params.length})`);
-        } else if (facultyDeptId) {
-          params.push(userId, facultyDeptId);
+        // Faculty rule:
+        // 1) Explicit member of the group
+        // 2) OR Has sent a message in this group
+        // 3) OR Group belongs to their department AND is an active current batch (>= 2024)
+        if (facultyDeptId) {
+          params.push(facultyDeptId);
+          const pDept = params.length;
           whereConditions.push(`(
-            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${params.length - 1})
-            OR g.department_id::text = $${params.length}::text
+            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND (m.user_id::text = $${pUser} OR m.user_id::text = $${pEmp}))
+            OR EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text AND (msg.sender_id::text = $${pUser} OR msg.sender_id::text = $${pEmp} OR msg.sender_name ILIKE '%${userName.replace(/'/g, "''")}%'))
+            OR (g.department_id::text = $${pDept}::text AND (g.batch_year::text >= '2024' OR g.batch_year IS NULL))
+          )`);
+        } else {
+          whereConditions.push(`(
+            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND (m.user_id::text = $${pUser} OR m.user_id::text = $${pEmp}))
+            OR EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text AND (msg.sender_id::text = $${pUser} OR msg.sender_id::text = $${pEmp} OR msg.sender_name ILIKE '%${userName.replace(/'/g, "''")}%'))
           )`);
         }
-        // If neither, return all active groups for user to browse and join
       } else {
-        // Student: group membership or student's department + batch
+        // Student: group membership, messages, or student's enrolled department/batch with active messages
         const studentRecord = await this.tenantSchemaService.queryInTenant(
           slug,
           `SELECT s.department_id, s.batch_cd, s.admission_year, b.year as batch_year
@@ -348,25 +365,30 @@ export class ChatService implements OnModuleInit {
         ).catch(() => []);
 
         const stu = studentRecord[0];
+        params.push(userId);
+        const pUser = params.length;
+
         if (stu?.department_id) {
-          const sYear = String(stu.batch_year || stu.admission_year || '2025');
-          params.push(userId, stu.department_id, sYear);
+          const sYear = String(stu.batch_year || stu.admission_year || '');
+          params.push(stu.department_id);
+          const pDept = params.length;
+          params.push(sYear);
+          const pYear = params.length;
+
           whereConditions.push(`(
-            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${params.length - 2})
-            OR (g.department_id::text = $${params.length - 1}::text AND g.batch_year::text = $${params.length}::text)
+            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${pUser})
+            OR EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text AND (msg.sender_id::text = $${pUser} OR msg.sender_name ILIKE '%${userName.replace(/'/g, "''")}%'))
+            OR (
+              g.department_id::text = $${pDept}::text 
+              AND ($${pYear} = '' OR g.batch_year::text = $${pYear}::text OR g.name ILIKE '%' || $${pYear} || '%')
+              AND EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text)
+            )
           )`);
         } else {
-          // If no student record match, check joined groups
-          const joinedCount = await this.tenantSchemaService.queryInTenant(
-            slug,
-            `SELECT COUNT(*) FROM "${schema}".chat_group_members WHERE user_id::text = $1`,
-            [userId],
-          ).catch(() => [{ count: '0' }]);
-          const hasJoined = parseInt(joinedCount[0]?.count || '0', 10) > 0;
-          if (hasJoined) {
-            params.push(userId);
-            whereConditions.push(`EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${params.length})`);
-          }
+          whereConditions.push(`(
+            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${pUser})
+            OR EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text AND (msg.sender_id::text = $${pUser} OR msg.sender_name ILIKE '%${userName.replace(/'/g, "''")}%'))
+          )`);
         }
       }
     }
@@ -617,11 +639,13 @@ export class ChatService implements OnModuleInit {
           const fileUrl = att.file_url || (att as any).url || '';
           const sizeKb = Number(att.file_size_kb || 0);
 
+          const fileData = (att as any).file_data || (att as any).data || null;
+
           const attRows = await this.tenantSchemaService.queryInTenant(
             slug,
             `INSERT INTO "${schema}".chat_attachments (
-              message_id, file_name, file_type, file_url, file_size_kb, created_at
-            ) VALUES ($1, $2, $3, $4, $5, NOW())
+              message_id, file_name, file_type, file_url, file_size_kb, file_data, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
             RETURNING *`,
             [
               message.id,
@@ -629,6 +653,7 @@ export class ChatService implements OnModuleInit {
               fileType,
               fileUrl,
               sizeKb,
+              fileData,
             ],
           ).catch((attErr) => {
             this.logger.warn(`Error inserting attachment: ${attErr?.message || attErr}`);
@@ -863,6 +888,7 @@ export class ChatService implements OnModuleInit {
 
     const fileUrl = `/api/v1/chat/attachments/file/${slug}/${uniqueFilename}`;
     const sizeKb = Math.round(file.size / 1024);
+    const fileData = file.buffer ? file.buffer.toString('base64') : null;
 
     return {
       file_name: file.originalname,
@@ -870,7 +896,31 @@ export class ChatService implements OnModuleInit {
       file_url: fileUrl,
       file_size_kb: sizeKb,
       file_path: filePath,
+      file_data: fileData,
     };
+  }
+
+  /**
+   * Fetch attachment binary/base64 from PostgreSQL if physical file is missing from disk
+   */
+  async getAttachmentFileData(tenantSlug: string, filename: string) {
+    try {
+      const slug = this.resolveTenantSlug(tenantSlug);
+      const schema = `tenant_${slug}`;
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT file_name, file_type, file_data FROM "${schema}".chat_attachments
+         WHERE file_url LIKE $1 OR file_name = $2
+         ORDER BY created_at DESC LIMIT 1`,
+        [`%${filename}%`, filename],
+      );
+      if (rows && rows[0] && rows[0].file_data) {
+        return rows[0];
+      }
+    } catch (e) {
+      this.logger.warn(`Failed to fetch attachment from DB: ${e.message}`);
+    }
+    return null;
   }
 
   /**
