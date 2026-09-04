@@ -417,8 +417,14 @@ export default function FacultyProfilePage() {
             cachedObj.name = payload.name;
             cachedObj.photo_url = payload.photo_url;
             cachedObj.photoUrl = payload.photo_url;
+            if (cachedObj.profile) {
+              cachedObj.profile.name = payload.name;
+              cachedObj.profile.photo_url = payload.photo_url;
+              cachedObj.profile.photoUrl = payload.photo_url;
+            }
             localStorage.setItem('user', JSON.stringify(cachedObj));
           }
+          window.dispatchEvent(new CustomEvent('user-profile-updated', { detail: { photo_url: payload.photo_url, name: payload.name } }));
         } catch {}
 
         fetchProfile();

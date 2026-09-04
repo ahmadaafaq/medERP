@@ -130,13 +130,13 @@ export default function StaffAdminPage() {
       if (typeof window !== 'undefined') {
         role = (localStorage.getItem('role') || localStorage.getItem('auth_role') || 'ADMIN').toUpperCase();
         userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
-        userSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+        userSlug = (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly')
+          .replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+        if (userSlug === 'srms-cet') userSlug = 'srms-cet-bareilly';
+        if (userSlug === 'srms-cetr') userSlug = 'srms-cetr-bareilly';
         setUserRole(role);
         setUserColgCd(userColg);
         setUserTenantSlug(userSlug);
-        if (role !== 'SUPER_ADMIN') {
-          setSelectedCollegeFilter('all');
-        }
       }
 
       const activeTenantSlug = role === 'SUPER_ADMIN' ? 'all' : userSlug;
@@ -146,11 +146,22 @@ export default function StaffAdminPage() {
         fetch(`${API_BASE}/admin-master/departments?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
       ]);
 
+      let loadedColleges: College[] = [];
+      let loadedDepts: Department[] = [];
+
       if (colRes && colRes.ok) {
         const colJson = await colRes.json();
         const colList = colJson.data || colJson;
         if (Array.isArray(colList)) {
-          setColleges(colList);
+          if (role !== 'SUPER_ADMIN') {
+            const myCol = colList.find((c: any) => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
+            loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SRMS CET, Bareilly', slug: userSlug }];
+            setSelectedCollegeFilter(loadedColleges[0].code || loadedColleges[0].id || '1');
+          } else {
+            loadedColleges = colList;
+            setSelectedCollegeFilter('all');
+          }
+          setColleges(loadedColleges);
         }
       }
 
@@ -158,6 +169,7 @@ export default function StaffAdminPage() {
         const deptJson = await deptRes.json();
         const deptList = deptJson.data || deptJson;
         if (Array.isArray(deptList)) {
+          loadedDepts = deptList;
           setDepartments(deptList);
         }
       }
@@ -446,6 +458,28 @@ export default function StaffAdminPage() {
     ).length;
   }, [faculties]);
 
+  // Active College Display Name
+  const activeCollegeName = useMemo(() => {
+    const found = colleges.find(c => String(c.code) === String(selectedCollegeFilter) || String(c.id) === String(selectedCollegeFilter) || c.slug === selectedCollegeFilter || c.slug === userTenantSlug);
+    return found ? `[#${found.code || found.id}] ${found.name}` : '[#1] SRMS CET, Bareilly';
+  }, [colleges, selectedCollegeFilter, userTenantSlug]);
+
+  // Filter available departments for the Filter Bar
+  const availableFilterDepartments = useMemo(() => {
+    if (selectedCollegeFilter === 'all') return departments;
+    const currentSelectedCol = colleges.find(c => String(c.code) === String(selectedCollegeFilter) || String(c.id) === String(selectedCollegeFilter) || c.slug === selectedCollegeFilter);
+    return departments.filter(d => {
+      if (!currentSelectedCol) return true;
+      return (
+        d.college_id === currentSelectedCol.id ||
+        d.college_slug === currentSelectedCol.slug ||
+        String(d.colg_cd) === String(currentSelectedCol.code) ||
+        String(d.colg_cd) === String(currentSelectedCol.id) ||
+        String(d.college_code) === String(currentSelectedCol.code)
+      );
+    });
+  }, [departments, selectedCollegeFilter, colleges]);
+
   return (
     <div className="flex h-screen bg-[#F6F8FC] dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 overflow-hidden">
       <Sidebar role="admin" />
@@ -544,8 +578,8 @@ export default function StaffAdminPage() {
             <div className="bg-white dark:bg-slate-900 rounded-[22px] p-5 border border-[#E7EAF3] dark:border-slate-800 shadow-sm flex items-center justify-between">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Selected Institution</p>
-                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 mt-1 truncate max-w-[180px]">
-                  {colleges.find(c => String(c.code) === String(selectedCollegeFilter) || c.slug === selectedCollegeFilter || c.id === selectedCollegeFilter)?.name || 'SRMS CET, Bareilly'}
+                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 mt-1 truncate max-w-[200px]" title={activeCollegeName}>
+                  {activeCollegeName}
                 </h3>
                 <span className="text-[10px] text-emerald-600 font-bold">● Isolated Schema Active</span>
               </div>
@@ -606,19 +640,32 @@ export default function StaffAdminPage() {
               <div className="relative flex items-center">
                 <select
                   value={selectedCollegeFilter}
+                  disabled={userRole !== 'SUPER_ADMIN'}
                   onChange={(e) => {
                     setSelectedCollegeFilter(e.target.value);
                     setSelectedDeptFilter('all');
                   }}
-                  className="w-full h-11 px-3.5 pr-8 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white shadow-sm cursor-pointer"
+                  className="w-full h-11 px-3.5 pr-8 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white shadow-sm disabled:cursor-not-allowed appearance-none cursor-pointer truncate"
                 >
-                  <option value="all">🏛️ All Colleges ({colleges.length})</option>
+                  {userRole === 'SUPER_ADMIN' && <option value="all">🏛️ All Colleges ({colleges.length})</option>}
                   {colleges.map((col) => (
-                    <option key={col.id} value={col.code || col.slug || col.id}>
+                    <option key={col.id} value={col.code || col.id}>
                       🏛️ [#{col.code || col.id}] {col.name}
                     </option>
                   ))}
                 </select>
+                <div className="absolute right-3 pointer-events-none flex items-center gap-1">
+                  {userRole !== 'SUPER_ADMIN' ? (
+                    <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                      <span>🔒</span>
+                      <span>Locked</span>
+                    </span>
+                  ) : (
+                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  )}
+                </div>
               </div>
 
               {/* Department Selector */}
@@ -626,15 +673,20 @@ export default function StaffAdminPage() {
                 <select
                   value={selectedDeptFilter}
                   onChange={(e) => setSelectedDeptFilter(e.target.value)}
-                  className="w-full h-11 px-3.5 pr-8 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white shadow-sm cursor-pointer"
+                  className="w-full h-11 px-3.5 pr-8 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white shadow-sm appearance-none cursor-pointer truncate"
                 >
-                  <option value="all">🏢 All Departments ({departments.length})</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} ({d.code})
+                  <option value="all">🏢 All Departments ({availableFilterDepartments.length})</option>
+                  {availableFilterDepartments.map((dept) => (
+                    <option key={dept.id} value={dept.id || dept.code}>
+                      {dept.name} ({dept.code || dept.branch_cd})
                     </option>
                   ))}
                 </select>
+                <div className="absolute right-3 pointer-events-none flex items-center">
+                  <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>

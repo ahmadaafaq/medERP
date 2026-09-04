@@ -1,14 +1,39 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 
-interface Batch {
-  id: string;
+interface College {
+  id?: string;
+  colg_cd?: number | string;
   code: string;
-  year: number;
-  batch_cd?: string;
+  name: string;
+  slug?: string;
+}
+
+interface CourseItem {
+  id?: string;
+  code: string;
+  name: string;
+  colg_cd?: string;
+}
+
+interface BranchItem {
+  id?: string;
+  code: string;
+  name: string;
+  course_cd?: string;
+  colg_cd?: string;
+}
+
+interface BatchItem {
+  id?: string;
+  code: string;
+  name?: string;
+  year?: number;
+  course_cd?: string;
+  colg_cd?: string;
 }
 
 interface Subject {
@@ -21,6 +46,7 @@ interface Subject {
 interface StudentReportRow {
   student_id: string;
   rollno?: string;
+  registration_no?: string;
   name: string;
   total_classes: number;
   present: number;
@@ -28,6 +54,7 @@ interface StudentReportRow {
   late?: number;
   excused?: number;
   attendance_pct: number | string;
+  subject_sessions?: any[];
 }
 
 interface MatrixReportData {
@@ -35,8 +62,9 @@ interface MatrixReportData {
   students: {
     student_id: string;
     rollno?: string;
+    registration_no?: string;
     name: string;
-    subjects: Record<string, { total: number; present: number; pct: number }>;
+    subjects: Record<string, { total: number; present: number; pct: number; raw?: string }>;
     totalClasses: number;
     totalPresent: number;
     overallPct: number;
@@ -45,133 +73,464 @@ interface MatrixReportData {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
+const getInitialColgCd = (): string => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+  }
+  return '1';
+};
+
 const getTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+    const raw = (
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('institutionSlug') ||
+      localStorage.getItem('tenant') ||
+      'srms-cet-bareilly'
+    ).replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+    if (raw === 'srms-cet') return 'srms-cet-bareilly';
+    if (raw === 'srms-cetr') return 'srms-cetr-bareilly';
+    return raw || 'srms-cet-bareilly';
   }
   return 'srms-cet-bareilly';
 };
 
 export default function MISAttendanceReportsPage() {
-  const [batches, setBatches] = useState<Batch[]>([]);
+  // Cascading Academic Hierarchy States
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [userRole, setUserRole] = useState<string>('ADMIN');
+  const [selectedCollege, setSelectedCollege] = useState<string>(getInitialColgCd);
+  const [selectedTenantSlug, setSelectedTenantSlug] = useState<string>(getTenantSlug);
+
+  const [courses, setCourses] = useState<CourseItem[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<string>('13'); // Default BCA
+
+  const [branches, setBranches] = useState<BranchItem[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<string>('1'); // Default BCA General
+
+  const [batches, setBatches] = useState<BatchItem[]>([]);
+  const [selectedBatch, setSelectedBatch] = useState<string>('2'); // Default 2025
+
+  const [selectedSem, setSelectedSem] = useState<string>('3'); // Default Semester 3
+  const [selectedSection, setSelectedSection] = useState<string>('1');
+
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [phases, setPhases] = useState<{ id: string; name: string }[]>([
-    { id: 'sem-1', name: 'Semester 1 / Year 1' },
-    { id: 'sem-2', name: 'Semester 2 / Year 1' },
-    { id: 'sem-3', name: 'Semester 3 / Year 2' },
-    { id: 'sem-4', name: 'Semester 4 / Year 2' },
-    { id: 'sem-5', name: 'Semester 5 / Year 3' },
-    { id: 'sem-6', name: 'Semester 6 / Year 3' },
-  ]);
-  
-  // Selection Filters
-  const [selectedPhaseId, setSelectedPhaseId] = useState<string>('1st-prof');
-  const [selectedBatchId, setSelectedBatchId] = useState<string>('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all');
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+
+  // Date Range States
+  const [fromDate, setFromDate] = useState<string>('2026-07-02');
+  const [toDate, setToDate] = useState<string>('2026-08-21');
   const [reportMode, setReportMode] = useState<'roster' | 'matrix' | 'shortage'>('roster');
   const [thresholdFilter, setThresholdFilter] = useState<'all' | 'shortage' | 'critical' | 'eligible'>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Report Data
   const [rosterReport, setRosterReport] = useState<StudentReportRow[]>([]);
   const [matrixReport, setMatrixReport] = useState<MatrixReportData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Load Metadata (Batches & Subjects)
+  // Initial Load & Auth Role Resolution
   useEffect(() => {
-    const fetchMetadata = async () => {
-      try {
-        const slug = getTenantSlug();
-        const headers = { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` };
-        
-        const [batchRes, subRes, profRes] = await Promise.all([
-          fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers }),
-          fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }),
-          fetch(`${API_BASE}/college-master/professionals?tenant=${slug}`, { headers }),
-        ]);
-
-        if (batchRes.ok) {
-          const bJson = await batchRes.json();
-          const bList = bJson.data || bJson;
-          if (Array.isArray(bList) && bList.length > 0) {
-            setBatches(bList);
-            setSelectedBatchId(bList[0].id);
-          }
-        }
-
-        if (subRes.ok) {
-          const sJson = await subRes.json();
-          const sList = sJson.data || sJson;
-          if (Array.isArray(sList)) {
-            setSubjects(sList);
-          }
-        }
-
-        if (profRes.ok) {
-          const pJson = await profRes.json();
-          const pList = pJson.data || pJson;
-          if (Array.isArray(pList) && pList.length > 0) {
-            setPhases(pList.map((p: any) => ({ id: p.id, name: p.name })));
-            setSelectedPhaseId(pList[0].id);
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load MIS report metadata', e);
-      }
-    };
-    fetchMetadata();
+    fetchCollegesAndInitialHierarchy();
   }, []);
 
-  // Fetch Report Data
-  const fetchReport = async () => {
-    if (!selectedBatchId) return;
-    setLoading(true);
+  const dedupeBy = <T,>(arr: T[], keyFn: (item: T) => string): T[] => {
+    const seen = new Set<string>();
+    return (arr || []).filter((item) => {
+      if (!item) return false;
+      const key = keyFn(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const fetchCollegesAndInitialHierarchy = async () => {
+    let roleVal = 'ADMIN';
+    let userColg = getInitialColgCd();
+    let slug = getTenantSlug();
+
+    if (typeof window !== 'undefined') {
+      roleVal = (
+        localStorage.getItem('role') ||
+        localStorage.getItem('auth_role') ||
+        localStorage.getItem('user_role') ||
+        'ADMIN'
+      ).toUpperCase();
+      userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+      slug = getTenantSlug();
+      setUserRole(roleVal);
+      setSelectedCollege(userColg);
+      setSelectedTenantSlug(slug);
+    }
+
     try {
-      const slug = getTenantSlug();
-      const headers = { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` };
+      const colRes = await fetch('/api/srms/colleges').catch(() => null);
+      let loadedColleges: College[] = [];
 
-      if (reportMode === 'matrix') {
-        let url = `${API_BASE}/attendance/batches/${selectedBatchId}/matrix-report?tenant=${slug}`;
-        if (fromDate) url += `&fromDate=${fromDate}`;
-        if (toDate) url += `&toDate=${toDate}`;
+      if (colRes && colRes.ok) {
+        const j = await colRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        const mappedList: College[] = list.map((c: any) => ({
+          id: String(c.colg_cd || c.code || '1'),
+          code: String(c.colg_cd || c.code || '1'),
+          name: c.colg_name || c.name || `College ${c.colg_cd || 1}`,
+          slug: c.slug || slug,
+        }));
 
-        const res = await fetch(url, { headers });
-        if (res.ok) {
-          const json = await res.json();
-          const extractedData = json.data !== undefined ? json.data : json;
-          setMatrixReport(extractedData || null);
+        if (roleVal !== 'SUPER_ADMIN') {
+          const myCol = mappedList.find(
+            (c: any) => String(c.code) === String(userColg) || String(c.id) === String(userColg)
+          );
+          loadedColleges = myCol
+            ? [myCol]
+            : [{ id: userColg, code: userColg, name: 'SRMS CET, BAREILLY', slug }];
+          setSelectedCollege(loadedColleges[0].code || '1');
         } else {
-          setMatrixReport(null);
+          loadedColleges = mappedList;
+        }
+        setColleges(loadedColleges);
+      } else {
+        const defaultCol: College[] = [{ id: userColg, code: userColg, name: 'SRMS CET, BAREILLY', slug }];
+        setColleges(defaultCol);
+        setSelectedCollege(userColg);
+      }
+
+      // Fetch Courses for active college
+      await fetchCoursesForCollege(userColg, slug);
+    } catch (e) {
+      console.error('Failed to initialize colleges and metadata:', e);
+    }
+  };
+
+  const fetchCoursesForCollege = async (colgCd: string, slug?: string) => {
+    const tenant = slug || selectedTenantSlug || getTenantSlug();
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${colgCd}&tenant=${tenant}`).catch(() => null);
+      if (res && res.ok) {
+        const j = await res.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        const mappedCourses: CourseItem[] = list.map((c: any) => ({
+          id: String(c.course_cd || c.code || '13'),
+          code: String(c.course_cd || c.code || '13'),
+          name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+          colg_cd: String(c.colg_cd || colgCd),
+        }));
+
+        setCourses(mappedCourses);
+        if (mappedCourses.length > 0) {
+          const crsToUse = selectedCourse && mappedCourses.some((c) => c.code === selectedCourse)
+            ? selectedCourse
+            : mappedCourses[0].code;
+          setSelectedCourse(crsToUse);
+          await fetchBranchesAndBatches(colgCd, crsToUse, mappedCourses, tenant);
+        }
+        return mappedCourses;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch courses:', e);
+    }
+    setCourses([]);
+    return [];
+  };
+
+  const fetchBranchesAndBatches = async (
+    colgCd: string,
+    courseCd: string,
+    customCourses?: CourseItem[],
+    slug?: string
+  ) => {
+    const tenant = slug || selectedTenantSlug || getTenantSlug();
+    const effectiveColg = colgCd || selectedCollege || '1';
+    const effectiveCrs = courseCd || selectedCourse || '13';
+    const activeCourses = customCourses || courses;
+
+    try {
+      const [brRes, btRes, subRes] = await Promise.all([
+        fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+        fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${tenant}`).catch(() => null),
+      ]);
+
+      // 1. Branches Mapping with fallback for BCA and '-'
+      if (brRes && brRes.ok) {
+        const j = await brRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        const courseObj = activeCourses.find(
+          (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
+        );
+        const courseName = (courseObj?.name || (effectiveCrs === '13' ? 'BCA' : 'Course'))
+          .replace(/^\[#\d+\]\s*/, '')
+          .trim();
+
+        const mappedBranches: BranchItem[] = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
+          const rawName = (b.branch_name || b.name || '').trim();
+          const validName =
+            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE'
+              ? rawName
+              : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} General`;
+          return {
+            id: String(b.branch_cd || b.code || '1'),
+            code: String(b.branch_cd || b.code || '1'),
+            name: validName,
+            course_cd: String(b.course_cd || effectiveCrs),
+            colg_cd: String(b.colg_cd || effectiveColg),
+          };
+        });
+
+        if (mappedBranches.length > 0) {
+          setBranches(mappedBranches);
+          setSelectedBranch((prev) => {
+            const exists = mappedBranches.some((b) => String(b.code) === String(prev));
+            return exists ? prev : mappedBranches[0].code;
+          });
+        } else {
+          const fallback = [{ id: '1', code: '1', name: `${courseName} General`, course_cd: effectiveCrs, colg_cd: effectiveColg }];
+          setBranches(fallback);
+          setSelectedBranch('1');
         }
       } else {
-        let url = `${API_BASE}/attendance/batches/${selectedBatchId}/report?tenant=${slug}`;
-        if (selectedSubjectId !== 'all') url += `&subjectId=${selectedSubjectId}`;
-        if (fromDate) url += `&fromDate=${fromDate}`;
-        if (toDate) url += `&toDate=${toDate}`;
+        const courseObj = activeCourses.find(
+          (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
+        );
+        const courseName = (courseObj?.name || 'BCA').replace(/^\[#\d+\]\s*/, '').trim();
+        const fallback = [{ id: '1', code: '1', name: `${courseName} General`, course_cd: effectiveCrs, colg_cd: effectiveColg }];
+        setBranches(fallback);
+        setSelectedBranch('1');
+      }
 
-        const res = await fetch(url, { headers });
-        if (res.ok) {
-          const json = await res.json();
+      // 2. Batches Mapping
+      if (btRes && btRes.ok) {
+        const j = await btRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        const mappedBatches: BatchItem[] = list.map((b: any) => ({
+          id: String(b.batch_cd || b.code || b.batch_id || '2'),
+          code: String(b.batch_cd || b.code || b.batch_id || '2'),
+          name: String(b.batch_name || b.name || b.year || b.batch_cd || '2025'),
+          year: Number(b.batch_name || b.year || 2025),
+          course_cd: String(b.course_cd || effectiveCrs),
+          colg_cd: String(b.colg_cd || effectiveColg),
+        }));
+
+        if (mappedBatches.length > 0) {
+          setBatches(mappedBatches);
+          setSelectedBatch((prev) => {
+            const exists = mappedBatches.some((b) => String(b.code) === String(prev));
+            return exists ? prev : mappedBatches[0].code;
+          });
+        }
+      }
+
+      // 3. Subjects Mapping
+      if (subRes && subRes.ok) {
+        const j = await subRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        const mappedSubs = list.map((s: any) => ({
+          id: String(s.subject_cd || s.id || s.code),
+          code: String(s.code || s.subject_cd || s.id),
+          name: s.name || s.subject_name || `Subject ${s.code}`,
+        }));
+        setSubjects(mappedSubs);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch branches & batches:', err);
+    }
+  };
+
+  // Change Handlers
+  const handleCollegeChange = async (colgCode: string) => {
+    setSelectedCollege(colgCode);
+    const foundCol = colleges.find((c) => c.code === colgCode);
+    const slug = foundCol?.slug || selectedTenantSlug;
+    await fetchCoursesForCollege(colgCode, slug);
+  };
+
+  const handleCourseChange = async (courseCode: string) => {
+    setSelectedCourse(courseCode);
+    await fetchBranchesAndBatches(selectedCollege, courseCode);
+  };
+
+  // Fetch Report Data from Live SRMS + PostgreSQL Fallback
+  const fetchReport = async () => {
+    setLoading(true);
+    const slug = selectedTenantSlug || getTenantSlug();
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const headers = { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug };
+
+    try {
+      // 1. Attempt Live SRMS Attendance POST
+      const srmsPayload = {
+        colg_cd: Number(selectedCollege || 1),
+        course_cd: Number(selectedCourse || 13),
+        branch_cd: Number(selectedBranch || 1),
+        batch_cd: Number(selectedBatch || 2),
+        sem_cd: Number(selectedSem || 3),
+        section_cd: Number(selectedSection || 1),
+        fdt: fromDate,
+        tdt: toDate,
+      };
+
+      const srmsRes = await fetch('/api/srms/student-attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(srmsPayload),
+      }).catch(() => null);
+
+      if (srmsRes && srmsRes.ok) {
+        const json = await srmsRes.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          const subList: Subject[] = (json.subjectList || []).map((s: any) => ({
+            id: String(s.sub_cd || s.id || s.code),
+            code: String(s.sub_cd || s.code || s.id),
+            name: s.sub_name || s.name || `Subject ${s.sub_cd}`,
+          }));
+
+          if (subList.length > 0) {
+            setSubjects(subList);
+          }
+
+          const rawStudents = json.data;
+          const matrixStudents = rawStudents.map((stud: any) => {
+            const attRecord: Record<string, any> = {};
+            let totalPresent = 0;
+            let totalConducted = 0;
+
+            subList.forEach((sub) => {
+              const val = stud[sub.name] || stud[sub.code];
+              if (val && typeof val === 'string') {
+                const match = val.match(/(\d+)\/(\d+)\s*\(([\d.]+)%\)/);
+                if (match) {
+                  const p = parseInt(match[1], 10);
+                  const t = parseInt(match[2], 10);
+                  totalPresent += p;
+                  totalConducted += t;
+                  attRecord[sub.id] = {
+                    total: t,
+                    present: p,
+                    pct: parseFloat(match[3]),
+                    raw: val,
+                  };
+                } else {
+                  attRecord[sub.id] = { total: 0, present: 0, pct: 0, raw: val };
+                }
+              } else {
+                attRecord[sub.id] = { total: 0, present: 0, pct: 0, raw: '—' };
+              }
+            });
+
+            const overallPct = totalConducted > 0
+              ? parseFloat(((totalPresent / totalConducted) * 100).toFixed(1))
+              : parseFloat(String(stud.TotalPresentPercentage || '0').replace('%', ''));
+
+            return {
+              student_id: String(stud.stud_reg_no || stud.stud_roll_no || Math.random()),
+              rollno: stud.stud_roll_no || stud.stud_reg_no,
+              registration_no: stud.stud_reg_no,
+              name: stud.stud_name || 'Student',
+              subjects: attRecord,
+              totalClasses: totalConducted,
+              totalPresent: totalPresent,
+              overallPct: overallPct,
+            };
+          });
+
+          // Set Matrix Report
+          setMatrixReport({
+            subjects: subList,
+            students: matrixStudents,
+          });
+
+          // Set Roster Report
+          const rosterStudents: StudentReportRow[] = rawStudents.map((stud: any) => {
+            let pCount = 0;
+            let tCount = 0;
+            if (selectedSubjectId !== 'all') {
+              const subObj = subList.find((s) => s.id === selectedSubjectId || s.code === selectedSubjectId);
+              const val = subObj ? stud[subObj.name] : null;
+              if (val && typeof val === 'string') {
+                const match = val.match(/(\d+)\/(\d+)\s*\(([\d.]+)%\)/);
+                if (match) {
+                  pCount = parseInt(match[1], 10);
+                  tCount = parseInt(match[2], 10);
+                }
+              }
+            } else {
+              subList.forEach((sub) => {
+                const val = stud[sub.name];
+                if (val && typeof val === 'string') {
+                  const match = val.match(/(\d+)\/(\d+)/);
+                  if (match) {
+                    pCount += parseInt(match[1], 10);
+                    tCount += parseInt(match[2], 10);
+                  }
+                }
+              });
+            }
+
+            const pct = tCount > 0
+              ? ((pCount / tCount) * 100).toFixed(1)
+              : String(stud.TotalPresentPercentage || '0').replace('%', '');
+
+            return {
+              student_id: String(stud.stud_reg_no || stud.stud_roll_no || Math.random()),
+              rollno: stud.stud_roll_no || stud.stud_reg_no,
+              registration_no: stud.stud_reg_no,
+              name: stud.stud_name || 'Student',
+              total_classes: tCount,
+              present: pCount,
+              absent: Math.max(0, tCount - pCount),
+              attendance_pct: pct,
+            };
+          });
+
+          setRosterReport(rosterStudents);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. PostgreSQL Fallback
+      if (selectedBatch) {
+        let mUrl = `${API_BASE}/attendance/batches/${selectedBatch}/matrix-report?tenant=${slug}`;
+        if (fromDate) mUrl += `&fromDate=${fromDate}`;
+        if (toDate) mUrl += `&toDate=${toDate}`;
+
+        let rUrl = `${API_BASE}/attendance/batches/${selectedBatch}/report?tenant=${slug}`;
+        if (selectedSubjectId !== 'all') rUrl += `&subjectId=${selectedSubjectId}`;
+        if (fromDate) rUrl += `&fromDate=${fromDate}`;
+        if (toDate) rUrl += `&toDate=${toDate}`;
+
+        const [mRes, rRes] = await Promise.all([
+          fetch(mUrl, { headers }).catch(() => null),
+          fetch(rUrl, { headers }).catch(() => null),
+        ]);
+
+        if (mRes && mRes.ok) {
+          const json = await mRes.json();
+          const extractedData = json.data !== undefined ? json.data : json;
+          setMatrixReport(extractedData || null);
+        }
+
+        if (rRes && rRes.ok) {
+          const json = await rRes.json();
           const extractedData = json.data !== undefined ? json.data : json;
           setRosterReport(Array.isArray(extractedData) ? extractedData : []);
-        } else {
-          setRosterReport([]);
         }
       }
     } catch (e) {
-      console.error('Failed to fetch MIS report data', e);
-      setRosterReport([]);
+      console.error('Failed to fetch attendance reports:', e);
     } finally {
       setLoading(false);
     }
   };
 
+  // Trigger report fetch on criteria changes
   useEffect(() => {
-    if (selectedBatchId) {
+    if (selectedCollege && selectedCourse && selectedBranch && selectedBatch) {
       fetchReport();
     }
-  }, [selectedBatchId, selectedSubjectId, fromDate, toDate, reportMode]);
+  }, [selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubjectId, fromDate, toDate]);
 
   // Preset Date Periods
   const applyPreset = (preset: 'month' | 'last30' | 'term') => {
@@ -189,56 +548,154 @@ export default function MISAttendanceReportsPage() {
       setFromDate(past30.toISOString().split('T')[0]);
       setToDate(todayStr);
     } else if (preset === 'term') {
-      setFromDate('');
-      setToDate('');
+      setFromDate('2026-07-02');
+      setToDate('2026-08-21');
     }
   };
 
-  // Filtered Roster Rows based on Threshold
-  const filteredRoster = rosterReport.filter((row) => {
-    const pct = parseFloat(String(row.attendance_pct || 0));
-    if (thresholdFilter === 'shortage') return pct < 75;
-    if (thresholdFilter === 'critical') return pct < 70;
-    if (thresholdFilter === 'eligible') return pct >= 75;
-    return true;
-  });
+  // Filtered Roster Rows based on Threshold & Search
+  const filteredRoster = useMemo(() => {
+    return rosterReport.filter((row) => {
+      const pct = parseFloat(String(row.attendance_pct || 0));
+      const matchThreshold =
+        thresholdFilter === 'all' ||
+        (thresholdFilter === 'shortage' && pct < 75) ||
+        (thresholdFilter === 'critical' && pct < 70) ||
+        (thresholdFilter === 'eligible' && pct >= 75);
 
-  // Analytics Metrics
-  const totalEnrolled = rosterReport.length;
-  const shortageCount = rosterReport.filter(r => parseFloat(String(r.attendance_pct || 0)) < 75).length;
+      const q = searchQuery.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        (row.name || '').toLowerCase().includes(q) ||
+        (row.rollno || '').toLowerCase().includes(q) ||
+        (row.registration_no || '').toLowerCase().includes(q);
+
+      return matchThreshold && matchSearch;
+    });
+  }, [rosterReport, thresholdFilter, searchQuery]);
+
+  // Filtered Matrix Students based on Threshold & Search
+  const filteredMatrixStudents = useMemo(() => {
+    if (!matrixReport || !Array.isArray(matrixReport.students)) return [];
+    return matrixReport.students.filter((st) => {
+      const pct = st.overallPct;
+      const matchThreshold =
+        thresholdFilter === 'all' ||
+        (thresholdFilter === 'shortage' && pct < 75) ||
+        (thresholdFilter === 'critical' && pct < 70) ||
+        (thresholdFilter === 'eligible' && pct >= 75);
+
+      const q = searchQuery.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        (st.name || '').toLowerCase().includes(q) ||
+        (st.rollno || '').toLowerCase().includes(q) ||
+        (st.registration_no || '').toLowerCase().includes(q);
+
+      return matchThreshold && matchSearch;
+    });
+  }, [matrixReport, thresholdFilter, searchQuery]);
+
+  // Computed KPI Metrics
+  const totalEnrolled = rosterReport.length || (matrixReport?.students?.length ?? 0);
+  const shortageCount = rosterReport.filter((r) => parseFloat(String(r.attendance_pct || 0)) < 75).length;
   const avgAttendance = totalEnrolled > 0
-    ? (rosterReport.reduce((acc, r) => acc + parseFloat(String(r.attendance_pct || 0)), 0) / totalEnrolled).toFixed(1)
+    ? (
+        rosterReport.reduce((acc, r) => acc + parseFloat(String(r.attendance_pct || 0)), 0) / totalEnrolled
+      ).toFixed(1)
     : '0.0';
 
+  // Export CSV
+  const handleExportCSV = () => {
+    let headers: string[] = [];
+    let rows: string[][] = [];
+
+    if (reportMode === 'matrix' && matrixReport) {
+      headers = ['S.No', 'Reg No / Roll No', 'Student Name', ...matrixReport.subjects.map((s) => `${s.name} (${s.code})`), 'Cumulative %'];
+      rows = filteredMatrixStudents.map((st, idx) => [
+        `"${idx + 1}"`,
+        `"${st.rollno || st.registration_no || ''}"`,
+        `"${st.name}"`,
+        ...matrixReport.subjects.map((sub) => {
+          const info = st.subjects[sub.id] || st.subjects[sub.code];
+          return info && info.total > 0 ? `"${info.present}/${info.total} (${info.pct}%)"` : `"—"`;
+        }),
+        `"${st.overallPct}%"`,
+      ]);
+    } else {
+      headers = ['S.No', 'Reg No / Roll No', 'Student Name', 'Conducted Classes', 'Present', 'Absent', 'Attendance %', 'NMC Compliance Status'];
+      rows = filteredRoster.map((r, idx) => [
+        `"${idx + 1}"`,
+        `"${r.rollno || r.registration_no || ''}"`,
+        `"${r.name}"`,
+        `"${r.total_classes}"`,
+        `"${r.present}"`,
+        `"${r.absent}"`,
+        `"${r.attendance_pct}%"`,
+        `"${Number(r.attendance_pct) >= 75 ? 'ELIGIBLE (≥ 75%)' : 'SHORTAGE (< 75%)'}"`,
+      ]);
+    }
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `MIS_Attendance_Report_${selectedCourse}_Batch_${selectedBatch}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const selectedColgName = colleges.find((c) => c.code === selectedCollege)?.name || 'SRMS CET, BAREILLY';
+  const selectedCourseName = courses.find((c) => c.code === selectedCourse)?.name || 'BCA';
+  const selectedBranchName = branches.find((b) => b.code === selectedBranch)?.name || 'BCA General';
+  const selectedBatchName = batches.find((b) => b.code === selectedBatch)?.name || selectedBatch;
+
   return (
-    <div className="flex min-h-screen bg-slate-100 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200">
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar role="admin" />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title="MIS Attendance & Academic Compliance Portal" />
-        <main className="p-6 space-y-6 flex-1 bg-slate-50 dark:bg-[#0F172A]">
+        <Header title="MIS ATTENDANCE & ACADEMIC COMPLIANCE PORTAL" />
 
-          {/* Top MIS Title Banner Card */}
-          <div className="p-6 rounded-2xl bg-gradient-to-r from-white via-indigo-50/50 to-white dark:from-slate-900 dark:via-indigo-950/80 dark:to-slate-900 border border-indigo-200/80 dark:border-indigo-500/20 shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="p-2 bg-indigo-500/10 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 text-lg">📈</span>
-                <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">MIS Student Attendance Reports</h2>
-                <span className="px-2.5 py-0.5 rounded-md bg-purple-500/10 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-500/30 font-extrabold text-[10px] uppercase tracking-widest">
-                  Executive Dashboard
-                </span>
+        <main className="p-6 space-y-6 flex-1 flex flex-col">
+          {/* Main Top Header Banner */}
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white dark:bg-slate-900/90 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 text-xl font-bold">
+                  📈
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                      MIS Student Attendance Reports
+                    </h1>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      EXECUTIVE DASHBOARD
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Multi-subject cumulative matrixes, subject rosters, date-range analytics, and NMC 75% shortage detention tracking.
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                Multi-subject cumulative matrixes, subject rosters, date-range analytics, and NMC 75% shortage detention lists.
-              </p>
             </div>
 
-            {/* Print Statement Button */}
-            <button
-              onClick={() => window.print()}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 shrink-0 cursor-pointer"
-            >
-              <span>🖨️</span> Print MIS Report
-            </button>
+            {/* Quick Actions */}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <button
+                onClick={handleExportCSV}
+                className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition-all shadow-sm flex items-center gap-1.5"
+              >
+                <span>📥</span> Export CSV Roster
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-black text-white shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-1.5"
+              >
+                <span>🖨️</span> Print MIS Report
+              </button>
+            </div>
           </div>
 
           {/* KPI Analytics Summary Cards */}
@@ -263,22 +720,20 @@ export default function MISAttendanceReportsPage() {
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all">
               <span className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Exam Compliant (≥ 75%)</span>
-              <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">{totalEnrolled - shortageCount}</p>
+              <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">{Math.max(0, totalEnrolled - shortageCount)}</p>
               <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-bold">Eligible Students</span>
             </div>
           </div>
 
-          {/* FILTER CONTROLS BAR */}
+          {/* ─── CASCADING FILTER CONTROLS BAR (Photo 1 & Placement Design) ─── */}
           <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-4 shadow-xl">
-            
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3">
-              
               {/* Report Mode Tabs */}
               <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
                 <button
                   onClick={() => setReportMode('roster')}
                   className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    reportMode === 'roster'
+                    reportMode === 'roster' && thresholdFilter !== 'shortage'
                       ? 'bg-purple-600 text-white shadow-md'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
@@ -296,9 +751,12 @@ export default function MISAttendanceReportsPage() {
                   📐 Cumulative Subject Matrix
                 </button>
                 <button
-                  onClick={() => { setReportMode('roster'); setThresholdFilter('shortage'); }}
+                  onClick={() => {
+                    setReportMode('roster');
+                    setThresholdFilter('shortage');
+                  }}
                   className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    thresholdFilter === 'shortage' && reportMode === 'roster'
+                    thresholdFilter === 'shortage'
                       ? 'bg-rose-600 text-white shadow-md'
                       : 'text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400'
                   }`}
@@ -331,68 +789,176 @@ export default function MISAttendanceReportsPage() {
               </div>
             </div>
 
-            {/* Filter Inputs Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-              
-              {/* Phase Select */}
+            {/* Cascading Hierarchy 6-Column Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+              {/* 1. College (Locked for non-SuperAdmin) */}
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Professional Phase *</label>
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+                  <span>🏛️</span> 1. College
+                </label>
+                <div className="relative flex items-center">
+                  <select
+                    value={selectedCollege}
+                    disabled={userRole !== 'SUPER_ADMIN'}
+                    onChange={(e) => handleCollegeChange(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold disabled:cursor-not-allowed appearance-none cursor-pointer truncate pr-14 focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {colleges.map((c) => (
+                      <option key={c.id || c.code} value={c.code}>
+                        [#{c.code}] {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-2 pointer-events-none flex items-center gap-1">
+                    {userRole !== 'SUPER_ADMIN' ? (
+                      <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                        <span>🔒</span>
+                        <span>Locked</span>
+                      </span>
+                    ) : (
+                      <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Course */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+                  <span>🎓</span> 2. Course <span className="text-indigo-600 dark:text-indigo-400">({courses.length})</span>
+                </label>
                 <select
-                  value={selectedPhaseId}
-                  onChange={(e) => setSelectedPhaseId(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
+                  value={selectedCourse}
+                  onChange={(e) => handleCourseChange(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold cursor-pointer truncate focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="">Select Phase *</option>
-                  {phases.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
+                  {courses.map((cr) => (
+                    <option key={cr.id || cr.code} value={cr.code}>
+                      [#{cr.code}] {cr.name}
+                    </option>
                   ))}
                 </select>
               </div>
 
-              {/* Batch Select */}
+              {/* 3. Branch */}
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Batch *</label>
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+                  <span>🏢</span> 3. Branch <span className="text-indigo-600 dark:text-indigo-400">({branches.length})</span>
+                </label>
                 <select
-                  value={selectedBatchId}
-                  onChange={(e) => setSelectedBatchId(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold cursor-pointer truncate focus:ring-2 focus:ring-indigo-500"
                 >
-                  {batches.map((b) => {
-                    const bCode = b.batch_cd || b.code || String(b.year) || b.id;
-                    return (
-                      <option key={b.id || bCode} value={bCode}>Batch {b.code} ({b.year})</option>
-                    );
-                  })}
+                  {branches.map((br) => (
+                    <option key={br.id || br.code} value={br.code}>
+                      [#{br.code}] {br.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Subject Select */}
-              {reportMode === 'roster' && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Subject Filter</label>
-                  <select
-                    value={selectedSubjectId}
-                    onChange={(e) => setSelectedSubjectId(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="all" className="bg-slate-900 text-white font-bold">All Subjects Combined</option>
-                    {subjects.map((s) => {
-                      const sCode = s.subject_cd || s.code || s.id;
-                      return (
-                        <option key={s.id || sCode} value={sCode} className="bg-slate-900 text-white font-bold">[{s.code || sCode}] {s.name}</option>
-                      );
-                    })}
-                  </select>
-                </div>
-              )}
+              {/* 4. Batch */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+                  <span>👥</span> 4. Batch <span className="text-indigo-600 dark:text-indigo-400">({batches.length})</span>
+                </label>
+                <select
+                  value={selectedBatch}
+                  onChange={(e) => setSelectedBatch(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold cursor-pointer truncate focus:ring-2 focus:ring-indigo-500"
+                >
+                  {batches.map((b) => (
+                    <option key={b.id || b.code} value={b.code}>
+                      [#{b.code}] {b.name || b.year || `Batch ${b.code}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 5. Semester */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+                  <span>📖</span> 5. Semester
+                </label>
+                <select
+                  value={selectedSem}
+                  onChange={(e) => setSelectedSem(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 font-bold cursor-pointer focus:ring-2 focus:ring-indigo-500"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                    <option key={sem} value={String(sem)}>
+                      Semester {sem}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 6. Subject Filter */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+                  <span>🌐</span> 6. Subject Filter
+                </label>
+                <select
+                  value={selectedSubjectId}
+                  onChange={(e) => setSelectedSubjectId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold cursor-pointer truncate focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="all">All Subjects Combined</option>
+                  {subjects.map((s) => (
+                    <option key={s.id || s.code} value={s.id || s.code}>
+                      [{s.code}] {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Secondary Controls: Date Range, Search & Compliance */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-3 border-t border-slate-200 dark:border-slate-800">
+              {/* From Date */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">📅 From Date (fdt)</label>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono font-bold focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                />
+              </div>
+
+              {/* To Date */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">📅 To Date (tdt)</label>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono font-bold focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                />
+              </div>
+
+              {/* Search Student Filter */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">🔍 Search Student</label>
+                <input
+                  type="text"
+                  placeholder="Filter name, rollno, reg..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
 
               {/* Threshold Filter */}
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">NMC Compliance Status</label>
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">⚠️ Compliance Threshold</label>
                 <select
                   value={thresholdFilter}
                   onChange={(e) => setThresholdFilter(e.target.value as any)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
                   <option value="all">All Students (100% Roster)</option>
                   <option value="shortage">🚨 Shortage List (&lt; 75% Attendance)</option>
@@ -400,55 +966,44 @@ export default function MISAttendanceReportsPage() {
                   <option value="eligible">✅ Fully Eligible (≥ 75% Attendance)</option>
                 </select>
               </div>
-
-              {/* From Date */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">From Date</label>
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              {/* To Date */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">To Date</label>
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
             </div>
 
             {/* Fetch Action Button Bar */}
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5">
+                <span>Filter context:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{selectedCourseName}</span>
+                <span>•</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{selectedBranchName}</span>
+                <span>•</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">Batch {selectedBatchName}</span>
+                <span>•</span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">Semester {selectedSem}</span>
+              </div>
+
               <button
                 onClick={fetchReport}
                 disabled={loading}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 shrink-0 disabled:opacity-50 cursor-pointer"
+                className="px-6 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 shrink-0 disabled:opacity-50 cursor-pointer active:scale-95"
               >
                 <span>⚡</span> {loading ? 'Fetching Attendance Data...' : 'Get Attendance Data'}
               </button>
             </div>
           </div>
 
-          {/* PRINTABLE ATTENDANCE REPORT SECTION */}
+          {/* ─── PRINTABLE ATTENDANCE REPORT SECTION ─── */}
           <div id="attendance-report-print-area" className="space-y-4">
-            {/* Printable Official Institutional Header (Visible ONLY during print) */}
+            {/* Printable Official Institutional Header */}
             <div className="hidden print:block mb-4 text-center border-b-2 border-slate-900 pb-3">
               <h1 className="text-base font-black uppercase text-slate-900 tracking-wider">
-                SRMS COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY
+                {selectedColgName}
               </h1>
               <h2 className="text-xs font-extrabold uppercase text-slate-700 tracking-tight mt-0.5">
                 MIS STUDENT ATTENDANCE & ACADEMIC COMPLIANCE REPORT
               </h2>
               <div className="grid grid-cols-3 text-[10px] text-slate-700 font-semibold mt-2 pt-1.5 border-t border-slate-300 text-left gap-1">
-                <div><strong>Phase / Semester:</strong> {phases.find(p => p.id === selectedPhaseId)?.name || selectedPhaseId}</div>
-                <div><strong>Batch:</strong> Batch {batches.find(b => (b.batch_cd || b.code || String(b.year) || b.id) === selectedBatchId)?.code || selectedBatchId}</div>
+                <div><strong>Course &amp; Branch:</strong> {selectedCourseName} ({selectedBranchName})</div>
+                <div><strong>Batch:</strong> Batch {selectedBatchName} (Sem {selectedSem})</div>
                 <div><strong>Duration:</strong> {fromDate} to {toDate}</div>
                 <div><strong>Report Type:</strong> {reportMode === 'roster' ? 'Subject Roster Report' : 'Cumulative Subject Matrix'}</div>
                 <div><strong>Compliance Status:</strong> {thresholdFilter === 'all' ? 'All Students' : thresholdFilter === 'shortage' ? 'Shortage (< 75%)' : thresholdFilter === 'critical' ? 'Critical (< 70%)' : 'Eligible (≥ 75%)'}</div>
@@ -464,7 +1019,7 @@ export default function MISAttendanceReportsPage() {
                     <span>📚</span> Subject Roster Attendance Report ({filteredRoster.length} Records)
                   </h3>
                   <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                    NMC Standard: 75% Theory / 80% Practical Requirement
+                    NMC / UGC Standard: 75% Attendance Requirement
                   </span>
                 </div>
 
@@ -473,25 +1028,24 @@ export default function MISAttendanceReportsPage() {
                     <thead className="bg-slate-100/80 dark:bg-slate-950/80 text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 print:bg-slate-100 print:text-slate-900">
                       <tr>
                         <th className="p-3.5 text-center w-12">S.No</th>
-                        <th className="p-3.5">Reg No</th>
+                        <th className="p-3.5">Reg No / Roll No</th>
                         <th className="p-3.5">Student Name</th>
                         <th className="p-3.5 text-center">Conducted Classes</th>
-                        <th className="p-3.5 text-center">Attendance Status (P / A)</th>
-                        <th className="p-3.5 text-center text-amber-600 dark:text-amber-400 print:text-slate-900">Late / Excused</th>
+                        <th className="p-3.5 text-center">Present / Absent</th>
                         <th className="p-3.5 text-center">Attendance %</th>
-                        <th className="p-3.5 text-center">NMC Status</th>
+                        <th className="p-3.5 text-center">Compliance Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800/60 font-medium print:divide-slate-300">
                       {loading ? (
                         <tr>
-                          <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400 font-bold animate-pulse">
+                          <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400 font-bold animate-pulse">
                             Generating MIS subject attendance report...
                           </td>
                         </tr>
                       ) : filteredRoster.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="p-8 text-center text-slate-500 italic">
+                          <td colSpan={7} className="p-8 text-center text-slate-500 italic">
                             No student attendance records match the selected filter criteria.
                           </td>
                         </tr>
@@ -501,61 +1055,22 @@ export default function MISAttendanceReportsPage() {
                           const isEligible = pct >= 75.0;
 
                           return (
-                            <tr key={r.student_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                            <tr key={r.student_id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                               <td className="p-3.5 text-center font-mono text-slate-500 dark:text-slate-400 font-bold print:text-slate-900">{idx + 1}</td>
-                              <td className="p-3.5 font-mono text-indigo-600 dark:text-indigo-400 font-bold print:text-slate-900">{r.rollno || '—'}</td>
+                              <td className="p-3.5 font-mono text-indigo-600 dark:text-indigo-400 font-bold print:text-slate-900">
+                                {r.registration_no || r.rollno || '—'}
+                              </td>
                               <td className="p-3.5 font-bold text-slate-900 dark:text-white print:text-black">{r.name}</td>
                               <td className="p-3.5 text-center font-mono font-bold text-slate-700 dark:text-slate-300 print:text-slate-900">{r.total_classes || 0}</td>
-                              
-                              {/* Attendance Status */}
                               <td className="p-3.5 text-center">
-                                {selectedSubjectId === 'all' && Array.isArray((r as any).subject_sessions) && (r as any).subject_sessions.length > 0 ? (
-                                  <div className="flex flex-wrap items-center justify-center gap-1.5 font-mono text-xs">
-                                    {(Array.from(
-                                      (r as any).subject_sessions.reduce((acc: Map<string, string>, ss: any) => {
-                                        if (ss.subject_code && ss.status) acc.set(ss.subject_code, ss.status);
-                                        return acc;
-                                      }, new Map<string, string>()).entries()
-                                    ) as [string, string][]).map(([code, status]) => {
-                                      const isP = ['PRESENT', 'LATE'].includes(status);
-                                      return (
-                                        <span
-                                          key={code}
-                                          className={`px-2 py-0.5 rounded font-black border ${
-                                            isP
-                                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 print:bg-transparent print:text-slate-900'
-                                              : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 print:bg-transparent print:text-slate-900'
-                                          }`}
-                                        >
-                                          {code}: {isP ? 'P' : 'A'}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                ) : Number(r.total_classes || 0) <= 1 ? (
-                                  Number(r.present || 0) > 0 ? (
-                                    <span className="px-3 py-1 rounded-md text-xs font-black font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 print:bg-transparent print:text-slate-900">
-                                      P (Present)
-                                    </span>
-                                  ) : (
-                                    <span className="px-3 py-1 rounded-md text-xs font-black font-mono bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30 print:bg-transparent print:text-slate-900">
-                                      A (Absent)
-                                    </span>
-                                  )
-                                ) : (
-                                  <div className="flex items-center justify-center gap-1.5 font-mono font-bold text-xs">
-                                    <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 print:bg-transparent print:text-slate-900">
-                                      P: {Number(r.present || 0)}
-                                    </span>
-                                    <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30 print:bg-transparent print:text-slate-900">
-                                      A: {Number(r.absent || 0)}
-                                    </span>
-                                  </div>
-                                )}
-                              </td>
-
-                              <td className="p-3.5 text-center font-mono text-amber-600 dark:text-amber-400 print:text-slate-900">
-                                {(Number(r.late || 0) + Number(r.excused || 0))}
+                                <div className="flex items-center justify-center gap-1.5 font-mono font-bold text-xs">
+                                  <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 print:bg-transparent print:text-slate-900">
+                                    P: {Number(r.present || 0)}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30 print:bg-transparent print:text-slate-900">
+                                    A: {Number(r.absent || 0)}
+                                  </span>
+                                </div>
                               </td>
                               <td className="p-3.5 text-center">
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-black font-mono border ${
@@ -590,7 +1105,7 @@ export default function MISAttendanceReportsPage() {
               <div className="rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl print:border-none print:shadow-none print:rounded-none">
                 <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between print:hidden">
                   <h3 className="text-xs font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-wider flex items-center gap-2">
-                    <span>📐</span> Multi-Subject Cumulative Attendance Matrix ({matrixReport?.students.length || 0} Students)
+                    <span>📐</span> Multi-Subject Cumulative Attendance Matrix ({filteredMatrixStudents.length} Students)
                   </h3>
                   <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                     Per-subject breakdown + Cumulative %
@@ -602,88 +1117,80 @@ export default function MISAttendanceReportsPage() {
                     <thead className="bg-slate-100/80 dark:bg-slate-950/80 text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 print:bg-slate-100 print:text-slate-900">
                       <tr>
                         <th className="p-3.5 text-center w-12">S.No</th>
-                        <th className="p-3.5">Reg No</th>
+                        <th className="p-3.5">Reg No / Roll No</th>
                         <th className="p-3.5">Student Name</th>
-                        {matrixReport?.subjects.map(s => (
-                          <th key={s.id} className="p-3.5 text-center font-black" title={s.name}>
-                            {s.name}
+                        {(matrixReport?.subjects || []).map((sub) => (
+                          <th key={sub.id || sub.code} className="p-3.5 text-center">
+                            {sub.name} <br />
+                            <span className="text-[9px] text-slate-500 font-normal">({sub.code})</span>
                           </th>
                         ))}
-                        <th className="p-3.5 text-center text-purple-700 dark:text-purple-300 font-extrabold print:text-slate-900">Overall %</th>
-                        <th className="p-3.5 text-center">NMC Status</th>
+                        <th className="p-3.5 text-center">Cumulative Attendance %</th>
+                        <th className="p-3.5 text-center">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800/60 font-medium print:divide-slate-300">
                       {loading ? (
                         <tr>
-                          <td colSpan={(matrixReport?.subjects.length || 0) + 5} className="p-8 text-center text-slate-500 dark:text-slate-400 font-bold animate-pulse">
-                            Generating cumulative attendance matrix...
+                          <td colSpan={5 + (matrixReport?.subjects?.length || 0)} className="p-8 text-center text-slate-500 dark:text-slate-400 font-bold animate-pulse">
+                            Generating Multi-Subject Cumulative Attendance Matrix...
                           </td>
                         </tr>
-                      ) : !matrixReport || matrixReport.students.length === 0 ? (
+                      ) : filteredMatrixStudents.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-slate-500 italic">
-                            No matrix records available for this batch and date range.
+                          <td colSpan={5 + (matrixReport?.subjects?.length || 0)} className="p-8 text-center text-slate-500 italic">
+                            No student matrix attendance records found.
                           </td>
                         </tr>
                       ) : (
-                        matrixReport.students
-                          .filter(st => {
-                            if (thresholdFilter === 'shortage') return st.overallPct < 75;
-                            if (thresholdFilter === 'critical') return st.overallPct < 70;
-                            if (thresholdFilter === 'eligible') return st.overallPct >= 75;
-                            return true;
-                          })
-                          .map((st, idx) => {
-                            const isEligible = st.overallPct >= 75.0;
-
-                            return (
-                              <tr key={st.student_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                                <td className="p-3.5 text-center font-mono text-slate-500 dark:text-slate-400 font-bold print:text-slate-900">{idx + 1}</td>
-                                <td className="p-3.5 font-mono text-indigo-600 dark:text-indigo-400 font-bold print:text-slate-900">{st.rollno || '—'}</td>
-                                <td className="p-3.5 font-bold text-slate-900 dark:text-white whitespace-nowrap print:text-black">{st.name}</td>
-                                
-                                {/* Subject Percentage Columns with Attended / Conducted (Pct%) */}
-                                {matrixReport.subjects.map(s => {
-                                  const subData = st.subjects[s.id];
-                                  if (!subData || subData.total === 0) {
-                                    return <td key={s.id} className="p-3.5 text-center text-slate-400 dark:text-slate-600 font-mono">—</td>;
-                                  }
-                                  const { present, total, pct } = subData;
-                                  const isPass = pct >= 75.0;
+                        filteredMatrixStudents.map((st, idx) => {
+                          const isEligible = st.overallPct >= 75.0;
+                          return (
+                            <tr key={st.student_id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="p-3.5 text-center font-mono text-slate-500 dark:text-slate-400 font-bold print:text-slate-900">{idx + 1}</td>
+                              <td className="p-3.5 font-mono text-indigo-600 dark:text-indigo-400 font-bold print:text-slate-900">
+                                {st.registration_no || st.rollno || '—'}
+                              </td>
+                              <td className="p-3.5 font-bold text-slate-900 dark:text-white print:text-black">{st.name}</td>
+                              {(matrixReport?.subjects || []).map((sub) => {
+                                const info = st.subjects[sub.id] || st.subjects[sub.code] || st.subjects[sub.name];
+                                if (!info || info.total === 0) {
                                   return (
-                                    <td key={s.id} className="p-3.5 text-center font-mono font-bold">
-                                      <span className={`px-2 py-0.5 rounded text-[11px] font-black ${
-                                        isPass ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 print:bg-transparent print:text-slate-900' : 'text-rose-700 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 print:bg-transparent print:text-slate-900'
-                                      }`}>
-                                        {present}/{total} ({pct.toFixed(0)}%)
-                                      </span>
+                                    <td key={sub.id || sub.code} className="p-3.5 text-center font-mono text-slate-400">
+                                      —
                                     </td>
                                   );
-                                })}
-
-                                {/* Overall Cumulative Percentage */}
-                                <td className="p-3.5 text-center font-mono font-black text-sm text-slate-900 dark:text-white print:text-black">
-                                  <span className={`px-2.5 py-1 rounded-full border ${
-                                    isEligible ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 print:bg-transparent print:text-slate-900' : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40 print:bg-transparent print:text-slate-900'
-                                  }`}>
-                                    {st.overallPct.toFixed(1)}%
-                                  </span>
-                                </td>
-
-                                {/* Eligibility Status */}
-                                <td className="p-3.5 text-center">
-                                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border ${
-                                    isEligible
-                                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 print:bg-transparent print:text-slate-900'
-                                      : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 print:bg-transparent print:text-slate-900'
-                                  }`}>
-                                    {isEligible ? 'ELIGIBLE' : 'SHORTAGE'}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })
+                                }
+                                return (
+                                  <td key={sub.id || sub.code} className="p-3.5 text-center font-mono">
+                                    <span className="font-bold text-slate-900 dark:text-white">{info.present}/{info.total}</span>
+                                    <span className={`block text-[10px] font-black ${info.pct >= 75 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                      ({info.pct}%)
+                                    </span>
+                                  </td>
+                                );
+                              })}
+                              <td className="p-3.5 text-center">
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-black font-mono border ${
+                                  isEligible
+                                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 print:bg-transparent print:text-slate-900'
+                                    : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40 print:bg-transparent print:text-slate-900'
+                                }`}>
+                                  {st.overallPct}%
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-center">
+                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border ${
+                                  isEligible
+                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 print:bg-transparent print:text-slate-900'
+                                    : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 print:bg-transparent print:text-slate-900'
+                                }`}>
+                                  {isEligible ? 'ELIGIBLE' : 'SHORTAGE'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -691,72 +1198,8 @@ export default function MISAttendanceReportsPage() {
               </div>
             )}
           </div>
-
         </main>
       </div>
-
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4 landscape;
-            margin: 6mm 8mm 6mm 8mm;
-          }
-          html, body {
-            background: #ffffff !important;
-            color: #000000 !important;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-            width: 100% !important;
-            height: auto !important;
-            min-height: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          #attendance-report-print-area, #attendance-report-print-area * {
-            visibility: visible !important;
-          }
-          #attendance-report-print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 4px 6px !important;
-            background: #ffffff !important;
-            color: #000000 !important;
-            border: none !important;
-            box-shadow: none !important;
-            border-radius: 0 !important;
-          }
-          #attendance-report-print-area table {
-            width: 100% !important;
-            border-collapse: collapse !important;
-            font-size: 10px !important;
-          }
-          #attendance-report-print-area th, 
-          #attendance-report-print-area td {
-            border: 1px solid #cbd5e1 !important;
-            padding: 4px 6px !important;
-            color: #0f172a !important;
-            background-color: transparent !important;
-          }
-          #attendance-report-print-area thead th {
-            background-color: #f1f5f9 !important;
-            color: #0f172a !important;
-            font-weight: 800 !important;
-          }
-          #attendance-report-print-area tr {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }

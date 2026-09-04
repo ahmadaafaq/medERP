@@ -428,7 +428,37 @@ export class ChatService implements OnModuleInit {
             'id', msg.id,
             'body', msg.body,
             'sender_id', msg.sender_id,
-            'sender_name', msg.sender_name,
+            'sender_name', COALESCE(
+              NULLIF(
+                CASE 
+                  WHEN UPPER(TRIM(msg.sender_name)) IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY', 'ADMIN USER') THEN NULL 
+                  ELSE msg.sender_name 
+                END, 
+                ''
+              ),
+              (
+                SELECT f.name FROM "${schema}".faculty f 
+                WHERE (f.user_id::text = msg.sender_id::text OR f.emp_id::text = msg.sender_id::text OR f.id::text = msg.sender_id::text)
+                  AND f.name IS NOT NULL 
+                  AND UPPER(TRIM(f.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+                LIMIT 1
+              ),
+              (
+                SELECT u.name FROM "${schema}".users u 
+                WHERE u.id::text = msg.sender_id::text 
+                  AND u.name IS NOT NULL 
+                  AND UPPER(TRIM(u.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+                LIMIT 1
+              ),
+              (
+                SELECT s.name FROM "${schema}".students s 
+                WHERE (s.user_id::text = msg.sender_id::text OR s.registration_no::text = msg.sender_id::text OR s.rollno::text = msg.sender_id::text)
+                  AND s.name IS NOT NULL 
+                  AND UPPER(TRIM(s.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+                LIMIT 1
+              ),
+              msg.sender_name
+            ),
             'sender_role', msg.sender_role,
             'created_at', msg.created_at
           )
@@ -541,9 +571,85 @@ export class ChatService implements OnModuleInit {
         m.id,
         m.chat_group_id,
         m.sender_id,
-        m.sender_name,
+        COALESCE(
+          NULLIF(
+            CASE 
+              WHEN UPPER(TRIM(m.sender_name)) IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY', 'ADMIN USER') THEN NULL 
+              ELSE m.sender_name 
+            END, 
+            ''
+          ),
+          (
+            SELECT f.name FROM "${schema}".faculty f 
+            WHERE (f.user_id::text = m.sender_id::text OR f.emp_id::text = m.sender_id::text OR f.id::text = m.sender_id::text)
+              AND f.name IS NOT NULL 
+              AND UPPER(TRIM(f.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+            LIMIT 1
+          ),
+          (
+            SELECT u.name FROM "${schema}".users u 
+            WHERE u.id::text = m.sender_id::text 
+              AND u.name IS NOT NULL 
+              AND UPPER(TRIM(u.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+            LIMIT 1
+          ),
+          (
+            SELECT s.name FROM "${schema}".students s 
+            WHERE (s.user_id::text = m.sender_id::text OR s.registration_no::text = m.sender_id::text OR s.rollno::text = m.sender_id::text)
+              AND s.name IS NOT NULL 
+              AND UPPER(TRIM(s.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+            LIMIT 1
+          ),
+          (
+            SELECT gm.name FROM "${schema}".chat_group_members gm 
+            WHERE gm.user_id::text = m.sender_id::text 
+              AND gm.name IS NOT NULL 
+              AND UPPER(TRIM(gm.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+            LIMIT 1
+          ),
+          (
+            SELECT f2.name FROM "${schema}".faculty f2 
+            WHERE f2.name IS NOT NULL 
+              AND UPPER(TRIM(f2.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+            LIMIT 1
+          ),
+          m.sender_name
+        ) AS sender_name,
         m.sender_role,
-        m.sender_avatar,
+        COALESCE(
+          NULLIF(m.sender_avatar, ''),
+          (
+            SELECT s.photo_url FROM "${schema}".students s 
+            WHERE (s.user_id::text = m.sender_id::text 
+               OR s.registration_no::text = m.sender_id::text 
+               OR s.rollno::text = m.sender_id::text
+               OR UPPER(s.name) = UPPER(m.sender_name))
+              AND s.photo_url IS NOT NULL AND s.photo_url != ''
+            LIMIT 1
+          ),
+          (
+            SELECT f.photo_url FROM "${schema}".faculty f 
+            WHERE (f.user_id::text = m.sender_id::text 
+               OR f.emp_id::text = m.sender_id::text
+               OR UPPER(f.name) = UPPER(m.sender_name))
+              AND f.photo_url IS NOT NULL AND f.photo_url != ''
+            LIMIT 1
+          ),
+          (
+            SELECT gm.avatar_url FROM "${schema}".chat_group_members gm 
+            WHERE (gm.user_id::text = m.sender_id::text 
+               OR UPPER(gm.name) = UPPER(m.sender_name))
+              AND gm.avatar_url IS NOT NULL AND gm.avatar_url != ''
+            LIMIT 1
+          ),
+          (
+            SELECT prev.sender_avatar FROM "${schema}".chat_messages prev
+            WHERE (prev.sender_id::text = m.sender_id::text OR UPPER(prev.sender_name) = UPPER(m.sender_name))
+              AND prev.sender_avatar IS NOT NULL AND prev.sender_avatar != ''
+            ORDER BY prev.created_at DESC
+            LIMIT 1
+          )
+        ) AS sender_avatar,
         m.body,
         m.created_at,
         COALESCE(
@@ -584,9 +690,40 @@ export class ChatService implements OnModuleInit {
       await this.ensureTables(slug);
 
       const senderId = user?.id || user?.sub || 'FAC001';
-      const senderName = user?.name || user?.username || 'Faculty Member';
+      let senderName = user?.name || user?.username || dto.sender_name || 'Faculty Member';
       const senderRole = (user?.role || 'FACULTY').toUpperCase();
-      const senderAvatar = user?.photo_url || user?.photoUrl || null;
+      let senderAvatar = user?.photo_url || user?.photoUrl || dto.sender_avatar || null;
+
+      if (!senderName || ['FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY'].includes(senderName.toUpperCase().trim())) {
+        const nameLookup = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT COALESCE(
+            (SELECT name FROM "${schema}".faculty WHERE (user_id::text = $1::text OR emp_id::text = $1::text OR id::text = $1::text) AND name IS NOT NULL AND UPPER(TRIM(name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY') LIMIT 1),
+            (SELECT name FROM "${schema}".users WHERE id::text = $1::text AND name IS NOT NULL AND UPPER(TRIM(name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY') LIMIT 1),
+            (SELECT name FROM "${schema}".students WHERE (user_id::text = $1::text OR registration_no::text = $1::text OR rollno::text = $1::text) AND name IS NOT NULL AND UPPER(TRIM(name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY') LIMIT 1),
+            (SELECT name FROM "${schema}".chat_group_members WHERE user_id::text = $1::text AND name IS NOT NULL AND UPPER(TRIM(name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY') LIMIT 1),
+            (SELECT name FROM "${schema}".faculty WHERE name IS NOT NULL AND UPPER(TRIM(name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY') LIMIT 1)
+          ) AS name`,
+          [senderId],
+        ).catch(() => []);
+        if (nameLookup[0]?.name) {
+          senderName = nameLookup[0].name;
+        }
+      }
+
+      if (!senderAvatar && senderId) {
+        const avatarLookup = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT COALESCE(
+            (SELECT photo_url FROM "${schema}".students WHERE (user_id::text = $1::text OR registration_no::text = $1::text OR rollno::text = $1::text OR UPPER(name) = UPPER($2::text)) AND photo_url IS NOT NULL AND photo_url != '' LIMIT 1),
+            (SELECT photo_url FROM "${schema}".faculty WHERE (user_id::text = $1::text OR emp_id::text = $1::text OR UPPER(name) = UPPER($2::text)) AND photo_url IS NOT NULL AND photo_url != '' LIMIT 1),
+            (SELECT avatar_url FROM "${schema}".chat_group_members WHERE (user_id::text = $1::text OR UPPER(name) = UPPER($2::text)) AND avatar_url IS NOT NULL AND avatar_url != '' LIMIT 1),
+            (SELECT sender_avatar FROM "${schema}".chat_messages WHERE (sender_id::text = $1::text OR UPPER(sender_name) = UPPER($2::text)) AND sender_avatar IS NOT NULL AND sender_avatar != '' ORDER BY created_at DESC LIMIT 1)
+          ) AS avatar`,
+          [senderId, senderName],
+        ).catch(() => []);
+        senderAvatar = avatarLookup[0]?.avatar || null;
+      }
 
       if (!dto.body?.trim() && (!dto.attachments || dto.attachments.length === 0)) {
         throw new BadRequestException('Message must contain text body or at least one attachment');
@@ -607,13 +744,13 @@ export class ChatService implements OnModuleInit {
           slug,
           `INSERT INTO "${schema}".chat_group_members (chat_group_id, user_id, role, name, avatar_url)
            VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (chat_group_id, user_id) DO UPDATE SET name = EXCLUDED.name`,
+           ON CONFLICT (chat_group_id, user_id) DO UPDATE SET name = EXCLUDED.name, avatar_url = COALESCE(EXCLUDED.avatar_url, "${schema}".chat_group_members.avatar_url)`,
           [groupId, senderId, senderRole, senderName, senderAvatar],
         ).catch(async () => {
           await this.tenantSchemaService.queryInTenant(
             slug,
-            `UPDATE "${schema}".chat_group_members SET name = $1 WHERE chat_group_id::text = $2::text AND user_id::text = $3::text`,
-            [senderName, groupId, senderId],
+            `UPDATE "${schema}".chat_group_members SET name = $1, avatar_url = COALESCE($4, avatar_url) WHERE chat_group_id::text = $2::text AND user_id::text = $3::text`,
+            [senderName, groupId, senderId, senderAvatar],
           ).catch(() => null);
         });
       }
@@ -847,8 +984,52 @@ export class ChatService implements OnModuleInit {
         m.id,
         m.user_id,
         m.role,
-        m.name,
-        m.avatar_url,
+        COALESCE(
+          NULLIF(
+            CASE 
+              WHEN UPPER(TRIM(m.name)) IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY', 'ADMIN USER') THEN NULL 
+              ELSE m.name 
+            END, 
+            ''
+          ),
+          (
+            SELECT f.name FROM "${schema}".faculty f 
+            WHERE (f.user_id::text = m.user_id::text OR f.emp_id::text = m.user_id::text OR f.id::text = m.user_id::text)
+              AND f.name IS NOT NULL 
+              AND UPPER(TRIM(f.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+            LIMIT 1
+          ),
+          (
+            SELECT u.name FROM "${schema}".users u 
+            WHERE u.id::text = m.user_id::text 
+              AND u.name IS NOT NULL 
+              AND UPPER(TRIM(u.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+            LIMIT 1
+          ),
+          (
+            SELECT s.name FROM "${schema}".students s 
+            WHERE (s.user_id::text = m.user_id::text OR s.registration_no::text = m.user_id::text OR s.rollno::text = m.user_id::text)
+              AND s.name IS NOT NULL 
+              AND UPPER(TRIM(s.name)) NOT IN ('FACULTY USER', 'FACULTY MEMBER', 'USER', 'FACULTY')
+            LIMIT 1
+          ),
+          m.name
+        ) AS name,
+        COALESCE(
+          NULLIF(m.avatar_url, ''),
+          (
+            SELECT f.photo_url FROM "${schema}".faculty f 
+            WHERE (f.user_id::text = m.user_id::text OR f.emp_id::text = m.user_id::text OR f.id::text = m.user_id::text)
+              AND f.photo_url IS NOT NULL AND f.photo_url != ''
+            LIMIT 1
+          ),
+          (
+            SELECT s.photo_url FROM "${schema}".students s 
+            WHERE (s.user_id::text = m.user_id::text OR s.registration_no::text = m.user_id::text OR s.rollno::text = m.user_id::text)
+              AND s.photo_url IS NOT NULL AND s.photo_url != ''
+            LIMIT 1
+          )
+        ) AS avatar_url,
         m.joined_at,
         u.email
        FROM "${schema}".chat_group_members m

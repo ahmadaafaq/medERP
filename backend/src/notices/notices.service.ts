@@ -99,6 +99,9 @@ export class NoticesService implements OnModuleInit {
         ALTER TABLE notice_recipients DROP CONSTRAINT IF EXISTS notice_recipients_user_id_fkey;
         ALTER TABLE notice_recipients ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR(255);
         ALTER TABLE notice_attachments ADD COLUMN IF NOT EXISTS file_data TEXT;
+        ALTER TABLE notices ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE notices ALTER COLUMN created_at SET DEFAULT NOW();
+        UPDATE notices SET created_at = NOW() WHERE created_at IS NULL;
 
         CREATE TABLE IF NOT EXISTS notice_group_templates (
           id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -252,9 +255,9 @@ export class NoticesService implements OnModuleInit {
                   s.name AS student_name,
                   f.name AS faculty_name, f.designation
            FROM users u
-           LEFT JOIN students s ON s.user_id = u.id
-           LEFT JOIN faculty f ON f.user_id = u.id
-           WHERE u.id = $1`,
+           LEFT JOIN students s ON s.user_id::TEXT = u.id::TEXT
+           LEFT JOIN faculty f ON f.user_id::TEXT = u.id::TEXT
+           WHERE u.id::TEXT = $1`,
           [creatorUserId],
         );
 
@@ -275,9 +278,10 @@ export class NoticesService implements OnModuleInit {
       `INSERT INTO notices (
         college_id, title, body, priority, category,
         created_by, creator_name, creator_role, status,
-        scheduled_at, expires_at, requires_acknowledgement
+        scheduled_at, expires_at, requires_acknowledgement,
+        created_at, updated_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
        RETURNING *`,
       [
         dto.college_id || null,
@@ -330,15 +334,28 @@ export class NoticesService implements OnModuleInit {
     }
 
     if (recipientUserIds.length > 0) {
-      // Batch insert recipients
-      for (const uid of recipientUserIds) {
-        const isCreator = uid === validCreatorId;
+      // High-speed chunked batch insert (50 recipients per query)
+      const chunkSize = 50;
+      for (let i = 0; i < recipientUserIds.length; i += chunkSize) {
+        const chunk = recipientUserIds.slice(i, i + chunkSize);
+        const valuePlaceholders: string[] = [];
+        const params: any[] = [noticeId];
+
+        chunk.forEach((uid, idx) => {
+          const isCreator = uid === validCreatorId;
+          const p1 = 2 + idx * 3;
+          const p2 = 3 + idx * 3;
+          const p3 = 4 + idx * 3;
+          valuePlaceholders.push(`($1, $${p1}, $${p2}, $${p3})`);
+          params.push(uid, isCreator, isCreator ? new Date() : null);
+        });
+
         await this.tenantSchemaService.queryInTenant(
           slug,
           `INSERT INTO notice_recipients (notice_id, user_id, is_read, read_at)
-           VALUES ($1, $2, $3, $4)
+           VALUES ${valuePlaceholders.join(', ')}
            ON CONFLICT (notice_id, user_id) DO NOTHING`,
-          [noticeId, uid, isCreator, isCreator ? new Date() : null],
+          params,
         );
       }
     }
@@ -405,72 +422,83 @@ export class NoticesService implements OnModuleInit {
           slug,
           `SELECT s.user_id AS id
            FROM students s
-           JOIN users u ON u.id = s.user_id
-           LEFT JOIN batches b ON b.id = s.batch_id
-           WHERE (s.batch_cd = $1 OR b.code = $1 OR CAST(s.admission_year AS TEXT) = $1 OR CAST(b.year AS TEXT) = $1)
+           JOIN users u ON u.id::TEXT = s.user_id::TEXT
+           LEFT JOIN batches b ON b.id::TEXT = s.batch_id::TEXT
+           WHERE (s.batch_cd::TEXT = $1 OR b.code::TEXT = $1 OR CAST(s.admission_year AS TEXT) = $1 OR CAST(b.year AS TEXT) = $1)
              AND u.is_active = true`,
           [val],
         );
         studentBatchUsers.forEach((u) => {
-          if (u.id) userIdsSet.add(u.id);
+          if (u.id) userIdsSet.add(String(u.id));
         });
       } else if (type === 'course') {
         const courseStudents = await this.tenantSchemaService.queryInTenant(
           slug,
           `SELECT s.user_id AS id
            FROM students s
-           JOIN users u ON u.id = s.user_id
-           WHERE UPPER(s.course_cd) = $1 AND u.is_active = true`,
+           JOIN users u ON u.id::TEXT = s.user_id::TEXT
+           WHERE UPPER(s.course_cd::TEXT) = $1 AND u.is_active = true`,
           [val.toUpperCase()],
         );
         courseStudents.forEach((u) => {
-          if (u.id) userIdsSet.add(u.id);
+          if (u.id) userIdsSet.add(String(u.id));
         });
 
         const courseFaculty = await this.tenantSchemaService.queryInTenant(
           slug,
           `SELECT f.user_id AS id
            FROM faculty f
-           JOIN users u ON u.id = f.user_id
+           JOIN users u ON u.id::TEXT = f.user_id::TEXT
            WHERE u.is_active = true`,
         );
         courseFaculty.forEach((u) => {
-          if (u.id) userIdsSet.add(u.id);
+          if (u.id) userIdsSet.add(String(u.id));
         });
       } else if (type === 'branch' || type === 'department') {
         const deptUsers = await this.tenantSchemaService.queryInTenant(
           slug,
           `SELECT s.user_id AS id
            FROM students s
-           JOIN users u ON u.id = s.user_id
-           LEFT JOIN departments d ON d.id = s.department_id
-           WHERE (d.code = $1 OR d.name = $1 OR CAST(s.department_id AS TEXT) = $1)
+           JOIN users u ON u.id::TEXT = s.user_id::TEXT
+           LEFT JOIN departments d ON d.id::TEXT = s.department_id::TEXT
+           WHERE (d.code::TEXT = $1 OR d.name::TEXT = $1 OR CAST(s.department_id AS TEXT) = $1 OR s.branch_id::TEXT = $1)
              AND u.is_active = true
            UNION
            SELECT f.user_id AS id
            FROM faculty f
-           JOIN users u ON u.id = f.user_id
-           LEFT JOIN departments d ON d.id = f.department_id
-           WHERE (d.code = $1 OR d.name = $1 OR CAST(f.department_id AS TEXT) = $1)
+           JOIN users u ON u.id::TEXT = f.user_id::TEXT
+           LEFT JOIN departments d ON d.id::TEXT = f.department_id::TEXT
+           WHERE (d.code::TEXT = $1 OR d.name::TEXT = $1 OR CAST(f.department_id AS TEXT) = $1)
              AND u.is_active = true`,
           [val],
         );
         deptUsers.forEach((u) => {
-          if (u.id) userIdsSet.add(u.id);
+          if (u.id) userIdsSet.add(String(u.id));
+        });
+      } else if (type === 'semester') {
+        const semStudents = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT s.user_id AS id
+           FROM students s
+           JOIN users u ON u.id::TEXT = s.user_id::TEXT
+           WHERE u.is_active = true`,
+        );
+        semStudents.forEach((u) => {
+          if (u.id) userIdsSet.add(String(u.id));
         });
       } else if (type === 'user') {
         const specificUser = await this.tenantSchemaService.queryInTenant(
           slug,
           `SELECT u.id
            FROM users u
-           LEFT JOIN students s ON s.user_id = u.id
-           LEFT JOIN faculty f ON f.user_id = u.id
-           WHERE (u.id::TEXT = $1 OR u.email = $1 OR s.registration_no = $1 OR s.rollno = $1 OR f.emp_id = $1)
+           LEFT JOIN students s ON s.user_id::TEXT = u.id::TEXT
+           LEFT JOIN faculty f ON f.user_id::TEXT = u.id::TEXT
+           WHERE (u.id::TEXT = $1 OR u.email = $1 OR s.registration_no::TEXT = $1 OR s.rollno::TEXT = $1 OR f.emp_id::TEXT = $1)
              AND u.is_active = true`,
           [val],
         );
         specificUser.forEach((u) => {
-          if (u.id) userIdsSet.add(u.id);
+          if (u.id) userIdsSet.add(String(u.id));
         });
       }
     }
@@ -481,7 +509,7 @@ export class NoticesService implements OnModuleInit {
         slug,
         `SELECT id FROM users WHERE is_active = true`,
       );
-      allUsers.forEach((u) => userIdsSet.add(u.id));
+      allUsers.forEach((u) => userIdsSet.add(String(u.id)));
     }
 
     return Array.from(userIdsSet);
@@ -509,9 +537,9 @@ export class NoticesService implements OnModuleInit {
               COALESCE(s.name, f.name, u.email) AS name,
               COALESCE(s.registration_no, s.rollno, f.emp_id, 'Active') AS identifier
        FROM users u
-       LEFT JOIN students s ON s.user_id = u.id
-       LEFT JOIN faculty f ON f.user_id = u.id
-       WHERE u.id IN (${inList})
+       LEFT JOIN students s ON s.user_id::TEXT = u.id::TEXT
+       LEFT JOIN faculty f ON f.user_id::TEXT = u.id::TEXT
+       WHERE u.id::TEXT IN (${inList})
        ORDER BY u.created_at ASC`,
     );
 
@@ -571,7 +599,7 @@ export class NoticesService implements OnModuleInit {
         n.scheduled_at,
         n.expires_at,
         n.requires_acknowledgement,
-        n.created_at,
+        COALESCE(n.created_at, n.scheduled_at, NOW()) AS created_at,
         n.updated_at,
         COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id::text = n.id::text), 0) AS total_recipients,
         COALESCE((SELECT COUNT(*) FROM notice_recipients nr WHERE nr.notice_id::text = n.id::text AND nr.is_read = true), 0) AS read_count,
@@ -590,7 +618,23 @@ export class NoticesService implements OnModuleInit {
             WHERE nt.notice_id::text = n.id::text
           ),
           '[]'::json
-        ) AS targets
+        ) AS targets,
+        COALESCE(
+          (
+            SELECT JSON_AGG(
+              JSONB_BUILD_OBJECT(
+                'id', na.id,
+                'file_name', na.file_name,
+                'file_type', na.file_type,
+                'file_url', na.file_url,
+                'file_size_kb', na.file_size_kb
+              )
+            )
+            FROM notice_attachments na
+            WHERE na.notice_id::text = n.id::text
+          ),
+          '[]'::json
+        ) AS attachments
       FROM notices n
       ${whereClause}
       ORDER BY n.created_at DESC
@@ -646,7 +690,7 @@ export class NoticesService implements OnModuleInit {
 
     if (roleFilter && roleFilter !== 'all') {
       params.push(roleFilter.toUpperCase());
-      recWhere += ` AND u.role = $${params.length}`;
+      recWhere += ` AND UPPER(u.role::text) = $${params.length}`;
     }
 
     if (search) {
@@ -662,23 +706,40 @@ export class NoticesService implements OnModuleInit {
       SELECT 
         nr.id AS recipient_id,
         nr.user_id,
-        nr.is_read,
+        (CASE WHEN nr.is_read::text = 'true' OR nr.is_read::text = '1' THEN true ELSE false END) AS is_read,
         nr.read_at,
-        nr.acknowledged,
+        (CASE WHEN nr.acknowledged::text = 'true' OR nr.acknowledged::text = '1' THEN true ELSE false END) AS acknowledged,
         nr.acknowledged_at,
         u.email,
-        u.role,
+        UPPER(u.role::text) AS role,
         COALESCE(s.name, f.name, u.email) AS name,
         COALESCE(s.registration_no, s.rollno, f.emp_id, '—') AS identifier,
         COALESCE(s.batch_cd, d.name, 'General') AS group_info,
+        s.course_cd,
+        s.department_id,
+        s.batch_cd,
+        s.batch_id,
+        s.admission_year,
         s.photo_url AS student_photo,
         f.photo_url AS faculty_photo
-      FROM notice_recipients nr
+      FROM (
+        SELECT DISTINCT ON (user_id) *
+        FROM notice_recipients
+        WHERE notice_id::text = $1::text
+      ) nr
       JOIN users u ON u.id::text = nr.user_id::text
-      LEFT JOIN students s ON s.user_id::text = u.id::text
-      LEFT JOIN faculty f ON f.user_id::text = u.id::text
+      LEFT JOIN (
+        SELECT DISTINCT ON (user_id) *
+        FROM students
+        WHERE user_id IS NOT NULL
+      ) s ON s.user_id::text = u.id::text
+      LEFT JOIN (
+        SELECT DISTINCT ON (user_id) *
+        FROM faculty
+        WHERE user_id IS NOT NULL
+      ) f ON f.user_id::text = u.id::text
       LEFT JOIN departments d ON d.id::text = f.department_id::text
-      ${recWhere}
+      ${recWhere.replace('WHERE nr.notice_id::text = $1::text', 'WHERE 1=1')}
       ORDER BY nr.is_read DESC, nr.read_at DESC NULLS LAST, name ASC
     `;
 

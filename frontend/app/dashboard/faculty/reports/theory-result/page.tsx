@@ -211,6 +211,7 @@ const CHART_COLORS = [
 export default function TheoryResultReportPage() {
   const pathname = usePathname();
   const currentRole: 'admin' | 'faculty' = (pathname && pathname.includes('/dashboard/admin/')) ? 'admin' : 'faculty';
+  const [userRole, setUserRole] = useState<string>('FACULTY');
 
   // ─── 1. Colleges State (Rule 1: colg_cd) ───────────────────────────────────
   const [colleges, setColleges] = useState<College[]>([]);
@@ -271,6 +272,9 @@ export default function TheoryResultReportPage() {
 
   const fetchColleges = async () => {
     try {
+      const role = (typeof window !== 'undefined' ? (localStorage.getItem('role') || localStorage.getItem('user_role') || 'FACULTY') : 'FACULTY').toUpperCase();
+      setUserRole(role);
+
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
       const res = await fetch(`${API_BASE}/college-master/colleges`, { headers });
@@ -278,7 +282,6 @@ export default function TheoryResultReportPage() {
         const json = await res.json();
         const rawList: College[] = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
         const list = dedupeBy(rawList, (c: College) => String(c.colg_cd || c.code || c.slug || c.id));
-        setColleges(list);
 
         const currentSlug = getInitialTenantSlug();
         const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
@@ -286,12 +289,29 @@ export default function TheoryResultReportPage() {
           (savedColgCd && String(c.colg_cd || c.code) === savedColgCd) ||
           c.slug === currentSlug || String(c.code) === currentSlug || String(c.colg_cd) === currentSlug
         );
+
+        let filteredList = list;
+        if (role !== 'SUPER_ADMIN') {
+          if (found) {
+            filteredList = [found];
+          } else {
+            filteredList = [{
+              id: '1',
+              colg_cd: savedColgCd || '1',
+              code: savedColgCd || '1',
+              name: 'SRMS College of Engineering & Technology, Bareilly',
+              slug: currentSlug,
+            }];
+          }
+        }
+        setColleges(filteredList);
+
         if (found) {
           setSelectedCollegeSlug(found.slug);
           setSelectedColgCd(String(found.colg_cd || found.code || '1'));
-        } else if (list.length > 0) {
-          setSelectedCollegeSlug(list[0].slug);
-          setSelectedColgCd(String(list[0].colg_cd || list[0].code || '1'));
+        } else if (filteredList.length > 0) {
+          setSelectedCollegeSlug(filteredList[0].slug);
+          setSelectedColgCd(String(filteredList[0].colg_cd || filteredList[0].code || '1'));
         }
       }
     } catch (e) {
@@ -597,6 +617,25 @@ export default function TheoryResultReportPage() {
   const activePaper = useMemo(() => {
     return filteredPapers.find(p => p.code === selectedPaperCode) || filteredPapers[0] || allFetchedPapers[0] || null;
   }, [filteredPapers, allFetchedPapers, selectedPaperCode]);
+
+  const isPracticalPaper = useMemo(() => {
+    if (!activePaper) return false;
+    const pName = (activePaper.name || '').toLowerCase();
+    const pCode = (activePaper.code || '').toLowerCase();
+    const pType = ((activePaper as any).type || (activePaper as any).paper_type || (activePaper as any).mode || '').toLowerCase();
+    
+    if (pType === 'practical' || pName.includes('practical') || pCode.includes('prac') || pCode.includes('lab')) {
+      return true;
+    }
+    
+    // Check if sections contain practical
+    const hasPracticalSection = (activePaper.sections || []).some(
+      (sec: any) => sec.type === 'PRACTICAL' || (sec.name || '').toLowerCase().includes('practical')
+    );
+    if (hasPracticalSection) return true;
+
+    return false;
+  }, [activePaper]);
 
   // ─── Dynamic SubTopics List from Active Paper ──────────────────────────────
   const activePaperSubTopics = useMemo<SubTopicSummary[]>(() => {
@@ -973,7 +1012,8 @@ export default function TheoryResultReportPage() {
   }, [activeStudent, activePaperSubTopics]);
 
   return (
-    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0B1120] text-[#1B1E28] dark:text-slate-100 font-sans transition-colors duration-200">
+    <>
+      <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0B1120] text-[#1B1E28] dark:text-slate-100 font-sans transition-colors duration-200">
       <Sidebar role={currentRole} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title={currentRole === 'admin' ? 'Admin MIS Reports — Theory Assessment Results' : 'Faculty MIS Reports — Theory Assessment Results'} />
@@ -1025,46 +1065,57 @@ export default function TheoryResultReportPage() {
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          {/* STEP 1: 7-STEP HIERARCHICAL CASCADING BAR (Order: College->Course->Branch->Batch->Sem->Dept->Subj) */}
+          {/* STEP 1: 6-STEP HIERARCHICAL CASCADING BAR (Order: College->Course->Branch->Batch->Sem->Subj) */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
             <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">1</span>
-                STEP 1: SELECT HIERARCHY (1. COLLEGE → 2. COURSE → 3. BRANCH → 4. BATCH → 5. SEMESTER → 6. DEPARTMENT → 7. SUBJECT)
+                STEP 1: SELECT HIERARCHY (1. COLLEGE → 2. COURSE → 3. BRANCH → 4. BATCH → 5. SEMESTER → 6. SUBJECT)
               </h3>
               <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-[#F36C21]/10 text-[#F36C21] border border-[#F36C21]/20">
                 Rule 1–5 Strict Standard
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-xs">
               {/* 1. College (colg_cd) */}
               <div>
                 <label className="block text-[10px] font-bold text-[#F36C21] uppercase mb-1">1. College *</label>
-                <select
-                  value={selectedColgCd}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedColgCd(val);
-                    const found = colleges.find(c => String(c.colg_cd || c.code) === val);
-                    if (found) {
-                      setSelectedCollegeSlug(found.slug);
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('colg_cd', val);
-                        localStorage.setItem('tenantSlug', found.slug);
-                        localStorage.setItem('selectedTenant', found.slug);
+                <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
+                  <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1 shrink-0">
+                    <span>🏛️</span>
+                  </span>
+                  <select
+                    value={selectedColgCd}
+                    disabled={userRole !== 'SUPER_ADMIN'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedColgCd(val);
+                      const found = colleges.find(c => String(c.colg_cd || c.code) === val);
+                      if (found) {
+                        setSelectedCollegeSlug(found.slug);
+                        if (typeof window !== 'undefined') {
+                          localStorage.setItem('colg_cd', val);
+                          localStorage.setItem('tenantSlug', found.slug);
+                          localStorage.setItem('selectedTenant', found.slug);
+                        }
                       }
-                    }
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                >
-                  {colleges.map(c => (
-                    <option key={c.code || c.slug} value={String(c.colg_cd || c.code)}>
-                      [{c.colg_cd || c.code}] {c.name || ''}
-                    </option>
-                  ))}
-                </select>
+                    }}
+                    className="w-full bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer disabled:cursor-not-allowed text-xs truncate"
+                  >
+                    {colleges.map(c => (
+                      <option key={c.code || c.slug} value={String(c.colg_cd || c.code)}>
+                        [{c.colg_cd || c.code}] {c.name || ''}
+                      </option>
+                    ))}
+                  </select>
+                  {userRole !== 'SUPER_ADMIN' && (
+                    <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shrink-0">
+                      🔒 Locked
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* 2. Course (course_cd) */}
@@ -1133,29 +1184,9 @@ export default function TheoryResultReportPage() {
                 </select>
               </div>
 
-              {/* 6. Department (dept_cd) */}
+              {/* 6. Subject (subject_cd) */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">6. Department *</label>
-                <select
-                  value={selectedDeptCd}
-                  onChange={(e) => setSelectedDeptCd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                >
-                  {filteredDepartments.length === 0 ? (
-                    <option value="">No departments</option>
-                  ) : (
-                    filteredDepartments.map(d => (
-                      <option key={d.name || d.code} value={d.name || d.code}>
-                        {d.name} {d.course_name ? `(${d.course_name})` : d.code ? `(${d.code})` : ''}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              {/* 7. Subject (subject_cd) */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">7. Subject *</label>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">6. Subject *</label>
                 <select
                   value={selectedSubjectCd}
                   onChange={(e) => setSelectedSubjectCd(e.target.value)}
@@ -1403,7 +1434,7 @@ export default function TheoryResultReportPage() {
           {/* STUDENT ANALYSIS MODAL (4 TABS: SubTopics | Tracking | Practical | Chart) */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {modalOpen && activeStudent && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[99999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 w-screen h-screen min-h-screen overflow-y-auto">
               <div className="bg-white dark:bg-[#1B1E28] rounded-[24px] max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700 animate-scaleUp">
                 
                 {/* 1. Modal Top Bar */}
@@ -1439,7 +1470,7 @@ export default function TheoryResultReportPage() {
                   </button>
                 </div>
 
-                {/* 2. Modal 4 Tabs Bar (with Practical Assessment before Chart) */}
+                {/* 2. Modal Tabs Bar (Practical Assessment only shown for Practical papers) */}
                 <div className="px-6 border-b border-slate-200 dark:border-slate-800 flex items-center gap-6 bg-slate-100 dark:bg-slate-950/80 overflow-x-auto">
                   <button
                     type="button"
@@ -1461,17 +1492,19 @@ export default function TheoryResultReportPage() {
                     <span>📝</span>
                     <span>2. Question Paper Tracking</span>
                   </button>
-                  {/* Tab 3: Practical Assessment (Before Chart) */}
-                  <button
-                    type="button"
-                    onClick={() => setModalTab('practical')}
-                    className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
-                      modalTab === 'practical' ? 'border-[#F36C21] text-[#F36C21]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                    }`}
-                  >
-                    <span>🧪</span>
-                    <span>3. Practical Assessment</span>
-                  </button>
+                  {/* Tab 3: Practical Assessment (Hidden for theory papers) */}
+                  {isPracticalPaper && (
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('practical')}
+                      className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+                        modalTab === 'practical' ? 'border-[#F36C21] text-[#F36C21]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>🧪</span>
+                      <span>3. Practical Assessment</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setModalTab('chart')}
@@ -1480,7 +1513,7 @@ export default function TheoryResultReportPage() {
                     }`}
                   >
                     <span>📊</span>
-                    <span>4. Chart</span>
+                    <span>{isPracticalPaper ? '4. Chart' : '3. Chart'}</span>
                   </button>
                 </div>
 
@@ -1672,9 +1705,9 @@ export default function TheoryResultReportPage() {
                   )}
 
                   {/* ───────────────────────────────────────────────────────────── */}
-                  {/* TAB 3: Practical Assessment (4 Categories & Dedicated Chart) */}
+                  {/* TAB 3: Practical Assessment (Only for Practical papers) */}
                   {/* ───────────────────────────────────────────────────────────── */}
-                  {modalTab === 'practical' && (
+                  {isPracticalPaper && modalTab === 'practical' && (
                     <div className="space-y-6">
                       {/* Practical Banner */}
                       <div className="p-4 rounded-2xl bg-gradient-to-r from-[#F36C21] to-[#FF8A48] text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-md">
@@ -1996,5 +2029,6 @@ export default function TheoryResultReportPage() {
         </main>
       </div>
     </div>
+    </>
   );
 }

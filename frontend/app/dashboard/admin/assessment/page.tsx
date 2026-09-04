@@ -400,9 +400,10 @@ const DEFAULT_INITIAL_QUESTIONS: QuestionItem[] = [
 
 export default function AssessmentMasterPage() {
   const [activeTab, setActiveTab] = useState<'bank' | 'design' | 'publish'>('bank');
+  const [userRole, setUserRole] = useState<string>('ADMIN');
 
-  // ─── 8-STEP CASCADING HIERARCHY STATE ────────────────────────────────────
-  // Sequence: 1. College -> 2. Course -> 3. Branch -> 4. Batch -> 5. Semester -> 6. Department -> 7. Subject -> 8. MANAGEMENT / ENGINEERING YEAR
+  // ─── 7-STEP CASCADING HIERARCHY STATE ────────────────────────────────────
+  // Sequence: 1. College -> 2. Course -> 3. Branch -> 4. Batch -> 5. Semester -> 6. Subject -> 7. MANAGEMENT / ENGINEERING YEAR
   const [colleges, setColleges] = useState<College[]>([]);
   const [selectedColgCd, setSelectedColgCd] = useState<string>(getInitialColgCd);
   const [selectedCollegeSlug, setSelectedCollegeSlug] = useState<string>(getInitialTenantSlug);
@@ -566,25 +567,53 @@ export default function AssessmentMasterPage() {
 
   const fetchColleges = async () => {
     try {
+      const roleVal = (typeof window !== 'undefined'
+        ? (localStorage.getItem('role') || localStorage.getItem('auth_role') || localStorage.getItem('user_role') || 'ADMIN')
+        : 'ADMIN').toUpperCase();
+      setUserRole(roleVal);
+
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
-      const res = await fetch(`${API_BASE}/college-master/colleges`, { headers });
-      if (res.ok) {
+      const res = await fetch(`${API_BASE}/college-master/colleges`, { headers }).catch(() => null);
+      let list: College[] = [];
+      if (res && res.ok) {
         const json = await res.json();
         const rawList = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
-        const list: College[] = dedupeBy(rawList, (c: College) => String(c.code || c.slug || c.id));
-        setColleges(list);
+        list = dedupeBy(rawList, (c: College) => String(c.code || c.slug || c.id));
+      }
 
-        const currentSlug = getInitialTenantSlug();
-        const savedColgCd = getInitialColgCd();
-        const found = list.find((c: College) => String(c.code || c.id) === savedColgCd || c.slug === currentSlug || c.code === currentSlug);
+      const currentSlug = getInitialTenantSlug();
+      const savedColgCd = getInitialColgCd();
+      const found = list.find((c: College) => String(c.code || c.id) === savedColgCd || c.slug === currentSlug || c.code === currentSlug);
+
+      let filteredList = list;
+      if (roleVal !== 'SUPER_ADMIN') {
         if (found) {
-          setSelectedCollegeSlug(found.slug);
-          setSelectedColgCd(String(found.code || found.id || '1'));
-        } else if (list.length > 0) {
-          setSelectedCollegeSlug(list[0].slug);
-          setSelectedColgCd(String(list[0].code || list[0].id || '1'));
+          filteredList = [found];
+        } else {
+          filteredList = [{
+            id: '1',
+            code: savedColgCd || '1',
+            name: 'SRMS College of Engineering & Technology, Bareilly',
+            slug: currentSlug,
+          }];
         }
+      } else if (filteredList.length === 0) {
+        filteredList = [{
+          id: '1',
+          code: savedColgCd || '1',
+          name: 'SRMS College of Engineering & Technology, Bareilly',
+          slug: currentSlug,
+        }];
+      }
+      setColleges(filteredList);
+
+      if (found) {
+        setSelectedCollegeSlug(found.slug);
+        setSelectedColgCd(String(found.code || found.id || '1'));
+      } else if (filteredList.length > 0) {
+        setSelectedCollegeSlug(filteredList[0].slug);
+        setSelectedColgCd(String(filteredList[0].code || filteredList[0].id || '1'));
       }
     } catch (e) {
       console.error('Failed to fetch colleges', e);
@@ -743,18 +772,29 @@ export default function AssessmentMasterPage() {
       const isMed = b.code === 'ANA' || b.code === 'PHY' || (b.name && (b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology')));
       return !isMed;
     });
-    // Try filtering by course_cd first
+
     const courseFiltered = nonMedBranches.filter(b => {
       if (!selectedCourseCd) return true;
       return String(b.course_cd) === String(selectedCourseCd);
     });
-    // If course-specific branches found, use those; else show all non-medical branches for this college
+
+    const curCourse = filteredCourses.find(c => String(c.course_cd || c.code) === String(selectedCourseCd));
+    const courseName = curCourse?.name?.replace(/^\[#\d+\]\s*/, '').trim() || (selectedCourseCd === '13' ? 'BCA' : 'General');
+
     const list = courseFiltered.length > 0 ? courseFiltered : nonMedBranches;
-    const base = list.length > 0 ? list : [
-      { branch_cd: '1', code: '1', name: 'General Branch', course_cd: selectedCourseCd },
-    ];
-    return dedupeBy(base, b => `${b.branch_cd || b.code || b.id}|${b.course_cd || ''}`);
-  }, [branches, selectedCourseCd, isMedicalCollege]);
+    const mapped = (list.length > 0 ? list : [{ branch_cd: '1', code: '1', name: '-', course_cd: selectedCourseCd }]).map(b => {
+      const rawName = (b.name || '').trim();
+      const validName = (rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE')
+        ? rawName
+        : `${courseName} General`;
+      return {
+        ...b,
+        name: validName,
+      };
+    });
+
+    return dedupeBy(mapped, b => `${b.branch_cd || b.code || b.id}|${b.course_cd || ''}`);
+  }, [branches, selectedCourseCd, isMedicalCollege, filteredCourses]);
 
   useEffect(() => {
     if (filteredBranches.length > 0) {
@@ -772,8 +812,8 @@ export default function AssessmentMasterPage() {
       return String(b.course_cd) === String(selectedCourseCd) || (b.code && b.code.includes(`C${selectedCourseCd}`));
     });
     const base = list.length > 0 ? list : [
-      { id: 'b1', code: 'B2026-C13-1', name: 'Batch 2026 (BCA)', year: 2026, batch_cd: 'B2026-C13-1' },
-      { id: 'b2', code: 'B2025-C13-1', name: 'Batch 2025 (BCA)', year: 2025, batch_cd: 'B2025-C13-1' },
+      { id: 'b1', code: '2', name: '2025', year: 2025, batch_cd: '2', course_cd: selectedCourseCd },
+      { id: 'b2', code: '1', name: '2026', year: 2026, batch_cd: '1', course_cd: selectedCourseCd },
     ];
     return dedupeBy(base, b => String(b.code || b.batch_cd || b.id));
   }, [batches, selectedCourseCd]);
@@ -1143,7 +1183,7 @@ export default function AssessmentMasterPage() {
     const unitObj = allUnits.find(u => u.id === selectedUnitId || u.code === selectedUnitId);
 
     const payload = mode === 'MCQ' ? {
-      departmentId: selectedDept || null,
+      departmentId: selectedBranchCd || selectedDept || null,
       subjectId: selectedSubject || null,
       professionalPhase: profPhaseName,
       academicSession: selectedAcademicYear,
@@ -1165,7 +1205,7 @@ export default function AssessmentMasterPage() {
       difficultyLevel: mcqDifficulty,
       maxMarks: Number(mcqMaxMarks) || 1.0,
     } : {
-      departmentId: selectedDept || null,
+      departmentId: selectedBranchCd || selectedDept || null,
       subjectId: selectedSubject || null,
       professionalPhase: profPhaseName,
       academicSession: selectedAcademicYear,
@@ -1812,14 +1852,14 @@ export default function AssessmentMasterPage() {
             <div className="space-y-6">
 
               {/* ═════════════════════════════════════════════════════════════════════════ */}
-              {/* 8-STEP HIERARCHICAL CASCADING BAR */}
-              {/* Sequence: 1. College -> 2. Course -> 3. Branch -> 4. Batch -> 5. Semester -> 6. Department -> 7. Subject -> 8. MANAGEMENT / ENGINEERING YEAR */}
+              {/* 7-STEP HIERARCHICAL CASCADING BAR */}
+              {/* Sequence: 1. College -> 2. Course -> 3. Branch -> 4. Batch -> 5. Semester -> 6. Subject -> 7. MANAGEMENT / ENGINEERING YEAR */}
               {/* ═════════════════════════════════════════════════════════════════════════ */}
               <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 space-y-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
                 <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
                   <h3 className="text-xs font-black uppercase tracking-wider text-[#5B4BFF] flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">1</span>
-                    <span>ASSESSMENT CONTEXT: 1. COLLEGE → 2. COURSE → 3. BRANCH → 4. BATCH → 5. SEMESTER → 6. DEPARTMENT → 7. SUBJECT → 8. MANAGEMENT / ENGINEERING YEAR</span>
+                    <span>ASSESSMENT CONTEXT: 1. COLLEGE → 2. COURSE → 3. BRANCH → 4. BATCH → 5. SEMESTER → 6. SUBJECT → 7. MANAGEMENT / ENGINEERING YEAR</span>
                   </h3>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono uppercase font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/20">
@@ -1831,48 +1871,62 @@ export default function AssessmentMasterPage() {
                   </div>
                 </div>
 
-                {/* 8 Cascading Controls Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 text-xs">
-                  {/* 1. College (colg_cd) */}
+                {/* 7 Cascading Controls Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 text-xs">
+                  {/* 1. College (colg_cd) - Locked for non-SuperAdmin */}
                   <div>
-                    <label className="block text-[10px] font-bold text-[#F36C21] uppercase mb-1">
-                      1. College *
+                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <span>🏛️</span> 1. College *
                     </label>
-                    <select
-                      value={selectedColgCd}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedColgCd(val);
-                        const found = colleges.find(c => String(c.code || c.id) === val || c.slug === val);
-                        if (found) {
-                          handleCollegeChange(found.slug);
-                        }
-                      }}
-                      disabled={metaLoading}
-                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                    >
-                      {colleges.map(c => (
-                        <option key={c.code || c.slug} value={String(c.code || c.id || '1')}>
-                          [{c.code || '1'}] {c.name || ''}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative flex items-center">
+                      <select
+                        value={selectedColgCd}
+                        disabled={userRole !== 'SUPER_ADMIN'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedColgCd(val);
+                          const found = colleges.find(c => String(c.code || c.id) === val || c.slug === val);
+                          if (found) {
+                            handleCollegeChange(found.slug);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold disabled:cursor-not-allowed appearance-none cursor-pointer truncate pr-14 focus:outline-none focus:border-[#5B4BFF]"
+                      >
+                        {colleges.map(c => (
+                          <option key={c.code || c.slug} value={String(c.code || c.id || '1')}>
+                            [{c.code || '1'}] {c.name || ''}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute right-2 pointer-events-none flex items-center gap-1">
+                        {userRole !== 'SUPER_ADMIN' ? (
+                          <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                            <span>🔒</span>
+                            <span>Locked</span>
+                          </span>
+                        ) : (
+                          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {/* 2. Course (course_cd) */}
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                      2. Course *
+                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <span>🎓</span> 2. Course <span className="text-[#5B4BFF] dark:text-indigo-400 font-extrabold">({filteredCourses.length})</span> *
                     </label>
                     <select
                       value={selectedCourseCd}
                       onChange={(e) => setSelectedCourseCd(e.target.value)}
                       disabled={metaLoading}
-                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] cursor-pointer truncate"
                     >
                       {filteredCourses.map(c => (
                         <option key={c.course_cd || c.code} value={String(c.course_cd || c.code)}>
-                          {c.name} ({c.course_cd || c.code})
+                          [#{c.course_cd || c.code}] {c.name}
                         </option>
                       ))}
                     </select>
@@ -1880,18 +1934,18 @@ export default function AssessmentMasterPage() {
 
                   {/* 3. Branch (branch_cd) */}
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                      3. Branch *
+                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <span>🏢</span> 3. Branch <span className="text-[#5B4BFF] dark:text-indigo-400 font-extrabold">({filteredBranches.length})</span> *
                     </label>
                     <select
                       value={selectedBranchCd}
                       onChange={(e) => setSelectedBranchCd(e.target.value)}
                       disabled={metaLoading}
-                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] cursor-pointer truncate"
                     >
                       {filteredBranches.map(b => (
                         <option key={b.branch_cd || b.code} value={b.branch_cd || b.code}>
-                          {b.name} ({b.branch_cd || b.code})
+                          [#{b.branch_cd || b.code}] {b.name}
                         </option>
                       ))}
                     </select>
@@ -1899,18 +1953,18 @@ export default function AssessmentMasterPage() {
 
                   {/* 4. Batch */}
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                      4. Batch *
+                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <span>👥</span> 4. Batch <span className="text-[#5B4BFF] dark:text-indigo-400 font-extrabold">({filteredBatches.length})</span> *
                     </label>
                     <select
                       value={selectedBatchCd}
                       onChange={(e) => setSelectedBatchCd(e.target.value)}
                       disabled={metaLoading}
-                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] cursor-pointer truncate"
                     >
                       {filteredBatches.map(b => (
                         <option key={b.code || b.batch_cd || b.id} value={b.code || b.batch_cd || b.id}>
-                          {b.name || `Batch ${b.year}`} ({b.code || b.batch_cd})
+                          [#{b.batch_cd || b.code}] Batch {b.name || b.year}
                         </option>
                       ))}
                     </select>
@@ -1918,14 +1972,14 @@ export default function AssessmentMasterPage() {
 
                   {/* 5. Semester */}
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                      5. Semester *
+                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <span>📖</span> 5. Semester *
                     </label>
                     <select
                       value={selectedSemCd}
                       onChange={(e) => setSelectedSemCd(e.target.value)}
                       disabled={metaLoading}
-                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[#5B4BFF] dark:text-indigo-400 font-bold focus:outline-none focus:border-[#5B4BFF] cursor-pointer"
                     >
                       {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
                         <option key={s} value={String(s)}>Semester {s}</option>
@@ -1933,58 +1987,39 @@ export default function AssessmentMasterPage() {
                     </select>
                   </div>
 
-                  {/* 6. Department */}
+                  {/* 6. Subject */}
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                      6. Department *
-                    </label>
-                    <select
-                      value={selectedDept}
-                      onChange={(e) => handleDepartmentChange(e.target.value)}
-                      disabled={metaLoading}
-                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                    >
-                      {filteredDepartments.map(d => (
-                        <option key={d.id || d.code} value={d.id || d.code}>
-                          {d.name} ({d.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* 7. Subject */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-1">
-                      7. Subject *
+                    <label className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-1 flex items-center gap-1">
+                      <span>📚</span> 6. Subject <span className="font-extrabold text-emerald-600">({filteredSubjects.length})</span> *
                     </label>
                     <select
                       value={selectedSubject}
                       onChange={(e) => handleSubjectChange(e.target.value)}
                       disabled={metaLoading}
-                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-emerald-500/40 text-emerald-700 dark:text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-emerald-500/40 text-emerald-700 dark:text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 cursor-pointer truncate"
                     >
                       {filteredSubjects.map(s => (
                         <option key={s.id || s.code} value={s.id || s.code}>
-                          {s.name} ({s.code})
+                          [{s.code}] {s.name}
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  {/* 8. MANAGEMENT / ENGINEERING YEAR */}
+                  {/* 7. MANAGEMENT / ENGINEERING YEAR */}
                   <div>
-                    <label className="block text-[10px] font-bold text-[#F36C21] uppercase mb-1">
-                      8. MANAGEMENT / ENGINEERING YEAR *
+                    <label className="block text-[10px] font-bold text-[#F36C21] uppercase mb-1 flex items-center gap-1">
+                      <span>📅</span> 7. Academic Year *
                     </label>
                     <select
                       value={selectedAcademicYear}
                       onChange={(e) => setSelectedAcademicYear(e.target.value)}
                       disabled={metaLoading}
-                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-orange-500/40 text-[#F36C21] font-bold focus:outline-none focus:border-[#F36C21]"
+                      className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-orange-500/40 text-[#F36C21] font-bold focus:outline-none focus:border-[#F36C21] cursor-pointer"
                     >
-                      <option value="2026-2027">ENGINEERING &amp; MANAGEMENT (2026-2027)</option>
-                      <option value="2025-2026">ENGINEERING &amp; MANAGEMENT (2025-2026)</option>
-                      <option value="2024-2025">ENGINEERING &amp; MANAGEMENT (2024-2025)</option>
+                      <option value="2026-2027">2026-2027 (Current)</option>
+                      <option value="2025-2026">2025-2026</option>
+                      <option value="2024-2025">2024-2025</option>
                     </select>
                   </div>
                 </div>

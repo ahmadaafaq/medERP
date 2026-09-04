@@ -74,6 +74,11 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   const [branchesList, setBranchesList] = useState<DropdownItem[]>([]);
   const [batchesList, setBatchesList] = useState<DropdownItem[]>([]);
 
+  // User Auth & Tenant Context State
+  const [userRole, setUserRole] = useState<string>(role || 'STUDENT');
+  const [userColgCd, setUserColgCd] = useState<string>('1');
+  const [userTenantSlug, setUserTenantSlug] = useState<string>('srms-cet-bareilly');
+
   const [selectedCollege, setSelectedCollege] = useState('1');
   const [selectedCourse, setSelectedCourse] = useState('13'); // BCA
   const [selectedBranch, setSelectedBranch] = useState('1');
@@ -211,40 +216,92 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     }
   }, [selectedStudentUid, matrixStudents, matrixSubjects]);
 
+  const handleCollegeChange = async (colgCode: string) => {
+    setSelectedCollege(colgCode);
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${colgCode}&tenant=${userTenantSlug}`);
+      if (res.ok) {
+        const j = await res.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        const mapped = list.map((c: any) => ({
+          id: String(c.course_cd || c.code || '13'),
+          code: String(c.course_cd || c.code || '13'),
+          name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+        }));
+        setCoursesList(mapped);
+        if (mapped.length > 0) {
+          const firstCourse = mapped[0].code;
+          setSelectedCourse(firstCourse);
+          fetchBranchesAndBatches(colgCode, firstCourse, mapped);
+        }
+      }
+    } catch (e) {
+      console.warn('Error changing college:', e);
+    }
+  };
+
+  const handleCourseChange = (courseCode: string) => {
+    setSelectedCourse(courseCode);
+    fetchBranchesAndBatches(selectedCollege, courseCode);
+  };
+
   const fetchAcademicMetadata = async () => {
     try {
+      let roleVal = role || 'STUDENT';
+      let userColg = '1';
+      let userSlug = 'srms-cet-bareilly';
+      if (typeof window !== 'undefined') {
+        roleVal = (localStorage.getItem('role') || localStorage.getItem('auth_role') || role || 'STUDENT').toUpperCase();
+        userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+        userSlug = (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly')
+          .replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+        if (userSlug === 'srms-cet') userSlug = 'srms-cet-bareilly';
+        if (userSlug === 'srms-cetr') userSlug = 'srms-cetr-bareilly';
+        setUserRole(roleVal);
+        setUserColgCd(userColg);
+        setUserTenantSlug(userSlug);
+      }
+
       const [colgRes, crsRes] = await Promise.all([
         fetch('/api/srms/colleges').catch(() => null),
-        fetch('/api/srms/courses?colgcd=1').catch(() => null),
+        fetch(`/api/srms/courses?colgcd=${userColg}&tenant=${userSlug}`).catch(() => null),
       ]);
 
+      let loadedColleges: DropdownItem[] = [];
       if (colgRes && colgRes.ok) {
         const j = await colgRes.json();
         const list = Array.isArray(j) ? j : j.data || [];
-        setCollegesList(
-          list.map((c: any) => ({
-            id: String(c.colg_cd || c.code || '1'),
-            code: String(c.colg_cd || c.code || '1'),
-            name: c.colg_name || c.name || `College ${c.colg_cd || 1}`,
-          }))
-        );
+        const mappedList: DropdownItem[] = list.map((c: any) => ({
+          id: String(c.colg_cd || c.code || '1'),
+          code: String(c.colg_cd || c.code || '1'),
+          name: c.colg_name || c.name || `College ${c.colg_cd || 1}`,
+        }));
+
+        if (roleVal !== 'SUPER_ADMIN') {
+          const myCol = mappedList.find((c: any) => String(c.code) === String(userColg) || String(c.id) === String(userColg));
+          loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SRMS CET,BAREILLY' }];
+          setSelectedCollege(loadedColleges[0].code || '1');
+        } else {
+          loadedColleges = mappedList;
+        }
+        setCollegesList(loadedColleges);
       } else {
-        setCollegesList([
-          { id: '1', code: '1', name: 'SRMS CET,BAREILLY' },
-          { id: '2', code: '2', name: 'SRMS CETR,BAREILLY' },
-        ]);
+        const defaultCol = [{ id: userColg, code: userColg, name: 'SRMS CET,BAREILLY' }];
+        setCollegesList(defaultCol);
+        setSelectedCollege(userColg);
       }
 
       if (crsRes && crsRes.ok) {
         const j = await crsRes.json();
         const list = Array.isArray(j) ? j : j.data || [];
-        setCoursesList(
-          list.map((c: any) => ({
-            id: String(c.course_cd || c.code || '13'),
-            code: String(c.course_cd || c.code || '13'),
-            name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
-          }))
-        );
+        const mappedCourses: DropdownItem[] = list.map((c: any) => ({
+          id: String(c.course_cd || c.code || '13'),
+          code: String(c.course_cd || c.code || '13'),
+          name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+        }));
+        setCoursesList(mappedCourses);
+        const crsToUse = selectedCourse || (mappedCourses[0] ? mappedCourses[0].code : '13');
+        fetchBranchesAndBatches(userColg, crsToUse, mappedCourses, userSlug);
       } else {
         setCoursesList([]);
       }
@@ -253,23 +310,65 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     }
   };
 
-  const fetchBranchesAndBatches = async (colg: string, crs: string) => {
+  const fetchBranchesAndBatches = async (
+    colg: string,
+    crs: string,
+    customCourses?: DropdownItem[],
+    customSlug?: string
+  ) => {
+    const effectiveColg = colg || selectedCollege || '1';
+    const effectiveCrs = crs || selectedCourse || '13';
+    const slug = customSlug || userTenantSlug || 'srms-cet-bareilly';
+    const activeCourses = customCourses || coursesList;
+
     try {
       const [brRes, btRes] = await Promise.all([
-        fetch(`/api/srms/branches?colgcd=${colg}&coursecd=${crs}`).catch(() => null),
-        fetch(`/api/srms/batches?colgcd=${colg}&coursecd=${crs}`).catch(() => null),
+        fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${slug}`).catch(() => null),
+        fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${slug}`).catch(() => null),
       ]);
 
       if (brRes && brRes.ok) {
         const j = await brRes.json();
         const list = Array.isArray(j) ? j : j.data || [];
-        setBranchesList(
-          list.map((b: any) => ({
+        const courseObj = activeCourses.find(
+          (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
+        );
+        const courseName = (courseObj?.name || (effectiveCrs === '13' ? 'BCA' : 'Course'))
+          .replace(/^\[#\d+\]\s*/, '')
+          .trim();
+
+        const mapped: DropdownItem[] = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
+          const rawName = (b.branch_name || b.name || '').trim();
+          const validName =
+            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE'
+              ? rawName
+              : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} General`;
+          return {
             id: String(b.branch_cd || b.code || '1'),
             code: String(b.branch_cd || b.code || '1'),
-            name: b.branch_name || b.name || `Branch ${b.branch_cd || 1}`,
-          }))
+            name: validName,
+          };
+        });
+
+        if (mapped.length > 0) {
+          setBranchesList(mapped);
+          setSelectedBranch((prev) => {
+            const exists = mapped.some((b) => String(b.code) === String(prev));
+            return exists ? prev : mapped[0].code;
+          });
+        } else {
+          const fallback = [{ id: '1', code: '1', name: `${courseName} General` }];
+          setBranchesList(fallback);
+          setSelectedBranch('1');
+        }
+      } else {
+        const courseObj = activeCourses.find(
+          (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
         );
+        const courseName = (courseObj?.name || 'BCA').replace(/^\[#\d+\]\s*/, '').trim();
+        const fallback = [{ id: '1', code: '1', name: `${courseName} General` }];
+        setBranchesList(fallback);
+        setSelectedBranch('1');
       }
 
       if (btRes && btRes.ok) {
@@ -282,6 +381,10 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         }));
         if (mapped.length > 0) {
           setBatchesList(mapped);
+          setSelectedBatch((prev) => {
+            const exists = mapped.some((b: any) => String(b.code) === String(prev));
+            return exists ? prev : mapped[0].code;
+          });
         }
       }
     } catch (err) {
@@ -628,27 +731,45 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2.5 text-xs">
           {/* 1. College */}
           <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">1. College</label>
-            <select
-              value={selectedCollege}
-              disabled={role !== 'SUPER_ADMIN' && role !== 'ADMIN'}
-              onChange={(e) => setSelectedCollege(e.target.value)}
-              className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold cursor-pointer truncate text-[11px]"
-            >
-              {collegesList.map((c) => (
-                <option key={c.id} value={c.code}>
-                  [#{c.code}] {c.name}
-                </option>
-              ))}
-            </select>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
+              <span>🏛️</span> 1. College
+            </label>
+            <div className="relative flex items-center">
+              <select
+                value={selectedCollege}
+                disabled={userRole !== 'SUPER_ADMIN'}
+                onChange={(e) => handleCollegeChange(e.target.value)}
+                className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 pr-14 font-bold disabled:cursor-not-allowed appearance-none cursor-pointer truncate text-[11px]"
+              >
+                {collegesList.map((c) => (
+                  <option key={c.id} value={c.code}>
+                    [#{c.code}] {c.name}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-2 pointer-events-none flex items-center gap-1">
+                {userRole !== 'SUPER_ADMIN' ? (
+                  <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                    <span>🔒</span>
+                    <span>Locked</span>
+                  </span>
+                ) : (
+                  <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* 2. Course */}
           <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">2. Course</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
+              <span>🎓</span> 2. Course <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({coursesList.length})</span>
+            </label>
             <select
               value={selectedCourse}
-              onChange={(e) => setSelectedCourse(e.target.value)}
+              onChange={(e) => handleCourseChange(e.target.value)}
               className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold cursor-pointer truncate text-[11px]"
             >
               {coursesList.map((cr) => (
@@ -661,7 +782,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
           {/* 3. Branch */}
           <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">3. Branch</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
+              <span>🏢</span> 3. Branch <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({branchesList.length})</span>
+            </label>
             <select
               value={selectedBranch}
               onChange={(e) => setSelectedBranch(e.target.value)}
@@ -677,7 +800,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
           {/* 4. Batch */}
           <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">4. Batch</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
+              <span>👥</span> 4. Batch <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({batchesList.length})</span>
+            </label>
             <select
               value={selectedBatch}
               onChange={(e) => setSelectedBatch(e.target.value)}
@@ -693,7 +818,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
           {/* 5. Semester */}
           <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">5. Semester</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
+              <span>📖</span> 5. Semester
+            </label>
             <select
               value={selectedSem}
               onChange={(e) => setSelectedSem(e.target.value)}
@@ -709,7 +836,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
           {/* 6. Section */}
           <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">6. Section</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
+              <span>🔤</span> 6. Section
+            </label>
             <select
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}

@@ -158,8 +158,18 @@ export default function NoticeComposer() {
         requires_acknowledgement: requiresAck,
         scheduled_at: scheduledAt || null,
         expires_at: expiresAt || null,
-        targets,
-        attachments,
+        targets: targets.map((t) => ({
+          target_type: t.target_type,
+          target_value: String(t.target_value),
+          target_label: t.target_label || '',
+        })),
+        attachments: attachments.map((att: any) => ({
+          file_name: att.file_name,
+          file_type: att.file_type || 'pdf',
+          file_url: att.file_url,
+          file_size_kb: Number(att.file_size_kb) || 0,
+          file_data: att.file_data || undefined,
+        })),
       };
 
       const res = await fetch(`${API_BASE}/admin/notices?tenant=${slug}`, {

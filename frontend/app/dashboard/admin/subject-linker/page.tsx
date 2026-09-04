@@ -150,6 +150,11 @@ export default function SubjectLinkerPage() {
     setTimeout(() => setAlert(null), 4500);
   };
 
+  // User Auth & Tenant Context State
+  const [userRole, setUserRole] = useState<string>('ADMIN');
+  const [userColgCd, setUserColgCd] = useState<string>('1');
+  const [userTenantSlug, setUserTenantSlug] = useState<string>('srms-cet-bareilly');
+
   // 1. Initial Metadata Fetch (Colleges, Courses, Batches, All Depts, All Subjects, All Links)
   const fetchMetadata = async () => {
     setMetadataLoading(true);
@@ -157,13 +162,30 @@ export default function SubjectLinkerPage() {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
 
+      let role = 'ADMIN';
+      let userColg = '1';
+      let userSlug = 'srms-cet-bareilly';
+      if (typeof window !== 'undefined') {
+        role = (localStorage.getItem('role') || localStorage.getItem('auth_role') || 'ADMIN').toUpperCase();
+        userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+        userSlug = (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly')
+          .replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+        if (userSlug === 'srms-cet') userSlug = 'srms-cet-bareilly';
+        if (userSlug === 'srms-cetr') userSlug = 'srms-cetr-bareilly';
+        setUserRole(role);
+        setUserColgCd(userColg);
+        setUserTenantSlug(userSlug);
+      }
+
+      const activeTenantSlug = role === 'SUPER_ADMIN' ? 'all' : userSlug;
+
       const [colRes, crsRes, bchRes, deptRes, subRes, linkRes] = await Promise.all([
         fetch(`${API_BASE}/college-master/colleges`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/courses?tenant=all`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/batches?tenant=all`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/departments?tenant=all`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=all`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=all`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/college-master/courses?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/college-master/batches?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/departments?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
       ]);
 
       let loadedColleges: College[] = [];
@@ -176,8 +198,13 @@ export default function SubjectLinkerPage() {
         const colJson = await colRes.json();
         const colList = colJson.data || colJson;
         if (Array.isArray(colList)) {
-          loadedColleges = colList;
-          setColleges(colList);
+          if (role !== 'SUPER_ADMIN') {
+            const myCol = colList.find((c: any) => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
+            loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SRMS CET, Bareilly', slug: userSlug }];
+          } else {
+            loadedColleges = colList;
+          }
+          setColleges(loadedColleges);
         }
       }
 
@@ -227,22 +254,13 @@ export default function SubjectLinkerPage() {
 
       // Initialize default college selection
       if (loadedColleges.length > 0) {
-        const savedSlug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant')) : null;
-        const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
-
-        const defaultCol = loadedColleges.find(c =>
-          (savedSlug && (c.slug === savedSlug || c.id === savedSlug)) ||
-          (savedColgCd && (String((c as any).colg_cd) === savedColgCd || String(c.id) === savedColgCd || String(c.code) === savedColgCd)) ||
-          c.slug === 'srms-cet-bareilly' ||
-          String(c.code) === '1'
-        ) || loadedColleges[0];
-
+        const defaultCol = loadedColleges[0];
         const defaultColCode = defaultCol.code || defaultCol.id || '1';
-        const defaultColSlug = defaultCol.slug || 'srms-cet-bareilly';
+        const defaultColSlug = defaultCol.slug || userSlug || 'srms-cet-bareilly';
 
         setSelectedCollegeId(defaultColCode);
         setSelectedCollegeSlug(defaultColSlug);
-        setSelectedCollegeFilter(defaultColCode);
+        setSelectedCollegeFilter(role === 'SUPER_ADMIN' ? 'all' : defaultColCode);
         fetchFaculties(defaultColSlug);
 
         const matchingDepts = loadedDepts.filter(d =>
@@ -294,7 +312,14 @@ export default function SubjectLinkerPage() {
         } else if (Array.isArray(json?.items)) {
           dataList = json.items;
         }
-        setFaculties(dataList);
+        const seen = new Set<string>();
+        const dedupedList = dataList.filter(f => {
+          const key = f.emp_id || f.id;
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setFaculties(dedupedList);
       }
     } catch (err) {
       console.error('[SubjectLinker] Failed to fetch staff roster', err);
@@ -534,7 +559,7 @@ export default function SubjectLinkerPage() {
       d.branch_cd === selectedDeptId
     );
 
-    return faculties.filter(f => {
+    const filtered = faculties.filter(f => {
       // 1. College Match
       if (currentCol || colCode || colSlug || colId) {
         const isColMatch =
@@ -555,6 +580,14 @@ export default function SubjectLinkerPage() {
         if (!matchesTerm) return false;
       }
 
+      return true;
+    });
+
+    const seen = new Set<string>();
+    return filtered.filter(f => {
+      const key = f.emp_id || f.id;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
   }, [faculties, departments, selectedCollegeId, selectedCollegeSlug, selectedDeptId, facultySearchTerm, colleges]);
@@ -1034,18 +1067,33 @@ export default function SubjectLinkerPage() {
                     <label className="text-[11px] font-extrabold uppercase text-[#F36C21] tracking-wider flex items-center gap-1">
                       <span>1.</span> Choose College First *
                     </label>
-                    <select
-                      required
-                      value={selectedCollegeId}
-                      onChange={(e) => handleCollegeChange(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-xs text-slate-900 dark:text-white font-bold transition-all"
-                    >
-                      {colleges.map((c) => (
-                        <option key={c.id} value={c.code || c.id}>
-                          🏛️ [#{c.code || c.id}] {c.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative flex items-center">
+                      <select
+                        required
+                        disabled={userRole !== 'SUPER_ADMIN'}
+                        value={selectedCollegeId}
+                        onChange={(e) => handleCollegeChange(e.target.value)}
+                        className="w-full px-3.5 pr-14 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-xs text-slate-900 dark:text-white font-bold transition-all disabled:cursor-not-allowed appearance-none cursor-pointer truncate"
+                      >
+                        {colleges.map((c) => (
+                          <option key={c.id} value={c.code || c.id}>
+                            🏛️ [#{c.code || c.id}] {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute right-3 pointer-events-none flex items-center gap-1">
+                        {userRole !== 'SUPER_ADMIN' ? (
+                          <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                            <span>🔒</span>
+                            <span>Locked</span>
+                          </span>
+                        ) : (
+                          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {/* STEP 2: Select Course */}
@@ -1283,18 +1331,33 @@ export default function SubjectLinkerPage() {
 
                 <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                   {/* 2. College Filter */}
-                  <select
-                    value={selectedCollegeFilter}
-                    onChange={(e) => { setSelectedCollegeFilter(e.target.value); setSelectedDeptFilter('all'); }}
-                    className="px-3 py-2 text-xs rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white font-bold"
-                  >
-                    <option value="all">🏛️ All Colleges ({colleges.length})</option>
-                    {colleges.map((col) => (
-                      <option key={col.id} value={col.code || col.id}>
-                        🏛️ [#{col.code || col.id}] {col.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative flex items-center">
+                    <select
+                      value={selectedCollegeFilter}
+                      disabled={userRole !== 'SUPER_ADMIN'}
+                      onChange={(e) => { setSelectedCollegeFilter(e.target.value); setSelectedDeptFilter('all'); }}
+                      className="px-3.5 pr-14 py-2 text-xs rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white font-bold disabled:cursor-not-allowed appearance-none cursor-pointer truncate"
+                    >
+                      {userRole === 'SUPER_ADMIN' && <option value="all">🏛️ All Colleges ({colleges.length})</option>}
+                      {colleges.map((col) => (
+                        <option key={col.id} value={col.code || col.id}>
+                          🏛️ [#{col.code || col.id}] {col.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute right-2.5 pointer-events-none flex items-center gap-1">
+                      {userRole !== 'SUPER_ADMIN' ? (
+                        <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                          <span>🔒</span>
+                          <span>Locked</span>
+                        </span>
+                      ) : (
+                        <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
 
                   {/* 3. Department Filter */}
                   <select

@@ -204,9 +204,9 @@ export class NoticesController {
   // ──────────────────────────────────────────────────────────────────────────
   // ADMIN NOTICE ENDPOINTS
   // ──────────────────────────────────────────────────────────────────────────
+  @Public()
   @Post('admin/notices')
   @ApiOperation({ summary: 'Compose and send a new targeted notice' })
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN, UserRole.CLERK)
   async createNotice(
     @Body() dto: CreateNoticeDto,
     @Req() req: any,

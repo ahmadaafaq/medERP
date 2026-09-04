@@ -47,14 +47,21 @@ export class ChatController {
       } catch {}
     }
 
-    const headerId = dto?.sender_id || req.headers?.['x-user-id'] || tokenUser?.sub || tokenUser?.id || '2025107990';
-    const headerName = dto?.sender_name || req.headers?.['x-user-name'] || tokenUser?.name || tokenUser?.username || 'AAFREEN KHAN';
-    const headerRole = (dto?.sender_role || req.headers?.['x-user-role'] || tokenUser?.role || 'STUDENT').toUpperCase();
-    const headerAvatar = dto?.sender_avatar || req.headers?.['x-user-avatar'] || tokenUser?.photo_url || null;
+    const headerId = dto?.sender_id || req.headers?.['x-user-id'] || tokenUser?.sub || tokenUser?.id || tokenUser?.emp_id || tokenUser?.registration_no || 'FAC001';
+    const headerName =
+      dto?.sender_name ||
+      req.headers?.['x-user-name'] ||
+      tokenUser?.name ||
+      tokenUser?.faculty_name ||
+      tokenUser?.student_name ||
+      tokenUser?.username ||
+      '';
+    const headerRole = (dto?.sender_role || req.headers?.['x-user-role'] || tokenUser?.role || 'FACULTY').toUpperCase();
+    const headerAvatar = dto?.sender_avatar || req.headers?.['x-user-avatar'] || tokenUser?.photo_url || tokenUser?.photoUrl || tokenUser?.avatar_url || null;
 
     return {
       id: String(headerId),
-      name: String(headerName),
+      name: headerName ? String(headerName) : '',
       role: String(headerRole),
       photo_url: headerAvatar,
     };

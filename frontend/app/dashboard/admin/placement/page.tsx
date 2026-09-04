@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
@@ -23,6 +23,17 @@ import {
   Plus,
   X
 } from 'lucide-react';
+
+export interface TargetCohort {
+  id: string;
+  course_cd: string;
+  course_name: string;
+  branch_cd: string;
+  branch_name: string;
+  batch_cd: string;
+  batch_name: string;
+  semester: string;
+}
 
 export default function AdminPlacementPage() {
   const [companies, setCompanies] = useState<PlacementCompany[]>([]);
@@ -47,6 +58,7 @@ export default function AdminPlacementPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   const [selectedCompany, setSelectedCompany] = useState<PlacementCompany | null>(null);
+  const [isEditDrawer, setIsEditDrawer] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [creatingDrive, setCreatingDrive] = useState(false);
@@ -54,8 +66,18 @@ export default function AdminPlacementPage() {
   const [createSuccess, setCreateSuccess] = useState(false);
   const [deletingDriveId, setDeletingDriveId] = useState<number | null>(null);
 
+  // Modal Looping Section Dropdown States
+  const [queuedCohorts, setQueuedCohorts] = useState<TargetCohort[]>([]);
+  const [modalCourse, setModalCourse] = useState<string>('13');
+  const [modalBranch, setModalBranch] = useState<string>('1');
+  const [modalBatch, setModalBatch] = useState<string>('2');
+  const [modalSemester, setModalSemester] = useState<string>('All Semesters');
   const [modalBranchesList, setModalBranchesList] = useState<any[]>([]);
   const [modalBatchesList, setModalBatchesList] = useState<any[]>([]);
+  const [cohortError, setCohortError] = useState<string | null>(null);
+
+  const modalBodyRef = useRef<HTMLDivElement | null>(null);
+  const cohortListEndRef = useRef<HTMLDivElement | null>(null);
 
   const [createFormData, setCreateFormData] = useState({
     company_name: '',
@@ -64,7 +86,6 @@ export default function AdminPlacementPage() {
     eligibility_course_cd: '13',
     eligibility_branch_cd: '1',
     eligibility_batch_cd: '2',
-    min_score_required: 60,
     drive_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     deadline_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     description: '',
@@ -210,19 +231,17 @@ export default function AdminPlacementPage() {
 
   const handleFilterCourseChange = async (courseCode: string) => {
     setSelectedCourse(courseCode);
-    const crs = courseCode === 'ALL' ? '13' : courseCode;
-    const branches = await fetchBranchesForCourse(selectedCollege, crs);
-    if (branches.length > 0) {
-      setSelectedBranch(branches[0].code);
-    } else {
+    if (courseCode === 'ALL') {
       setSelectedBranch('ALL');
-    }
-    const batches = await fetchBatchesForCourse(selectedCollege, crs);
-    if (batches.length > 0) {
-      setSelectedBatch(batches[0].code);
-    } else {
       setSelectedBatch('ALL');
+      setBranchesList([]);
+      setBatchesList([]);
+      return;
     }
+    const branches = await fetchBranchesForCourse(selectedCollege, courseCode);
+    setSelectedBranch('ALL');
+    const batches = await fetchBatchesForCourse(selectedCollege, courseCode);
+    setSelectedBatch('ALL');
   };
 
   const handleFilterBranchChange = (branchCode: string) => {
@@ -267,16 +286,11 @@ export default function AdminPlacementPage() {
       const initialCourseCd = bca ? bca.code : '13';
       setSelectedCourse(initialCourseCd);
 
-      const branches = await fetchBranchesForCourse(activeColCode, initialCourseCd);
-      if (branches.length > 0) {
-        setSelectedBranch(branches[0].code);
-      }
+      await fetchBranchesForCourse(activeColCode, initialCourseCd);
+      setSelectedBranch('ALL');
 
-      const batches = await fetchBatchesForCourse(activeColCode, initialCourseCd);
-      const curBatch = batches.find(b => b.name === '2025' || b.year === 2025 || b.code === '2') || batches[0];
-      if (curBatch) {
-        setSelectedBatch(curBatch.code);
-      }
+      await fetchBatchesForCourse(activeColCode, initialCourseCd);
+      setSelectedBatch('ALL');
 
       await fetchDrives();
     };
@@ -338,13 +352,19 @@ export default function AdminPlacementPage() {
 
   const handleOpenCreateModal = async () => {
     setCreateError(null);
+    setCohortError(null);
     const crs = selectedCourse && selectedCourse !== 'ALL' ? selectedCourse : (coursesList[0]?.code || '13');
+    setModalCourse(crs);
     const branches = await fetchBranchesForCourse(selectedCollege, crs);
     const batches = await fetchBatchesForCourse(selectedCollege, crs);
     setModalBranchesList(branches);
     setModalBatchesList(batches);
     const defaultBranch = branches[0]?.code || '1';
     const defaultBatch = batches.find(b => b.name === '2025' || b.year === 2025)?.code || batches[0]?.code || '2';
+    setModalBranch(defaultBranch);
+    setModalBatch(defaultBatch);
+    setModalSemester('All Semesters');
+    setQueuedCohorts([]);
 
     setCreateFormData({
       company_name: '',
@@ -353,7 +373,6 @@ export default function AdminPlacementPage() {
       eligibility_course_cd: crs,
       eligibility_branch_cd: defaultBranch,
       eligibility_batch_cd: defaultBatch,
-      min_score_required: 60,
       drive_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       deadline_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       description: '',
@@ -362,16 +381,64 @@ export default function AdminPlacementPage() {
   };
 
   const handleModalCourseChange = async (newCourseCd: string) => {
+    setModalCourse(newCourseCd);
     const branches = await fetchBranchesForCourse(selectedCollege, newCourseCd);
     const batches = await fetchBatchesForCourse(selectedCollege, newCourseCd);
     setModalBranchesList(branches);
     setModalBatchesList(batches);
-    setCreateFormData((prev) => ({
+    const defaultBranch = branches[0]?.code || '1';
+    const defaultBatch = batches.find(b => b.name === '2025' || b.year === 2025)?.code || batches[0]?.code || '2';
+    setModalBranch(defaultBranch);
+    setModalBatch(defaultBatch);
+    setCohortError(null);
+  };
+
+  const handleAddCohortToQueue = () => {
+    const courseObj = coursesList.find(c => String(c.code) === String(modalCourse));
+    const courseLabel = courseObj?.name || (modalCourse === '13' ? 'BCA' : `Course #${modalCourse}`);
+
+    const branchObj = modalBranchesList.find(b => String(b.code) === String(modalBranch));
+    const branchLabel = branchObj?.name || `Branch #${modalBranch}`;
+
+    const batchObj = modalBatchesList.find(b => String(b.code) === String(modalBatch));
+    const batchLabel = batchObj?.name || (batchObj?.year ? `Batch ${batchObj.year}` : `Batch #${modalBatch}`);
+
+    const isDuplicate = queuedCohorts.some(
+      (c) =>
+        String(c.course_cd) === String(modalCourse) &&
+        String(c.branch_cd) === String(modalBranch) &&
+        String(c.batch_cd) === String(modalBatch) &&
+        String(c.semester) === String(modalSemester)
+    );
+
+    if (isDuplicate) {
+      setCohortError(`Cohort "[#${modalCourse}] ${courseLabel} • ${branchLabel} • ${batchLabel} • ${modalSemester}" is already added.`);
+      return;
+    }
+
+    setCohortError(null);
+    setQueuedCohorts((prev) => [
       ...prev,
-      eligibility_course_cd: newCourseCd,
-      eligibility_branch_cd: branches[0]?.code || '1',
-      eligibility_batch_cd: batches.find(b => b.name === '2025' || b.year === 2025)?.code || batches[0]?.code || '2',
-    }));
+      {
+        id: `${modalCourse}-${modalBranch}-${modalBatch}-${modalSemester}-${Date.now()}`,
+        course_cd: modalCourse,
+        course_name: courseLabel,
+        branch_cd: modalBranch,
+        branch_name: branchLabel,
+        batch_cd: modalBatch,
+        batch_name: batchLabel,
+        semester: modalSemester,
+      },
+    ]);
+
+    // Automatically scroll to bottom so the user immediately sees the added cohort
+    setTimeout(() => {
+      if (cohortListEndRef.current) {
+        cohortListEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else if (modalBodyRef.current) {
+        modalBodyRef.current.scrollTo({ top: modalBodyRef.current.scrollHeight, behavior: 'smooth' });
+      }
+    }, 60);
   };
 
   const handleCreateDriveSubmit = async (e: React.FormEvent) => {
@@ -388,17 +455,52 @@ export default function AdminPlacementPage() {
       const tenant = getTenantSlug();
       const headers = getAuthHeaders();
 
-      const branchObj = modalBranchesList.find(b => String(b.code) === String(createFormData.eligibility_branch_cd));
-      const branchLabel = branchObj?.name || createFormData.eligibility_branch_cd;
+      let cohorts = [...queuedCohorts];
+      if (cohorts.length === 0) {
+        // Auto-add current dropdown selection if user didn't click + Add
+        const courseObj = coursesList.find(c => String(c.code) === String(modalCourse));
+        const courseLabel = courseObj?.name || (modalCourse === '13' ? 'BCA' : `Course #${modalCourse}`);
+        const branchObj = modalBranchesList.find(b => String(b.code) === String(modalBranch));
+        const branchLabel = branchObj?.name || `Branch #${modalBranch}`;
+        const batchObj = modalBatchesList.find(b => String(b.code) === String(modalBatch));
+        const batchLabel = batchObj?.name || (batchObj?.year ? `Batch ${batchObj.year}` : `Batch #${modalBatch}`);
 
-      const batchObj = modalBatchesList.find(b => String(b.code) === String(createFormData.eligibility_batch_cd));
-      const batchLabel = batchObj?.name || String(batchObj?.year || createFormData.eligibility_batch_cd);
+        cohorts = [{
+          id: `${modalCourse}-${modalBranch}-${modalBatch}-${modalSemester}`,
+          course_cd: modalCourse,
+          course_name: courseLabel,
+          branch_cd: modalBranch,
+          branch_name: branchLabel,
+          batch_cd: modalBatch,
+          batch_name: batchLabel,
+          semester: modalSemester,
+        }];
+      }
+
+      const uniqueCourseCodes = Array.from(new Set(cohorts.map((c) => c.course_cd))).filter(Boolean);
+      const uniqueCourseNames = Array.from(
+        new Set(cohorts.map((c) => c.course_name ? String(c.course_name).replace(/^\[#\d+\]\s*/, '') : (c.course_cd === '13' ? 'BCA' : c.course_cd === '1' ? 'B.Tech' : `Course ${c.course_cd}`)))
+      ).filter(Boolean);
+      const uniqueBranchNames = Array.from(new Set(cohorts.map((c) => c.branch_name || c.branch_cd))).filter(Boolean);
+      const uniqueBatchNames = Array.from(new Set(cohorts.map((c) => c.batch_name || c.batch_cd))).filter(Boolean);
 
       const payload = {
         ...createFormData,
-        min_score_required: Number(createFormData.min_score_required) || 0,
-        eligible_branches: [branchLabel],
-        eligible_batches: [batchLabel],
+        company_name: createFormData.company_name.trim(),
+        role: createFormData.role.trim(),
+        package_ctc: createFormData.package_ctc?.trim() || null,
+        description: createFormData.description || '',
+        eligibility_course_cd: uniqueCourseCodes.join(', ') || '13',
+        eligibility_branch_cd: cohorts[0]?.branch_cd || '1',
+        eligibility_batch_cd: cohorts[0]?.batch_cd || '2',
+        eligible_courses: uniqueCourseNames,
+        eligible_branches: uniqueBranchNames,
+        eligible_batches: uniqueBatchNames,
+        min_score_required: 0,
+        extra_fields: {
+          target_cohorts: cohorts,
+          eligible_courses: uniqueCourseNames,
+        },
       };
 
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
@@ -408,6 +510,7 @@ export default function AdminPlacementPage() {
       setTimeout(() => {
         setCreateSuccess(false);
         setIsCreateModalOpen(false);
+        setQueuedCohorts([]);
         setCreateFormData({
           company_name: '',
           role: '',
@@ -415,7 +518,6 @@ export default function AdminPlacementPage() {
           eligibility_course_cd: '13',
           eligibility_branch_cd: '1',
           eligibility_batch_cd: '2',
-          min_score_required: 60,
           drive_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           deadline_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           description: '',
@@ -423,7 +525,10 @@ export default function AdminPlacementPage() {
         fetchDrives();
       }, 1200);
     } catch (err: any) {
-      setCreateError(err?.response?.data?.message || err?.message || 'Failed to create placement drive.');
+      const msg = Array.isArray(err?.response?.data?.errors)
+        ? err.response.data.errors.join('; ')
+        : (err?.response?.data?.message || err?.message || 'Failed to create placement drive.');
+      setCreateError(msg);
     } finally {
       setCreatingDrive(false);
     }
@@ -594,32 +699,84 @@ export default function AdminPlacementPage() {
       (c.package_ctc || '').toLowerCase().includes(s) ||
       (c.description || '').toLowerCase().includes(s);
 
-    const matchCourse =
-      selectedCourse === 'ALL' ||
-      !c.eligibility_course_cd ||
-      String(c.eligibility_course_cd) === String(selectedCourse);
+    // 1. Course Match (Supports comma-separated codes, target_cohorts, eligible_courses array)
+    let matchCourse = true;
+    if (selectedCourse && selectedCourse !== 'ALL') {
+      const selectedCourseStr = String(selectedCourse).trim();
+      const selectedCourseObj = coursesList.find(crs => String(crs.code).trim() === selectedCourseStr);
+      const selectedCourseName = selectedCourseObj?.name ? String(selectedCourseObj.name).toLowerCase().replace(/^\[#\d+\]\s*/, '').trim() : '';
 
-    const matchBranch =
-      selectedBranch === 'ALL' ||
-      !c.eligible_branches ||
-      (Array.isArray(c.eligible_branches) && c.eligible_branches.length === 0) ||
-      (Array.isArray(c.eligible_branches)
-        ? c.eligible_branches.some((b: any) => 
-            String(b).toUpperCase() === selectedBranch.toUpperCase() ||
-            (branchesList.find(br => br.code === selectedBranch)?.name || '').toUpperCase().includes(String(b).toUpperCase())
-          )
-        : String(c.eligible_branches).includes(selectedBranch));
+      const driveCourseCodes = [
+        ...(c.eligibility_course_cd ? String(c.eligibility_course_cd).split(',').map(x => x.trim()) : []),
+        ...(c.extra_fields?.target_cohorts && Array.isArray(c.extra_fields.target_cohorts)
+          ? c.extra_fields.target_cohorts.map((tc: any) => String(tc.course_cd).trim())
+          : [])
+      ].filter(Boolean);
 
-    const matchBatch =
-      selectedBatch === 'ALL' ||
-      !c.eligible_batches ||
-      (Array.isArray(c.eligible_batches) && c.eligible_batches.length === 0) ||
-      (Array.isArray(c.eligible_batches)
-        ? c.eligible_batches.some((b: any) => 
-            String(b).includes(selectedBatch) || 
-            (batchesList.find(bt => bt.code === selectedBatch)?.name || '').includes(String(b))
-          )
-        : String(c.eligible_batches).includes(selectedBatch));
+      const driveCourseNames = [
+        ...(Array.isArray(c.eligible_courses) ? c.eligible_courses : typeof c.eligible_courses === 'string' ? c.eligible_courses.split(',') : []),
+        ...(c.extra_fields?.eligible_courses && Array.isArray(c.extra_fields.eligible_courses) ? c.extra_fields.eligible_courses : []),
+        ...(c.extra_fields?.target_cohorts && Array.isArray(c.extra_fields.target_cohorts)
+          ? c.extra_fields.target_cohorts.map((tc: any) => String(tc.course_name || '').replace(/^\[#\d+\]\s*/, '').trim())
+          : [])
+      ].map(x => String(x || '').toLowerCase().trim()).filter(Boolean);
+
+      if (driveCourseCodes.length > 0 || driveCourseNames.length > 0) {
+        matchCourse =
+          driveCourseCodes.includes(selectedCourseStr) ||
+          (selectedCourseName ? driveCourseNames.some(cn => cn.includes(selectedCourseName) || selectedCourseName.includes(cn)) : false);
+      }
+    }
+
+    // 2. Branch Match (Supports codes, names, and cohort combinations)
+    let matchBranch = true;
+    if (selectedBranch && selectedBranch !== 'ALL') {
+      const selectedBranchStr = String(selectedBranch).trim().toUpperCase();
+      const selectedBranchObj = branchesList.find(br => String(br.code).trim() === String(selectedBranch).trim());
+      const selectedBranchName = selectedBranchObj?.name ? String(selectedBranchObj.name).toUpperCase().trim() : '';
+
+      const driveBranches = [
+        ...(Array.isArray(c.eligible_branches) ? c.eligible_branches : typeof c.eligible_branches === 'string' ? c.eligible_branches.split(',') : []),
+        ...(Array.isArray(c.branches) ? c.branches : typeof c.branches === 'string' ? c.branches.split(',') : []),
+        ...(c.eligibility_branch_cd ? String(c.eligibility_branch_cd).split(',') : []),
+        ...(c.extra_fields?.target_cohorts && Array.isArray(c.extra_fields.target_cohorts)
+          ? c.extra_fields.target_cohorts.flatMap((tc: any) => [tc.branch_cd, tc.branch_name])
+          : [])
+      ].map(b => String(b || '').trim().toUpperCase()).filter(Boolean);
+
+      if (driveBranches.length > 0) {
+        matchBranch = driveBranches.some(b =>
+          b === selectedBranchStr ||
+          (selectedBranchName && (b.includes(selectedBranchName) || selectedBranchName.includes(b)))
+        );
+      }
+    }
+
+    // 3. Batch Match (Supports years 2025, codes, and target cohort batch objects)
+    let matchBatch = true;
+    if (selectedBatch && selectedBatch !== 'ALL') {
+      const selectedBatchStr = String(selectedBatch).trim();
+      const selectedBatchObj = batchesList.find(bt => String(bt.code).trim() === selectedBatchStr);
+      const selectedBatchName = selectedBatchObj?.name ? String(selectedBatchObj.name).trim() : '';
+      const selectedBatchYear = selectedBatchObj?.year ? String(selectedBatchObj.year).trim() : '';
+
+      const driveBatches = [
+        ...(Array.isArray(c.eligible_batches) ? c.eligible_batches : typeof c.eligible_batches === 'string' ? c.eligible_batches.split(',') : []),
+        ...(Array.isArray(c.batches) ? c.batches : typeof c.batches === 'string' ? c.batches.split(',') : []),
+        ...(c.eligibility_batch_cd ? String(c.eligibility_batch_cd).split(',') : []),
+        ...(c.extra_fields?.target_cohorts && Array.isArray(c.extra_fields.target_cohorts)
+          ? c.extra_fields.target_cohorts.flatMap((tc: any) => [tc.batch_cd, tc.batch_name])
+          : [])
+      ].map(b => String(b || '').trim()).filter(Boolean);
+
+      if (driveBatches.length > 0) {
+        matchBatch = driveBatches.some(b =>
+          b === selectedBatchStr ||
+          (selectedBatchName && (b.includes(selectedBatchName) || selectedBatchName.includes(b))) ||
+          (selectedBatchYear && (b.includes(selectedBatchYear) || selectedBatchYear.includes(b)))
+        );
+      }
+    }
 
     const matchStatus =
       statusFilter === 'ALL' || (c.status || '').toUpperCase() === statusFilter.toUpperCase();
@@ -727,6 +884,7 @@ export default function AdminPlacementPage() {
                   onChange={(e) => handleFilterCourseChange(e.target.value)}
                   className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
                 >
+                  <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Courses</option>
                   {coursesList.map((crs, idx) => (
                     <option key={crs.code || idx} value={crs.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       [#{crs.code}] {crs.name}
@@ -745,6 +903,7 @@ export default function AdminPlacementPage() {
                   onChange={(e) => handleFilterBranchChange(e.target.value)}
                   className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
                 >
+                  <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Branches</option>
                   {branchesList.map((br: any, idx: number) => (
                     <option key={br.code || idx} value={br.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       [#{br.code}] {br.name}
@@ -763,6 +922,7 @@ export default function AdminPlacementPage() {
                   onChange={(e) => handleFilterBatchChange(e.target.value)}
                   className="bg-transparent text-slate-900 dark:text-white font-black focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
                 >
+                  <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Batches</option>
                   {batchesList.map((batch, idx) => (
                     <option key={batch.code || idx} value={batch.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       [#{batch.code}] Batch {batch.name || batch.year} {batch.year && batch.name !== String(batch.year) ? `(${batch.year})` : ''}
@@ -852,7 +1012,14 @@ export default function AdminPlacementPage() {
                   role="admin"
                   userRole={userRole}
                   isDeleting={deletingDriveId === comp.drive_id}
-                  onViewDetails={(c) => setSelectedCompany(c)}
+                  onViewDetails={(c) => {
+                    setSelectedCompany(c);
+                    setIsEditDrawer(false);
+                  }}
+                  onEdit={(c) => {
+                    setSelectedCompany(c);
+                    setIsEditDrawer(true);
+                  }}
                   onManageApplicants={(c) => handleOpenApplicants(c)}
                   onDelete={(c) => handleDeleteDrive(c)}
                 />
@@ -862,11 +1029,25 @@ export default function AdminPlacementPage() {
         </main>
       </div>
 
-      {/* View Details Drawer */}
+      {/* View & Edit Details Drawer */}
       <CompanyDetailDrawer
         company={selectedCompany}
         role="admin"
-        onClose={() => setSelectedCompany(null)}
+        initialEditMode={isEditDrawer}
+        coursesList={coursesList}
+        selectedCollege={selectedCollege}
+        onClose={() => {
+          setSelectedCompany(null);
+          setIsEditDrawer(false);
+        }}
+        onUpdateSuccess={(updatedCompany) => {
+          setCompanies((prev) =>
+            prev.map((c) => (c.drive_id === updatedCompany.drive_id ? { ...c, ...updatedCompany } : c))
+          );
+          setSelectedCompany(null);
+          setIsEditDrawer(false);
+          fetchDrives();
+        }}
       />
 
       {/* Excel Import Modal */}
@@ -1034,10 +1215,11 @@ export default function AdminPlacementPage() {
       {/* Post New Placement Drive Modal */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-[28px] max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-200">
-            <div className="flex items-start justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-[28px] max-w-2xl sm:max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 pb-4 sm:p-7 sm:pb-4 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#2D2575] to-[#5B4BFF] text-white font-black text-lg flex items-center justify-center shrink-0">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#2D2575] to-[#5B4BFF] text-white font-black text-lg flex items-center justify-center shrink-0 shadow-md">
                   <Building2 className="w-5 h-5" />
                 </div>
                 <div>
@@ -1045,200 +1227,327 @@ export default function AdminPlacementPage() {
                     Post New Campus Placement Drive
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Immediately announces to students and triggers dashboard highlight alerts.
+                    Specify company profile and configure multiple eligible academic cohorts (Courses, Branches, Batches &amp; Semesters).
                   </p>
                 </div>
               </div>
 
               <button
                 onClick={() => setIsCreateModalOpen(false)}
-                className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
+                className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {createSuccess ? (
-              <div className="py-8 text-center space-y-2 text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="w-12 h-12 mx-auto animate-bounce" />
-                <h4 className="font-extrabold text-base">Placement Drive Announced Successfully!</h4>
-                <p className="text-xs text-slate-500">
-                  Live notice posted and highlighted alerts activated on student dashboards.
-                </p>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateDriveSubmit} className="space-y-4">
-                {createError && (
-                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300">
-                    {createError}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Company Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={createFormData.company_name}
-                      onChange={(e) => setCreateFormData({ ...createFormData, company_name: e.target.value })}
-                      placeholder="e.g. Google Cloud, TCS, Infosys"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Job Role / Designation *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={createFormData.role}
-                      onChange={(e) => setCreateFormData({ ...createFormData, role: e.target.value })}
-                      placeholder="e.g. Cloud Engineer, SDE-1"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                    />
-                  </div>
+            {/* Modal Body */}
+            <div ref={modalBodyRef} className="p-6 sm:p-7 overflow-y-auto flex-1 space-y-5">
+              {createSuccess ? (
+                <div className="py-12 text-center space-y-3 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="w-14 h-14 mx-auto animate-bounce" />
+                  <h4 className="font-extrabold text-lg">Placement Drive Announced Successfully!</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Live notices and highlighted recruitment alerts dispatched across all {queuedCohorts.length > 0 ? queuedCohorts.length : 1} selected academic cohorts.
+                  </p>
                 </div>
+              ) : (
+                <form onSubmit={handleCreateDriveSubmit} id="placement-drive-form" className="space-y-5">
+                  {createError && (
+                    <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                      {createError}
+                    </div>
+                  )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Offered Package (CTC)
-                    </label>
-                    <input
-                      type="text"
-                      value={createFormData.package_ctc}
-                      onChange={(e) => setCreateFormData({ ...createFormData, package_ctc: e.target.value })}
-                      placeholder="e.g. ₹8.5 - ₹12 LPA"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                    />
+                  {/* SECTION 1: Company & Job Details */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider">
+                        1. Company &amp; Recruitment Details
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Company Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={createFormData.company_name}
+                          onChange={(e) => setCreateFormData({ ...createFormData, company_name: e.target.value })}
+                          placeholder="e.g. Google Cloud, TCS, Infosys"
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Job Role / Designation *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={createFormData.role}
+                          onChange={(e) => setCreateFormData({ ...createFormData, role: e.target.value })}
+                          placeholder="e.g. Cloud Engineer, SDE-1"
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Offered Package (CTC)
+                        </label>
+                        <input
+                          type="text"
+                          value={createFormData.package_ctc}
+                          onChange={(e) => setCreateFormData({ ...createFormData, package_ctc: e.target.value })}
+                          placeholder="e.g. ₹8.5 - ₹12 LPA"
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Drive Date *
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={createFormData.drive_date}
+                          onChange={(e) => setCreateFormData({ ...createFormData, drive_date: e.target.value })}
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Application Deadline *
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={createFormData.deadline_date}
+                          onChange={(e) => setCreateFormData({ ...createFormData, deadline_date: e.target.value })}
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Job Description &amp; Technical Requirements
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={createFormData.description}
+                        onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
+                        placeholder="Describe interview stages, coding assessments, skills required..."
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Eligible Course *
-                    </label>
-                    <select
-                      value={createFormData.eligibility_course_cd}
-                      onChange={(e) => handleModalCourseChange(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                    >
-                      {coursesList.map((crs, idx) => (
-                        <option key={crs.code || idx} value={crs.code}>
-                          [#{crs.code}] {crs.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* SECTION 2: Target Academic Cohorts Looping Section (+ Add in Loop) */}
+                  <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/80 p-4 rounded-2xl space-y-3.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-xs text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                        <span>🎯</span> 2. Target Academic Cohorts (Course • Branch • Batch • Semester)
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#5B4BFF]/10 text-[#5B4BFF] border border-[#5B4BFF]/20">
+                        {queuedCohorts.length} Target Cohort{queuedCohorts.length !== 1 ? 's' : ''} Added
+                      </span>
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Eligible Branch * <span className="text-[#5B4BFF]">({modalBranchesList.length})</span>
-                    </label>
-                    <select
-                      value={createFormData.eligibility_branch_cd}
-                      onChange={(e) => setCreateFormData({ ...createFormData, eligibility_branch_cd: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                    >
-                      {modalBranchesList.map((br: any, idx: number) => (
-                        <option key={br.code || idx} value={br.code}>
-                          [#{br.code}] {br.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Eligible Batch * <span className="text-[#5B4BFF]">({modalBatchesList.length})</span>
-                    </label>
-                    <select
-                      value={createFormData.eligibility_batch_cd}
-                      onChange={(e) => setCreateFormData({ ...createFormData, eligibility_batch_cd: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                    >
-                      {modalBatchesList.map((batch: any, idx: number) => (
-                        <option key={batch.code || idx} value={batch.code}>
-                          [#{batch.code}] Batch {batch.name || batch.year} {batch.year && batch.name !== String(batch.year) ? `(${batch.year})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Drive Date *
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={createFormData.drive_date}
-                      onChange={(e) => setCreateFormData({ ...createFormData, drive_date: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Application Deadline *
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={createFormData.deadline_date}
-                      onChange={(e) => setCreateFormData({ ...createFormData, deadline_date: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Job Description &amp; Technical Requirements
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={createFormData.description}
-                    onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
-                    placeholder="Describe interview stages, coding assessments, skills required..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                  />
-                </div>
-
-                <div className="pt-2 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsCreateModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={creatingDrive}
-                    className="px-5 py-2 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    {creatingDrive ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Announcing...
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="w-3.5 h-3.5" />
-                        Announce Placement Drive
-                      </>
+                    {cohortError && (
+                      <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                        ⚠️ {cohortError}
+                      </div>
                     )}
-                  </button>
-                </div>
-              </form>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          🎓 Course *
+                        </label>
+                        <select
+                          value={modalCourse}
+                          onChange={(e) => handleModalCourseChange(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                        >
+                          {coursesList.map((crs, idx) => (
+                            <option key={crs.code || idx} value={crs.code}>
+                              [#{crs.code}] {crs.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          🏢 Branch * <span className="text-[#5B4BFF]">({modalBranchesList.length})</span>
+                        </label>
+                        <select
+                          value={modalBranch}
+                          onChange={(e) => {
+                            setModalBranch(e.target.value);
+                            setCohortError(null);
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                        >
+                          {modalBranchesList.map((br: any, idx: number) => (
+                            <option key={br.code || idx} value={br.code}>
+                              [#{br.code}] {br.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          👥 Batch * <span className="text-[#5B4BFF]">({modalBatchesList.length})</span>
+                        </label>
+                        <select
+                          value={modalBatch}
+                          onChange={(e) => {
+                            setModalBatch(e.target.value);
+                            setCohortError(null);
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                        >
+                          {modalBatchesList.map((batch: any, idx: number) => (
+                            <option key={batch.code || idx} value={batch.code}>
+                              [#{batch.code}] Batch {batch.name || batch.year} {batch.year && batch.name !== String(batch.year) ? `(${batch.year})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          📅 Semester
+                        </label>
+                        <select
+                          value={modalSemester}
+                          onChange={(e) => {
+                            setModalSemester(e.target.value);
+                            setCohortError(null);
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                        >
+                          <option value="All Semesters">All Semesters</option>
+                          <option value="Semester 1">Semester 1</option>
+                          <option value="Semester 2">Semester 2</option>
+                          <option value="Semester 3">Semester 3</option>
+                          <option value="Semester 4">Semester 4</option>
+                          <option value="Semester 5">Semester 5</option>
+                          <option value="Semester 6">Semester 6</option>
+                          <option value="Semester 7">Semester 7</option>
+                          <option value="Semester 8">Semester 8</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={handleAddCohortToQueue}
+                        className="py-1.5 px-4 text-xs font-bold text-white bg-[#5B4BFF] hover:bg-indigo-600 rounded-lg shadow-sm transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Cohort to Drive
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Added Queued Cohorts List Table / Cards */}
+                  {queuedCohorts.length > 0 && (
+                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-extrabold text-slate-900 dark:text-white">
+                        <span className="flex items-center gap-1.5">
+                          <span>📋</span> Added Target Cohorts ({queuedCohorts.length} cohorts ready to announce)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setQueuedCohorts([])}
+                          className="text-[11px] text-rose-500 hover:underline font-bold cursor-pointer"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+
+                      <div className="max-h-40 overflow-y-auto divide-y divide-slate-200 dark:divide-slate-700">
+                        {queuedCohorts.map((cohort, idx) => (
+                          <div key={cohort.id || idx} className="py-2 flex items-center justify-between gap-3 text-xs">
+                            <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+                              <span className="font-mono font-extrabold text-[#5B4BFF] bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded text-[11px] border border-indigo-200 dark:border-indigo-800">
+                                [#{cohort.course_cd}] {cohort.course_name}
+                              </span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200 px-2 py-0.5 rounded text-[11px] bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+                                {cohort.branch_name}
+                              </span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded text-[11px] bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+                                {cohort.batch_name}
+                              </span>
+                              <span className="font-bold text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded text-[11px] bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                                {cohort.semester}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setQueuedCohorts(queuedCohorts.filter((_, i) => i !== idx))}
+                              className="text-rose-500 hover:text-rose-700 font-bold text-sm px-2 py-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                              title="Remove Cohort"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Scroll Anchor to ensure newly added cohorts scroll into view */}
+                  <div ref={cohortListEndRef} />
+                </form>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            {!createSuccess && (
+              <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5 shrink-0 bg-slate-50/50 dark:bg-slate-900/50 rounded-b-[28px]">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  form="placement-drive-form"
+                  disabled={creatingDrive}
+                  className="px-5 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {creatingDrive ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Announcing...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-3.5 h-3.5" />
+                      {queuedCohorts.length > 0
+                        ? `Announce Placement Drive (${queuedCohorts.length} Target Cohort${queuedCohorts.length > 1 ? 's' : ''})`
+                        : 'Announce Placement Drive'}
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
         </div>

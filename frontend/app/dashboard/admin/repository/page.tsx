@@ -82,6 +82,9 @@ export default function AdminRepositoryPage() {
   // Image Preview Lightbox Modal
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
+  const [coursesList, setCoursesList] = useState<any[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<string>('ALL');
+
   const getHeaders = () => {
     const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
@@ -98,8 +101,32 @@ export default function AdminRepositoryPage() {
     return typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
   };
 
+  const fetchCourses = async () => {
+    const cd = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+    const slug = getTenantSlug();
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((c: any) => ({
+            code: String(c.course_cd || c.code || '1'),
+            name: c.course_name || c.name || `Course ${c.course_cd}`,
+            colg_cd: String(c.colg_cd || cd),
+          }));
+          setCoursesList(mapped);
+          return mapped;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch courses:', e);
+    }
+    return [];
+  };
+
   useEffect(() => {
     fetchRepositories();
+    fetchCourses();
   }, []);
 
   const fetchRepositories = async () => {
@@ -159,8 +186,45 @@ export default function AdminRepositoryPage() {
     );
   };
 
-  // Filtered Repositories Logic
-  const filteredList = repositories.filter(repo => {
+  // 1. Course Filtered Repositories
+  const courseFilteredRepos = repositories.filter(repo => {
+    if (selectedCourse && selectedCourse !== 'ALL') {
+      const selCourseStr = String(selectedCourse).trim();
+      const selCourseObj = coursesList.find(c => String(c.code) === selCourseStr);
+      const selCourseName = selCourseObj?.name ? selCourseObj.name.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+      
+      const repoCourseCd = String(repo.course_cd || '').trim();
+      const repoCourseName = String(repo.course_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      // Direct Code or Substring match
+      const matchByCd = repoCourseCd === selCourseStr;
+      const matchByName = Boolean(selCourseName && repoCourseName && (repoCourseName.includes(selCourseName) || selCourseName.includes(repoCourseName)));
+
+      // Semantic canonical mapping (B.Tech / MCA / MBA / BCA / B.Pharm)
+      const isBTech = selCourseName.includes('btech') || selCourseName.includes('bacheloroftech') || selCourseStr === '1';
+      const repoIsBTech = repoCourseName.includes('btech') || repoCourseCd === '1';
+
+      const isMCA = selCourseName.includes('mca') || selCourseStr === '14';
+      const repoIsMCA = repoCourseName.includes('mca') || repoCourseCd === '14';
+
+      const isBCA = selCourseName.includes('bca') || selCourseStr === '13';
+      const repoIsBCA = repoCourseName.includes('bca') || repoCourseCd === '13';
+
+      const isMBA = selCourseName.includes('mba') || selCourseStr === '15';
+      const repoIsMBA = repoCourseName.includes('mba') || repoCourseCd === '15';
+
+      const isBPharm = selCourseName.includes('pharm') || selCourseStr === '2';
+      const repoIsBPharm = repoCourseName.includes('pharm') || repoCourseCd === '2';
+
+      const specificMatch = (isBTech && repoIsBTech) || (isMCA && repoIsMCA) || (isBCA && repoIsBCA) || (isMBA && repoIsMBA) || (isBPharm && repoIsBPharm);
+
+      if (!matchByCd && !matchByName && !specificMatch) return false;
+    }
+    return true;
+  });
+
+  // 2. Tab & Search Filtered Repositories Logic
+  const filteredList = courseFilteredRepos.filter(repo => {
     const isIncubated = ['Selected', 'Incubated', 'Funded'].includes(repo.incubation_status || '');
 
     if (activeFilter === 'INCUBATED') {
@@ -195,10 +259,10 @@ export default function AdminRepositoryPage() {
     return true;
   });
 
-  const highScoredCount = repositories.filter(r => (r.score || 0) > 70).length;
-  const incubatedCount = repositories.filter(r => ['Selected', 'Incubated', 'Funded'].includes(r.incubation_status || '')).length;
-  const gradedCount = repositories.filter(r => r.status === 'Reviewed' || !!r.score).length;
-  const pendingCount = repositories.filter(r => r.status !== 'Reviewed' && !r.score).length;
+  const highScoredCount = courseFilteredRepos.filter(r => (r.score || 0) > 70).length;
+  const incubatedCount = courseFilteredRepos.filter(r => ['Selected', 'Incubated', 'Funded'].includes(r.incubation_status || '')).length;
+  const gradedCount = courseFilteredRepos.filter(r => r.status === 'Reviewed' || !!r.score).length;
+  const pendingCount = courseFilteredRepos.filter(r => r.status !== 'Reviewed' && !r.score).length;
 
   return (
     <div className="flex h-screen bg-[#F6F8FC] overflow-hidden font-sans">
@@ -417,6 +481,24 @@ export default function AdminRepositoryPage() {
             </div>
 
             <div className="flex items-center gap-2 overflow-x-auto">
+              {/* Filter by courses of logged in tenant */}
+              <div className="flex items-center gap-1.5 shrink-0 px-3 py-2 rounded-xl bg-[#F6F8FC] border border-[#E7EAF3] shadow-xs">
+                <GraduationCap className="w-4 h-4 text-[#5B4BFF]" />
+                <span className="text-xs font-bold text-[#4E5969]">Course:</span>
+                <select
+                  value={selectedCourse}
+                  onChange={(e) => setSelectedCourse(e.target.value)}
+                  className="bg-transparent text-xs font-extrabold text-[#1B1E28] focus:outline-none cursor-pointer"
+                >
+                  <option value="ALL">All Courses</option>
+                  {coursesList.map((crs) => (
+                    <option key={crs.code} value={crs.code}>
+                      {crs.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setActiveFilter('ALL')}
@@ -426,7 +508,7 @@ export default function AdminRepositoryPage() {
                     : 'bg-slate-100 text-[#4E5969] hover:bg-slate-200'
                 }`}
               >
-                All Projects ({repositories.length})
+                All Projects ({courseFilteredRepos.length})
               </button>
 
               <button

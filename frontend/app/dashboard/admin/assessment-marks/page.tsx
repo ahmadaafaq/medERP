@@ -181,13 +181,15 @@ const getInitialTenantSlug = (): string => {
 };
 
 export default function AdminAssessmentMarksPage() {
+  const [userRole, setUserRole] = useState<string>('ADMIN');
+
   // ─── 1. Colleges State (Rule 1: colg_cd) ───────────────────────────────────
   const [colleges, setColleges] = useState<College[]>([]);
   const [selectedColgCd, setSelectedColgCd] = useState<string>(getInitialColgCd);
   const [selectedCollegeSlug, setSelectedCollegeSlug] = useState<string>(getInitialTenantSlug);
 
-  // ─── Step 1: 7-Level Cascading Hierarchy (RestrictAPI.md Standard) ─────────
-  // Order: 1. College -> 2. Course -> 3. Branch -> 4. Batch -> 5. Semester -> 6. Department -> 7. Subject
+  // ─── Step 1: 6-Level Cascading Hierarchy (RestrictAPI.md Standard) ─────────
+  // Order: 1. College -> 2. Course -> 3. Branch -> 4. Batch -> 5. Semester -> 6. Subject
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [selectedCourseCd, setSelectedCourseCd] = useState<string>('');
 
@@ -200,9 +202,6 @@ export default function AdminAssessmentMarksPage() {
 
   // Semester MUST be selected by user before subjects/papers are shown
   const [selectedSemCd, setSelectedSemCd] = useState<string>('');
-
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [selectedDeptCd, setSelectedDeptCd] = useState<string>('');
 
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
   // Subject defaults to '' — user MUST choose a subject before papers are shown
@@ -249,6 +248,9 @@ export default function AdminAssessmentMarksPage() {
 
   const fetchColleges = async () => {
     try {
+      const role = (typeof window !== 'undefined' ? (localStorage.getItem('role') || localStorage.getItem('user_role') || 'ADMIN') : 'ADMIN').toUpperCase();
+      setUserRole(role);
+
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
       const res = await fetch(`${API_BASE}/college-master/colleges`, { headers });
@@ -256,7 +258,6 @@ export default function AdminAssessmentMarksPage() {
         const json = await res.json();
         const rawList: College[] = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
         const list = dedupeBy(rawList, (c: College) => String(c.colg_cd || c.code || c.slug || c.id));
-        setColleges(list);
 
         const currentSlug = getInitialTenantSlug();
         const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
@@ -264,12 +265,29 @@ export default function AdminAssessmentMarksPage() {
           (savedColgCd && String(c.colg_cd || c.code) === savedColgCd) ||
           c.slug === currentSlug || String(c.code) === currentSlug || String(c.colg_cd) === currentSlug
         );
+
+        let filteredList = list;
+        if (role !== 'SUPER_ADMIN') {
+          if (found) {
+            filteredList = [found];
+          } else {
+            filteredList = [{
+              id: '1',
+              colg_cd: savedColgCd || '1',
+              code: savedColgCd || '1',
+              name: 'SRMS College of Engineering & Technology, Bareilly',
+              slug: currentSlug,
+            }];
+          }
+        }
+        setColleges(filteredList);
+
         if (found) {
           setSelectedCollegeSlug(found.slug);
           setSelectedColgCd(String(found.colg_cd || found.code || '1'));
-        } else if (list.length > 0) {
-          setSelectedCollegeSlug(list[0].slug);
-          setSelectedColgCd(String(list[0].colg_cd || list[0].code || '1'));
+        } else if (filteredList.length > 0) {
+          setSelectedCollegeSlug(filteredList[0].slug);
+          setSelectedColgCd(String(filteredList[0].colg_cd || filteredList[0].code || '1'));
         }
       }
     } catch (e) {
@@ -326,13 +344,7 @@ export default function AdminAssessmentMarksPage() {
         setBatches(bList);
       }
 
-      // 4. Departments
-      if (dRes && dRes.ok) {
-        const dList: Department[] = parse(await dRes.json());
-        setDepartments(dList);
-      }
-
-      // 5. Subjects
+      // 4. Subjects
       if (sRes && sRes.ok) {
         const sList: Subject[] = parse(await sRes.json());
         setAllSubjects(sList);
@@ -469,32 +481,6 @@ export default function AdminAssessmentMarksPage() {
       }
     }
   }, [filteredBatches]);
-
-  // ─── Filter Departments (Strictly CET Engineering vs IMS Medical) ──────────
-  const filteredDepartments = useMemo(() => {
-    const list = departments.filter(d => {
-      const dName = (d.name || '').toLowerCase();
-      const isMed = dName.includes('anatomy') || dName.includes('physiology') || d.code === 'ANA' || d.code === 'PHY';
-      if (isMedicalCollege) {
-        return isMed;
-      }
-      // SRMS CET: Exclude medical departments
-      if (isMed) return false;
-
-      if (!selectedCourseCd) return true;
-      return String(d.course_cd) === String(selectedCourseCd) || dName.includes(selectedCourseCd.toLowerCase());
-    });
-    return dedupeBy(list, d => String(d.dept_cd || d.code || d.name || d.id));
-  }, [departments, selectedCourseCd, isMedicalCollege]);
-
-  useEffect(() => {
-    if (filteredDepartments.length > 0 && selectedDeptCd) {
-      const exists = filteredDepartments.some(d => d.name === selectedDeptCd || d.code === selectedDeptCd || String(d.dept_cd) === selectedDeptCd);
-      if (!exists) {
-        setSelectedDeptCd('');
-      }
-    }
-  }, [filteredDepartments]);
 
   // ─── Filter Subjects by Course & Semester (only when batch+semester selected) ─
   const filteredSubjects = useMemo(() => {
@@ -899,18 +885,28 @@ export default function AdminAssessmentMarksPage() {
         throw new Error(errJson.message || 'Failed to save result in database');
       }
 
-      setStudents(prev => prev.map(s => {
-        if (s.rollno !== selectedStudent.rollno) return s;
-        return {
-          ...s,
-          evaluated: true,
-          marks_obtained: calculatedStudentTotal,
-          is_pass: isPass,
-          questionMarks: questionMarksMap,
-          subPartMarks: subPartMarksMap,
-          practicalMark: practicalSectionMark,
-        };
-      }));
+      setStudents(prev => {
+        const nextList = prev.map(s => {
+          if (s.rollno !== selectedStudent.rollno) return s;
+          return {
+            ...s,
+            evaluated: true,
+            marks_obtained: calculatedStudentTotal,
+            is_pass: isPass,
+            questionMarks: questionMarksMap,
+            subPartMarks: subPartMarksMap,
+            practicalMark: practicalSectionMark,
+          };
+        });
+
+        // Automatically advance to the next pending student in the roster
+        const nextPending = nextList.find(s => !s.evaluated && s.rollno !== selectedStudent.rollno);
+        if (nextPending) {
+          setTimeout(() => handleSelectStudent(nextPending.rollno), 100);
+        }
+
+        return nextList;
+      });
 
       setSaveSuccessMsg(`Evaluation for ${selectedStudent.name} (${calculatedStudentTotal.toFixed(2)} / ${maxMarks} Marks) saved successfully to PostgreSQL database!`);
       setTimeout(() => setSaveSuccessMsg(''), 4000);
@@ -958,33 +954,41 @@ export default function AdminAssessmentMarksPage() {
 
             <div className="flex items-center gap-3">
               {/* College Switcher */}
-              <div className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/20">
-                <label className="block text-[10px] font-bold text-orange-200 uppercase tracking-wider mb-0.5">
-                  1. College (colg_cd)
-                </label>
-                <select
-                  value={selectedColgCd}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedColgCd(val);
-                    const found = colleges.find(c => String(c.colg_cd || c.code) === val);
-                    if (found) {
-                      setSelectedCollegeSlug(found.slug);
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('colg_cd', val);
-                        localStorage.setItem('tenantSlug', found.slug);
-                        localStorage.setItem('selectedTenant', found.slug);
+              <div className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-orange-200 uppercase tracking-wider mb-0.5">
+                    1. College (colg_cd)
+                  </label>
+                  <select
+                    value={selectedColgCd}
+                    disabled={userRole !== 'SUPER_ADMIN'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedColgCd(val);
+                      const found = colleges.find(c => String(c.colg_cd || c.code) === val);
+                      if (found) {
+                        setSelectedCollegeSlug(found.slug);
+                        if (typeof window !== 'undefined') {
+                          localStorage.setItem('colg_cd', val);
+                          localStorage.setItem('tenantSlug', found.slug);
+                          localStorage.setItem('selectedTenant', found.slug);
+                        }
                       }
-                    }
-                  }}
-                  className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
-                >
-                  {colleges.map((c) => (
-                    <option key={c.code || c.slug} value={String(c.colg_cd || c.code)} className="text-slate-900 bg-white">
-                      [{c.colg_cd || c.code || '1'}] {c.name}
-                    </option>
-                  ))}
-                </select>
+                    }}
+                    className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {colleges.map((c) => (
+                      <option key={c.code || c.slug} value={String(c.colg_cd || c.code)} className="text-slate-900 bg-white">
+                        [{c.colg_cd || c.code || '1'}] {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {userRole !== 'SUPER_ADMIN' && (
+                  <span className="text-[9px] bg-orange-500/20 text-orange-200 font-black px-1.5 py-0.5 rounded border border-orange-400/30 shrink-0">
+                    🔒 Locked
+                  </span>
+                )}
               </div>
 
               <button
@@ -1015,49 +1019,60 @@ export default function AdminAssessmentMarksPage() {
           )}
 
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          {/* STEP 1: 7-STEP HIERARCHICAL CASCADING BAR (Order: College->Course->Branch->Batch->Sem->Dept->Subj) */}
+          {/* STEP 1: 6-STEP HIERARCHICAL CASCADING BAR (Order: College->Course->Branch->Batch->Sem->Subj) */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
             <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <h3 className="text-xs font-black text-[#11141A] dark:text-white uppercase tracking-wider flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-[#F36C21] text-white flex items-center justify-center text-[10px] font-bold">1</span>
-                STEP 1: SELECT HIERARCHY (1. COLLEGE → 2. COURSE → 3. BRANCH → 4. BATCH → 5. SEMESTER → 6. DEPARTMENT → 7. SUBJECT)
+                STEP 1: SELECT HIERARCHY (1. COLLEGE → 2. COURSE → 3. BRANCH → 4. BATCH → 5. SEMESTER → 6. SUBJECT)
               </h3>
               <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-[#F36C21]/10 text-[#F36C21] border border-[#F36C21]/20">
                 Rule 1–5 Strict Standard
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-xs">
               {/* 1. College (colg_cd) */}
               <div>
                 <label className="block text-[10px] font-bold text-[#F36C21] uppercase mb-1">1. College *</label>
-                <select
-                  value={selectedColgCd}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedColgCd(val);
-                    setSelectedPaperCode('');
-                    setStudents([]);
-                    setSelectedStudentRollno(null);
-                    const found = colleges.find(c => String(c.colg_cd || c.code) === val);
-                    if (found) {
-                      setSelectedCollegeSlug(found.slug);
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('colg_cd', val);
-                        localStorage.setItem('tenantSlug', found.slug);
-                        localStorage.setItem('selectedTenant', found.slug);
+                <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
+                  <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1 shrink-0">
+                    <span>🏛️</span>
+                  </span>
+                  <select
+                    value={selectedColgCd}
+                    disabled={userRole !== 'SUPER_ADMIN'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedColgCd(val);
+                      setSelectedPaperCode('');
+                      setStudents([]);
+                      setSelectedStudentRollno(null);
+                      const found = colleges.find(c => String(c.colg_cd || c.code) === val);
+                      if (found) {
+                        setSelectedCollegeSlug(found.slug);
+                        if (typeof window !== 'undefined') {
+                          localStorage.setItem('colg_cd', val);
+                          localStorage.setItem('tenantSlug', found.slug);
+                          localStorage.setItem('selectedTenant', found.slug);
+                        }
                       }
-                    }
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                >
-                  {colleges.map(c => (
-                    <option key={c.code || c.slug} value={String(c.colg_cd || c.code)}>
-                      [{c.colg_cd || c.code}] {c.name.split(',')[0]}
-                    </option>
-                  ))}
-                </select>
+                    }}
+                    className="w-full bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer disabled:cursor-not-allowed text-xs truncate"
+                  >
+                    {colleges.map(c => (
+                      <option key={c.code || c.slug} value={String(c.colg_cd || c.code)}>
+                        [{c.colg_cd || c.code}] {c.name.split(',')[0]}
+                      </option>
+                    ))}
+                  </select>
+                  {userRole !== 'SUPER_ADMIN' && (
+                    <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shrink-0">
+                      🔒 Locked
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* 2. Course (course_cd) */}
@@ -1152,34 +1167,9 @@ export default function AdminAssessmentMarksPage() {
                 </select>
               </div>
 
-              {/* 6. Department (dept_cd) */}
+              {/* 6. Subject (subject_cd) — requires batch+semester first */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">6. Department *</label>
-                <select
-                  value={selectedDeptCd}
-                  onChange={(e) => {
-                    setSelectedDeptCd(e.target.value);
-                    setSelectedPaperCode('');
-                    setStudents([]);
-                    setSelectedStudentRollno(null);
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                >
-                  {filteredDepartments.length === 0 ? (
-                    <option value="">No departments</option>
-                  ) : (
-                    filteredDepartments.map(d => (
-                      <option key={d.name || d.code} value={d.name || d.code}>
-                        {d.name} {d.course_name ? `(${d.course_name})` : d.code ? `(${d.code})` : ''}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              {/* 7. Subject (subject_cd) — requires batch+semester first */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">7. Subject *</label>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">6. Subject *</label>
                 <select
                   value={selectedSubjectCd}
                   onChange={(e) => {
@@ -1358,16 +1348,15 @@ export default function AdminAssessmentMarksPage() {
                       <div
                         key={st.rollno || st.id}
                         onClick={() => {
-                          // Completed/evaluated students cannot be re-selected for editing
-                          if (!isCompleted) handleSelectStudent(st.rollno);
+                          handleSelectStudent(st.rollno);
                         }}
-                        title={isCompleted ? 'Already evaluated — view only' : 'Click to evaluate'}
-                        className={`p-3.5 rounded-xl transition-all duration-150 border flex items-center justify-between ${
-                          isCompleted
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 cursor-not-allowed opacity-80'
-                            : isSelected
-                              ? 'bg-[#5B4BFF] border-[#5B4BFF] text-white shadow-md cursor-pointer'
-                              : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-slate-400 text-slate-700 dark:text-slate-300 cursor-pointer'
+                        title={isCompleted ? 'Evaluated — click to review' : 'Click to evaluate'}
+                        className={`p-3.5 rounded-xl transition-all duration-150 border flex items-center justify-between cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#5B4BFF] border-[#5B4BFF] text-white shadow-md ring-2 ring-[#5B4BFF]/30'
+                            : isCompleted
+                              ? 'bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-300/80 dark:border-emerald-800/60 hover:border-emerald-500 text-slate-900 dark:text-white shadow-xs'
+                              : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 hover:border-slate-400 text-slate-900 dark:text-white'
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -1375,40 +1364,50 @@ export default function AdminAssessmentMarksPage() {
                             <img
                               src={st.photo_url}
                               alt={st.name}
-                              className="w-8 h-8 rounded-full object-cover border border-white/30"
+                              className={`w-8 h-8 rounded-full object-cover border ${isSelected ? 'border-white/40' : 'border-slate-200 dark:border-slate-700'}`}
                               onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
                             />
                           ) : (
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-[#5B4BFF] text-white'}`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                              isSelected
+                                ? 'bg-white/20 text-white'
+                                : 'bg-[#F36C21] text-white'
+                            }`}>
                               {st.name?.charAt(0) || '?'}
                             </div>
                           )}
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className={`text-[10px] font-mono font-bold ${isSelected ? 'text-white/80' : 'text-[#5B4BFF]'}`}>
+                              <span className={`text-[10px] font-mono font-bold ${
+                                isSelected
+                                  ? 'text-white/90'
+                                  : 'text-[#F36C21]'
+                              }`}>
                                 {st.rollno}
                               </span>
                               {st.evaluated ? (
-                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border ${
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold border ${
                                   isSelected
                                     ? 'bg-white/20 text-white border-white/40'
-                                    : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                                    : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700'
                                 }`}>
                                   ✓ Evaluated
                                 </span>
                               ) : (
-                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold border ${
                                   isSelected
-                                    ? 'bg-white/20 text-white'
-                                    : 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400'
+                                    ? 'bg-white/20 text-white border-white/40'
+                                    : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
                                 }`}>
                                   Pending
                                 </span>
                               )}
                             </div>
-                            <h5 className="text-xs font-extrabold mt-0.5">{st.name}</h5>
+                            <h5 className={`text-xs font-extrabold mt-0.5 ${isSelected ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                              {st.name}
+                            </h5>
                             {st.registration_no && st.registration_no !== st.rollno && (
-                              <span className={`text-[9px] font-mono block ${isSelected ? 'text-white/70' : 'text-slate-400'}`}>
+                              <span className={`text-[9px] font-mono block ${isSelected ? 'text-white/70' : 'text-slate-400 dark:text-slate-500'}`}>
                                 Reg: {st.registration_no}
                               </span>
                             )}
@@ -1419,7 +1418,9 @@ export default function AdminAssessmentMarksPage() {
                           <span className={`text-xs font-black ${
                             isSelected
                               ? 'text-white'
-                              : st.evaluated ? 'text-[#00C48C]' : 'text-slate-400'
+                              : isCompleted
+                                ? 'text-[#00C48C]'
+                                : 'text-slate-400'
                           }`}>
                             {Math.max(0, st.marks_obtained).toFixed(2)} / {st.max_marks}
                           </span>

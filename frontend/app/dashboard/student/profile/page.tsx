@@ -327,6 +327,25 @@ export default function StudentProfilePage() {
         setIsEditingBio(false);
         setIsEditingGithub(false);
         setIsEditingLinkedin(false);
+
+        // Sync with local storage and other components like Chat/Header
+        if (payload.photo_url !== undefined) {
+          try {
+            const cachedStr = localStorage.getItem('user');
+            if (cachedStr) {
+              const cachedObj = JSON.parse(cachedStr);
+              cachedObj.photo_url = payload.photo_url;
+              cachedObj.photoUrl = payload.photo_url;
+              if (cachedObj.profile) {
+                cachedObj.profile.photo_url = payload.photo_url;
+                cachedObj.profile.photoUrl = payload.photo_url;
+              }
+              localStorage.setItem('user', JSON.stringify(cachedObj));
+            }
+            window.dispatchEvent(new CustomEvent('user-profile-updated', { detail: { photo_url: payload.photo_url } }));
+          } catch {}
+        }
+
         setTimeout(() => setSaveMessage(''), 3000);
       } else {
         alert('Failed to save profile update to database.');
@@ -340,6 +359,22 @@ export default function StudentProfilePage() {
       setIsEditingLinkedin(false);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleStudentPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 3 * 1024 * 1024) {
+        alert('Image size exceeds 3MB limit.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        handleSaveProfileField({ photo_url: base64String });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -431,6 +466,21 @@ export default function StudentProfilePage() {
                             {profile?.name ? profile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'AK'}
                           </div>
                         )}
+                        <label
+                          htmlFor="student-avatar-upload"
+                          className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity text-white text-[11px] font-bold gap-1 backdrop-blur-xs"
+                          title="Upload / Change Profile Photo"
+                        >
+                          <Camera className="w-6 h-6 text-white" />
+                          <span>Change</span>
+                        </label>
+                        <input
+                          id="student-avatar-upload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleStudentPhotoUpload}
+                        />
                         <span className="absolute bottom-1.5 right-1.5 w-4 h-4 rounded-full bg-[#00C48C] ring-2 ring-white dark:ring-slate-900" title="Enrolled & Active" />
                       </div>
 

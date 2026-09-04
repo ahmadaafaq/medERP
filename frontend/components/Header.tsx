@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useNotices, NoticeItem } from '../hooks/useNotices';
 import CampusAlertsDropdown from './notices/CampusAlertsDropdown';
@@ -83,6 +83,52 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const alertsRef = useRef<HTMLDivElement>(null);
+
+  const getDismissedStorageKey = useCallback(() => {
+    const uId = user?.id || (typeof window !== 'undefined' ? localStorage.getItem('userId') || localStorage.getItem('role') || 'default' : 'default');
+    return `dismissed_notices_${uId}`;
+  }, [user?.id]);
+
+  // Load dismissed alert IDs from persistent localStorage for this specific user
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = getDismissedStorageKey();
+      const savedUserDismissed = localStorage.getItem(key);
+      const savedGlobalDismissed = localStorage.getItem('dismissed_notices');
+      const setIds = new Set<string>();
+      if (savedUserDismissed) {
+        JSON.parse(savedUserDismissed).forEach((id: string) => setIds.add(id));
+      }
+      if (savedGlobalDismissed) {
+        JSON.parse(savedGlobalDismissed).forEach((id: string) => setIds.add(id));
+      }
+      setDismissedAlertIds(Array.from(setIds));
+    } catch {}
+  }, [getDismissedStorageKey]);
+
+  const handleDismissAlert = (noticeId: string) => {
+    setDismissedAlertIds((prev) => {
+      const updated = prev.includes(noticeId) ? prev : [...prev, noticeId];
+      if (typeof window !== 'undefined') {
+        try {
+          const key = getDismissedStorageKey();
+          localStorage.setItem(key, JSON.stringify(updated));
+          localStorage.setItem('dismissed_notices', JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+  };
+
+  const handleReadAlert = (notice: NoticeItem) => {
+    setSelectedAlertNotice(notice);
+    setIsNoticeDetailOpen(true);
+    handleDismissAlert(notice.id);
+    if (!notice.is_read) {
+      markAsRead(notice.id);
+    }
+  };
 
   const fetchChatUnread = async () => {
     try {
@@ -746,8 +792,24 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
       {/* LIVE ADMIN ANNOUNCEMENT ALERT BANNER */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {(() => {
+        const userRole = (user?.role || (typeof window !== 'undefined' ? localStorage.getItem('role') || '' : '') || '').toUpperCase();
+        const isAdminOrSuperAdmin =
+          userRole === 'ADMIN' ||
+          userRole === 'SUPER_ADMIN' ||
+          userRole === 'SUPERADMIN' ||
+          userRole.includes('ADMIN');
+
+        // Do not show the top announcement alert banner for admin or super admin roles
+        if (isAdminOrSuperAdmin) {
+          return null;
+        }
+
         const topAnnouncement = notices.find(
-          (n) => !n.is_read && (n.priority === 'urgent' || n.priority === 'important' || n.category === 'announcement'),
+          (n) =>
+            !n.is_read &&
+            !n.read_at &&
+            !dismissedAlertIds.includes(n.id) &&
+            (n.priority === 'urgent' || n.priority === 'important' || n.category === 'announcement'),
         );
         if (!topAnnouncement || dismissedAlertIds.includes(topAnnouncement.id) || !notificationsEnabled) {
           return null;
@@ -795,13 +857,7 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedAlertNotice(topAnnouncement);
-                  setIsNoticeDetailOpen(true);
-                  if (!topAnnouncement.is_read) {
-                    markAsRead(topAnnouncement.id);
-                  }
-                }}
+                onClick={() => handleReadAlert(topAnnouncement)}
                 className="px-3.5 py-1.5 rounded-xl bg-[#F36C21] hover:bg-[#E25C10] text-white font-black text-xs shadow-sm transition-all flex items-center gap-1 cursor-pointer"
               >
                 <span>Read Notice</span>
@@ -810,7 +866,7 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
 
               <button
                 type="button"
-                onClick={() => setDismissedAlertIds((prev) => [...prev, topAnnouncement.id])}
+                onClick={() => handleDismissAlert(topAnnouncement.id)}
                 className="w-7 h-7 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-[#4E5969] dark:text-slate-300 flex items-center justify-center font-bold text-xs transition-colors cursor-pointer"
                 title="Dismiss"
               >

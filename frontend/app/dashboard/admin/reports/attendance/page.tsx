@@ -1,5 +1,7 @@
-import FacultyMISReportsPage from '../../../faculty/reports/page';
+'use client';
+
+import MISAttendanceReportsPage from '../../attendance-reports/page';
 
 export default function AdminAttendanceReportPage() {
-  return <FacultyMISReportsPage />;
+  return <MISAttendanceReportsPage />;
 }

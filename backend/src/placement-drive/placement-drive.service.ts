@@ -10,6 +10,7 @@ import { DataSource } from 'typeorm';
 import { TenantSchemaService } from '../database/tenant-schema.service';
 import { 
   CreatePlacementDriveDto, 
+  UpdatePlacementDriveDto,
   ApplyPlacementDriveDto, 
   UpdateApplicantStatusDto, 
   PlacementReportQueryDto,
@@ -106,7 +107,7 @@ export class PlacementDriveService {
       ? dto.eligible_batches.split(',').map((s: string) => s.trim()).filter(Boolean)
       : (dto.eligibility_batch_cd ? [dto.eligibility_batch_cd] : ['2025', '2026']);
 
-    // Ensure table structure exists
+    // Ensure table structure exists and columns are present
     try {
       await this.tenantSchemaService.queryInTenant(
         slug,
@@ -132,7 +133,13 @@ export class PlacementDriveService {
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );`
       );
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `ALTER TABLE "${schema}".placement_drives ADD COLUMN IF NOT EXISTS extra_fields JSONB DEFAULT '{}'::jsonb;`
+      );
     } catch {}
+
+    const extraData = dto.extra_fields || (dto.target_cohorts ? { target_cohorts: dto.target_cohorts } : {});
 
     const sql = `
       INSERT INTO "${schema}".placement_drives (
@@ -140,13 +147,13 @@ export class PlacementDriveService {
         eligibility_course_cd, eligibility_branch_cd, eligibility_batch_cd,
         eligible_branches, eligible_batches, logo_url,
         min_score_required, drive_date, deadline_date, status,
-        created_by_empid, created_at, updated_at
+        created_by_empid, extra_fields, created_at, updated_at
       ) VALUES (
         '1', $1, $2, $3, $4,
         $5, $6, $7,
         $8, $9, $10,
         $11, $12, $13, 'Open',
-        $14, NOW(), NOW()
+        $14, $15::jsonb, NOW(), NOW()
       )
       RETURNING *
     `;
@@ -177,6 +184,7 @@ export class PlacementDriveService {
       dto.drive_date,
       dto.deadline_date,
       createdByEmpId,
+      JSON.stringify(extraData),
     ]);
 
     // Automatically publish official Campus Placement Notice into Notices bulletin
@@ -1078,6 +1086,123 @@ export class PlacementDriveService {
       success: true,
       message: 'Placement drive deleted successfully',
       deleted: result?.[0] || null,
+    };
+  }
+
+  /**
+   * Update placement drive by drive_id
+   */
+  async updatePlacementDrive(tenantSlug: string, driveId: string | number, dto: UpdatePlacementDriveDto, user: any) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (dto.company_name !== undefined) {
+      setClauses.push(`company_name = $${idx++}`);
+      values.push(dto.company_name);
+    }
+    if (dto.role !== undefined) {
+      setClauses.push(`role = $${idx++}`);
+      values.push(dto.role);
+    }
+    if (dto.package_ctc !== undefined) {
+      setClauses.push(`package_ctc = $${idx++}`);
+      values.push(dto.package_ctc);
+    }
+    if (dto.description !== undefined) {
+      setClauses.push(`description = $${idx++}`);
+      values.push(dto.description);
+    }
+    if (dto.eligibility_course_cd !== undefined) {
+      setClauses.push(`eligibility_course_cd = $${idx++}`);
+      values.push(dto.eligibility_course_cd);
+    }
+    if (dto.eligibility_branch_cd !== undefined) {
+      setClauses.push(`eligibility_branch_cd = $${idx++}`);
+      values.push(dto.eligibility_branch_cd);
+    }
+    if (dto.eligibility_batch_cd !== undefined) {
+      setClauses.push(`eligibility_batch_cd = $${idx++}`);
+      values.push(dto.eligibility_batch_cd);
+    }
+    if (dto.eligible_branches !== undefined) {
+      const branches = Array.isArray(dto.eligible_branches)
+        ? dto.eligible_branches
+        : typeof dto.eligible_branches === 'string'
+        ? dto.eligible_branches.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : [];
+      setClauses.push(`eligible_branches = $${idx++}`);
+      values.push(JSON.stringify(branches));
+    }
+    if (dto.eligible_batches !== undefined) {
+      const batches = Array.isArray(dto.eligible_batches)
+        ? dto.eligible_batches
+        : typeof dto.eligible_batches === 'string'
+        ? dto.eligible_batches.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : [];
+      setClauses.push(`eligible_batches = $${idx++}`);
+      values.push(JSON.stringify(batches));
+    }
+    if (dto.min_score_required !== undefined) {
+      setClauses.push(`min_score_required = $${idx++}`);
+      values.push(Number(dto.min_score_required) || 0);
+    }
+    if (dto.drive_date !== undefined) {
+      setClauses.push(`drive_date = $${idx++}`);
+      values.push(dto.drive_date);
+    }
+    if (dto.deadline_date !== undefined) {
+      setClauses.push(`deadline_date = $${idx++}`);
+      values.push(dto.deadline_date);
+    }
+    if (dto.status !== undefined) {
+      setClauses.push(`status = $${idx++}`);
+      values.push(dto.status);
+    }
+    if (dto.logo_url !== undefined) {
+      setClauses.push(`logo_url = $${idx++}`);
+      values.push(dto.logo_url);
+    }
+    if (dto.extra_fields !== undefined || dto.target_cohorts !== undefined || dto.eligible_courses !== undefined) {
+      let extraData: any = dto.extra_fields || {};
+      if (dto.target_cohorts) {
+        extraData.target_cohorts = dto.target_cohorts;
+      }
+      if (dto.eligible_courses) {
+        extraData.eligible_courses = dto.eligible_courses;
+      }
+      setClauses.push(`extra_fields = COALESCE(extra_fields, '{}'::jsonb) || $${idx++}::jsonb`);
+      values.push(JSON.stringify(extraData));
+    }
+
+    setClauses.push(`updated_at = NOW()`);
+
+    if (setClauses.length === 1) {
+      const cur = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT * FROM "${schema}".placement_drives WHERE drive_id::text = $1::text`,
+        [String(driveId)],
+      );
+      return { success: true, message: 'No changes made', drive: cur?.[0] || null };
+    }
+
+    values.push(String(driveId));
+    const sql = `
+      UPDATE "${schema}".placement_drives
+      SET ${setClauses.join(', ')}
+      WHERE drive_id::text = $${idx}::text
+      RETURNING *
+    `;
+
+    const result = await this.tenantSchemaService.queryInTenant(slug, sql, values);
+
+    return {
+      success: true,
+      message: 'Placement drive updated successfully',
+      drive: result?.[0] || null,
     };
   }
 }

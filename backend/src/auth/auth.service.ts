@@ -1265,6 +1265,28 @@ export class AuthService {
       return [];
     });
 
+    // Auto sync updated avatar and name to chat groups and historical messages
+    const newAvatar = dto.photo_url || dto.photoUrl;
+    if (newAvatar !== undefined) {
+      await this.ds.query(
+        `UPDATE "${schema}".chat_group_members 
+         SET avatar_url = $1 
+         WHERE user_id::text = $2::text 
+            OR user_id::text = $3::text 
+            OR user_id::text = (SELECT id::text FROM "${schema}".users WHERE email = $4 LIMIT 1)`,
+        [newAvatar || null, userId, empId, email],
+      ).catch(() => null);
+
+      await this.ds.query(
+        `UPDATE "${schema}".chat_messages 
+         SET sender_avatar = $1 
+         WHERE sender_id::text = $2::text 
+            OR sender_id::text = $3::text 
+            OR sender_name = $4`,
+        [newAvatar || null, userId, empId, dto.name || ''],
+      ).catch(() => null);
+    }
+
     return {
       success: true,
       message: 'Profile updated successfully',
@@ -1282,6 +1304,14 @@ export class AuthService {
     const fields: string[] = [];
     const params: any[] = [];
 
+    if (dto.photo_url !== undefined || dto.photoUrl !== undefined) {
+      params.push(dto.photo_url || dto.photoUrl || null);
+      fields.push(`photo_url = $${params.length}`);
+    }
+    if (dto.cover_url !== undefined || dto.coverUrl !== undefined) {
+      params.push(dto.cover_url || dto.coverUrl || null);
+      fields.push(`cover_url = $${params.length}`);
+    }
     if (dto.bio !== undefined) {
       params.push(dto.bio);
       fields.push(`bio = $${params.length}`);
@@ -1314,10 +1344,32 @@ export class AuthService {
       UPDATE "${schema}".students 
       SET ${fields.join(', ')}, updated_at = NOW()
       WHERE registration_no = $${whereIdx} OR rollno = $${whereIdx} OR user_id::text = (SELECT id::text FROM "${schema}".users WHERE id::text = $${whereIdx} LIMIT 1)
-      RETURNING id, name, registration_no, rollno, bio, github_url, github_followers, linkedin_url, linkedin_connections
+      RETURNING id, name, registration_no, rollno, photo_url, cover_url, bio, github_url, github_followers, linkedin_url, linkedin_connections
     `;
 
-    const updated = await this.ds.query(sql, params);
+    const updated = await this.ds.query(sql, params).catch(() => []);
+
+    // Auto sync updated student avatar to chat groups and messages
+    const studentAvatar = dto.photo_url || dto.photoUrl;
+    if (studentAvatar !== undefined) {
+      await this.ds.query(
+        `UPDATE "${schema}".chat_group_members 
+         SET avatar_url = $1 
+         WHERE user_id::text = $2::text 
+            OR user_id::text = $3::text 
+            OR user_id::text = (SELECT user_id::text FROM "${schema}".students WHERE registration_no = $2 OR rollno = $2 LIMIT 1)`,
+        [studentAvatar || null, regNo, userId],
+      ).catch(() => null);
+
+      await this.ds.query(
+        `UPDATE "${schema}".chat_messages 
+         SET sender_avatar = $1 
+         WHERE sender_id::text = $2::text 
+            OR sender_id::text = $3::text 
+            OR sender_id::text = (SELECT user_id::text FROM "${schema}".students WHERE registration_no = $2 OR rollno = $2 LIMIT 1)`,
+        [studentAvatar || null, regNo, userId],
+      ).catch(() => null);
+    }
 
     return {
       success: true,

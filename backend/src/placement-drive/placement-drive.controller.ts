@@ -18,6 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { PlacementDriveService } from './placement-drive.service';
 import { 
   CreatePlacementDriveDto, 
+  UpdatePlacementDriveDto,
   ApplyPlacementDriveDto, 
   UpdateApplicantStatusDto, 
   PlacementReportQueryDto,
@@ -235,6 +236,18 @@ export class PlacementDriveController {
     @Body() dto: UpdateApplicantStatusDto,
   ) {
     return this.placementDriveService.updateApplicantStatus(tenantSlug, dto);
+  }
+
+  @Public()
+  @Patch(':id')
+  async updatePlacementDrive(
+    @TenantSlug() tenantSlug: string,
+    @Param('id') id: string,
+    @Body() dto: UpdatePlacementDriveDto,
+    @Request() req: any,
+  ) {
+    const user = this.extractUser(req, dto);
+    return this.placementDriveService.updatePlacementDrive(tenantSlug, id, dto, user);
   }
 
   @Public()

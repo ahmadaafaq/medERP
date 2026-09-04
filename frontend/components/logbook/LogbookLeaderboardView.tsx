@@ -134,7 +134,76 @@ export interface CategoryItem {
   type?: string;
 }
 
+interface College {
+  id: string;
+  code: string;
+  name: string;
+  slug: string;
+}
+
+const COURSE_NAME_MAP: Record<string, string> = {
+  '1': 'B.Tech (Bachelor of Technology)',
+  '2': 'B.Pharm (Bachelor of Pharmacy)',
+  '3': 'MBA (Master of Business Administration)',
+  '4': 'MCA (Master of Computer Applications)',
+  '5': 'M.Tech (Master of Technology)',
+  '6': 'M.Pharm (Master of Pharmacy)',
+  '7': 'BBA (Bachelor of Business Administration)',
+  '8': 'B.Sc (Bachelor of Science)',
+  '9': 'B.Com (Bachelor of Commerce)',
+  '10': 'M.Sc (Master of Science)',
+  '11': 'Diploma (Polytechnic)',
+  '12': 'B.Sc Nursing',
+  '13': 'BCA (Bachelor of Computer Applications)',
+  '14': 'MCA (Master of Computer Applications)',
+  '15': 'MBA (Master of Business Administration)',
+  '16': 'MBBS (Bachelor of Medicine, Bachelor of Surgery)',
+  'MBBS': 'MBBS (Bachelor of Medicine, Bachelor of Surgery)',
+  'BCA': 'BCA (Bachelor of Computer Applications)',
+  'BTECH': 'B.Tech (Bachelor of Technology)',
+  'MCA': 'MCA (Master of Computer Applications)',
+  'MBA': 'MBA (Master of Business Administration)',
+  'BBA': 'BBA (Bachelor of Business Administration)',
+  'BPHARM': 'B.Pharm (Bachelor of Pharmacy)',
+  'MPHARM': 'M.Pharm (Master of Pharmacy)',
+  'MTECH': 'M.Tech (Master of Technology)',
+};
+
+const getCourseDisplayName = (c: any): string => {
+  if (!c) return 'BCA';
+  const cd = String(c?.course_cd || c?.code || c?.id || '').trim();
+  const rawName = String(c?.course_name || c?.name || c?.crs_name || c?.crsdesc || c?.title || '').trim();
+  
+  if (rawName && !/^course\s*\d+$/i.test(rawName) && rawName !== '-' && rawName !== 'null') {
+    return rawName;
+  }
+  
+  if (cd && COURSE_NAME_MAP[cd]) {
+    return COURSE_NAME_MAP[cd];
+  }
+  const cleanCode = cd.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (cleanCode && COURSE_NAME_MAP[cleanCode]) {
+    return COURSE_NAME_MAP[cleanCode];
+  }
+
+  return rawName || `Course ${cd}`;
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+
+const getInitialTenantSlug = (): string => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+  }
+  return 'srms-cet-bareilly';
+};
+
+const getInitialColgCd = (): string => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('colg_cd') || '1';
+  }
+  return '1';
+};
 
 const PortfolioSkeleton = ({ rowCount = 5 }: { rowCount?: number }) => (
   <div className="overflow-x-auto">
@@ -194,6 +263,12 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
   // Navigation tab
   const [activeTab, setActiveTab] = useState<'portfolios' | 'submissions' | 'leaderboard'>('portfolios');
 
+  // Role & Tenant Locking
+  const [userRole, setUserRole] = useState<string>('ADMIN');
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [selectedCollege, setSelectedCollege] = useState<string>(getInitialColgCd);
+  const [selectedCollegeSlug, setSelectedCollegeSlug] = useState<string>(getInitialTenantSlug);
+
   // Data states from live backend/database
   const [entries, setEntries] = useState<LogbookEntryItem[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardStudent[]>([]);
@@ -212,22 +287,24 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     { id: '2', course_cd: '2', code: '2', name: 'B.Pharm (Bachelor of Pharmacy)' },
   ]);
   const [branches, setBranches] = useState<any[]>([
-    { id: 'CSE', branch_cd: 'CSE', code: 'CSE', name: 'Computer Science & Engineering' },
-    { id: 'IT', branch_cd: 'IT', code: 'IT', name: 'Information Technology' },
-    { id: 'ECE', branch_cd: 'ECE', code: 'ECE', name: 'Electronics & Communication Engineering' },
-    { id: 'ME', branch_cd: 'ME', code: 'ME', name: 'Mechanical Engineering' },
-    { id: 'EEE', branch_cd: 'EEE', code: 'EEE', name: 'Electrical & Electronics Engineering' },
-    { id: 'CE', branch_cd: 'CE', code: 'CE', name: 'Civil Engineering' },
-    { id: 'PHARM', branch_cd: 'PHARM', code: 'PHARM', name: 'Faculty of Pharmacy' },
-    { id: 'CA', branch_cd: 'CA', code: 'CA', name: 'Computer Applications' },
-    { id: 'MGMT', branch_cd: 'MGMT', code: 'MGMT', name: 'Management Studies' },
+    { id: '1', branch_cd: '1', code: '1', name: 'BCA General', course_cd: '13' },
+    { id: 'CSE', branch_cd: 'CSE', code: 'CSE', name: 'Computer Science & Engineering', course_cd: '1' },
+    { id: 'IT', branch_cd: 'IT', code: 'IT', name: 'Information Technology', course_cd: '1' },
+    { id: 'ECE', branch_cd: 'ECE', code: 'ECE', name: 'Electronics & Communication Engineering', course_cd: '1' },
+    { id: 'ME', branch_cd: 'ME', code: 'ME', name: 'Mechanical Engineering', course_cd: '1' },
+    { id: 'EEE', branch_cd: 'EEE', code: 'EEE', name: 'Electrical & Electronics Engineering', course_cd: '1' },
+    { id: 'CE', branch_cd: 'CE', code: 'CE', name: 'Civil Engineering', course_cd: '1' },
+    { id: 'PHARM', branch_cd: 'PHARM', code: 'PHARM', name: 'Faculty of Pharmacy', course_cd: '2' },
+    { id: 'CA', branch_cd: 'CA', code: 'CA', name: 'Computer Applications', course_cd: '4' },
+    { id: 'MGMT', branch_cd: 'MGMT', code: 'MGMT', name: 'Management Studies', course_cd: '3' },
   ]);
   const [batches, setBatches] = useState<any[]>([
-    { id: 'B2026', batch_cd: 'B2026', code: 'B2026', name: 'Batch 2026', year: 2026 },
-    { id: 'B2025', batch_cd: 'B2025', code: 'B2025', name: 'Batch 2025', year: 2025 },
-    { id: 'B2024', batch_cd: 'B2024', code: 'B2024', name: 'Batch 2024', year: 2024 },
-    { id: 'B2023', batch_cd: 'B2023', code: 'B2023', name: 'Batch 2023', year: 2023 },
-    { id: 'B2022', batch_cd: 'B2022', code: 'B2022', name: 'Batch 2022', year: 2022 },
+    { id: '2', batch_cd: '2', code: '2', name: '2025', year: 2025, course_cd: '13' },
+    { id: '1', batch_cd: '1', code: '1', name: '2026', year: 2026, course_cd: '13' },
+    { id: 'B2025', batch_cd: 'B2025', code: 'B2025', name: 'Batch 2025', year: 2025, course_cd: '1' },
+    { id: 'B2024', batch_cd: 'B2024', code: 'B2024', name: 'Batch 2024', year: 2024, course_cd: '1' },
+    { id: 'B2023', batch_cd: 'B2023', code: 'B2023', name: 'Batch 2023', year: 2023, course_cd: '1' },
+    { id: 'B2022', batch_cd: 'B2022', code: 'B2022', name: 'Batch 2022', year: 2022, course_cd: '1' },
   ]);
 
   // Filter states
@@ -275,10 +352,88 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDocPreviewOpen, selectedPortfolioStudent]);
 
-  // Fetch initial academic structure & categories
+  // Fetch initial colleges and lock to logged in tenant for non-superadmin
   useEffect(() => {
-    fetchMetadata();
+    fetchColleges();
   }, []);
+
+  const fetchColleges = async () => {
+    try {
+      const roleVal = (typeof window !== 'undefined'
+        ? (localStorage.getItem('role') || localStorage.getItem('auth_role') || localStorage.getItem('user_role') || (role === 'faculty' ? 'FACULTY' : 'ADMIN'))
+        : 'ADMIN').toUpperCase();
+      setUserRole(roleVal);
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch(`${API_BASE}/college-master/colleges`, { headers }).catch(() => null);
+      let list: College[] = [];
+      if (res && res.ok) {
+        const json = await res.json();
+        const rawList = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+        const seen = new Set<string>();
+        list = rawList.filter((c: any) => {
+          const k = String(c.code || c.slug || c.id);
+          if (!k || seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+      }
+
+      const currentSlug = getInitialTenantSlug();
+      const savedColgCd = getInitialColgCd();
+      const found = list.find((c: College) => String(c.code || c.id) === savedColgCd || c.slug === currentSlug || c.code === currentSlug);
+
+      let filteredList = list;
+      if (roleVal !== 'SUPER_ADMIN') {
+        if (found) {
+          filteredList = [found];
+        } else {
+          filteredList = [{
+            id: '1',
+            code: savedColgCd || '1',
+            name: 'SRMS College of Engineering & Technology, Bareilly',
+            slug: currentSlug,
+          }];
+        }
+      } else if (filteredList.length === 0) {
+        filteredList = [{
+          id: '1',
+          code: savedColgCd || '1',
+          name: 'SRMS College of Engineering & Technology, Bareilly',
+          slug: currentSlug,
+        }];
+      }
+      setColleges(filteredList);
+
+      if (found) {
+        setSelectedCollegeSlug(found.slug);
+        setSelectedCollege(String(found.code || found.id || '1'));
+      } else if (filteredList.length > 0) {
+        setSelectedCollegeSlug(filteredList[0].slug);
+        setSelectedCollege(String(filteredList[0].code || filteredList[0].id || '1'));
+      }
+    } catch (e) {
+      console.error('Failed to fetch colleges', e);
+    }
+  };
+
+  const handleCollegeChange = (colgVal: string) => {
+    setSelectedCollege(colgVal);
+    const found = colleges.find(c => String(c.code || c.id) === colgVal || c.slug === colgVal);
+    if (found) {
+      setSelectedCollegeSlug(found.slug);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('colg_cd', colgVal);
+        localStorage.setItem('tenantSlug', found.slug);
+        localStorage.setItem('selectedTenant', found.slug);
+      }
+    }
+    setSelectedCourse('all');
+    setSelectedBranch('all');
+    setSelectedBatch('all');
+    setSelectedSemester('all');
+  };
 
   const handleCourseChange = (newCourse: string) => {
     setSelectedCourse(newCourse);
@@ -287,86 +442,172 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     setSelectedSemester('all');
   };
 
-  const fetchMetadata = async () => {
-    const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+  const handleBranchChange = (newBranch: string) => {
+    setSelectedBranch(newBranch);
+  };
+
+  const handleBatchChange = (newBatch: string) => {
+    setSelectedBatch(newBatch);
+  };
+
+  const handleSemesterChange = (newSemester: string) => {
+    setSelectedSemester(newSemester);
+  };
+
+  const fetchMetadata = async (slug?: string, colgCd?: string) => {
+    const targetSlug = slug || selectedCollegeSlug || getInitialTenantSlug();
+    const targetColgCd = colgCd || selectedCollege || getInitialColgCd();
     const token = localStorage.getItem('token') || '';
-    const headers = { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug };
+    const headers = { Authorization: `Bearer ${token}`, 'x-tenant-slug': targetSlug };
 
     try {
       // 1. Categories
-      const catRes = await fetch(`${API_BASE}/logbook/categories?tenant=${slug}`, { headers }).catch(() => null);
+      const catRes = await fetch(`${API_BASE}/logbook/categories?tenant=${targetSlug}`, { headers }).catch(() => null);
       if (catRes && catRes.ok) {
         const catJson = await catRes.json();
         const catList = Array.isArray(catJson.data) ? catJson.data : Array.isArray(catJson) ? catJson : [];
         if (catList.length > 0) setCategories(catList);
       }
 
-      // 2. Courses, Branches, Batches from master endpoints (like assessment-marks)
-      const [cRes, brRes, bchRes, structRes] = await Promise.all([
-        fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/branches?tenant=${slug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/logbook/academic-structure?tenant=${slug}`, { headers }).catch(() => null),
+      // 2. Courses, Branches, Batches from master endpoints + SRMS endpoints
+      const [cRes, brRes, bchRes, srmsCoursesRes, srmsBranchesRes, srmsBatchesRes, structRes] = await Promise.all([
+        fetch(`${API_BASE}/college-master/courses?tenant=${targetSlug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/college-master/branches?tenant=${targetSlug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/college-master/batches?tenant=${targetSlug}`, { headers }).catch(() => null),
+        fetch(`/api/srms/courses?colgcd=${targetColgCd}&tenant=${targetSlug}`).catch(() => null),
+        fetch(`/api/srms/branches?colgcd=${targetColgCd}&tenant=${targetSlug}`).catch(() => null),
+        fetch(`/api/srms/batches?colgcd=${targetColgCd}&tenant=${targetSlug}`).catch(() => null),
+        fetch(`${API_BASE}/logbook/academic-structure?tenant=${targetSlug}`, { headers }).catch(() => null),
       ]);
 
-      if (cRes && cRes.ok) {
+      let cList: any[] = [];
+      if (srmsCoursesRes && srmsCoursesRes.ok) {
+        const j = await srmsCoursesRes.json();
+        if (Array.isArray(j) && j.length > 0) cList = j;
+      }
+      if (cList.length === 0 && cRes && cRes.ok) {
         const cJson = await cRes.json();
-        const cList = Array.isArray(cJson.data) ? cJson.data : Array.isArray(cJson) ? cJson : [];
-        if (cList.length > 0) setCourses(cList);
+        cList = Array.isArray(cJson.data) ? cJson.data : Array.isArray(cJson) ? cJson : [];
       }
-      if (brRes && brRes.ok) {
+      if (cList.length > 0) {
+        const mappedCourses = cList.map((c: any) => ({
+          ...c,
+          name: getCourseDisplayName(c),
+          course_name: getCourseDisplayName(c),
+        }));
+        setCourses(mappedCourses);
+      }
+
+      let brList: any[] = [];
+      if (srmsBranchesRes && srmsBranchesRes.ok) {
+        const j = await srmsBranchesRes.json();
+        if (Array.isArray(j) && j.length > 0) brList = j;
+      }
+      if (brList.length === 0 && brRes && brRes.ok) {
         const brJson = await brRes.json();
-        const brList = Array.isArray(brJson.data) ? brJson.data : Array.isArray(brJson) ? brJson : [];
-        if (brList.length > 0) setBranches(brList);
+        brList = Array.isArray(brJson.data) ? brJson.data : Array.isArray(brJson) ? brJson : [];
       }
-      if (bchRes && bchRes.ok) {
+      if (brList.length > 0) setBranches(brList);
+
+      let bchList: any[] = [];
+      if (srmsBatchesRes && srmsBatchesRes.ok) {
+        const j = await srmsBatchesRes.json();
+        if (Array.isArray(j) && j.length > 0) bchList = j;
+      }
+      if (bchList.length === 0 && bchRes && bchRes.ok) {
         const bchJson = await bchRes.json();
-        const bchList = Array.isArray(bchJson.data) ? bchJson.data : Array.isArray(bchJson) ? bchJson : [];
-        if (bchList.length > 0) setBatches(bchList);
+        bchList = Array.isArray(bchJson.data) ? bchJson.data : Array.isArray(bchJson) ? bchJson : [];
       }
+      if (bchList.length > 0) setBatches(bchList);
 
       if (structRes && structRes.ok) {
         const sJson = await structRes.json();
         const data = sJson.data || sJson;
-        if (data.courses && data.courses.length > 0) setCourses((prev) => (prev.length > 0 ? prev : data.courses));
-        if (data.branches && data.branches.length > 0) setBranches((prev) => (prev.length > 0 ? prev : data.branches));
-        if (data.batches && data.batches.length > 0) setBatches((prev) => (prev.length > 0 ? prev : data.batches));
+        if (data.courses && data.courses.length > 0 && cList.length === 0) setCourses(data.courses);
+        if (data.branches && data.branches.length > 0 && brList.length === 0) setBranches(data.branches);
+        if (data.batches && data.batches.length > 0 && bchList.length === 0) setBatches(data.batches);
       }
     } catch (e) {
       console.error('Failed to load logbook metadata:', e);
     }
   };
 
-  // Filter Branches by Selected Course
-  const filteredBranches = useMemo(() => {
-    if (!selectedCourse || selectedCourse === 'all') return branches;
-    const list = branches.filter((b) => {
+  useEffect(() => {
+    if (selectedCollegeSlug) {
+      fetchMetadata(selectedCollegeSlug, selectedCollege);
+    }
+  }, [selectedCollegeSlug, selectedCollege]);
+
+  // Filter Branches by Selected Course with clean BCA General fallback
+  const mappedBranches = useMemo(() => {
+    const curCourse = courses.find((c) => String(c.course_cd || c.code || c.id) === String(selectedCourse));
+    const courseName = curCourse?.name?.replace(/^\[#\d+\]\s*/, '').trim() || (selectedCourse === '13' ? 'BCA' : 'General');
+
+    const courseFiltered = branches.filter((b) => {
+      if (!selectedCourse || selectedCourse === 'all') return true;
       const bCourse = String(b.course_cd || b.course_id || '').toLowerCase();
       const sel = String(selectedCourse).toLowerCase();
       return bCourse === sel;
     });
-    return list.length > 0 ? list : branches;
-  }, [branches, selectedCourse]);
+
+    const list = courseFiltered.length > 0 ? courseFiltered : branches;
+    const mapped = list.map((b) => {
+      const rawName = (b.branch_name || b.name || '').trim();
+      const validName = (rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE')
+        ? rawName
+        : `${b.course_name || courseName} General`;
+      return {
+        ...b,
+        id: String(b.branch_cd || b.code || b.id || '1'),
+        branch_cd: String(b.branch_cd || b.code || b.id || '1'),
+        name: validName,
+      };
+    });
+
+    const seen = new Set<string>();
+    return mapped.filter((b) => {
+      const k = `${b.branch_cd}|${b.name}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [branches, selectedCourse, courses]);
 
   // Filter Batches by Selected Course
-  const filteredBatches = useMemo(() => {
-    if (!selectedCourse || selectedCourse === 'all') return batches;
+  const mappedBatches = useMemo(() => {
     const list = batches.filter((b) => {
+      if (!selectedCourse || selectedCourse === 'all') return true;
       const bCourse = String(b.course_cd || b.course_id || '').toLowerCase();
       const sel = String(selectedCourse).toLowerCase();
       return bCourse === sel || b.code?.toLowerCase().includes(sel);
     });
-    return list.length > 0 ? list : batches;
+
+    const targetList = list.length > 0 ? list : batches;
+    const mapped = targetList.map((b) => ({
+      ...b,
+      code: String(b.batch_cd || b.code || b.name || b.id || '1'),
+      batch_cd: String(b.batch_cd || b.code || b.name || b.id || '1'),
+      name: String(b.batch_name || b.name || b.year || b.batch_cd || ''),
+      year: Number(b.year || b.batch_name || 2025),
+    }));
+
+    const seen = new Set<string>();
+    return mapped.filter((b) => {
+      const k = String(b.batch_cd || b.code || b.name);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
   }, [batches, selectedCourse]);
 
   // Fetch entries & leaderboard
   useEffect(() => {
     fetchData();
-  }, [selectedCategory, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedStatus]);
+  }, [selectedCollegeSlug, selectedCategory, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedStatus]);
 
   const fetchData = async () => {
     setLoading(true);
-    const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+    const slug = selectedCollegeSlug || localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
     const token = localStorage.getItem('token') || '';
     const headers = { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug };
 
@@ -430,6 +671,15 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
         if (!match) return false;
       }
 
+      // 1b. Branch Match
+      if (selectedBranch !== 'all') {
+        const brVal = selectedBranch.toLowerCase();
+        const itemBr = (item.branchId || item.branchName || '').toLowerCase();
+        if (itemBr && !itemBr.includes(brVal) && item.branchId !== selectedBranch && itemBr !== 'bca general') {
+          return false;
+        }
+      }
+
       // 2. Batch Match
       if (selectedBatch !== 'all') {
         const bVal = selectedBatch.toLowerCase().replace(/[^0-9]/g, '');
@@ -470,7 +720,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
 
       return true;
     });
-  }, [entries, selectedCourse, selectedBatch, selectedSemester, selectedCategory, selectedStatus, searchQuery]);
+  }, [entries, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedCategory, selectedStatus, searchQuery]);
 
   // ════════════════════════════════════════════════════════════════════════════════
   // CONSOLIDATE INTO SINGLE ROW PER STUDENT (Student Portfolio Summaries)
@@ -764,73 +1014,112 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {/* Course */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 text-xs">
+              {/* 1. College (colg_cd) - Locked for non-SuperAdmin */}
               <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-                  1. Program / Course
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                  <span>🏛️</span> 1. College *
+                </label>
+                <div className="relative flex items-center">
+                  <select
+                    value={selectedCollege}
+                    disabled={userRole !== 'SUPER_ADMIN'}
+                    onChange={(e) => handleCollegeChange(e.target.value)}
+                    className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF] disabled:cursor-not-allowed appearance-none cursor-pointer truncate pr-14"
+                  >
+                    {colleges.map((c) => (
+                      <option key={c.code || c.slug || c.id} value={String(c.code || c.id || '1')}>
+                        [{c.code || '1'}] {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-2 pointer-events-none flex items-center gap-1">
+                    {userRole !== 'SUPER_ADMIN' ? (
+                      <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                        <span>🔒</span>
+                        <span>Locked</span>
+                      </span>
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Course */}
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                  <span>🎓</span> 2. Course ({courses.length})
                 </label>
                 <select
                   value={selectedCourse}
                   onChange={(e) => handleCourseChange(e.target.value)}
-                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF] cursor-pointer truncate"
                 >
                   <option value="all">All Courses</option>
-                  {courses.map((c, idx) => (
-                    <option key={c.course_cd || c.code || c.id || idx} value={c.course_cd || c.code || String(c.id)}>
-                      {c.name || c.code || `Course ${c.course_cd}`}
-                    </option>
-                  ))}
+                  {courses.map((c, idx) => {
+                    const code = c.course_cd || c.code || c.id || idx;
+                    const displayName = getCourseDisplayName(c);
+                    return (
+                      <option key={code} value={String(code)}>
+                        [#{code}] {displayName}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
-              {/* Branch */}
+              {/* 3. Branch */}
               <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-                  2. Department / Branch
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                  <span>🏢</span> 3. Branch ({mappedBranches.length})
                 </label>
                 <select
                   value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                  onChange={(e) => handleBranchChange(e.target.value)}
+                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF] cursor-pointer truncate"
                 >
                   <option value="all">All Branches</option>
-                  {filteredBranches.map((b, idx) => (
-                    <option key={b.id || b.branch_cd || b.code || idx} value={b.branch_cd || b.code || b.id}>
-                      {b.name || b.branch_cd || b.code}
+                  {mappedBranches.map((b, idx) => (
+                    <option key={b.id || b.branch_cd || b.code || idx} value={String(b.branch_cd || b.code || b.id)}>
+                      [#{b.branch_cd || b.code || idx + 1}] {b.name || b.branch_cd || b.code}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Batch */}
+              {/* 4. Batch */}
               <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-                  3. Academic Batch
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                  <span>👥</span> 4. Batch ({mappedBatches.length})
                 </label>
                 <select
                   value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
-                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                  onChange={(e) => handleBatchChange(e.target.value)}
+                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF] cursor-pointer truncate"
                 >
                   <option value="all">All Batches</option>
-                  {filteredBatches.map((b, idx) => (
-                    <option key={b.id || b.batch_cd || b.code || idx} value={b.batch_cd || b.code || b.name || b.id}>
-                      {b.name || `Batch ${b.year || b.batch_cd || b.code}`} [{b.batch_cd || b.code || b.id}]
-                    </option>
-                  ))}
+                  {mappedBatches.map((b, idx) => {
+                    const rawName = String(b.name || b.batch_name || b.year || b.batch_cd || '').trim();
+                    const batchLabel = rawName.toLowerCase().startsWith('batch') ? rawName : `Batch ${rawName}`;
+                    return (
+                      <option key={b.id || b.batch_cd || b.code || idx} value={String(b.batch_cd || b.code || b.name || b.id)}>
+                        [#{b.batch_cd || b.code || b.id}] {batchLabel}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
-              {/* Semester */}
+              {/* 5. Semester */}
               <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-                  4. Current Semester
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                  <span>📖</span> 5. Semester
                 </label>
                 <select
                   value={selectedSemester}
-                  onChange={(e) => setSelectedSemester(e.target.value)}
-                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                  onChange={(e) => handleSemesterChange(e.target.value)}
+                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-400 font-bold focus:outline-none focus:border-[#5B4BFF] cursor-pointer"
                 >
                   <option value="all">All Semesters</option>
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
@@ -841,15 +1130,15 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                 </select>
               </div>
 
-              {/* Category */}
+              {/* 6. Activity Category */}
               <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-                  5. Activity Category
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                  <span>📋</span> 6. Category
                 </label>
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF] cursor-pointer truncate"
                 >
                   <option value="all">All Categories</option>
                   <option value="SEMINAR">Seminars &amp; Presentations</option>
@@ -859,15 +1148,15 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                 </select>
               </div>
 
-              {/* Faculty Status */}
+              {/* 7. Faculty Status */}
               <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-                  6. Evaluation Status
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                  <span>⚡</span> 7. Status
                 </label>
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                  className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF] cursor-pointer"
                 >
                   <option value="all">All Statuses</option>
                   <option value="EVALUATED">Evaluated / Graded</option>

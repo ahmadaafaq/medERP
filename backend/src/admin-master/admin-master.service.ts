@@ -2549,6 +2549,28 @@ export class AdminMasterService {
   }
 
   // ─── 8. FACULTY SUBJECT LINKER ─────────────────────────────────────────────
+  private static readonly ensuredFacultySubjectSchemas = new Set<string>();
+
+  private async ensureFacultySubjectsTable(schema: string) {
+    if (AdminMasterService.ensuredFacultySubjectSchemas.has(schema)) return;
+    try {
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".faculty_subjects (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          faculty_id UUID NOT NULL,
+          subject_id UUID NOT NULL,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {});
+      await this.ds.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9_]/g, '_')}_fac_sub ON "${schema}".faculty_subjects (faculty_id, subject_id);
+      `).catch(() => {});
+      AdminMasterService.ensuredFacultySubjectSchemas.add(schema);
+    } catch (e) {}
+  }
+
   async listFacultySubjects(query: { facultyId?: string; subjectId?: string; departmentId?: string }, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
     const colleges = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`).catch(() => []);
@@ -2559,6 +2581,7 @@ export class AdminMasterService {
         if (!col.slug) continue;
         const s = `tenant_${col.slug}`;
         try {
+          await this.ensureFacultySubjectsTable(s);
           const rows = await this.ds.query(
             `SELECT DISTINCT ON (fs.id) fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
                     f.name AS faculty_name, f.emp_id AS faculty_code, f.designation AS faculty_designation,
@@ -2590,6 +2613,7 @@ export class AdminMasterService {
     const currentCollege = colleges.find((c: any) => c.slug === slug || c.id === slug || c.code === slug);
     const targetSlug = currentCollege?.slug || slug;
     const s = `tenant_${targetSlug}`;
+    await this.ensureFacultySubjectsTable(s);
 
     const params: any[] = [];
     let sql = `
@@ -2634,6 +2658,7 @@ export class AdminMasterService {
     const currentCollege = colleges.find((c: any) => c.slug === slug || c.id === slug || c.code === slug);
     const targetSlug = currentCollege?.slug || (slug === 'all' ? 'srms-cet-bareilly' : slug);
     const schema = `tenant_${targetSlug}`;
+    await this.ensureFacultySubjectsTable(schema);
 
     // Resolve Faculty UUID
     let facId = dto.facultyId;

@@ -34,6 +34,7 @@ export enum TargetType {
   BRANCH = 'branch',
   BATCH_YEAR = 'batch_year',
   USER = 'user',
+  SEMESTER = 'semester',
 }
 
 export class NoticeTargetRuleDto {
@@ -72,6 +73,11 @@ export class NoticeAttachmentDto {
   @IsOptional()
   @IsNumber()
   file_size_kb?: number;
+
+  @ApiPropertyOptional({ description: 'Base64 encoded file data backup' })
+  @IsOptional()
+  @IsString()
+  file_data?: string;
 }
 
 export class CreateNoticeDto {
@@ -201,6 +207,20 @@ export class UpdateNoticeDto {
   @IsOptional()
   @IsBoolean()
   requires_acknowledgement?: boolean;
+
+  @ApiPropertyOptional({ type: [NoticeTargetRuleDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => NoticeTargetRuleDto)
+  targets?: NoticeTargetRuleDto[];
+
+  @ApiPropertyOptional({ type: [NoticeAttachmentDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => NoticeAttachmentDto)
+  attachments?: NoticeAttachmentDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

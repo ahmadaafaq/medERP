@@ -12,7 +12,34 @@ async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: 
   try {
     const data = await srmsPost('erpadmin/GetBranch', { colgcd: cd, coursecd: crs });
     if (Array.isArray(data) && data.length > 0) {
-      return NextResponse.json(data);
+      // Filter by course_cd if provided
+      const courseFiltered = data.filter((b: any) => {
+        const bCourse = String(b.course_cd || b.coursecd || b.course_id || '').trim();
+        return !bCourse || bCourse === String(crs);
+      });
+      const targetList = courseFiltered.length > 0 ? courseFiltered : data;
+
+      // Deduplicate by unique branch_name + branch_cd
+      const seen = new Set<string>();
+      const deduplicated: any[] = [];
+      for (const item of targetList) {
+        const bCode = String(item.branch_cd || item.code || item.id || '1').trim();
+        const bName = String(item.branch_name || item.name || '').trim();
+        const key = `${bCode}:::${bName.toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduplicated.push({
+            colg_cd: String(item.colg_cd || cd),
+            course_cd: String(item.course_cd || crs),
+            branch_cd: bCode,
+            branch_name: bName,
+          });
+        }
+      }
+
+      if (deduplicated.length > 0) {
+        return NextResponse.json(deduplicated);
+      }
     }
   } catch (error: any) {
     console.warn('[API /api/srms/branches] SRMS live portal fetch error:', error?.message);

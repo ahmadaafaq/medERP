@@ -99,9 +99,10 @@ export default function AdminSentNoticesPage() {
   const urgentCount = notices.filter((n) => n.priority === 'urgent').length;
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '—';
+    if (!dateStr) return 'Just now';
     try {
       const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return 'Just now';
       return d.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',

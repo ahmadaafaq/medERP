@@ -61,6 +61,81 @@ export class CreatePlacementDriveDto {
   @IsOptional()
   @IsString()
   logo_url?: string;
+
+  @IsOptional()
+  extra_fields?: any;
+
+  @IsOptional()
+  target_cohorts?: any;
+
+  @IsOptional()
+  eligible_courses?: any;
+}
+
+export class UpdatePlacementDriveDto {
+  @IsOptional()
+  @IsString()
+  company_name?: string;
+
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @IsOptional()
+  @IsString()
+  package_ctc?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  eligibility_course_cd?: string;
+
+  @IsOptional()
+  @IsString()
+  eligibility_branch_cd?: string;
+
+  @IsOptional()
+  @IsString()
+  eligibility_batch_cd?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  min_score_required?: number;
+
+  @IsOptional()
+  @IsDateString()
+  drive_date?: string;
+
+  @IsOptional()
+  @IsDateString()
+  deadline_date?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  eligible_branches?: any;
+
+  @IsOptional()
+  eligible_batches?: any;
+
+  @IsOptional()
+  @IsString()
+  logo_url?: string;
+
+  @IsOptional()
+  extra_fields?: any;
+
+  @IsOptional()
+  target_cohorts?: any;
+
+  @IsOptional()
+  eligible_courses?: any;
 }
 
 export class ApplyPlacementDriveDto {

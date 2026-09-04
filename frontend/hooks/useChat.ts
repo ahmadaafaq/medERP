@@ -32,6 +32,7 @@ export interface ChatGroup {
   description?: string;
   member_count?: number;
   unread_count?: number;
+  members?: ChatMember[];
   last_message?: {
     id?: string;
     body?: string;
@@ -97,10 +98,19 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
         if (raw) {
           const u = JSON.parse(raw);
           const p = u.profile || u;
-          userId = u.id || u.sub || p.registration_no || p.rollno || userId;
-          userName = u.name || p.name || userName;
+          userId = u.id || u.sub || p.emp_id || p.empId || p.registration_no || p.rollno || userId;
+          userName =
+            u.name ||
+            p.name ||
+            u.faculty_name ||
+            p.faculty_name ||
+            u.student_name ||
+            p.student_name ||
+            (u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : '') ||
+            (p.firstName ? `${p.firstName} ${p.lastName || ''}`.trim() : '') ||
+            userName;
           userRole = u.role || userRole;
-          userAvatar = u.photo_url || p.photo_url || p.avatar_url || '';
+          userAvatar = u.photo_url || p.photo_url || p.avatar_url || p.photoUrl || '';
         }
       } catch {}
     }
@@ -424,6 +434,24 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
     }, 15000);
     return () => clearInterval(interval);
   }, [fetchGroups, fetchMessages]);
+
+  // Instantly re-fetch and refresh avatars when user profile photo is updated in profile section
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      fetchGroups(true);
+      if (activeGroupRef.current) {
+        fetchMessages(activeGroupRef.current, true);
+        fetchMembers(activeGroupRef.current);
+      }
+    };
+
+    window.addEventListener('user-profile-updated', handleProfileUpdate);
+    window.addEventListener('storage', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('user-profile-updated', handleProfileUpdate);
+      window.removeEventListener('storage', handleProfileUpdate);
+    };
+  }, [fetchGroups, fetchMessages, fetchMembers]);
 
   // Join / Add a Batch Group to discussion list
   const joinBatchGroup = async (params: {

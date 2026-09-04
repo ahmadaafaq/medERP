@@ -918,6 +918,27 @@ export class StudentMasterService {
         [id, dto.photoUrl || null],
       );
 
+      // Auto sync updated avatar to chat tables
+      if (dto.photoUrl) {
+        await runner.query(
+          `UPDATE chat_group_members 
+           SET avatar_url = $1 
+           WHERE user_id::text = (SELECT user_id::text FROM students WHERE id = $2 LIMIT 1)
+              OR user_id::text = (SELECT registration_no::text FROM students WHERE id = $2 LIMIT 1)
+              OR user_id::text = (SELECT rollno::text FROM students WHERE id = $2 LIMIT 1)`,
+          [dto.photoUrl, id],
+        ).catch(() => null);
+
+        await runner.query(
+          `UPDATE chat_messages 
+           SET sender_avatar = $1 
+           WHERE sender_id::text = (SELECT user_id::text FROM students WHERE id = $2 LIMIT 1)
+              OR sender_id::text = (SELECT registration_no::text FROM students WHERE id = $2 LIMIT 1)
+              OR sender_id::text = (SELECT rollno::text FROM students WHERE id = $2 LIMIT 1)`,
+          [dto.photoUrl, id],
+        ).catch(() => null);
+      }
+
       await runner.commitTransaction();
       return { success: true };
     } catch (err) {

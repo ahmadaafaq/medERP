@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, Calendar, MapPin, DollarSign, Award, ChevronRight, CheckCircle2, AlertCircle, Trash2, Loader2 } from 'lucide-react';
+import { Building2, Calendar, MapPin, DollarSign, Award, ChevronRight, CheckCircle2, AlertCircle, Trash2, Loader2, Pencil } from 'lucide-react';
 
 export interface PlacementCompany {
   drive_id: number;
@@ -40,6 +40,7 @@ interface CompanyCardProps {
   userRole?: string;
   isDeleting?: boolean;
   onViewDetails: (company: PlacementCompany) => void;
+  onEdit?: (company: PlacementCompany) => void;
   onApply?: (company: PlacementCompany) => void;
   onManageApplicants?: (company: PlacementCompany) => void;
   onDelete?: (company: PlacementCompany) => void;
@@ -51,25 +52,157 @@ export default function CompanyCard({
   userRole,
   isDeleting,
   onViewDetails,
+  onEdit,
   onApply,
   onManageApplicants,
   onDelete,
 }: CompanyCardProps) {
   const normRole = (userRole || role || '').toUpperCase();
   const canDelete = normRole === 'ADMIN' || normRole === 'SUPER_ADMIN' || normRole === 'COLLEGE_ADMIN' || role === 'admin';
-  const branches = Array.isArray(company.eligible_branches)
-    ? company.eligible_branches
-    : typeof company.eligible_branches === 'string'
-    ? company.eligible_branches.split(',').map((s) => s.trim())
-    : ['All Branches'];
 
-  const batches = Array.isArray(company.eligible_batches)
-    ? company.eligible_batches
-    : typeof company.eligible_batches === 'string'
-    ? company.eligible_batches.split(',').map((s) => s.trim())
-    : ['2025', '2026'];
+  const courses = React.useMemo(() => {
+    const detected = new Set<string>();
 
-  const extraFieldKeys = company.extra_fields ? Object.keys(company.extra_fields) : [];
+    const addNormalized = (raw: string) => {
+      if (!raw) return;
+      const clean = String(raw).replace(/^\[#\d+\]\s*/, '').trim();
+      const upper = clean.toUpperCase().replace(/[\.\s_-]/g, '');
+      
+      if (upper.includes('BTECH') || upper.includes('BACHELOROFTECH')) detected.add('B.Tech');
+      else if (upper.includes('MTECH') || upper.includes('MASTEROFTECH')) detected.add('M.Tech');
+      else if (upper.includes('BCA') || upper.includes('BACHELOROFCOMPUTER')) detected.add('BCA');
+      else if (upper.includes('MCA') || upper.includes('MASTEROFCOMPUTER')) detected.add('MCA');
+      else if (upper.includes('BBA') || upper.includes('BACHELOROFBUSINESS')) detected.add('BBA');
+      else if (upper.includes('MBA') || upper.includes('MASTEROFBUSINESS')) detected.add('MBA');
+      else if (upper.includes('BPHARM') || upper.includes('PHARMACY')) detected.add('B.Pharm');
+      else if (upper.includes('MPHARM')) detected.add('M.Pharm');
+      else if (upper.includes('BSC') || upper.includes('BACHELOROFSCI')) detected.add('B.Sc');
+      else if (upper.includes('MSC') || upper.includes('MASTEROFSCI')) detected.add('M.Sc');
+      else if (upper.includes('BCOM')) detected.add('B.Com');
+      else if (upper.includes('MCOM')) detected.add('M.Com');
+      else if (upper.includes('DIPLOMA')) detected.add('Diploma');
+      else {
+        const standard = clean.replace(/\.+$/, '');
+        if (standard) detected.add(standard);
+      }
+    };
+
+    // 1. Target cohorts
+    if (company.extra_fields?.target_cohorts && Array.isArray(company.extra_fields.target_cohorts)) {
+      company.extra_fields.target_cohorts.forEach((c: any) => {
+        if (c.course_name) {
+          addNormalized(c.course_name);
+        } else if (c.course_cd) {
+          const cd = String(c.course_cd).trim();
+          if (cd === '13') addNormalized('BCA');
+          else if (cd === '1') addNormalized('B.Tech');
+          else if (cd === '14') addNormalized('MCA');
+          else addNormalized(`Course ${cd}`);
+        }
+      });
+    }
+
+    // 2. Direct course fields
+    const rawCourses = company.eligible_courses || company.courses;
+    if (Array.isArray(rawCourses)) {
+      rawCourses.forEach((c: any) => {
+        if (c) addNormalized(c);
+      });
+    } else if (typeof rawCourses === 'string' && rawCourses) {
+      rawCourses.split(',').forEach((s: string) => {
+        const trimmed = s.trim();
+        if (trimmed) addNormalized(trimmed);
+      });
+    }
+
+    // 3. eligibility_course_cd codes
+    if (company.eligibility_course_cd) {
+      const cdStr = String(company.eligibility_course_cd);
+      cdStr.split(',').forEach((c) => {
+        const trimmed = c.trim();
+        if (trimmed === '13') addNormalized('BCA');
+        else if (trimmed === '1') addNormalized('B.Tech');
+        else if (trimmed === '14') addNormalized('MCA');
+        else if (trimmed && trimmed !== 'ALL') addNormalized(`Course ${trimmed}`);
+      });
+    }
+
+    // 4. Derive from eligible branches (only if no courses detected yet or if explicit branches match known patterns)
+    const allBranchStrs = Array.isArray(company.eligible_branches)
+      ? company.eligible_branches
+      : typeof company.eligible_branches === 'string'
+      ? company.eligible_branches.split(',')
+      : Array.isArray(company.branches)
+      ? company.branches
+      : [];
+
+    allBranchStrs.forEach((b: any) => {
+      const bUpper = String(b).toUpperCase();
+      if (bUpper.includes('BCA')) {
+        addNormalized('BCA');
+      }
+      if (
+        bUpper.includes('CSE') ||
+        bUpper.includes('IT') ||
+        bUpper.includes('(IT)') ||
+        bUpper.includes('ECE') ||
+        bUpper.includes('ME') ||
+        bUpper.includes('EE') ||
+        bUpper.includes('COMPUTER SCIENCE') ||
+        bUpper.includes('DATA SCIENCE') ||
+        bUpper.includes('INFORMATION TECH') ||
+        bUpper.includes('MECHANICAL') ||
+        bUpper.includes('ELECTRICAL') ||
+        bUpper.includes('ELECTRONICS') ||
+        bUpper.includes('CIVIL') ||
+        bUpper.includes('B.TECH') ||
+        bUpper.includes('BTECH')
+      ) {
+        addNormalized('B.Tech');
+      }
+      if (bUpper.includes('MCA')) {
+        addNormalized('MCA');
+      }
+      if (bUpper.includes('MBA')) {
+        addNormalized('MBA');
+      }
+      if (bUpper.includes('BBA')) {
+        addNormalized('BBA');
+      }
+      if (bUpper.includes('PHARM')) {
+        addNormalized('B.Pharm');
+      }
+    });
+
+    if (detected.size === 0) {
+      return ['BCA'];
+    }
+    return Array.from(detected);
+  }, [company]);
+
+  const branches = React.useMemo(() => {
+    const raw = Array.isArray(company.eligible_branches) && company.eligible_branches.length > 0
+      ? company.eligible_branches
+      : typeof company.eligible_branches === 'string' && company.eligible_branches
+      ? company.eligible_branches.split(',').map((s) => s.trim())
+      : company.eligibility_branch_cd
+      ? [String(company.eligibility_branch_cd)]
+      : ['All Branches'];
+    return Array.from(new Set(raw.map((b: any) => String(b || '').trim()).filter(Boolean)));
+  }, [company]);
+
+  const batches = React.useMemo(() => {
+    const raw = Array.isArray(company.eligible_batches) && company.eligible_batches.length > 0
+      ? company.eligible_batches
+      : typeof company.eligible_batches === 'string' && company.eligible_batches
+      ? company.eligible_batches.split(',').map((s) => s.trim())
+      : company.eligibility_batch_cd
+      ? [String(company.eligibility_batch_cd)]
+      : ['2025'];
+    return Array.from(new Set(raw.map((b: any) => String(b || '').trim()).filter(Boolean)));
+  }, [company]);
+
+  const extraFieldKeys = company.extra_fields ? Object.keys(company.extra_fields).filter(k => k !== 'target_cohorts' && k !== 'eligible_courses') : [];
   const initial = company.company_name?.charAt(0)?.toUpperCase() || 'C';
 
   return (
@@ -104,6 +237,19 @@ export default function CompanyCard({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {company.status || 'Active'}
             </span>
+            {canDelete && onEdit && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(company);
+                }}
+                title="Edit Placement Drive"
+                className="px-2 py-1 rounded-full text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 hover:text-amber-800 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1 shrink-0 transition-all cursor-pointer active:scale-95 shadow-xs"
+              >
+                <Pencil className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+              </button>
+            )}
             {canDelete && onDelete && (
               <button
                 type="button"
@@ -152,8 +298,27 @@ export default function CompanyCard({
           </div>
         </div>
 
-        {/* Eligible Branches & Batches */}
+        {/* Eligible Courses, Branches & Batches */}
         <div className="space-y-2 mb-4">
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mr-1">
+              Courses:
+            </span>
+            {courses.slice(0, 3).map((c: any, i: number) => (
+              <span
+                key={i}
+                className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-[#5B4BFF] dark:bg-violet-950/40 dark:text-violet-300 border border-violet-200/80 dark:border-violet-800/60"
+              >
+                {String(c)}
+              </span>
+            ))}
+            {courses.length > 3 && (
+              <span className="text-[10px] text-slate-400 font-bold">
+                +{courses.length - 3} more
+              </span>
+            )}
+          </div>
+
           <div className="flex flex-wrap gap-1.5 items-center">
             <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400 mr-1">
               Branches:
@@ -161,7 +326,7 @@ export default function CompanyCard({
             {branches.slice(0, 4).map((b, i) => (
               <span
                 key={i}
-                className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800"
+                className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60"
               >
                 {b}
               </span>

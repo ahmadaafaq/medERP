@@ -360,6 +360,58 @@ export class UsersService {
     return cleaned;
   }
 
+  private static readonly ensuredFacultySchemas = new Set<string>();
+
+  private async ensureFacultyColumns(schema: string) {
+    if (UsersService.ensuredFacultySchemas.has(schema)) return;
+    try {
+      await this.ds.query(`
+        ALTER TABLE "${schema}".faculty 
+          ADD COLUMN IF NOT EXISTS usr_id VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS devicecd BIGINT,
+          ADD COLUMN IF NOT EXISTS loc_cd INT,
+          ADD COLUMN IF NOT EXISTS email VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS phone VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS designation VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS qualification VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS specialization VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS experience VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS gender VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS photo_url TEXT,
+          ADD COLUMN IF NOT EXISTS date_of_joining DATE,
+          ADD COLUMN IF NOT EXISTS joining_date DATE,
+          ADD COLUMN IF NOT EXISTS date_of_birth DATE,
+          ADD COLUMN IF NOT EXISTS date_of_leaving DATE,
+          ADD COLUMN IF NOT EXISTS employment_status VARCHAR(50) DEFAULT 'ACTIVE',
+          ADD COLUMN IF NOT EXISTS staff_type VARCHAR(50) DEFAULT 'Faculty',
+          ADD COLUMN IF NOT EXISTS blood_group VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS caste VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS pan_no VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS aadhaar_no VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS uan VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS bank_ac_no VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS current_basic NUMERIC(14,2),
+          ADD COLUMN IF NOT EXISTS device_cd VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS salgrade VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS father_name VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS spouse_name VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS address TEXT,
+          ADD COLUMN IF NOT EXISTS perm_addr TEXT,
+          ADD COLUMN IF NOT EXISTS city VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS state VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS perm_city VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS perm_state VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS homephone VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS permanent_tel_no VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS highest_education VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS category VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS payroll_category VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+      `).catch(() => {});
+      UsersService.ensuredFacultySchemas.add(schema);
+    } catch (e) {}
+  }
+
   async getFaculty(tenantSlug: string, pagination: PaginationDto, filters: {
     search?: string; departmentId?: string; role?: UserRole; staffType?: string; isActive?: string;
   } = {}) {
@@ -372,6 +424,7 @@ export class UsersService {
         if (!col.slug) continue;
         const s = `tenant_${col.slug}`;
         try {
+          await this.ensureFacultyColumns(s);
           const rows = await this.ds.query(
             `SELECT f.id, f.emp_id, f.name, f.designation,
                     COALESCE(NULLIF(f.photo_url, ''), CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
@@ -401,11 +454,19 @@ export class UsersService {
           });
         } catch (e) { }
       }
-      return paginate(allFaculty, allFaculty.length, pagination);
+      const seen = new Set<string>();
+      const dedupedAll = allFaculty.filter(f => {
+        const key = f.emp_id || f.id || f.email;
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return paginate(dedupedAll, dedupedAll.length, pagination);
     }
 
     const currentCollege = colleges.find((c: any) => c.slug === resolvedSlug || c.id === resolvedSlug || c.code === resolvedSlug);
     const schema = `tenant_${currentCollege?.slug || resolvedSlug}`;
+    await this.ensureFacultyColumns(schema);
     const { page = 1, limit = 20 } = pagination;
     const offset = (page - 1) * limit;
 
@@ -486,6 +547,7 @@ export class UsersService {
     const colleges = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`).catch(() => []);
 
     const fetchFromSchema = async (s: string) => {
+      await this.ensureFacultyColumns(s);
       return this.ds.query(
         `SELECT f.*,
                 COALESCE(NULLIF(f.photo_url, ''), CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
@@ -829,6 +891,25 @@ export class UsersService {
         `UPDATE "${schema}".faculty SET ${sets.join(', ')} WHERE id=$${i}`,
         params,
       );
+
+      const newAvatar = dto.photoUrl !== undefined ? dto.photoUrl : (dto as any).photo_url;
+      if (newAvatar !== undefined) {
+        await this.ds.query(
+          `UPDATE "${schema}".chat_group_members 
+           SET avatar_url = $1 
+           WHERE user_id::text = $2::text 
+              OR user_id::text = $3::text`,
+          [newAvatar || null, faculty.user_id, faculty.emp_id],
+        ).catch(() => null);
+
+        await this.ds.query(
+          `UPDATE "${schema}".chat_messages 
+           SET sender_avatar = $1 
+           WHERE sender_id::text = $2::text 
+              OR sender_id::text = $3::text`,
+          [newAvatar || null, faculty.user_id, faculty.emp_id],
+        ).catch(() => null);
+      }
     }
 
     return this.getFacultyById(resolvedSlug, id);
