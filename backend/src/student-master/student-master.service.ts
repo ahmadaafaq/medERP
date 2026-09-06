@@ -1356,7 +1356,7 @@ export class StudentMasterService {
         WITH student_base AS (
           SELECT DISTINCT ON (COALESCE(s.registration_no, s.rollno, s.id::text))
                  s.id, s.name, s.rollno, s.registration_no, s.course_cd, s.batch_cd, s.photo_url, s.user_id::text AS user_id,
-                 0 AS srms_attd_pct,
+                 COALESCE(s.attendance_percentage, 0) AS srms_attd_pct,
                  c.name AS course_name,
                  COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, 'Batch ' || s.batch_cd, s.batch_cd) AS batch_name
           FROM "${schema}".students s

@@ -8,6 +8,8 @@ import AttendanceWidget from '../../../components/AttendanceWidget';
 import NoticeDashboardWidget from '../../../components/notices/NoticeDashboardWidget';
 import LibraryDashboardCard from '../../../components/library/LibraryDashboardCard';
 import ChatDashboardWidget from '../../../components/chat/ChatDashboardWidget';
+import FacultyBatchAttendanceAnalytics from '../../../components/faculty/FacultyBatchAttendanceAnalytics';
+import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperHustleBoard';
 
 export default function ClerkDashboardPage() {
   return (
@@ -130,8 +132,10 @@ export default function ClerkDashboardPage() {
           {/* Digital Library & Academic Catalog Card */}
           <LibraryDashboardCard role="clerk" />
 
-          <div className="grid grid-cols-1 gap-6">
-            <AttendanceWidget role="CLERK" />
+          {/* Class Attendance Analytics (50%) & Topper Hustle Board (50%) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            <FacultyBatchAttendanceAnalytics />
+            <FacultyTopperHustleBoard />
           </div>
         </main>
       </div>

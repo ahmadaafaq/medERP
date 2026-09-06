@@ -38,6 +38,7 @@ export class UsersService {
         try {
           const rows = await this.ds.query(
             `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url,
+                    COALESCE(s.attendance_percentage, 0) AS attendance_percentage,
                     COALESCE(b.code, s.batch_cd, '2025-MBBS') AS batch_cd,
                     s.course_cd, s.phone, s.admission_year, s.batch_id, s.department_id, s.branch_id,
                     u.email, COALESCE(u.is_active, s.is_active, true) as is_active, s.created_at,
@@ -108,6 +109,7 @@ export class UsersService {
     const [rows, countRows] = await Promise.all([
       this.ds.query(
         `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url,
+                COALESCE(s.attendance_percentage, 0) AS attendance_percentage,
                 COALESCE(b.code, s.batch_cd, '2025') AS batch_cd,
                 s.course_cd, s.phone, s.admission_year, s.batch_id, s.department_id, s.branch_id,
                 u.email, COALESCE(u.is_active, s.is_active, true) as is_active, s.created_at,
