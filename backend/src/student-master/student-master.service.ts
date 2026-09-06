@@ -1365,10 +1365,8 @@ export class StudentMasterService {
           ORDER BY COALESCE(s.registration_no, s.rollno, s.id::text), s.id DESC
         ),
         repo_metrics AS (
-          SELECT DISTINCT ON (COALESCE(r.student_reg_no, r.student_name))
-                 COALESCE(r.student_reg_no, r.student_name) AS match_key,
+          SELECT DISTINCT ON (r.student_reg_no)
                  r.student_reg_no,
-                 r.student_name,
                  r.title AS project_title,
                  COALESCE(NULLIF(regexp_replace(r.score::text, '[^0-9.]', '', 'g'), '')::numeric, 0) AS project_score,
                  COALESCE(r.grade, 'N/A') AS project_grade,
@@ -1376,7 +1374,8 @@ export class StudentMasterService {
                  COALESCE(NULLIF(regexp_replace(r.funding_amount::text, '[^0-9.]', '', 'g'), '')::numeric, 0) AS funding_amount,
                  (r.incubation_status IN ('Incubated', 'Selected', 'Funded')) AS is_incubated
           FROM "${schema}".repositories r
-          ORDER BY COALESCE(r.student_reg_no, r.student_name), NULLIF(regexp_replace(r.score::text, '[^0-9.]', '', 'g'), '')::numeric DESC NULLS LAST
+          WHERE r.student_reg_no IS NOT NULL
+          ORDER BY r.student_reg_no, NULLIF(regexp_replace(r.score::text, '[^0-9.]', '', 'g'), '')::numeric DESC NULLS LAST
         ),
         exam_metrics AS (
           SELECT sr.student_id,
@@ -1394,70 +1393,121 @@ export class StudentMasterService {
           FROM "${schema}".attendance_records ar
           GROUP BY ar.student_id
         ),
-        chat_metrics AS (
-          SELECT cm.sender_id::text AS sender_id, COUNT(cm.id) AS chat_count
-          FROM "${schema}".chat_messages cm
-          GROUP BY cm.sender_id::text
-        ),
         mini_project_metrics AS (
           SELECT 
             p.student_id,
-            COUNT(p.id) AS mini_projects_count,
+            COUNT(p.id) FILTER (WHERE p.project_status IN ('APPROVED', 'COMPLETED') OR p.approved_at IS NOT NULL) AS mini_projects_done,
+            COUNT(p.id) FILTER (WHERE p.project_status NOT IN ('APPROVED', 'COMPLETED') AND p.approved_at IS NULL) AS mini_projects_in_progress,
+            COUNT(p.id) AS total_mini_projects,
             MAX(p.title) AS mini_project_title,
+            MAX(p.project_status) AS mini_project_status,
+            MAX(p.final_grade) AS mini_project_grade,
             MAX(COALESCE(NULLIF(regexp_replace(p.final_percentage::text, '[^0-9.]', '', 'g'), '')::numeric, NULLIF(regexp_replace(p.guide_marks::text, '[^0-9.]', '', 'g'), '')::numeric, 0)) AS mini_project_score,
-            MAX(COALESCE(p.final_grade, 'A')) AS mini_project_grade,
-            MAX(COALESCE(p.project_status, 'IN_PROGRESS')) AS mini_project_status,
-            COALESCE(MAX(wl.logs_count), 0) AS mini_project_logs_count,
-            true AS has_mini_project
+            COALESCE(MAX(wl.logs_count), 0) AS mini_project_logs_count
           FROM "${schema}".logbook_mini_projects p
           LEFT JOIN (
             SELECT student_id, COUNT(*) AS logs_count
             FROM "${schema}".logbook_weekly_logs
             GROUP BY student_id
           ) wl ON (wl.student_id::text = p.student_id::text)
+          WHERE p.student_id IS NOT NULL
           GROUP BY p.student_id
+        ),
+        seminar_metrics AS (
+          SELECT
+            student_id,
+            COUNT(*) AS seminars_done,
+            ROUND(AVG(marks_obtained), 1) AS avg_seminar_score
+          FROM (
+            SELECT s.student_id, COALESCE(NULLIF(regexp_replace(e.marks_obtained::text, '[^0-9.]', '', 'g'), '')::numeric, 0) AS marks_obtained
+            FROM "${schema}".logbook_submissions s
+            JOIN "${schema}".logbook_topics t ON t.id::text = s.topic_id::text
+            JOIN "${schema}".logbook_categories c ON c.id::text = t.category_id::text
+            LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id::text = s.id::text
+            WHERE (c.code = 'SEMINAR' OR c.name ILIKE '%seminar%') AND (s.status = 'EVALUATED' OR e.id IS NOT NULL)
+            UNION ALL
+            SELECT sm.student_id, COALESCE(NULLIF(regexp_replace(sm.guide_marks::text, '[^0-9.]', '', 'g'), '')::numeric, 0) AS marks_obtained
+            FROM "${schema}".logbook_seminars sm
+            WHERE sm.status = 'EVALUATED' OR sm.guide_marks IS NOT NULL
+          ) all_sem
+          WHERE student_id IS NOT NULL
+          GROUP BY student_id
+        ),
+        tutorial_metrics AS (
+          SELECT
+            student_id,
+            COUNT(*) AS tutorials_done,
+            ROUND(AVG(marks_obtained), 1) AS avg_tutorial_score
+          FROM (
+            SELECT s.student_id, COALESCE(NULLIF(regexp_replace(e.marks_obtained::text, '[^0-9.]', '', 'g'), '')::numeric, 0) AS marks_obtained
+            FROM "${schema}".logbook_submissions s
+            JOIN "${schema}".logbook_topics t ON t.id::text = s.topic_id::text
+            JOIN "${schema}".logbook_categories c ON c.id::text = t.category_id::text
+            LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id::text = s.id::text
+            WHERE (c.code = 'TUTORIAL' OR c.name ILIKE '%tutorial%') AND (s.status = 'EVALUATED' OR e.id IS NOT NULL)
+            UNION ALL
+            SELECT tu.student_id, COALESCE(NULLIF(regexp_replace(tu.guide_marks::text, '[^0-9.]', '', 'g'), '')::numeric, 0) AS marks_obtained
+            FROM "${schema}".logbook_tutorials tu
+            WHERE tu.status = 'EVALUATED' OR tu.guide_marks IS NOT NULL
+          ) all_tut
+          WHERE student_id IS NOT NULL
+          GROUP BY student_id
+        ),
+        cert_metrics AS (
+          SELECT
+            st.id::text AS student_id,
+            COUNT(c.id) AS certificates_done,
+            MAX(c.internship_name) AS latest_certificate_title
+          FROM "${schema}".certificates c
+          JOIN "${schema}".students st ON (st.name ILIKE c.applicant_name)
+          GROUP BY st.id::text
         )
         SELECT sb.id, sb.name, sb.rollno, sb.registration_no, sb.course_name, sb.batch_name, sb.photo_url,
+               ROUND(COALESCE(am.attendance_pct, sb.srms_attd_pct::numeric, 0), 1) AS attendance_pct,
+               COALESCE(mpm.mini_projects_done, 0) AS mini_projects_done,
+               COALESCE(mpm.mini_projects_in_progress, 0) AS mini_projects_in_progress,
+               COALESCE(mpm.total_mini_projects, 0) AS total_mini_projects,
+               mpm.mini_project_title,
+               mpm.mini_project_status,
+               mpm.mini_project_grade,
+               COALESCE(mpm.mini_project_score, 0) AS mini_project_score,
+               COALESCE(mpm.mini_project_logs_count, 0) AS mini_project_logs_count,
+               COALESCE(sm.seminars_done, 0) AS seminars_done,
+               COALESCE(sm.avg_seminar_score, 0) AS avg_seminar_score,
+               COALESCE(tm.tutorials_done, 0) AS tutorials_done,
+               COALESCE(tm.avg_tutorial_score, 0) AS avg_tutorial_score,
+               COALESCE(cert.certificates_done, 0) AS certificates_done,
+               cert.latest_certificate_title,
                rm.project_title,
                COALESCE(rm.project_score, 0) AS project_score,
                COALESCE(rm.project_grade, 'N/A') AS project_grade,
                rm.incubation_status,
-               rm.funding_amount,
+               COALESCE(rm.funding_amount, 0) AS funding_amount,
                COALESCE(rm.is_incubated, false) AS is_incubated,
-               COALESCE(mpm.mini_projects_count, 0) AS mini_projects_covered,
-               mpm.mini_project_title,
-               COALESCE(mpm.mini_project_score, 0) AS mini_project_score,
-               COALESCE(mpm.mini_project_grade, 'N/A') AS mini_project_grade,
-               COALESCE(mpm.mini_project_status, 'IN_PROGRESS') AS mini_project_status,
-               COALESCE(mpm.mini_project_logs_count, 0) AS mini_project_logs_count,
-               COALESCE(mpm.has_mini_project, false) AS has_mini_project,
                em.theory_pct,
                em.exam_name,
-               ROUND(COALESCE(am.attendance_pct, sb.srms_attd_pct::numeric, 0), 1) AS attendance_pct,
-               COALESCE(am.total_classes, CASE WHEN sb.srms_attd_pct::numeric > 0 THEN 1 ELSE 0 END) AS total_classes,
-               COALESCE(cm.chat_count, 0) AS chat_count,
-               (COALESCE(cm.chat_count, 0) > 0) AS is_chat_active,
                ROUND(
                  (
-                   COALESCE(rm.project_score * 0.35, 0) +
-                   COALESCE(mpm.mini_project_score * 0.15, 0) +
-                   COALESCE(em.theory_pct * 0.35, 0) +
-                   COALESCE(COALESCE(am.attendance_pct, sb.srms_attd_pct::numeric, 0) * 0.10, 0) +
-                   CASE WHEN rm.incubation_status = 'Incubated' THEN 10
-                        WHEN rm.incubation_status IN ('Selected', 'Funded') THEN 8
-                        WHEN rm.incubation_status = 'Under Review' THEN 4
-                        ELSE 0 END +
-                   CASE WHEN COALESCE(cm.chat_count, 0) > 0 THEN 5 ELSE 0 END
+                   COALESCE(am.attendance_pct, sb.srms_attd_pct::numeric, 0) * 0.35 +
+                   COALESCE(sm.seminars_done, 0) * 10 +
+                   COALESCE(mpm.mini_projects_done, 0) * 15 +
+                   CASE WHEN COALESCE(mpm.mini_projects_in_progress, 0) > 0 THEN 5 ELSE 0 END +
+                   COALESCE(tm.tutorials_done, 0) * 8 +
+                   COALESCE(cert.certificates_done, 0) * 12 +
+                   COALESCE(em.theory_pct, 0) * 0.2 +
+                   COALESCE(rm.project_score, 0) * 0.1
                  )::numeric, 1
                ) AS composite_score
         FROM student_base sb
-        LEFT JOIN repo_metrics rm ON (rm.student_reg_no = sb.registration_no OR rm.student_reg_no = sb.rollno OR rm.student_name ILIKE sb.name)
+        LEFT JOIN repo_metrics rm ON (rm.student_reg_no = sb.registration_no OR rm.student_reg_no = sb.rollno)
         LEFT JOIN mini_project_metrics mpm ON (mpm.student_id::text = sb.id::text OR mpm.student_id::text = sb.registration_no OR mpm.student_id::text = sb.rollno)
+        LEFT JOIN seminar_metrics sm ON (sm.student_id::text = sb.id::text OR sm.student_id::text = sb.registration_no)
+        LEFT JOIN tutorial_metrics tm ON (tm.student_id::text = sb.id::text OR tm.student_id::text = sb.registration_no)
+        LEFT JOIN cert_metrics cert ON (cert.student_id::text = sb.id::text OR cert.student_id::text = sb.registration_no)
         LEFT JOIN exam_metrics em ON em.student_id::text = sb.id::text
         LEFT JOIN att_metrics am ON am.student_id::text = sb.id::text
-        LEFT JOIN chat_metrics cm ON cm.sender_id::text = sb.user_id::text
-        WHERE (rm.project_score > 0 OR em.theory_pct > 0 OR sb.srms_attd_pct::numeric > 0 OR am.total_classes > 0 OR rm.incubation_status IS NOT NULL OR mpm.has_mini_project = true)
-        ORDER BY composite_score DESC, rm.project_score DESC NULLS LAST, em.theory_pct DESC NULLS LAST
+        WHERE (sb.srms_attd_pct::numeric > 0 OR COALESCE(sm.seminars_done, 0) > 0 OR COALESCE(mpm.total_mini_projects, 0) > 0 OR COALESCE(cert.certificates_done, 0) > 0 OR COALESCE(tm.tutorials_done, 0) > 0 OR em.theory_pct > 0 OR rm.project_score > 0)
+        ORDER BY composite_score DESC, attendance_pct DESC
         LIMIT $1
       `;
 
@@ -1467,17 +1517,29 @@ export class StudentMasterService {
         success: true,
         data: rows.map((r: any, idx: number) => {
           const logsCount = Number(r.mini_project_logs_count || 0);
-          const miniStatus = r.mini_project_status || 'IN_PROGRESS';
-          const miniCoveredCount = Number(r.mini_projects_covered || (r.has_mini_project ? 1 : 0));
-          let miniProgressText = '0 Logs';
-          if (miniStatus === 'APPROVED' || miniStatus === 'COMPLETED' || Number(r.mini_project_score) >= 80) {
-            miniProgressText = 'Approved (100%)';
-          } else if (logsCount > 0) {
-            miniProgressText = `${logsCount}/4 Weekly Logs`;
-          } else if (miniCoveredCount > 0) {
-            miniProgressText = 'Logbook In Progress';
-          } else {
-            miniProgressText = '0 Covered';
+          const miniDoneCount = Number(r.mini_projects_done || 0);
+          const miniInProgCount = Number(r.mini_projects_in_progress || 0);
+          const miniTotal = Number(r.total_mini_projects || 0);
+          const seminarsDone = Number(r.seminars_done || 0);
+          const tutorialsDone = Number(r.tutorials_done || 0);
+          const certificatesDone = Number(r.certificates_done || 0);
+
+          let miniProgressText = '0 Covered';
+          if (miniDoneCount > 0) {
+            miniProgressText = `${miniDoneCount} Done`;
+          } else if (miniInProgCount > 0) {
+            miniProgressText = logsCount > 0 ? `${logsCount}/4 Logs In-Progress` : 'In Progress';
+          }
+
+          let hustleTag = '🎖️ Active College Contributor';
+          if (idx === 0) {
+            hustleTag = '👑 High Academic Scorer & Innovator';
+          } else if (seminarsDone > 0 && miniTotal > 0) {
+            hustleTag = '🚀 Seminar & Project Scholar';
+          } else if (certificatesDone > 0) {
+            hustleTag = '📜 Certified Industry Intern';
+          } else if (Number(r.attendance_pct || 0) >= 30) {
+            hustleTag = '⚡ Exemplary Semester Attendance';
           }
 
           return {
@@ -1490,7 +1552,7 @@ export class StudentMasterService {
             batch: r.batch_name || 'Batch 2025',
             photoUrl: r.photo_url,
             attendancePct: Number(r.attendance_pct || 0),
-            totalClasses: Number(r.total_classes || 0),
+            totalClasses: 153, // Current semester conducted classes
             theoryScore: r.theory_pct !== null && r.theory_pct !== undefined ? Number(r.theory_pct) : null,
             examName: r.exam_name || null,
             projectTitle: r.project_title || null,
@@ -1499,18 +1561,27 @@ export class StudentMasterService {
             isIncubationSelected: Boolean(r.is_incubated),
             incubationStatus: r.incubation_status || null,
             fundingAmount: Number(r.funding_amount || 0),
-            hasMiniProject: Boolean(miniCoveredCount > 0 && r.has_mini_project),
-            miniProjectsCovered: miniCoveredCount,
+            hasMiniProject: Boolean(miniTotal > 0),
+            miniProjectsCovered: miniDoneCount,
+            miniProjectsDone: miniDoneCount,
+            miniProjectsInProgress: miniInProgCount,
+            totalMiniProjects: miniTotal,
             miniProjectTitle: r.mini_project_title || null,
-            miniProjectStatus: miniStatus,
-            miniProjectGrade: r.mini_project_grade || 'A',
+            miniProjectStatus: r.mini_project_status || (miniDoneCount > 0 ? 'APPROVED' : miniInProgCount > 0 ? 'IN_PROGRESS' : 'NONE'),
+            miniProjectGrade: r.mini_project_grade || null,
             miniProjectScore: Number(r.mini_project_score || 0),
             miniProjectProgress: miniProgressText,
-            isChatActive: Boolean(r.is_chat_active),
+            seminarsDone,
+            avgSeminarScore: Number(r.avg_seminar_score || 0),
+            tutorialsDone,
+            avgTutorialScore: Number(r.avg_tutorial_score || 0),
+            certificationsDone: certificatesDone,
+            latestCertificateTitle: r.latest_certificate_title || null,
+            isChatActive: false,
             compositeScore: Number(r.composite_score || 0),
             tier: idx === 0 ? 'Tier S' : idx < 3 ? 'Tier A+' : 'Tier A',
             tierColor: idx === 0 ? 'from-amber-400 to-yellow-600' : 'from-indigo-500 to-purple-600',
-            hustleTag: idx === 0 ? '👑 High Academic Scorer & Innovator' : '🎖️ Active College Contributor',
+            hustleTag,
           };
         }),
       };

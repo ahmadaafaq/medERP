@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Trophy, Award, Flame, Star, FolderGit2, Rocket, Sparkles } from 'lucide-react';
+import { Trophy, Award, Flame, Star, FolderGit2, Rocket, Sparkles, BookOpen, FileCheck, CheckCircle2 } from 'lucide-react';
 
 interface TopperStudent {
   rank: number;
@@ -14,21 +14,30 @@ interface TopperStudent {
   batch: string;
   photoUrl: string;
   attendancePct: number;
-  theoryScore: number;
-  examName?: string;
+  theoryScore: number | null;
+  examName?: string | null;
   projectGrade: string;
   projectScorePct: number;
-  projectTitle?: string;
+  projectTitle?: string | null;
   isIncubationSelected: boolean;
-  incubationStatus?: string;
+  incubationStatus?: string | null;
   fundingAmount?: number;
   hasMiniProject?: boolean;
+  miniProjectsDone?: number;
+  miniProjectsInProgress?: number;
+  totalMiniProjects?: number;
   miniProjectsCovered?: number;
-  miniProjectTitle?: string;
+  miniProjectTitle?: string | null;
   miniProjectStatus?: string;
-  miniProjectGrade?: string;
+  miniProjectGrade?: string | null;
   miniProjectScore?: number;
   miniProjectProgress?: string;
+  seminarsDone?: number;
+  avgSeminarScore?: number;
+  tutorialsDone?: number;
+  avgTutorialScore?: number;
+  certificationsDone?: number;
+  latestCertificateTitle?: string | null;
   isChatActive: boolean;
   compositeScore: number;
   tier: string;
@@ -37,7 +46,7 @@ interface TopperStudent {
 }
 
 export default function FacultyTopperHustleBoard() {
-  const [filterMode, setFilterMode] = useState<'all' | 'incubation' | 'project' | 'mini_project'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'seminar' | 'mini_project' | 'tutorial' | 'certification' | 'incubation'>('all');
   const [students, setStudents] = useState<TopperStudent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -178,9 +187,11 @@ export default function FacultyTopperHustleBoard() {
   }, []);
 
   const filteredStudents = students.filter((st) => {
+    if (filterMode === 'seminar') return (st.seminarsDone || 0) > 0;
+    if (filterMode === 'mini_project') return st.hasMiniProject || (st.totalMiniProjects || 0) > 0 || (st.miniProjectsDone || 0) > 0 || (st.miniProjectsInProgress || 0) > 0;
+    if (filterMode === 'tutorial') return (st.tutorialsDone || 0) > 0;
+    if (filterMode === 'certification') return (st.certificationsDone || 0) > 0;
     if (filterMode === 'incubation') return st.isIncubationSelected || (st.incubationStatus && st.incubationStatus !== 'Under Review');
-    if (filterMode === 'project') return st.projectScorePct > 80;
-    if (filterMode === 'mini_project') return st.hasMiniProject;
     return true;
   });
 
@@ -198,14 +209,14 @@ export default function FacultyTopperHustleBoard() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-black text-[#1E293B] dark:text-white tracking-tight truncate">
-                Campus Hustle & Topper Leaderboard
+                Campus Academic & Merit Hustle Board
               </h3>
               <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0">
                 <Sparkles className="w-2.5 h-2.5" /> LIVE
               </span>
             </div>
             <p className="text-xs text-[#64748B] dark:text-slate-400 font-medium truncate">
-              Ranked by Theory, Practical Labs, Mini-Projects, Incubation & Attendance
+              Dynamic semester attendance, seminars, mini-projects, tutorials & certifications
             </p>
           </div>
         </div>
@@ -223,24 +234,14 @@ export default function FacultyTopperHustleBoard() {
             All Star Toppers
           </button>
           <button
-            onClick={() => { setFilterMode('incubation'); setCurrentPage(1); }}
+            onClick={() => { setFilterMode('seminar'); setCurrentPage(1); }}
             className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-              filterMode === 'incubation'
-                ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-300 shadow-xs font-extrabold'
+              filterMode === 'seminar'
+                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 shadow-xs font-extrabold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Rocket className="w-3.5 h-3.5 text-amber-500" /> Incubation
-          </button>
-          <button
-            onClick={() => { setFilterMode('project'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-              filterMode === 'project'
-                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <FolderGit2 className="w-3.5 h-3.5 text-indigo-500" /> High Capstone
+            <Sparkles className="w-3.5 h-3.5 text-blue-500" /> Seminars
           </button>
           <button
             onClick={() => { setFilterMode('mini_project'); setCurrentPage(1); }}
@@ -251,6 +252,26 @@ export default function FacultyTopperHustleBoard() {
             }`}
           >
             <Award className="w-3.5 h-3.5 text-emerald-500" /> Mini-Projects
+          </button>
+          <button
+            onClick={() => { setFilterMode('tutorial'); setCurrentPage(1); }}
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+              filterMode === 'tutorial'
+                ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-300 shadow-xs font-extrabold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-purple-500" /> Tutorials
+          </button>
+          <button
+            onClick={() => { setFilterMode('certification'); setCurrentPage(1); }}
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+              filterMode === 'certification'
+                ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-300 shadow-xs font-extrabold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <FileCheck className="w-3.5 h-3.5 text-amber-500" /> Certificates
           </button>
         </div>
       </div>
@@ -357,39 +378,65 @@ export default function FacultyTopperHustleBoard() {
                 {/* SECTION 3: BOTTOM ROW (Performance Chips Grid) */}
                 <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[10px] font-bold">
                   {/* Attendance */}
-                  <div className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 text-center flex-1 min-w-[90px]">
+                  <div className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 text-center flex-1 min-w-[75px]">
                     <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-extrabold">Attendance</span>
-                    <span className={`font-black text-xs ${st.attendancePct >= 75 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                    <span className="font-black text-xs text-slate-800 dark:text-slate-100">
                       {st.attendancePct || 0}%
                     </span>
                   </div>
 
-                  {/* Capstone Project */}
+                  {/* Mini Projects */}
+                  <div className="px-2.5 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 text-center flex-1 min-w-[85px]">
+                    <span className="block text-[8px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-extrabold">Mini-Projects</span>
+                    <span className="font-black text-xs text-emerald-700 dark:text-emerald-300">
+                      {(st.miniProjectsDone || 0) > 0
+                        ? `${st.miniProjectsDone} Done`
+                        : (st.miniProjectsInProgress || 0) > 0
+                        ? 'In Progress'
+                        : '0 Done'}
+                    </span>
+                  </div>
+
+                  {/* Seminars */}
+                  <div className="px-2.5 py-1.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40 text-center flex-1 min-w-[75px]">
+                    <span className="block text-[8px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-extrabold">Seminars</span>
+                    <span className="font-black text-xs text-blue-700 dark:text-blue-300">
+                      {st.seminarsDone || 0} Done
+                    </span>
+                  </div>
+
+                  {/* Tutorials */}
+                  <div className="px-2.5 py-1.5 rounded-xl bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/40 text-center flex-1 min-w-[75px]">
+                    <span className="block text-[8px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-extrabold">Tutorials</span>
+                    <span className="font-black text-xs text-purple-700 dark:text-purple-300">
+                      {st.tutorialsDone || 0} Done
+                    </span>
+                  </div>
+
+                  {/* Certificates */}
+                  <div className="px-2.5 py-1.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/40 text-center flex-1 min-w-[85px]">
+                    <span className="block text-[8px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-extrabold">Certificates</span>
+                    <span className="font-black text-xs text-amber-700 dark:text-amber-300">
+                      {st.certificationsDone || 0} Done
+                    </span>
+                  </div>
+
+                  {/* Authentic Capstone Project (only if present) */}
                   {st.projectScorePct > 0 && (
-                    <div className="px-3 py-1.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/40 text-center flex-1 min-w-[110px]">
-                      <span className="block text-[8px] uppercase tracking-wider text-indigo-500 dark:text-indigo-400 font-extrabold">Capstone Project</span>
+                    <div className="px-2.5 py-1.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/40 text-center flex-1 min-w-[95px]">
+                      <span className="block text-[8px] uppercase tracking-wider text-indigo-500 dark:text-indigo-400 font-extrabold">Capstone</span>
                       <span className="font-black text-xs text-[#5B4BFF] dark:text-indigo-300">
                         {st.projectScorePct}% {st.projectGrade ? `(${st.projectGrade})` : ''}
                       </span>
                     </div>
                   )}
 
-                  {/* Mini Projects */}
-                  {st.hasMiniProject && (
-                    <div className="px-3 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 text-center flex-1 min-w-[100px]">
-                      <span className="block text-[8px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-extrabold">Mini-Projects</span>
-                      <span className="font-black text-xs text-emerald-700 dark:text-emerald-300">
-                        {st.miniProjectsCovered || 1} Done
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Incubation */}
-                  {st.isIncubationSelected && (
-                    <div className="px-3 py-1.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/40 text-center flex-1 min-w-[100px]">
-                      <span className="block text-[8px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-extrabold">Incubation</span>
-                      <span className="font-black text-xs text-amber-700 dark:text-amber-300">
-                        {st.fundingAmount ? `₹${(st.fundingAmount / 1000).toFixed(0)}k Grant` : st.incubationStatus || 'Selected'}
+                  {/* Authentic Incubation Grant (only if funded) */}
+                  {st.isIncubationSelected && (st.fundingAmount || 0) > 0 && (
+                    <div className="px-2.5 py-1.5 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-800/40 text-center flex-1 min-w-[85px]">
+                      <span className="block text-[8px] uppercase tracking-wider text-rose-600 dark:text-rose-400 font-extrabold">Incubation</span>
+                      <span className="font-black text-xs text-rose-700 dark:text-rose-300">
+                        ₹{((st.fundingAmount || 0) / 1000).toFixed(0)}k Grant
                       </span>
                     </div>
                   )}
