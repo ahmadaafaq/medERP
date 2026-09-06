@@ -50,11 +50,24 @@ import {
   Printer,
   X,
   FlaskConical,
+  RotateCcw,
 } from 'lucide-react';
 
 export default function StudentLogbookPage() {
   const [activeTab, setActiveTab] = useState<LogbookTabKey>('DASHBOARD');
   const [loading, setLoading] = useState(true);
+
+  // Seminar / Tutorial 2-Tab State
+  const [seminarSubTab, setSeminarSubTab] = useState<'NEW_TOPICS' | 'SUBMITTED_DELIVERABLES'>('NEW_TOPICS');
+  const [topicTypeFilter, setTopicTypeFilter] = useState<'ALL' | 'SEMINAR' | 'TUTORIAL'>('ALL');
+  const [submissionSuccessBanner, setSubmissionSuccessBanner] = useState<string | null>(null);
+  const [isRefreshingStatus, setIsRefreshingStatus] = useState<boolean>(false);
+
+  // Dashboard Deliverables (Topic List vs Student Upload) 2-Tab State
+  const [dashboardDeliverablesTab, setDashboardDeliverablesTab] = useState<'TOPICS' | 'UPLOADS'>('TOPICS');
+  const [dashboardTopicFilter, setDashboardTopicFilter] = useState<'ALL' | 'SEMINAR' | 'TUTORIAL' | 'PENDING' | 'SUBMITTED'>('ALL');
+  const [dashboardTopicSearch, setDashboardTopicSearch] = useState<string>('');
+  const [dashboardUploadFilter, setDashboardUploadFilter] = useState<'ALL' | 'EVALUATED' | 'PENDING'>('ALL');
 
   // Data states
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -113,6 +126,9 @@ export default function StudentLogbookPage() {
     maxMarks?: number;
     facultyRemarks?: string;
     submittedAt?: string;
+    isEvaluated?: boolean;
+    evaluatedPdfUrl?: string;
+    originalPdfUrl?: string;
   }>({
     isOpen: false,
     title: '',
@@ -124,16 +140,25 @@ export default function StudentLogbookPage() {
   const handleOpenDocumentPreview = (item: any) => {
     const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
 
+    const isEval = item.status === 'EVALUATED' || item.status === 'evaluated' || !!item.evaluated_file_url;
+    const evaluatedPdfUrl = (isEval && item.id && !item.id.startsWith('sample'))
+      ? `/api/v1/logbook/submissions/${item.id}/evaluated-pdf?tenant=${slug}`
+      : item.evaluated_file_url || undefined;
+    const originalPdfUrl = (item.id && !item.id.startsWith('sample'))
+      ? `/api/v1/logbook/submissions/${item.id}/original-pdf?tenant=${slug}`
+      : undefined;
+
     const docUrl =
       item.docUrl ||
-      (item.id && !item.id.startsWith('sample') ? `/api/v1/logbook/submission/${item.id}/document?tenant=${slug}` : '') ||
+      (isEval && evaluatedPdfUrl ? evaluatedPdfUrl : '') ||
+      (item.id && !item.id.startsWith('sample') ? `/api/v1/logbook/submissions/${item.id}/document?tenant=${slug}` : '') ||
       item.attachment_url ||
       item.file_url ||
       item.slide_deck_url ||
       item.document_url ||
       item.certificate_url ||
       item.documentation_url ||
-      `/api/v1/logbook/submission/0dc2f11a-0f0d-4a49-bd7a-394f35d3a800/document?tenant=${slug}`;
+      `/api/v1/logbook/submissions/0dc2f11a-0f0d-4a49-bd7a-394f35d3a800/document?tenant=${slug}`;
 
     const docName =
       item.docName ||
@@ -159,7 +184,7 @@ export default function StudentLogbookPage() {
       '';
 
     const remarks = item.remarks || item.guide_remarks || item.faculty_remarks || item.feedback || '';
-    const marks = item.marks_obtained ?? item.score ?? item.marks ?? item.guide_marks ?? null;
+    const marks = item.marks_awarded ?? item.marks_obtained ?? item.score ?? item.marks ?? item.guide_marks ?? null;
     const maxMarks = item.max_marks || item.maxMarks || 20;
     const category =
       item.category_name ||
@@ -186,6 +211,9 @@ export default function StudentLogbookPage() {
       maxMarks,
       facultyRemarks: remarks,
       submittedAt,
+      isEvaluated: isEval,
+      evaluatedPdfUrl,
+      originalPdfUrl,
     });
   };
 
@@ -327,6 +355,21 @@ export default function StudentLogbookPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRefreshSubmissions = async () => {
+    setIsRefreshingStatus(true);
+    await fetchAllData();
+    setIsRefreshingStatus(false);
+  };
+
+  const handleSubmissionSuccess = async () => {
+    await fetchAllData();
+    setSeminarSubTab('SUBMITTED_DELIVERABLES');
+    setSubmissionSuccessBanner('Deliverable submitted successfully! Your submission is now recorded below with real-time faculty review tracking.');
+    setTimeout(() => {
+      setSubmissionSuccessBanner(null);
+    }, 7000);
   };
 
   const handleDocFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -627,6 +670,77 @@ export default function StudentLogbookPage() {
     remarksCount: remarks.length,
   };
 
+  const filteredTopics = useMemo(() => {
+    return topics.filter((t) => {
+      if (topicTypeFilter === 'SEMINAR') {
+        return t.category_code === 'SEMINAR' || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'));
+      }
+      if (topicTypeFilter === 'TUTORIAL') {
+        return t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial');
+      }
+      return true;
+    });
+  }, [topics, topicTypeFilter]);
+
+  // Memoized computations for Dashboard Deliverables 2-Tab Component
+  const dashboardTopicsStats = useMemo(() => {
+    const total = topics.length;
+    let seminars = 0;
+    let tutorials = 0;
+    let submitted = 0;
+
+    topics.forEach((t) => {
+      const isSem = t.category_code === 'SEMINAR' || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'));
+      if (isSem) seminars++;
+      else tutorials++;
+
+      const isSub = !!(t.student_submission || mySubmissions.some((s: any) => s.topic_id === t.id));
+      if (isSub) submitted++;
+    });
+
+    const pending = total - submitted;
+    return { total, seminars, tutorials, submitted, pending };
+  }, [topics, mySubmissions]);
+
+  const filteredDashboardTopics = useMemo(() => {
+    return topics.filter((t) => {
+      const isSem = t.category_code === 'SEMINAR' || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'));
+      const isTut = t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial');
+      const mySub = t.student_submission || mySubmissions.find((s: any) => s.topic_id === t.id);
+      const isSub = !!mySub;
+
+      if (dashboardTopicFilter === 'SEMINAR' && !isSem) return false;
+      if (dashboardTopicFilter === 'TUTORIAL' && !isTut) return false;
+      if (dashboardTopicFilter === 'PENDING' && isSub) return false;
+      if (dashboardTopicFilter === 'SUBMITTED' && !isSub) return false;
+
+      if (dashboardTopicSearch.trim()) {
+        const q = dashboardTopicSearch.toLowerCase().trim();
+        const titleMatch = (t.title || '').toLowerCase().includes(q);
+        const descMatch = (t.description || '').toLowerCase().includes(q);
+        const facultyMatch = (t.faculty_name || '').toLowerCase().includes(q);
+        if (!titleMatch && !descMatch && !facultyMatch) return false;
+      }
+
+      return true;
+    });
+  }, [topics, mySubmissions, dashboardTopicFilter, dashboardTopicSearch]);
+
+  const dashboardUploadsStats = useMemo(() => {
+    const total = allUploadedDeliverables.length;
+    const evaluated = allUploadedDeliverables.filter((item) => item.isEvaluated).length;
+    const pending = total - evaluated;
+    return { total, evaluated, pending };
+  }, [allUploadedDeliverables]);
+
+  const filteredDashboardUploads = useMemo(() => {
+    return allUploadedDeliverables.filter((item) => {
+      if (dashboardUploadFilter === 'EVALUATED' && !item.isEvaluated) return false;
+      if (dashboardUploadFilter === 'PENDING' && item.isEvaluated) return false;
+      return true;
+    });
+  }, [allUploadedDeliverables, dashboardUploadFilter]);
+
   return (
     <div className="flex h-screen bg-[#F6F8FC] dark:bg-slate-950 font-sans antialiased text-slate-800 dark:text-slate-100 overflow-hidden">
       <Sidebar role="student" />
@@ -735,270 +849,553 @@ export default function StudentLogbookPage() {
                   </div>
                 </div>
 
-                {/* Faculty Assigned Task Notifications Banner */}
-                {topics.length > 0 && (
-                  <div className="bg-gradient-to-r from-purple-900/10 via-indigo-900/10 to-blue-900/10 dark:from-purple-950/40 dark:to-indigo-950/40 rounded-[22px] p-5 border border-indigo-200/80 dark:border-indigo-800/60 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="p-1.5 rounded-lg bg-[#5B4BFF] text-white">
-                          <Presentation className="w-4 h-4" />
-                        </span>
-                        <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
-                          Faculty Assigned Seminar &amp; Tutorial Tasks ({topics.length})
-                        </h3>
+                {/* ======================================================== */}
+                {/* DELIVERABLES & TOPICS 2-TAB UNIFIED CONTAINER            */}
+                {/* ======================================================== */}
+                <div className="bg-white dark:bg-slate-900 rounded-[22px] border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden transition-all">
+                  {/* Top Bar with Section Title & Tab Controller */}
+                  <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800/80 bg-gradient-to-r from-slate-50/70 via-white to-slate-50/40 dark:from-slate-900 dark:to-slate-900/60">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      
+                      {/* Left Header */}
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#2D2575] to-[#5B4BFF] text-white flex items-center justify-center shadow-md shadow-[#5B4BFF]/20 shrink-0">
+                          {dashboardDeliverablesTab === 'TOPICS' ? (
+                            <Presentation className="w-5 h-5 text-white" />
+                          ) : (
+                            <FileCheck className="w-5 h-5 text-white" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-black text-lg text-slate-900 dark:text-white">
+                              {dashboardDeliverablesTab === 'TOPICS' ? 'Faculty Assigned Academic Topics' : 'Your Uploaded Logbook Work & Deliverables'}
+                            </h3>
+                            <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] border border-indigo-200/50 dark:border-indigo-800/50">
+                              {dashboardDeliverablesTab === 'TOPICS' ? 'Seminars & Tutorials' : 'Submissions & Records'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            {dashboardDeliverablesTab === 'TOPICS'
+                              ? 'Select an assigned topic below to upload your slide deck or tutorial deliverable'
+                              : 'Track verification status, review faculty evaluations, and preview submitted documents'}
+                          </p>
+                        </div>
                       </div>
-                      <span className="text-xs font-bold text-[#5B4BFF]">Active Submissions Open</span>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {topics.slice(0, 4).map((t) => {
-                        const isSem = t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar');
-                        const mySub = mySubmissions.find((s) => s.topic_id === t.id);
-                        return (
-                          <div
-                            key={t.id}
-                            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-2.5 shadow-xs"
+                      {/* Right: Elegant Pill Tab Controller */}
+                      <div className="flex items-center gap-2 self-start lg:self-center">
+                        <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-inner">
+                          {/* Tab 1: Topics */}
+                          <button
+                            type="button"
+                            onClick={() => setDashboardDeliverablesTab('TOPICS')}
+                            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 cursor-pointer select-none ${
+                              dashboardDeliverablesTab === 'TOPICS'
+                                ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/30 scale-[1.02]'
+                                : 'text-slate-600 dark:text-slate-300 hover:text-[#5B4BFF] hover:bg-white/60 dark:hover:bg-slate-700/50'
+                            }`}
                           >
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <span
-                                  className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
-                                    isSem
-                                      ? 'bg-purple-50 text-[#5B4BFF] dark:bg-purple-950'
-                                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950'
-                                  }`}
-                                >
-                                  {isSem ? 'Academic Seminar' : 'Unit Tutorial'}
-                                </span>
-                                <span className="text-[11px] font-mono font-bold text-slate-500">
-                                  Max {t.max_marks} Marks
-                                </span>
-                              </div>
-                              <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-snug">
-                                {t.title}
-                              </h4>
-                              {t.description && (
-                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{t.description}</p>
-                              )}
-                            </div>
+                            <Presentation className={`w-4 h-4 ${dashboardDeliverablesTab === 'TOPICS' ? 'text-white' : 'text-slate-400'}`} />
+                            <span>Topic List</span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                                dashboardDeliverablesTab === 'TOPICS'
+                                  ? 'bg-white/20 text-white'
+                                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                              }`}
+                            >
+                              {topics.length}
+                            </span>
+                          </button>
 
-                            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {t.submission_deadline ? `Due ${new Date(t.submission_deadline).toLocaleDateString()}` : 'Open'}
-                              </span>
+                          {/* Tab 2: Uploads */}
+                          <button
+                            type="button"
+                            onClick={() => setDashboardDeliverablesTab('UPLOADS')}
+                            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 cursor-pointer select-none ${
+                              dashboardDeliverablesTab === 'UPLOADS'
+                                ? 'bg-[#F36C21] text-white shadow-md shadow-[#F36C21]/30 scale-[1.02]'
+                                : 'text-slate-600 dark:text-slate-300 hover:text-[#F36C21] hover:bg-white/60 dark:hover:bg-slate-700/50'
+                            }`}
+                          >
+                            <FileCheck className={`w-4 h-4 ${dashboardDeliverablesTab === 'UPLOADS' ? 'text-white' : 'text-slate-400'}`} />
+                            <span>Student Uploads</span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                                dashboardDeliverablesTab === 'UPLOADS'
+                                  ? 'bg-white/20 text-white'
+                                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                              }`}
+                            >
+                              {allUploadedDeliverables.length}
+                            </span>
+                          </button>
+                        </div>
 
-                              {mySub ? (
-                                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200">
-                                  ✓ Submitted ({mySub.status})
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => {
-                                    setSelectedTopic(t);
-                                    setIsSubmitModalOpen(true);
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold flex items-center gap-1 shadow-sm"
-                                >
-                                  <UploadCloud className="w-3.5 h-3.5" />
-                                  <span>Submit Deliverable</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                        {/* Dossier button if on Uploads tab */}
+                        {dashboardDeliverablesTab === 'UPLOADS' && (
+                          <button
+                            type="button"
+                            onClick={() => setIsDossierModalOpen(true)}
+                            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-[#5B4BFF] hover:text-[#4338CA] bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 transition-colors cursor-pointer"
+                          >
+                            <span>Dossier</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                )}
 
-                {/* Prominent Uploaded Submissions Card in Dashboard */}
-                <div className="bg-white dark:bg-slate-900 rounded-[22px] p-6 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileCheck className="w-5 h-5 text-[#5B4BFF]" />
-                      <h3 className="font-bold text-base text-slate-900 dark:text-white">Your Uploaded Logbook Work &amp; Deliverables</h3>
-                    </div>
-                    <button
-                      onClick={() => setIsDossierModalOpen(true)}
-                      className="text-xs font-bold text-[#5B4BFF] hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>View Complete Submissions</span>
-                      <span>&rarr;</span>
-                    </button>
-                  </div>
-
-                  {allUploadedDeliverables.length === 0 ? (
-                    <div className="p-10 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center space-y-3">
-                      <div className="text-4xl">📭</div>
-                      <p className="text-sm font-semibold text-slate-500">No submissions yet</p>
-                      <p className="text-xs text-slate-400">Select an activity topic to submit your work.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                      {allUploadedDeliverables.map((item, idx) => {
-                        // Parse score for progress bar
-                        const [scored, total] = (item.scoreText || '0 / 20').split('/').map((s: string) => parseFloat(s.trim()) || 0);
-                        const pct = total > 0 && item.scoreText ? Math.min(100, Math.round((scored / total) * 100)) : 0;
-                        const isSeminar = item.deliverableType === 'SEMINAR';
-                        const isTutorial = item.deliverableType === 'TUTORIAL';
-                        const isEvaluated: boolean = item.isEvaluated;
-                        const isLocked: boolean = item.isLocked;
-                        const isExcellent = pct >= 85;
-                        const isGood = pct >= 60 && pct < 85;
-                        const scoreColor = !isEvaluated ? '#94a3b8' : isExcellent ? '#00C48C' : isGood ? '#5B4BFF' : '#F36C21';
-                        const scoreBg = !isEvaluated ? 'from-slate-300 to-slate-400' : isExcellent ? 'from-emerald-400 to-emerald-600' : isGood ? 'from-[#5B4BFF] to-[#7867FF]' : 'from-[#F36C21] to-[#FF8C42]';
-                        const categoryLabel: string = item.categoryLabel || (isSeminar ? 'SEMINAR' : isTutorial ? 'TUTORIAL' : 'ACTIVITY');
-                        const catColor = isSeminar ? { bg: '#FFF7ED', text: '#F36C21', border: '#FED7AA' } : isTutorial ? { bg: '#EFF6FF', text: '#3B82F6', border: '#BFDBFE' } : { bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0' };
-
-                        return (
-                          <div
-                            key={item.id || idx}
-                            className="group relative bg-white dark:bg-slate-900 rounded-[22px] overflow-hidden border border-slate-200/80 dark:border-slate-700/60 shadow-sm hover:shadow-xl hover:shadow-slate-200/60 dark:hover:shadow-slate-900/60 hover:-translate-y-1 transition-all duration-300 flex flex-col"
-                          >
-                            {/* Top gradient accent bar */}
-                            <div className={`h-1.5 w-full bg-gradient-to-r ${scoreBg}`} />
-
-                            {/* Category type ribbon — top left corner */}
-                            <div className="px-5 pt-4 pb-0 flex items-center justify-between gap-2">
-                              <span
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest"
-                                style={{ background: catColor.bg, color: catColor.text, border: `1px solid ${catColor.border}` }}
+                  {/* Tab Contents */}
+                  <div className="p-5 sm:p-6">
+                    {/* TAB 1: FACULTY ASSIGNED TOPICS */}
+                    {dashboardDeliverablesTab === 'TOPICS' && (
+                      <div className="space-y-5">
+                        {/* Filter & Search Bar */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+                          {/* Search */}
+                          <div className="relative flex-1 max-w-sm">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              placeholder="Search topics by title, details..."
+                              value={dashboardTopicSearch}
+                              onChange={(e) => setDashboardTopicSearch(e.target.value)}
+                              className="w-full pl-9 pr-4 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]/30 text-slate-800 dark:text-slate-100"
+                            />
+                            {dashboardTopicSearch && (
+                              <button
+                                onClick={() => setDashboardTopicSearch('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
                               >
-                                {isSeminar ? '🎓' : isTutorial ? '📘' : '📋'} {categoryLabel}
-                              </span>
-                              {/* Lock / Edit indicator */}
-                              {isLocked ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                                  🔒 Locked
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-[#5B4BFF] bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/60 cursor-pointer hover:bg-indigo-100 transition-colors">
-                                  ✏️ Edit
-                                </span>
-                              )}
-                            </div>
+                                ✕
+                              </button>
+                            )}
+                          </div>
 
-                            {/* Card Body */}
-                            <div className="p-5 flex flex-col flex-1 gap-3">
+                          {/* Filter Pills */}
+                          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                            <button
+                              onClick={() => setDashboardTopicFilter('ALL')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                dashboardTopicFilter === 'ALL'
+                                  ? 'bg-[#5B4BFF] text-white shadow-xs'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              All ({dashboardTopicsStats.total})
+                            </button>
+                            <button
+                              onClick={() => setDashboardTopicFilter('SEMINAR')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                dashboardTopicFilter === 'SEMINAR'
+                                  ? 'bg-[#5B4BFF] text-white shadow-xs'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              Seminars ({dashboardTopicsStats.seminars})
+                            </button>
+                            <button
+                              onClick={() => setDashboardTopicFilter('TUTORIAL')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                dashboardTopicFilter === 'TUTORIAL'
+                                  ? 'bg-[#5B4BFF] text-white shadow-xs'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              Tutorials ({dashboardTopicsStats.tutorials})
+                            </button>
+                            <button
+                              onClick={() => setDashboardTopicFilter('PENDING')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                dashboardTopicFilter === 'PENDING'
+                                  ? 'bg-[#F36C21] text-white shadow-xs'
+                                  : 'bg-orange-50 dark:bg-orange-950/40 text-[#F36C21] hover:bg-orange-100 dark:hover:bg-orange-900/40 border border-orange-200/50'
+                              }`}
+                            >
+                              Pending ({dashboardTopicsStats.pending})
+                            </button>
+                            <button
+                              onClick={() => setDashboardTopicFilter('SUBMITTED')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                dashboardTopicFilter === 'SUBMITTED'
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200/50'
+                              }`}
+                            >
+                              Submitted ({dashboardTopicsStats.submitted})
+                            </button>
+                          </div>
+                        </div>
 
-                              {/* Title + submission date */}
-                              <div>
-                                <h4 className="text-[15px] font-black text-slate-900 dark:text-white leading-tight line-clamp-2">
-                                  {item.displayTitle}
-                                </h4>
-                                {item.displayDate && (
-                                  <p className="text-[11px] text-slate-400 mt-0.5">Submitted {item.displayDate}</p>
-                                )}
-                              </div>
-
-                              {/* Faculty name row */}
-                              {item.facultyName && (
-                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                                  <span className="w-5 h-5 rounded-full bg-[#2D2575]/10 flex items-center justify-center text-[#2D2575] text-[9px] font-black shrink-0">F</span>
-                                  <span><span className="font-semibold text-[#2D2575] dark:text-indigo-300">{item.facultyName}</span></span>
-                                </div>
-                              )}
-
-                              {/* Evaluation Status Banner */}
-                              <div
-                                className="flex items-center justify-between px-3 py-2 rounded-xl"
-                                style={{
-                                  background: isEvaluated ? '#00C48C0F' : '#F36C210F',
-                                  border: `1px solid ${isEvaluated ? '#00C48C30' : '#F36C2130'}`,
+                        {/* Topics Grid or Empty State */}
+                        {filteredDashboardTopics.length === 0 ? (
+                          <div className="p-10 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center space-y-3 border border-dashed border-slate-200 dark:border-slate-700">
+                            <div className="text-4xl">📚</div>
+                            <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">No Topics Found</h4>
+                            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                              {topics.length === 0
+                                ? 'Your faculty guide has not assigned any seminar or tutorial topics yet.'
+                                : 'No assigned topics match your search query or category filter.'}
+                            </p>
+                            {(dashboardTopicSearch || dashboardTopicFilter !== 'ALL') && (
+                              <button
+                                onClick={() => {
+                                  setDashboardTopicSearch('');
+                                  setDashboardTopicFilter('ALL');
                                 }}
+                                className="px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-[#5B4BFF] text-xs font-bold hover:bg-indigo-100 cursor-pointer"
                               >
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-base">{isEvaluated ? '✅' : '⏳'}</span>
-                                  <span
-                                    className="text-[11px] font-bold uppercase tracking-wide"
-                                    style={{ color: isEvaluated ? '#00C48C' : '#F36C21' }}
-                                  >
-                                    {isEvaluated ? 'Evaluated' : 'Pending Review'}
-                                  </span>
-                                </div>
-                                {isEvaluated && item.evaluatedAt && (
-                                  <span className="text-[10px] text-slate-400">on {item.evaluatedAt}</span>
-                                )}
-                              </div>
-
-                              {/* Score Progress — only if evaluated */}
-                              {isEvaluated && item.scoreText ? (
-                                <div className="space-y-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Score</span>
-                                    <span className="text-sm font-black" style={{ color: scoreColor }}>{item.scoreText}</span>
-                                  </div>
-                                  <div className="relative h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                                    <div
-                                      className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${scoreBg} transition-all duration-700`}
-                                      style={{ width: `${pct}%` }}
-                                    />
-                                  </div>
-                                  <div className="flex justify-between text-[10px] text-slate-400">
-                                    <span>0</span>
-                                    <span className="font-bold" style={{ color: scoreColor }}>{pct}%</span>
-                                    <span>{total}</span>
-                                  </div>
-                                </div>
-                              ) : !isEvaluated ? (
-                                <div className="space-y-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-[11px] font-semibold text-slate-400">Score</span>
-                                    <span className="text-[11px] text-slate-400 italic">Awaiting faculty grading</span>
-                                  </div>
-                                  <div className="relative h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                                    <div className="absolute inset-y-0 left-0 w-0 rounded-full bg-slate-200" />
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              {/* Notes preview */}
-                              {item.notesText && (
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-3 py-2 border border-slate-100 dark:border-slate-700/50">
-                                  {item.notesText}
-                                </p>
-                              )}
-
-                              {/* Spacer */}
-                              <div className="flex-1" />
-
-                              {/* Document footer */}
-                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${catColor.text}15` }}>
-                                    <FileText className="w-4 h-4" style={{ color: catColor.text }} />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate leading-tight">
-                                      {item.docName || `${item.displayTitle}.pdf`}
-                                    </p>
-                                    <p className="text-[10px] text-slate-400">PDF Document</p>
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenDocumentPreview(item)}
-                                  className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-white transition-all hover:scale-105 shadow-sm cursor-pointer"
-                                  style={{ background: `linear-gradient(135deg, ${catColor.text}, ${catColor.text}bb)` }}
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>Preview</span>
-                                </button>
-                              </div>
-
-                              {/* Faculty Remarks — only shown after evaluation */}
-                              {isEvaluated && item.remarks && (
-                                <div className="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/50 text-[11px] text-emerald-800 dark:text-emerald-300">
-                                  <span className="font-bold">📝 Remarks: </span>{item.remarks}
-                                </div>
-                              )}
-                            </div>
+                                Clear Filters
+                              </button>
+                            )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {filteredDashboardTopics.map((t) => {
+                              const isSem = t.category_code === 'SEMINAR' || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'));
+                              const mySub = t.student_submission || mySubmissions.find((s: any) => s.topic_id === t.id);
+                              const isSubmitted = !!mySub;
+
+                              return (
+                                <div
+                                  key={t.id}
+                                  className="group relative bg-slate-50/70 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-850 rounded-[20px] p-5 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 dark:hover:border-indigo-600/60 shadow-xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between space-y-3"
+                                >
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span
+                                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                                          isSem
+                                            ? 'bg-purple-100/80 text-[#5B4BFF] dark:bg-purple-950/70 dark:text-purple-300 border border-purple-200/60'
+                                            : 'bg-blue-100/80 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200/60'
+                                        }`}
+                                      >
+                                        {isSem ? '🎓 Academic Seminar' : '📘 Unit Tutorial'}
+                                      </span>
+                                      <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-700/60">
+                                        Max {t.max_marks || 20} Marks
+                                      </span>
+                                    </div>
+
+                                    <h4 className="font-extrabold text-base text-slate-900 dark:text-white leading-snug group-hover:text-[#5B4BFF] transition-colors">
+                                      {t.title}
+                                    </h4>
+
+                                    {t.description && (
+                                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 line-clamp-2 leading-relaxed">
+                                        {t.description}
+                                      </p>
+                                    )}
+
+                                    {t.faculty_name && (
+                                      <div className="flex items-center gap-1.5 mt-2.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                        <span className="w-4 h-4 rounded-full bg-[#2D2575]/10 text-[#2D2575] dark:text-indigo-300 flex items-center justify-center text-[9px] font-black">F</span>
+                                        <span>Guide: <strong className="text-slate-700 dark:text-slate-300">{t.faculty_name}</strong></span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="pt-3 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
+                                    <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1.5">
+                                      <Clock className="w-3.5 h-3.5 shrink-0" />
+                                      <span>{t.submission_deadline ? `Due ${new Date(t.submission_deadline).toLocaleDateString()}` : 'Open Submission'}</span>
+                                    </span>
+
+                                    <div className="flex items-center gap-1.5">
+                                      {isSubmitted ? (
+                                        <>
+                                          <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200/80 flex items-center gap-1">
+                                            <span>✓ Submitted</span>
+                                            <span className="text-[10px] opacity-80">({mySub.status || 'SUBMITTED'})</span>
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedTopic(t);
+                                              setIsSubmitModalOpen(true);
+                                            }}
+                                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                                            title="Edit or re-upload your deliverable"
+                                          >
+                                            <Edit3 className="w-3 h-3" />
+                                            <span>Edit</span>
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedTopic(t);
+                                            setIsSubmitModalOpen(true);
+                                          }}
+                                          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] hover:from-[#4737e6] hover:to-[#6554e7] text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-[#5B4BFF]/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                                        >
+                                          <UploadCloud className="w-3.5 h-3.5" />
+                                          <span>Submit Deliverable</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TAB 2: STUDENT UPLOADS & DELIVERABLES */}
+                    {dashboardDeliverablesTab === 'UPLOADS' && (
+                      <div className="space-y-5">
+                        {/* Filter Bar */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+                          {/* Filter Pills */}
+                          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                            <button
+                              onClick={() => setDashboardUploadFilter('ALL')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                dashboardUploadFilter === 'ALL'
+                                  ? 'bg-[#F36C21] text-white shadow-xs'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              All Submissions ({dashboardUploadsStats.total})
+                            </button>
+                            <button
+                              onClick={() => setDashboardUploadFilter('EVALUATED')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                dashboardUploadFilter === 'EVALUATED'
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200/50'
+                              }`}
+                            >
+                              Evaluated & Graded ({dashboardUploadsStats.evaluated})
+                            </button>
+                            <button
+                              onClick={() => setDashboardUploadFilter('PENDING')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                dashboardUploadFilter === 'PENDING'
+                                  ? 'bg-amber-500 text-white shadow-xs'
+                                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200/50'
+                              }`}
+                            >
+                              Pending Faculty Review ({dashboardUploadsStats.pending})
+                            </button>
+                          </div>
+
+                          <div className="text-xs text-slate-500">
+                            Showing {filteredDashboardUploads.length} of {allUploadedDeliverables.length} submissions
+                          </div>
+                        </div>
+
+                        {/* Deliverables Grid or Empty State */}
+                        {filteredDashboardUploads.length === 0 ? (
+                          <div className="p-10 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center space-y-3 border border-dashed border-slate-200 dark:border-slate-700">
+                            <div className="text-4xl">📭</div>
+                            <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                              {allUploadedDeliverables.length === 0 ? 'No Deliverables Uploaded Yet' : 'No Submissions Match Filter'}
+                            </h4>
+                            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                              {allUploadedDeliverables.length === 0
+                                ? 'You have not submitted any assignments or seminar slide decks yet. Switch to the Topic List tab to choose an assigned topic.'
+                                : 'No submissions found under this filter.'}
+                            </p>
+                            {allUploadedDeliverables.length === 0 ? (
+                              <button
+                                onClick={() => setDashboardDeliverablesTab('TOPICS')}
+                                className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold flex items-center gap-1.5 mx-auto shadow-md shadow-[#5B4BFF]/20 cursor-pointer"
+                              >
+                                <Presentation className="w-3.5 h-3.5" />
+                                <span>Browse Assigned Topics</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setDashboardUploadFilter('ALL')}
+                                className="px-3 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-950/50 text-[#F36C21] text-xs font-bold hover:bg-orange-100 cursor-pointer"
+                              >
+                                Reset Filter
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                            {filteredDashboardUploads.map((item, idx) => {
+                              // Parse score for progress bar
+                              const [scored, total] = (item.scoreText || '0 / 20').split('/').map((s: string) => parseFloat(s.trim()) || 0);
+                              const pct = total > 0 && item.scoreText ? Math.min(100, Math.round((scored / total) * 100)) : 0;
+                              const isSeminar = item.deliverableType === 'SEMINAR';
+                              const isTutorial = item.deliverableType === 'TUTORIAL';
+                              const isEvaluated: boolean = item.isEvaluated;
+                              const isLocked: boolean = item.isLocked;
+                              const isExcellent = pct >= 85;
+                              const isGood = pct >= 60 && pct < 85;
+                              const scoreColor = !isEvaluated ? '#94a3b8' : isExcellent ? '#00C48C' : isGood ? '#5B4BFF' : '#F36C21';
+                              const scoreBg = !isEvaluated ? 'from-slate-300 to-slate-400' : isExcellent ? 'from-emerald-400 to-emerald-600' : isGood ? 'from-[#5B4BFF] to-[#7867FF]' : 'from-[#F36C21] to-[#FF8C42]';
+                              const categoryLabel: string = item.categoryLabel || (isSeminar ? 'SEMINAR' : isTutorial ? 'TUTORIAL' : 'ACTIVITY');
+                              const catColor = isSeminar ? { bg: '#FFF7ED', text: '#F36C21', border: '#FED7AA' } : isTutorial ? { bg: '#EFF6FF', text: '#3B82F6', border: '#BFDBFE' } : { bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0' };
+
+                              return (
+                                <div
+                                  key={item.id || idx}
+                                  className="group relative bg-white dark:bg-slate-900 rounded-[22px] overflow-hidden border border-slate-200/80 dark:border-slate-700/60 shadow-sm hover:shadow-xl hover:shadow-slate-200/60 dark:hover:shadow-slate-900/60 hover:-translate-y-1 transition-all duration-300 flex flex-col"
+                                >
+                                  {/* Top gradient accent bar */}
+                                  <div className={`h-1.5 w-full bg-gradient-to-r ${scoreBg}`} />
+
+                                  {/* Category type ribbon — top left corner */}
+                                  <div className="px-5 pt-4 pb-0 flex items-center justify-between gap-2">
+                                    <span
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest"
+                                      style={{ background: catColor.bg, color: catColor.text, border: `1px solid ${catColor.border}` }}
+                                    >
+                                      {isSeminar ? '🎓' : isTutorial ? '📘' : '📋'} {categoryLabel}
+                                    </span>
+                                    {/* Lock / Edit indicator */}
+                                    {isLocked ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                                        🔒 Locked
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const foundTopic = topics.find((t) => t.id === item.topic_id);
+                                          setSelectedTopic(foundTopic || { id: item.topic_id, title: item.displayTitle });
+                                          setIsSubmitModalOpen(true);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold text-[#5B4BFF] bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/60 cursor-pointer hover:bg-indigo-100 transition-colors"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                        <span>Edit</span>
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Card Body */}
+                                  <div className="p-5 flex flex-col flex-1 gap-3">
+                                    {/* Title + submission date */}
+                                    <div>
+                                      <h4 className="text-[15px] font-black text-slate-900 dark:text-white leading-tight line-clamp-2">
+                                        {item.displayTitle}
+                                      </h4>
+                                      {item.displayDate && (
+                                        <p className="text-[11px] text-slate-400 mt-0.5">Submitted {item.displayDate}</p>
+                                      )}
+                                    </div>
+
+                                    {/* Faculty name row */}
+                                    {item.facultyName && (
+                                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                        <span className="w-5 h-5 rounded-full bg-[#2D2575]/10 flex items-center justify-center text-[#2D2575] text-[9px] font-black shrink-0">F</span>
+                                        <span>Guide: <strong className="font-semibold text-[#2D2575] dark:text-indigo-300">{item.facultyName}</strong></span>
+                                      </div>
+                                    )}
+
+                                    {/* Evaluation Status Banner */}
+                                    <div
+                                      className="flex items-center justify-between px-3 py-2 rounded-xl"
+                                      style={{
+                                        background: isEvaluated ? '#00C48C0F' : '#F36C210F',
+                                        border: `1px solid ${isEvaluated ? '#00C48C30' : '#F36C2130'}`,
+                                      }}
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-base">{isEvaluated ? '✅' : '⏳'}</span>
+                                        <span
+                                          className="text-[11px] font-bold uppercase tracking-wide"
+                                          style={{ color: isEvaluated ? '#00C48C' : '#F36C21' }}
+                                        >
+                                          {isEvaluated ? 'Evaluated' : 'Pending Review'}
+                                        </span>
+                                      </div>
+                                      {isEvaluated && item.evaluatedAt && (
+                                        <span className="text-[10px] text-slate-400">on {item.evaluatedAt}</span>
+                                      )}
+                                    </div>
+
+                                    {/* Score Progress — only if evaluated */}
+                                    {isEvaluated && item.scoreText ? (
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Score</span>
+                                          <span className="text-sm font-black" style={{ color: scoreColor }}>{item.scoreText}</span>
+                                        </div>
+                                        <div className="relative h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                          <div
+                                            className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${scoreBg} transition-all duration-700`}
+                                            style={{ width: `${pct}%` }}
+                                          />
+                                        </div>
+                                        <div className="flex justify-between text-[10px] text-slate-400">
+                                          <span>0</span>
+                                          <span className="font-bold" style={{ color: scoreColor }}>{pct}%</span>
+                                          <span>{total}</span>
+                                        </div>
+                                      </div>
+                                    ) : !isEvaluated ? (
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[11px] font-semibold text-slate-400">Score</span>
+                                          <span className="text-[11px] text-slate-400 italic">Awaiting faculty grading</span>
+                                        </div>
+                                        <div className="relative h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                          <div className="absolute inset-y-0 left-0 w-0 rounded-full bg-slate-200" />
+                                        </div>
+                                      </div>
+                                    ) : null}
+
+                                    {/* Notes preview */}
+                                    {item.notesText && (
+                                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-3 py-2 border border-slate-100 dark:border-slate-700/50">
+                                        {item.notesText}
+                                      </p>
+                                    )}
+
+                                    {/* Spacer */}
+                                    <div className="flex-1" />
+
+                                    {/* Document footer */}
+                                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${catColor.text}15` }}>
+                                          <FileText className="w-4 h-4" style={{ color: catColor.text }} />
+                                        </div>
+                                        <div className="min-w-0">
+                                          <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate leading-tight">
+                                            {item.docName || `${item.displayTitle}.pdf`}
+                                          </p>
+                                          <p className="text-[10px] text-slate-400">PDF Document</p>
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenDocumentPreview(item)}
+                                        className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-white transition-all hover:scale-105 shadow-sm cursor-pointer"
+                                        style={{ background: `linear-gradient(135deg, ${catColor.text}, ${catColor.text}bb)` }}
+                                      >
+                                        <Eye className="w-3.5 h-3.5" />
+                                        <span>Preview</span>
+                                      </button>
+                                    </div>
+
+                                    {/* Faculty Remarks — only shown after evaluation */}
+                                    {isEvaluated && item.remarks && (
+                                      <div className="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/50 text-[11px] text-emerald-800 dark:text-emerald-300">
+                                        <span className="font-bold">📝 Remarks: </span>{item.remarks}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -1786,270 +2183,524 @@ export default function StudentLogbookPage() {
             })()}
 
             {/* ======================================================== */}
-            {/* 5. TAB: SEMINARS (Dedicated & Assigned Topics) */}
+            {/* 5 & 6. TAB: SEMINARS & TUTORIALS (Two Classified Sub-Tabs) */}
             {/* ======================================================== */}
-            {activeTab === 'SEMINARS' && (
+            {(activeTab === 'SEMINARS' || activeTab === 'TUTORIALS') && (
               <div className="space-y-6">
+                {/* Header Section */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Presentation className="w-5 h-5 text-[#F36C21]" />
-                      <span>Academic &amp; Technical Seminars</span>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] dark:text-indigo-400 text-xs font-bold mb-2">
+                      <Sparkles className="w-3.5 h-3.5 text-[#F36C21]" />
+                      <span>Academic Portfolio Deliverable Submissions</span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <Presentation className="w-6 h-6 text-[#F36C21]" />
+                      <span>Seminar &amp; Tutorial Academic Portfolio</span>
                     </h2>
-                    <p className="text-xs text-slate-500">View faculty assigned seminar topics, submit presentation deliverables, and check evaluations</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Access newly assigned technical topics, submit slide deck / solution deliverables, and track faculty progressive scoring.
+                    </p>
                   </div>
-                  <button
-                    onClick={() => { setEditingSeminar(null); setIsSeminarModalOpen(true); }}
-                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center gap-2 transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Log External Seminar</span>
-                  </button>
+
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {/* Auto-refresh / Reload Content Button */}
+                    <button
+                      type="button"
+                      onClick={handleRefreshSubmissions}
+                      disabled={isRefreshingStatus}
+                      className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer"
+                      title="Reload latest submissions and faculty evaluation status"
+                    >
+                      <RotateCcw className={`w-3.5 h-3.5 ${isRefreshingStatus ? 'animate-spin text-[#5B4BFF]' : 'text-slate-500'}`} />
+                      <span>{isRefreshingStatus ? 'Refreshing...' : 'Refresh Status'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => { setEditingSeminar(null); setIsSeminarModalOpen(true); }}
+                      className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4 text-[#F36C21]" />
+                      <span>Log External Seminar</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Faculty Assigned Seminar Topics */}
-                {topics.filter((t) => t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar') || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'))).length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-black uppercase text-[#5B4BFF] tracking-wider">
-                      Faculty Assigned Seminar &amp; Academic Topics ({topics.filter((t) => t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar') || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'))).length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {topics
-                        .filter((t) => t.category_code === 'SEMINAR' || t.title?.toLowerCase().includes('seminar') || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial')))
-                        .map((top) => {
-                          const existingSub = mySubmissions.find((s) => s.topic_id === top.id);
-                          return (
-                            <div
-                              key={top.id}
-                              className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3 flex flex-col justify-between"
-                            >
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-purple-50 dark:bg-purple-950 text-[#5B4BFF]">
-                                    Academic Seminar
-                                  </span>
-                                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300">
-                                    Max {top.max_marks} Marks
-                                  </span>
-                                </div>
-                                <h4 className="font-extrabold text-base text-slate-900 dark:text-white">{top.title}</h4>
-                                {top.description && (
-                                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{top.description}</p>
-                                )}
-                              </div>
-
-                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
-                                  <Clock className="w-3.5 h-3.5" />
-                                  {top.submission_deadline ? `Due ${new Date(top.submission_deadline).toLocaleDateString()}` : 'Open'}
-                                </span>
-
-                                {existingSub ? (
-                                  <button
-                                    onClick={() => {
-                                      setSelectedTopic(top);
-                                      setIsSubmitModalOpen(true);
-                                    }}
-                                    className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-bold border border-emerald-200 flex items-center gap-1.5"
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>Submitted ({existingSub.status})</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => {
-                                      setSelectedTopic(top);
-                                      setIsSubmitModalOpen(true);
-                                    }}
-                                    className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold shadow-md shadow-[#5B4BFF]/20 flex items-center gap-1.5"
-                                  >
-                                    <UploadCloud className="w-3.5 h-3.5" />
-                                    <span>Submit PDF / Doc</span>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Evaluated / Submitted Seminar Deliverables */}
-                {mySubmissions.filter((s) => s.category_code === 'SEMINAR' || s.topic_title?.toLowerCase().includes('seminar') || mySubmissions.length > 0).length > 0 && (
-                  <div className="space-y-4 pt-2">
-                    <h3 className="text-xs font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
-                      Submitted Seminar Deliverables &amp; Faculty Scores
-                    </h3>
-                    <div className="space-y-4">
-                      {mySubmissions.map((sub) => (
-                        <div
-                          key={sub.id}
-                          className="bg-white dark:bg-slate-900 rounded-[22px] p-6 shadow-sm border-2 border-indigo-200 dark:border-indigo-900 space-y-4"
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-                            <div>
-                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-bold mb-1">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>{sub.status === 'EVALUATED' ? 'Evaluated Deliverable' : 'Submitted Deliverable'}</span>
-                              </div>
-                              <h3 className="text-lg font-black text-slate-900 dark:text-white">{sub.topic_title}</h3>
-                              <div className="text-xs text-slate-500">
-                                Submitted on {new Date(sub.submitted_at).toLocaleString()}
-                              </div>
-                            </div>
-
-                            <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-center min-w-[120px]">
-                              <div className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold uppercase">Marks Awarded</div>
-                              <div className="text-2xl font-black text-emerald-600">{sub.marks_obtained !== undefined ? sub.marks_obtained : '—'} / {sub.max_marks || 20}</div>
-                              <div className="text-[10px] text-emerald-600 font-bold">Status: {sub.status}</div>
-                            </div>
-                          </div>
-
-                          {/* Attached File */}
-                          {(sub.attachment_name || sub.file_name || sub.attachment_url || sub.file_url || sub.slide_deck_url) && (
-                            <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-[#F36C21] shrink-0">
-                                  <FileText className="w-5 h-5" />
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                                    {sub.attachment_name || sub.file_name || sub.slide_deck_name || `${sub.topic_title || 'Seminar'}.pdf`}
-                                  </div>
-                                  <div className="text-[11px] text-slate-500 truncate">
-                                    Attached Seminar Slide Deck / PDF • Evaluation Status: {sub.status}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => handleOpenDocumentPreview(sub)}
-                                className="px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-[#F36C21]/25 transition shrink-0 cursor-pointer"
-                              >
-                                <Eye className="w-4 h-4" />
-                                <span>Preview Document</span>
-                              </button>
-                            </div>
-                          )}
-
-                          {/* Objective and Explanation Text */}
-                          {(sub.submission_text || sub.explanation_text) && (
-                            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-                              <div className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                                Student Abstract &amp; Implementation Details:
-                              </div>
-                              <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
-                                {sub.submission_text || sub.explanation_text}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Remarks */}
-                          {sub.remarks && (
-                            <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-1">
-                              <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
-                                <CheckCircle2 className="w-4 h-4" /> Faculty Evaluation Remarks
-                              </div>
-                              <div className="text-sm text-slate-800 dark:text-slate-200 font-semibold">{sub.remarks}</div>
-                            </div>
-                          )}
+                {/* Submission Success & Reload Notification Banner */}
+                {submissionSuccessBanner && (
+                  <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-3 text-emerald-800 dark:text-emerald-200 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-100">
+                          Auto-Refreshed With Latest Status
                         </div>
-                      ))}
+                        <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                          {submissionSuccessBanner}
+                        </div>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setSubmissionSuccessBanner(null)}
+                      className="p-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-600 transition cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* ======================================================== */}
-            {/* 6. TAB: TUTORIALS (Dedicated & Assigned Problem Sheets) */}
-            {/* ======================================================== */}
-            {activeTab === 'TUTORIALS' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <BookOpen className="w-5 h-5 text-[#5B4BFF]" />
-                      <span>Unit Tutorials &amp; Problem Sheets</span>
-                    </h2>
-                    <p className="text-xs text-slate-500">Access unit problem sheets, upload written derivations / PDF solutions, and receive faculty review</p>
+                {/* Sub-Tabs Switcher Bar */}
+                <div className="bg-slate-100/90 dark:bg-slate-800/80 p-1.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border border-slate-200/80 dark:border-slate-700">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    {/* Tab 1: Newly Topics */}
+                    <button
+                      type="button"
+                      onClick={() => setSeminarSubTab('NEW_TOPICS')}
+                      className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                        seminarSubTab === 'NEW_TOPICS'
+                          ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/25 scale-[1.01]'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-[#5B4BFF] hover:bg-white/60 dark:hover:bg-slate-700/60'
+                      }`}
+                    >
+                      <Presentation className="w-4 h-4" />
+                      <span>1. Academic &amp; Technical Seminars</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        seminarSubTab === 'NEW_TOPICS'
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}>
+                        {topics.length}
+                      </span>
+                    </button>
+
+                    {/* Tab 2: Submitted Deliverables & Scores */}
+                    <button
+                      type="button"
+                      onClick={() => setSeminarSubTab('SUBMITTED_DELIVERABLES')}
+                      className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                        seminarSubTab === 'SUBMITTED_DELIVERABLES'
+                          ? 'bg-[#F36C21] text-white shadow-md shadow-[#F36C21]/25 scale-[1.01]'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-[#F36C21] hover:bg-white/60 dark:hover:bg-slate-700/60'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>2. Submitted Seminar Deliverables &amp; Faculty Scores</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        seminarSubTab === 'SUBMITTED_DELIVERABLES'
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}>
+                        {mySubmissions.length}
+                      </span>
+                    </button>
                   </div>
-                  <button
-                    onClick={() => { setEditingTutorial(null); setIsTutorialModalOpen(true); }}
-                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center gap-2 transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Log External Sheet</span>
-                  </button>
+
+                  {/* Filter Pills for Tab 1 */}
+                  {seminarSubTab === 'NEW_TOPICS' && (
+                    <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden md:inline">Filter:</span>
+                      <button
+                        type="button"
+                        onClick={() => setTopicTypeFilter('ALL')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          topicTypeFilter === 'ALL'
+                            ? 'bg-white dark:bg-slate-900 text-[#5B4BFF] shadow-xs'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                      >
+                        All ({topics.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTopicTypeFilter('SEMINAR')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          topicTypeFilter === 'SEMINAR'
+                            ? 'bg-white dark:bg-slate-900 text-[#5B4BFF] shadow-xs'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                      >
+                        Seminars ({topics.filter(t => t.category_code === 'SEMINAR' || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'))).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTopicTypeFilter('TUTORIAL')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          topicTypeFilter === 'TUTORIAL'
+                            ? 'bg-white dark:bg-slate-900 text-[#00C48C] shadow-xs'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                      >
+                        Tutorials ({topics.filter(t => t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial')).length})
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Faculty Assigned Tutorial Problem Sheets */}
-                {topics.filter((t) => t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial')).length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-black uppercase text-emerald-600 tracking-wider">
-                      Faculty Assigned Tutorial Sheets ({topics.filter((t) => t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial')).length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {topics
-                        .filter((t) => t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial'))
-                        .map((top) => {
+                {/* ========================================================================= */}
+                {/* 1. ACADEMIC & TECHNICAL SEMINARS (MODERN UI CARD: 1 ROW 4 CARDS) */}
+                {/* ========================================================================= */}
+                {seminarSubTab === 'NEW_TOPICS' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-black uppercase text-[#5B4BFF] tracking-wider flex items-center gap-2">
+                          <Layers className="w-4 h-4" />
+                          <span>Active Seminar &amp; Tutorial Topics ({filteredTopics.length})</span>
+                        </h3>
+                        <p className="text-xs text-slate-500">Every topic either seminar or tutorial displayed in modern stylish cards. Click below to submit deliverables.</p>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full hidden sm:inline-block">
+                        1 Row 4 Cards Layout
+                      </span>
+                    </div>
+
+                    {filteredTopics.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-900 rounded-[22px] p-12 text-center shadow-soft border border-slate-200/80 dark:border-slate-800 space-y-3">
+                        <BookOpenCheck className="w-12 h-12 text-slate-300 mx-auto" />
+                        <h4 className="font-bold text-base text-slate-800 dark:text-slate-200">No Topics Found</h4>
+                        <p className="text-xs text-slate-500">There are currently no topics matching this category filter.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                        {filteredTopics.map((top) => {
                           const existingSub = mySubmissions.find((s) => s.topic_id === top.id);
+                          const isTutorial = top.category_code === 'TUTORIAL' || top.title?.toLowerCase().includes('tutorial');
+
                           return (
                             <div
                               key={top.id}
-                              className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3 flex flex-col justify-between"
+                              className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-soft border border-slate-200/80 dark:border-slate-800 hover:shadow-xl hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden"
                             >
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                                    Unit Tutorial Sheet
+                              {/* Card Top colored accent bar */}
+                              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+                                isTutorial ? 'bg-gradient-to-r from-emerald-400 to-teal-500' : 'bg-gradient-to-r from-[#5B4BFF] to-[#7867FF]'
+                              }`} />
+
+                              <div className="space-y-3 pt-1">
+                                {/* Badges Header */}
+                                <div className="flex items-center justify-between gap-1 flex-wrap">
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                    isTutorial
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/70 text-[#00C48C] border border-emerald-200/60 dark:border-emerald-800'
+                                      : 'bg-purple-50 dark:bg-purple-950/70 text-[#5B4BFF] border border-purple-200/60 dark:border-purple-800'
+                                  }`}>
+                                    {isTutorial ? 'Unit Tutorial' : 'Academic Seminar'}
                                   </span>
-                                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300">
+                                  <span className="text-[11px] font-mono font-black text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
                                     Max {top.max_marks} Marks
                                   </span>
                                 </div>
-                                <h4 className="font-extrabold text-base text-slate-900 dark:text-white">{top.title}</h4>
-                                {top.description && (
-                                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{top.description}</p>
-                                )}
+
+                                {/* Title & Description */}
+                                <div>
+                                  <h4 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-[#5B4BFF] transition line-clamp-1" title={top.title}>
+                                    {top.title}
+                                  </h4>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed min-h-[36px]" title={top.description || ''}>
+                                    {top.description || 'Deliverable presentation and technical demonstration.'}
+                                  </p>
+                                </div>
+
+                                {/* Metadata Info */}
+                                <div className="space-y-1.5 text-xs text-slate-500 pt-1">
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <span className="text-slate-400">Course / Batch:</span>
+                                    <span className="font-bold text-slate-700 dark:text-slate-300">{top.course_name || 'BCA'} • {top.batch_name || '2025'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <span className="text-slate-400">Supervisor:</span>
+                                    <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[130px]">{top.faculty_name || 'Dr. Shorab Ahmad'}</span>
+                                  </div>
+                                </div>
                               </div>
 
-                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
-                                  <Clock className="w-3.5 h-3.5" />
-                                  {top.submission_deadline ? `Due ${new Date(top.submission_deadline).toLocaleDateString()}` : 'Open'}
-                                </span>
+                              {/* Footer Action & Due Date */}
+                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>{top.submission_deadline ? `Due ${new Date(top.submission_deadline).toLocaleDateString()}` : 'Open Deadline'}</span>
+                                  </span>
+                                  {existingSub && (
+                                    <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                                      {existingSub.status}
+                                    </span>
+                                  )}
+                                </div>
 
                                 {existingSub ? (
-                                  <button
-                                    onClick={() => {
-                                      setSelectedTopic(top);
-                                      setIsSubmitModalOpen(true);
-                                    }}
-                                    className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-bold border border-emerald-200 flex items-center gap-1.5"
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>Submitted ({existingSub.status})</span>
-                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSeminarSubTab('SUBMITTED_DELIVERABLES');
+                                      }}
+                                      className="flex-1 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-1.5 transition cursor-pointer"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                      <span>View Score ({existingSub.marks_obtained !== undefined ? `${existingSub.marks_obtained}/${top.max_marks}` : 'Submitted'})</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedTopic(top);
+                                        setIsSubmitModalOpen(true);
+                                      }}
+                                      title="Submit Revision"
+                                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                                    >
+                                      <UploadCloud className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 ) : (
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       setSelectedTopic(top);
                                       setIsSubmitModalOpen(true);
                                     }}
-                                    className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold shadow-md shadow-[#5B4BFF]/20 flex items-center gap-1.5"
+                                    className="w-full py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold shadow-md shadow-[#5B4BFF]/20 flex items-center justify-center gap-1.5 transition duration-200 cursor-pointer group-hover:scale-[1.01]"
                                   >
-                                    <UploadCloud className="w-3.5 h-3.5" />
-                                    <span>Submit Solution PDF</span>
+                                    <UploadCloud className="w-4 h-4" />
+                                    <span>Submit Deliverable</span>
                                   </button>
                                 )}
                               </div>
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ========================================================================= */}
+                {/* 2. SUBMITTED SEMINAR DELIVERABLES & FACULTY SCORES (MODERN UI: 1 ROW 3 CARDS WITH PROGRESSIVE BAR) */}
+                {/* ========================================================================= */}
+                {seminarSubTab === 'SUBMITTED_DELIVERABLES' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <h3 className="text-sm font-black uppercase text-[#F36C21] tracking-wider flex items-center gap-2">
+                          <Award className="w-4 h-4" />
+                          <span>Submitted Deliverables &amp; Continuous Faculty Scoring ({mySubmissions.length})</span>
+                        </h3>
+                        <p className="text-xs text-slate-500">Real-time faculty evaluation records, progressive score bars, and exam-grade marked PDF documents.</p>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full hidden sm:inline-block">
+                        1 Row 3 Cards with Progressive Bar
+                      </span>
                     </div>
+
+                    {mySubmissions.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-900 rounded-[22px] p-12 text-center shadow-soft border border-slate-200/80 dark:border-slate-800 space-y-4">
+                        <Presentation className="w-12 h-12 text-slate-300 mx-auto" />
+                        <h4 className="font-bold text-base text-slate-800 dark:text-slate-200">No Deliverables Submitted Yet</h4>
+                        <p className="text-xs text-slate-500 max-w-md mx-auto">
+                          You haven&apos;t submitted any seminar presentation slide decks or tutorial problem sheets yet. Select an assigned topic from Tab 1 to submit your deliverable.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setSeminarSubTab('NEW_TOPICS')}
+                          className="px-5 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold transition shadow-md shadow-[#5B4BFF]/25 cursor-pointer"
+                        >
+                          Browse Assigned Topics &amp; Submit
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {mySubmissions.map((sub) => {
+                          const marks = Number(sub.marks_obtained ?? sub.marks_awarded ?? 0);
+                          const maxMarks = Number(sub.max_marks || 20);
+                          const pct = maxMarks > 0 ? Math.min(100, Math.max(0, Math.round((marks / maxMarks) * 100))) : 0;
+                          const isEvaluated = sub.status === 'EVALUATED' || sub.status === 'evaluated' || (sub.marks_obtained !== undefined && sub.marks_obtained !== null);
+                          const isTutorial = (sub.category_code === 'TUTORIAL' || sub.topic_title?.toLowerCase().includes('tutorial'));
+
+                          // Score tier badge
+                          let tierLabel = 'Under Review';
+                          let tierBadgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
+                          if (isEvaluated) {
+                            if (pct >= 90) {
+                              tierLabel = '🏆 Outstanding Mastery';
+                              tierBadgeClass = 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800';
+                            } else if (pct >= 75) {
+                              tierLabel = '🌟 Excellent Performance';
+                              tierBadgeClass = 'bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800';
+                            } else if (pct >= 50) {
+                              tierLabel = '👍 Satisfactory Progress';
+                              tierBadgeClass = 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800';
+                            } else {
+                              tierLabel = '⚠️ Needs Revision';
+                              tierBadgeClass = 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800';
+                            }
+                          }
+
+                          return (
+                            <div
+                              key={sub.id}
+                              className="bg-white dark:bg-slate-900 rounded-[22px] p-6 shadow-soft border border-slate-200/80 dark:border-slate-800 hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden"
+                            >
+                              {/* Card Top accent bar */}
+                              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+                                isEvaluated
+                                  ? pct >= 75
+                                    ? 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
+                                    : 'bg-gradient-to-r from-amber-400 to-[#F36C21]'
+                                  : 'bg-gradient-to-r from-blue-400 to-indigo-500'
+                              }`} />
+
+                              <div className="space-y-3.5">
+                                {/* Header badges */}
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                    isTutorial
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-[#00C48C]'
+                                      : 'bg-purple-50 dark:bg-purple-950/60 text-[#5B4BFF]'
+                                  }`}>
+                                    {isTutorial ? 'Tutorial Deliverable' : 'Seminar Deliverable'}
+                                  </span>
+
+                                  <div className="flex items-center gap-1.5">
+                                    {isEvaluated ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 text-[10px] font-extrabold border border-emerald-200 dark:border-emerald-800">
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                        <span>Evaluated</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 text-[10px] font-extrabold border border-amber-200 dark:border-amber-800">
+                                        <Clock className="w-3 h-3 animate-spin" />
+                                        <span>Under Review</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Title & Submission Info */}
+                                <div>
+                                  <h4 className="font-extrabold text-base text-slate-900 dark:text-white line-clamp-1" title={sub.topic_title || 'Deliverable'}>
+                                    {sub.topic_title || sub.title || 'Seminar Topic'}
+                                  </h4>
+                                  <p className="text-[11px] text-slate-500 mt-0.5">
+                                    Submitted on {new Date(sub.submitted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • {sub.file_name || sub.attachment_name || 'PDF Document'}
+                                  </p>
+                                </div>
+
+                                {/* PROGRESSIVE BAR SECTION */}
+                                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700 space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-black uppercase text-slate-600 dark:text-slate-300 tracking-wider flex items-center gap-1">
+                                      <TrendingUp className="w-3.5 h-3.5 text-[#5B4BFF]" />
+                                      <span>Faculty Score Progress</span>
+                                    </span>
+                                    {isEvaluated ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-sm font-black text-slate-900 dark:text-white">
+                                          {marks} <span className="text-xs text-slate-400 font-normal">/ {maxMarks}</span>
+                                        </span>
+                                        <span className={`text-xs font-black px-2 py-0.5 rounded-full ${
+                                          pct >= 75 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300'
+                                        }`}>
+                                          {pct}%
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                                        Pending Grading
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Progress Track */}
+                                  <div className="h-3 rounded-full bg-slate-200/80 dark:bg-slate-700 p-0.5 overflow-hidden shadow-inner">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-1000 ${
+                                        isEvaluated
+                                          ? pct >= 75
+                                            ? 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
+                                            : pct >= 50
+                                            ? 'bg-gradient-to-r from-[#5B4BFF] to-[#FFB020]'
+                                            : 'bg-gradient-to-r from-[#FFB020] to-[#F04438]'
+                                          : 'w-2/3 bg-gradient-to-r from-amber-400 to-[#F36C21] animate-pulse'
+                                      }`}
+                                      style={{ width: isEvaluated ? `${pct}%` : '65%' }}
+                                    />
+                                  </div>
+
+                                  {/* Qualitative Performance Badge */}
+                                  <div className="flex items-center justify-between text-[11px] pt-0.5">
+                                    <span className={`px-2 py-0.5 rounded-md font-bold border text-[10px] ${tierBadgeClass}`}>
+                                      {tierLabel}
+                                    </span>
+                                    <span className="text-slate-500 font-medium">
+                                      {isEvaluated ? `Evaluated by ${sub.faculty_name || 'Faculty'}` : 'Stage 2/3: Faculty Review'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Attached Document Preview Card */}
+                                <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/30 flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-[#F36C21] shrink-0">
+                                      <FileText className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                        {sub.file_name || sub.attachment_name || `${sub.topic_title || 'Seminar'}.pdf`}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500">
+                                        {sub.file_size || 'Attached PDF Document'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDocumentPreview(sub)}
+                                    className="px-3 py-1.5 rounded-lg bg-[#F36C21] hover:bg-[#E05B10] text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition cursor-pointer shrink-0"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Preview</span>
+                                  </button>
+                                </div>
+
+                                {/* Remarks quote if evaluated */}
+                                {sub.remarks && (
+                                  <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                                    <div className="font-bold text-emerald-800 dark:text-emerald-300 text-[10px] uppercase tracking-wider flex items-center gap-1">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                      <span>Faculty Feedback:</span>
+                                    </div>
+                                    <p className="italic text-slate-600 dark:text-slate-300 line-clamp-2">
+                                      &ldquo;{sub.remarks}&rdquo;
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Footer Details */}
+                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                                <span className="text-slate-400 text-[11px]">
+                                  {sub.evaluated_at ? `Graded ${new Date(sub.evaluated_at).toLocaleDateString()}` : 'Awaiting Faculty Grading'}
+                                </span>
+                                {sub.evaluated_file_url ? (
+                                  <span className="text-[11px] font-bold text-[#5B4BFF] flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                    <span>Exam-Grade Markup</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] font-semibold text-slate-500">
+                                    Deliverable Active
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2288,7 +2939,7 @@ export default function StudentLogbookPage() {
       <LogbookSubmitWorkModal
         isOpen={isSubmitModalOpen}
         onClose={() => setIsSubmitModalOpen(false)}
-        onSuccess={fetchAllData}
+        onSuccess={handleSubmissionSuccess}
         topic={selectedTopic || topics[0]}
       />
 
@@ -2526,6 +3177,7 @@ export default function StudentLogbookPage() {
               )}
 
               {/* TAB 3: MINI PROJECTS & MILESTONES */}
+              {/* TAB 3: MINI PROJECTS & MILESTONES */}
               {dossierActiveTab === 'MINI_PROJECTS' && (
                 <div className="space-y-4">
                   {/* Project Overview Card */}
@@ -2534,68 +3186,89 @@ export default function StudentLogbookPage() {
                       <span className="px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] font-black text-[11px] uppercase tracking-wider border border-indigo-200/60 dark:border-indigo-900/40">
                         Assigned Mini Project
                       </span>
-                      <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800">
-                        Guide Grade: {miniProject?.guide_marks || '60'} / {miniProject?.max_marks || '100'} Marks
-                      </span>
+                      {miniProject?.guide_marks !== null && miniProject?.guide_marks !== undefined ? (
+                        <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800">
+                          Guide Grade: {miniProject.guide_marks} / {miniProject.max_marks || '100'} Marks
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold text-xs border border-amber-200 dark:border-amber-800">
+                          ⏳ Awaiting Evaluation
+                        </span>
+                      )}
                     </div>
 
                     <div>
                       <h4 className="text-xl font-black text-slate-900 dark:text-white">
-                        {miniProject?.title || 'E-Commerce'}
+                        {miniProject?.title || 'No Project Assigned'}
                       </h4>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                        {miniProject?.description || 'Dynamic Product listing and customer can view product add to cart and payment proceed'}
-                      </p>
+                      {miniProject?.description && (
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                          {miniProject.description}
+                        </p>
+                      )}
                     </div>
 
                     {/* Technologies */}
-                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                      {(miniProject?.technologies || ['React', 'TailwindCSS', 'Express', 'MongoDb']).map((tech: string, i: number) => (
-                        <span key={i} className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-semibold">
-                          {tech}
-                        </span>
-                      ))}
-                    </div>
+                    {miniProject?.technologies && Array.isArray(miniProject.technologies) && miniProject.technologies.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                        {miniProject.technologies.map((tech: string, i: number) => (
+                          <span key={i} className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-semibold">
+                            {tech}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Guide Remarks */}
-                    <div className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/60 text-xs text-emerald-900 dark:text-emerald-300">
-                      <span className="font-bold">Guide Evaluation Remarks:</span> {miniProject?.guide_remarks || 'Dynamic product catalog and cart workflow implemented properly.'}
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300">
+                      <span className="font-bold text-[#11141A] dark:text-white">Guide Evaluation Remarks: </span>
+                      {miniProject?.guide_remarks ? (
+                        <span>{miniProject.guide_remarks}</span>
+                      ) : (
+                        <span className="italic text-amber-600 dark:text-amber-400">No evaluation remarks recorded yet</span>
+                      )}
                     </div>
 
                     {/* Attached Project PDF Documentation */}
-                    <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-[#F36C21] shrink-0">
-                          <FileText className="w-5 h-5" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                            {miniProject?.documentation_name || 'ecommerce.pdf'}
+                    {miniProject?.documentation_name || miniProject?.documentation_url ? (
+                      <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-[#F36C21] shrink-0">
+                            <FileText className="w-5 h-5" />
                           </div>
-                          <div className="text-[11px] text-slate-500 truncate">
-                            Attached Project Documentation &amp; SRS Report • {miniProject?.file_size || '0.06 MB'}
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                              {miniProject.documentation_name || 'Project_Documentation.pdf'}
+                            </div>
+                            <div className="text-[11px] text-slate-500 truncate">
+                              Attached Project Documentation &amp; SRS Report {miniProject.file_size ? `• ${miniProject.file_size}` : ''}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleOpenDocumentPreview({
-                          title: miniProject?.title || 'E-Commerce Project Documentation',
-                          docUrl: miniProject?.documentation_url || 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-                          docName: miniProject?.documentation_name || 'ecommerce.pdf',
-                          notesText: miniProject?.description || 'Dynamic Product listing and customer can view product add to cart and payment proceed',
-                          category_name: 'Mini Project Documentation',
-                          marksObtained: Number(miniProject?.guide_marks) || 60,
-                          maxMarks: Number(miniProject?.max_marks) || 100,
-                          facultyRemarks: miniProject?.guide_remarks || 'Dynamic product catalog and cart workflow implemented properly.',
-                        })}
-                        className="px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-[#F36C21]/25 transition cursor-pointer shrink-0"
-                      >
-                        <Eye className="w-4 h-4" />
-                        <span>Preview Project Documentation</span>
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDocumentPreview({
+                            title: miniProject.title || 'Project Documentation',
+                            docUrl: miniProject.documentation_url || `/api/v1/logbook/mini-project/${miniProject.id}/document`,
+                            docName: miniProject.documentation_name || 'Project_Documentation.pdf',
+                            notesText: miniProject.description || '',
+                            category_name: 'Mini Project Documentation',
+                            marksObtained: miniProject.guide_marks !== null && miniProject.guide_marks !== undefined ? Number(miniProject.guide_marks) : 0,
+                            maxMarks: Number(miniProject.max_marks) || 100,
+                            facultyRemarks: miniProject.guide_remarks || 'Awaiting guide evaluation remarks',
+                          })}
+                          className="px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-[#F36C21]/25 transition cursor-pointer shrink-0"
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span>Preview Project Documentation</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-[#E7EAF3] dark:border-slate-800 text-xs text-[#6F7887] dark:text-slate-400 text-center">
+                        No project documentation file uploaded yet.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -2739,6 +3412,9 @@ export default function StudentLogbookPage() {
         maxMarks={previewDocData.maxMarks}
         facultyRemarks={previewDocData.facultyRemarks}
         submittedAt={previewDocData.submittedAt}
+        isEvaluated={previewDocData.isEvaluated}
+        evaluatedPdfUrl={previewDocData.evaluatedPdfUrl}
+        originalPdfUrl={previewDocData.originalPdfUrl}
       />
     </div>
   );

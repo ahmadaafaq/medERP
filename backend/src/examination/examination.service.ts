@@ -246,7 +246,7 @@ export class ExaminationService {
 
   async getResults(tenantSlug: string, paperId?: string, studentId?: string) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
-    let sql = `SELECT r.*, s.name as student_name, s.registration_no, s.rollno, s.photo_url, p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks
+    let sql = `SELECT r.*, s.name as student_name, s.registration_no, s.rollno, s.photo_url, p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks, p.type as paper_type, p.sections
                FROM student_results r
                LEFT JOIN students s ON r.student_id::text = s.id::text
                LEFT JOIN examination_papers p ON r.paper_id::text = p.id::text
@@ -271,11 +271,11 @@ export class ExaminationService {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     return this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT r.*, p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks, p.type as paper_type, sub.name as subject_name
+      `SELECT r.*, p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks, p.type as paper_type, p.sections, sub.name as subject_name
        FROM student_results r
-       JOIN students s ON r.student_id = s.id
-       JOIN examination_papers p ON r.paper_id = p.id
-       LEFT JOIN subjects sub ON p.subject_id = sub.id
+       JOIN students s ON r.student_id::text = s.id::text
+       JOIN examination_papers p ON r.paper_id::text = p.id::text
+       LEFT JOIN subjects sub ON p.subject_id::text = sub.id::text
        WHERE LOWER(COALESCE(s.rollno, '')) = LOWER($1)
           OR LOWER(COALESCE(s.registration_no, '')) = LOWER($1)
           OR s.id::text = $1

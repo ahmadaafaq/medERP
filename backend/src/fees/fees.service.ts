@@ -39,15 +39,34 @@ export class FeesService {
   }
 
   async getStudentFees(tenantSlug: string, rollno: string) {
-    return this.tenantSchemaService.queryInTenant(
-      tenantSlug,
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    // 1. Try student_fees summary table
+    const summary = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT sf.paid_fees, sf.pending_fees, sf.total_fees, s.name as student_name, s.rollno, s.registration_no
+       FROM student_fees sf
+       JOIN students s ON sf.student_id::text = s.id::text
+       WHERE s.rollno = $1 OR s.registration_no = $1 OR s.id::text = $1
+       ORDER BY sf.paid_fees DESC
+       LIMIT 1`,
+      [rollno],
+    ).catch(() => []);
+
+    // 2. Try student_fee_records
+    const records = await this.tenantSchemaService.queryInTenant(
+      slug,
       `SELECT r.*, fs.fee_type, fs.amount as total_amount, s.name as student_name
        FROM student_fee_records r
-       JOIN students s ON r.student_id = s.id
-       JOIN fees_structure fs ON r.fee_structure_id = fs.id
-       WHERE s.rollno = $1
+       JOIN students s ON r.student_id::text = s.id::text
+       JOIN fees_structure fs ON r.fee_structure_id::text = fs.id::text
+       WHERE s.rollno = $1 OR s.registration_no = $1 OR s.id::text = $1
        ORDER BY r.created_at DESC`,
       [rollno],
-    );
+    ).catch(() => []);
+
+    return {
+      summary: summary && summary.length > 0 ? summary[0] : null,
+      records: records || [],
+    };
   }
 }

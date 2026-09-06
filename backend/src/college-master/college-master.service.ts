@@ -832,13 +832,40 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         const payrollCategory = emp.payroll_category || null;
 
         // 7. Staff Type & Status
-        const majCat = (emp.category || emp.payroll_category || emp.maj_cat || 'TEACHING').toUpperCase();
+        const payrollCat = String(emp.payroll_category || emp.payrollCategory || '').toUpperCase();
+        const rawCategory = String(emp.category || emp.maj_cat || '').toUpperCase();
+        const desigUpper = String(designation || emp.Designation || '').toUpperCase();
+
+        const isTeaching =
+          payrollCat.includes('TEACH') ||
+          rawCategory.includes('TEACH') ||
+          desigUpper.includes('FACULTY') ||
+          desigUpper.includes('PROFESSOR') ||
+          desigUpper.includes('ASST. PROF') ||
+          desigUpper.includes('ASSOCIATE PROF') ||
+          desigUpper.includes('LECTURER') ||
+          desigUpper.includes('TEACHER') ||
+          desigUpper.includes('INSTRUCTOR') ||
+          desigUpper.includes('TUTOR') ||
+          desigUpper.includes('DIRECTOR') ||
+          desigUpper.includes('DEAN') ||
+          desigUpper.includes('HOD') ||
+          desigUpper.includes('HEAD OF DEPARTMENT');
+
+        const isAdminStaff =
+          payrollCat.includes('ADMIN') ||
+          rawCategory.includes('ADMIN') ||
+          desigUpper.includes('ADMINISTRATOR') ||
+          desigUpper.includes('PRINCIPAL') ||
+          desigUpper.includes('REGISTRAR') ||
+          desigUpper.includes('COLLEGE ADMIN');
+
         let staffType = 'Faculty';
         let userRole = 'FACULTY';
-        if (majCat.includes('TEACH')) {
+        if (isTeaching) {
           staffType = 'Faculty';
-          userRole = designation.includes('HOD') ? 'HOD' : 'FACULTY';
-        } else if (majCat.includes('ADMIN')) {
+          userRole = (desigUpper.includes('HOD') || desigUpper.includes('HEAD OF DEPARTMENT')) ? 'HOD' : 'FACULTY';
+        } else if (isAdminStaff) {
           staffType = 'Admin';
           userRole = 'COLLEGE_ADMIN';
         } else {

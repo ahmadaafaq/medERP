@@ -15,9 +15,10 @@ out/
 .env.local
 **/.env.local
 
-# Uploads
-uploads/
-**/uploads/
+# Uploads - backend uploads tracked for deployment
+# uploads/
+# **/uploads/
+
 # Logs
 logs
 *.log

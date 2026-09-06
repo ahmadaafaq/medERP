@@ -491,7 +491,8 @@ export default function LoginPage() {
           localStorage.setItem('selectedTenant', verifiedSlug);
           localStorage.setItem('tenant', verifiedSlug);
           localStorage.setItem('colg_cd', targetColgCd);
-          localStorage.setItem('role', role);
+          const verifiedRole = (authData.user?.role || role).toUpperCase();
+          localStorage.setItem('role', verifiedRole);
 
           const institutionName =
             authData.user?.collegeName ||

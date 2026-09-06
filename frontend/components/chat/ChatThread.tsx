@@ -241,11 +241,23 @@ export default function ChatThread({
                 ? String(currentUserId).toLowerCase() === String(msg.sender_id).toLowerCase()
                 : false;
 
-            const isFaculty = (msg.sender_role || '').toUpperCase() === 'FACULTY';
+            let displaySenderRole = (msg.sender_role || 'STUDENT').toUpperCase();
+            if (
+              (displaySenderRole === 'CLERK' || displaySenderRole === 'STAFF') &&
+              group?.members?.some(
+                (m: any) =>
+                  (m.user_id === msg.sender_id || (m.name && msg.sender_name && m.name.trim().toLowerCase() === msg.sender_name.trim().toLowerCase())) &&
+                  ((m.role || '').toUpperCase() === 'FACULTY' || (m.role || '').toUpperCase() === 'HOD')
+              )
+            ) {
+              displaySenderRole = 'FACULTY';
+            }
+
+            const isFaculty = displaySenderRole === 'FACULTY' || displaySenderRole === 'HOD';
             const isAdmin =
-              (msg.sender_role || '').toUpperCase() === 'ADMIN' ||
-              (msg.sender_role || '').toUpperCase() === 'SUPER_ADMIN' ||
-              (msg.sender_role || '').toUpperCase() === 'COLLEGE_ADMIN';
+              displaySenderRole === 'ADMIN' ||
+              displaySenderRole === 'SUPER_ADMIN' ||
+              displaySenderRole === 'COLLEGE_ADMIN';
 
             const prevMsg = messages[index - 1];
             const isDifferentDay = !prevMsg || new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
@@ -336,7 +348,7 @@ export default function ChatThread({
                             : 'bg-emerald-50 dark:bg-emerald-950 text-[#00C48C]'
                         }`}
                       >
-                        {msg.sender_role}
+                        {displaySenderRole}
                       </span>
                     </div>
 

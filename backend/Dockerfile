@@ -48,7 +48,8 @@ RUN apk add --no-cache python3 make g++ \
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/templates ./templates
 
-# Ensure uploads directory exists
+# Ensure uploads directory exists and copy existing uploads
+COPY --from=builder /app/uploads ./uploads
 RUN mkdir -p uploads
 
 EXPOSE 8081

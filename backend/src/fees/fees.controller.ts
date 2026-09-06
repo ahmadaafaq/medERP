@@ -3,6 +3,7 @@ import { FeesService } from './fees.service';
 import { CreateFeeStructureDto, RecordFeePaymentDto } from './dto/fees.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Tenant } from '../common/decorators/tenant.decorator';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('fees')
 @UseGuards(JwtAuthGuard)
@@ -24,6 +25,7 @@ export class FeesController {
     return this.feesService.recordPayment(tenantSlug, dto);
   }
 
+  @Public()
   @Get(':rollno')
   async getStudentFees(@Tenant() tenantSlug: string, @Param('rollno') rollno: string) {
     return this.feesService.getStudentFees(tenantSlug, rollno);

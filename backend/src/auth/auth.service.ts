@@ -366,7 +366,7 @@ export class AuthService {
         userId = existingUsers[0].id;
         await this.ds.query(
           `UPDATE "${schema}".users 
-           SET emp_id = $1, usr_id = $2, devicecd = $3, loc_cd = $4, department = $5, password_hash = $6, is_active = true, updated_at = NOW()
+           SET role = $8, emp_id = $1, usr_id = $2, devicecd = $3, loc_cd = $4, department = $5, password_hash = $6, is_active = true, updated_at = NOW()
            WHERE id = $7`,
           [
             empIdToUse,
@@ -376,6 +376,7 @@ export class AuthService {
             srmsRecord.Department || null,
             passwordHash,
             userId,
+            mappedRole,
           ],
         );
       } else {
@@ -518,6 +519,34 @@ export class AuthService {
           );
           user.role = 'FACULTY';
         }
+      }
+    }
+
+    // Auto self-heal teaching faculty role if incorrectly marked as CLERK
+    if (isValid && user && (user.role === 'CLERK' || user.role === 'STAFF') && schema.startsWith('tenant_')) {
+      const facCheck = await this.ds.query(
+        `SELECT id, designation, payroll_category FROM "${schema}".faculty 
+         WHERE (user_id::text = $1::text OR emp_id = $2)
+           AND (payroll_category ILIKE '%TEACH%' 
+                OR designation ILIKE '%Faculty%' 
+                OR designation ILIKE '%Professor%' 
+                OR designation ILIKE '%Lecturer%' 
+                OR designation ILIKE '%HOD%')
+         LIMIT 1`,
+        [user.id, user.emp_id || ''],
+      ).catch(() => []);
+
+      if (facCheck.length > 0) {
+        const fixedRole = facCheck[0].designation?.toUpperCase().includes('HOD') ? 'HOD' : 'FACULTY';
+        user.role = fixedRole;
+        await this.ds.query(
+          `UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`,
+          [fixedRole, user.id],
+        ).catch(() => {});
+        await this.ds.query(
+          `UPDATE "${schema}".faculty SET staff_type = 'Faculty', updated_at = NOW() WHERE id = $1`,
+          [facCheck[0].id],
+        ).catch(() => {});
       }
     }
 
@@ -1109,6 +1138,28 @@ export class AuthService {
             [String(profile.id)],
           );
           profile.subjects = subRows.length > 0 ? subRows : (profile.primary_subject_name ? [{ id: profile.subject_id, code: profile.primary_subject_code, name: profile.primary_subject_name }] : []);
+        }
+      }
+
+      if (profile && (rows[0]?.role === 'CLERK' || rows[0]?.role === 'STAFF') && schema.startsWith('tenant_')) {
+        const desig = String(profile.designation || '').toUpperCase();
+        const payroll = String(profile.payroll_category || '').toUpperCase();
+        if (
+          payroll.includes('TEACH') ||
+          desig.includes('FACULTY') ||
+          desig.includes('PROFESSOR') ||
+          desig.includes('LECTURER') ||
+          desig.includes('TEACH') ||
+          desig.includes('HOD')
+        ) {
+          const fixedRole = desig.includes('HOD') ? 'HOD' : 'FACULTY';
+          rows[0].role = fixedRole;
+          if (rows[0].id) {
+            await this.ds.query(
+              `UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`,
+              [fixedRole, rows[0].id],
+            ).catch(() => {});
+          }
         }
       }
     }

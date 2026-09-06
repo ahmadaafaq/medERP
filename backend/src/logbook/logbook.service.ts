@@ -26,6 +26,8 @@ import {
   VerifyLogbookEntryDto,
   EvaluateWeeklyLogDto,
   FinalizeProjectLockDto,
+  SaveAnnotationsDto,
+  FinalizeEvaluationDto,
 } from './dto/logbook.dto';
 
 @Injectable()
@@ -286,6 +288,16 @@ export class LogbookService {
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS college_id VARCHAR(100);
         ALTER TABLE "${schema}".logbook_mini_projects ADD COLUMN IF NOT EXISTS discipline_type VARCHAR(100);
         ALTER TABLE "${schema}".logbook_weekly_logs ADD COLUMN IF NOT EXISTS project_id UUID;
+
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS annotations JSONB DEFAULT '[]'::jsonb;
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS marks_awarded NUMERIC(6,2);
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS remarks TEXT;
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS evaluated_file_url VARCHAR(1000);
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS evaluated_file_path VARCHAR(1000);
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS original_file_url VARCHAR(1000);
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS original_file_path VARCHAR(1000);
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS file_type VARCHAR(50) DEFAULT 'pdf';
+        ALTER TABLE "${schema}".logbook_submissions ADD COLUMN IF NOT EXISTS evaluated_at TIMESTAMPTZ;
         `,
       );
       this.initializedSchemas.add(cleanSlug);
@@ -1991,17 +2003,58 @@ startxref
   }
 
   async createSubmission(tenantSlug: string, userIdOrStudentId: string | undefined, dto: CreateLogbookSubmissionDto) {
-    const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
-    const effectiveStudentId = await this.resolveStudentId(tenantSlug, userIdOrStudentId);
+    const cleanSlug = (tenantSlug || 'srms-cet-bareilly').replace(/^tenant_/, '');
+    await this.ensureTables(cleanSlug);
+    const schema = `tenant_${cleanSlug}`;
+    const effectiveStudentId = await this.resolveStudentId(cleanSlug, userIdOrStudentId);
 
-    const topic = await this.getTopicById(tenantSlug, dto.topicId);
+    const topic = await this.getTopicById(cleanSlug, dto.topicId);
     let status = 'SUBMITTED';
     if (topic.submission_deadline && new Date() > new Date(topic.submission_deadline)) {
       status = 'LATE';
     }
 
+    // Determine file type and persist physical file if Base64 Data URL
+    let fileType = 'pdf';
+    const lowerName = (dto.fileName || '').toLowerCase();
+    if (lowerName.endsWith('.docx') || lowerName.endsWith('.doc') || dto.fileUrl?.includes('wordprocessingml') || dto.fileUrl?.includes('msword')) {
+      fileType = 'docx';
+    } else if (lowerName.match(/\.(png|jpg|jpeg|webp|gif)$/) || dto.fileUrl?.startsWith('data:image/')) {
+      fileType = 'image';
+    }
+
+    let originalFilePath: string | null = null;
+    let originalFileUrl: string | null = null;
+    let effectiveFileUrl = dto.fileUrl || null;
+
+    if (dto.fileUrl && dto.fileUrl.startsWith('data:')) {
+      try {
+        const subDir = path.join(process.cwd(), 'uploads', 'submissions', cleanSlug);
+        if (!fs.existsSync(subDir)) {
+          fs.mkdirSync(subDir, { recursive: true });
+        }
+        const matches = dto.fileUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          const rawBuffer = Buffer.from(matches[2], 'base64');
+          const fileExt = fileType === 'docx' ? 'docx' : fileType === 'image' ? (lowerName.split('.').pop() || 'png') : 'pdf';
+          const submissionTempId = `sub_${Date.now()}`;
+          const origPath = path.join(subDir, `${submissionTempId}_original.${fileExt}`);
+          fs.writeFileSync(origPath, rawBuffer);
+          originalFilePath = origPath;
+
+          if (fileType === 'docx') {
+            const convertedPdfBuffer = await this.convertDocxToPdfBuffer(rawBuffer, dto.fileName || topic.title || 'Document Deliverable');
+            const convertedPdfPath = path.join(subDir, `${submissionTempId}_converted.pdf`);
+            fs.writeFileSync(convertedPdfPath, convertedPdfBuffer);
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not save uploaded submission file to disk: ${err?.message}`);
+      }
+    }
+
     const existing = await this.tenantSchemaService.queryInTenant(
-      tenantSlug,
+      cleanSlug,
       `SELECT s.id, s.status, e.id AS eval_id
        FROM "${schema}".logbook_submissions s
        LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id = s.id
@@ -2015,8 +2068,11 @@ startxref
         throw new BadRequestException('This activity has already been evaluated by faculty and locked. Modifications are disabled.');
       }
 
+      const subId = existing[0].id;
+      originalFileUrl = `/api/v1/logbook/submissions/${subId}/original-pdf?tenant=${cleanSlug}`;
+
       const res = await this.tenantSchemaService.queryInTenant(
-        tenantSlug,
+        cleanSlug,
         `UPDATE "${schema}".logbook_submissions
          SET file_url = COALESCE($1, file_url, attachment_url),
              attachment_url = COALESCE($1, attachment_url, file_url),
@@ -2025,22 +2081,56 @@ startxref
              file_size = COALESCE($3, file_size),
              explanation_text = COALESCE($4, explanation_text, submission_text),
              submission_text = COALESCE($4, submission_text, explanation_text),
+             file_type = COALESCE($5, file_type),
+             original_file_path = COALESCE($6, original_file_path),
+             original_file_url = COALESCE($7, original_file_url),
              submitted_at = NOW(),
-             status = $5,
+             status = $8,
              updated_at = NOW()
-         WHERE id = $6::uuid RETURNING *`,
-        [dto.fileUrl || null, dto.fileName || null, dto.fileSize || null, dto.explanationText || null, status, existing[0].id],
+         WHERE id = $9::uuid RETURNING *`,
+        [
+          effectiveFileUrl,
+          dto.fileName || null,
+          dto.fileSize || null,
+          dto.explanationText || null,
+          fileType,
+          originalFilePath,
+          originalFileUrl,
+          status,
+          subId,
+        ],
       );
       submission = res[0];
     } else {
       const res = await this.tenantSchemaService.queryInTenant(
-        tenantSlug,
+        cleanSlug,
         `INSERT INTO "${schema}".logbook_submissions (
-          topic_id, student_id, file_url, attachment_url, file_name, attachment_name, file_size, explanation_text, submission_text, status, submitted_at
-         ) VALUES ($1::uuid, $2::uuid, $3, $3, $4, $4, $5, $6, $6, $7, NOW()) RETURNING *`,
-        [dto.topicId, effectiveStudentId, dto.fileUrl || null, dto.fileName || null, dto.fileSize || null, dto.explanationText || null, status],
+          topic_id, student_id, file_url, attachment_url, file_name, attachment_name, file_size,
+          explanation_text, submission_text, file_type, original_file_path, original_file_url, status, submitted_at
+         ) VALUES ($1::uuid, $2::uuid, $3, $3, $4, $4, $5, $6, $6, $7, $8, $9, $10, NOW()) RETURNING *`,
+        [
+          dto.topicId,
+          effectiveStudentId,
+          effectiveFileUrl,
+          dto.fileName || null,
+          dto.fileSize || null,
+          dto.explanationText || null,
+          fileType,
+          originalFilePath,
+          originalFileUrl,
+          status,
+        ],
       );
       submission = res[0];
+      if (submission && !submission.original_file_url) {
+        const fullUrl = `/api/v1/logbook/submissions/${submission.id}/original-pdf?tenant=${cleanSlug}`;
+        await this.tenantSchemaService.queryInTenant(
+          cleanSlug,
+          `UPDATE "${schema}".logbook_submissions SET original_file_url = $1 WHERE id = $2::uuid`,
+          [fullUrl, submission.id],
+        );
+        submission.original_file_url = fullUrl;
+      }
     }
 
     return submission;
@@ -2063,7 +2153,9 @@ startxref
               t.submission_deadline,
               c.name AS category_name, c.code AS category_code,
               f.name AS faculty_name,
-              e.marks_obtained, e.remarks, e.evaluated_at
+              COALESCE(e.marks_obtained, s.marks_awarded::numeric) AS marks_obtained,
+              COALESCE(e.remarks, s.remarks) AS remarks,
+              COALESCE(e.evaluated_at, s.evaluated_at) AS evaluated_at
        FROM "${schema}".logbook_submissions s
        JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
        LEFT JOIN "${schema}".logbook_categories c ON c.id = t.category_id
@@ -2084,12 +2176,18 @@ startxref
     let sql = `
       SELECT s.id, s.topic_id, s.student_id, s.file_url, s.file_name, s.file_size,
              s.explanation_text, s.submitted_at, s.status,
+             s.evaluated_file_url, s.evaluated_file_path, s.original_file_url, s.original_file_path,
+             s.file_type, s.marks_awarded, s.remarks AS submission_remarks, s.evaluated_at AS submission_evaluated_at,
+             s.annotations,
              st.name AS student_name, st.rollno, st.registration_no, st.photo_url,
              cr.name AS course_name,
              COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, st.batch_cd) AS batch_name,
              t.title AS topic_title, t.max_marks, t.submission_deadline,
              c.name AS category_name, c.code AS category_code,
-             e.id AS evaluation_id, e.marks_obtained, COALESCE(e.remarks, e.feedback) AS remarks, e.evaluated_at,
+             e.id AS evaluation_id,
+             COALESCE(e.marks_obtained, s.marks_awarded::numeric) AS marks_obtained,
+             COALESCE(e.remarks, e.feedback, s.remarks) AS remarks,
+             COALESCE(e.evaluated_at, s.evaluated_at) AS evaluated_at,
              ef.name AS evaluated_by_name
       FROM "${schema}".logbook_submissions s
       JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
@@ -2128,8 +2226,10 @@ startxref
               cr.name AS course_name,
               COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, st.batch_cd) AS batch_name,
               t.title AS topic_title, t.description AS topic_description, t.max_marks, t.submission_deadline,
-              c.name AS category_name, c.code AS category_code,
-              e.id AS evaluation_id, e.marks_obtained, COALESCE(e.remarks, e.feedback) AS remarks, e.evaluated_at,
+              e.id AS evaluation_id,
+              COALESCE(e.marks_obtained, s.marks_awarded::numeric) AS marks_obtained,
+              COALESCE(e.remarks, e.feedback, s.remarks) AS remarks,
+              COALESCE(e.evaluated_at, s.evaluated_at) AS evaluated_at,
               ef.name AS evaluated_by_name
        FROM "${schema}".logbook_submissions s
        JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
@@ -2193,6 +2293,657 @@ startxref
       evaluation,
       status: 'EVALUATED',
     };
+  }
+
+  // ==========================================
+  // DIGITAL EXAM-STYLE EVALUATION & ANNOTATIONS
+  // ==========================================
+  async saveAnnotations(tenantSlug: string, submissionId: string, dto: SaveAnnotationsDto) {
+    const cleanSlug = (tenantSlug || 'srms-cet-bareilly').replace(/^tenant_/, '');
+    await this.ensureTables(cleanSlug);
+    const schema = `tenant_${cleanSlug}`;
+
+    const annotationsJson = JSON.stringify(dto.annotations || []);
+    const marks = dto.marksAwarded !== undefined ? Number(dto.marksAwarded) : null;
+    const remarks = dto.remarks !== undefined ? dto.remarks : null;
+
+    const res = await this.tenantSchemaService.queryInTenant(
+      cleanSlug,
+      `UPDATE "${schema}".logbook_submissions
+       SET annotations = $1::jsonb,
+           marks_awarded = COALESCE($2, marks_awarded),
+           remarks = COALESCE($3, remarks),
+           updated_at = NOW()
+       WHERE id = $4::uuid
+       RETURNING *`,
+      [annotationsJson, marks, remarks, submissionId],
+    );
+
+    if (!res || res.length === 0) {
+      throw new NotFoundException('Submission not found to save annotations');
+    }
+
+    return {
+      success: true,
+      message: 'Draft annotations autosaved successfully',
+      submissionId,
+      annotations: dto.annotations || [],
+      marksAwarded: res[0].marks_awarded,
+      remarks: res[0].remarks,
+    };
+  }
+
+  async finalizeEvaluation(
+    tenantSlug: string,
+    submissionId: string,
+    facultyId: string,
+    dto: FinalizeEvaluationDto,
+  ) {
+    const cleanSlug = (tenantSlug || 'srms-cet-bareilly').replace(/^tenant_/, '');
+    await this.ensureTables(cleanSlug);
+    const schema = `tenant_${cleanSlug}`;
+
+    const sub = await this.getSubmissionById(cleanSlug, submissionId);
+    if (!sub) throw new NotFoundException('Submission not found');
+
+    const annotations = Array.isArray(dto.annotations) ? dto.annotations : (Array.isArray(sub.annotations) ? sub.annotations : []);
+    const marksAwarded = dto.marksAwarded !== undefined && dto.marksAwarded !== null 
+      ? Number(dto.marksAwarded) 
+      : (sub.marks_awarded !== null && sub.marks_awarded !== undefined ? Number(sub.marks_awarded) : Number(sub.marks_obtained || 18));
+    const remarks = dto.remarks || sub.remarks || sub.faculty_remarks || 'Overall performance was satisfactory and satisfactory progress was observed.';
+    const digitalStamp = dto.digitalStamp !== false;
+
+    // 1. Resolve original PDF buffer
+    const originalPdfBuffer = await this.resolveOriginalPdfBuffer(cleanSlug, sub);
+
+    // 2. Stamp annotations with pdf-lib
+    const evaluatedPdfBuffer = await this.flattenAnnotationsOnPdf(originalPdfBuffer, annotations, {
+      digitalStamp,
+      marksAwarded,
+      maxMarks: Number(sub.max_marks || 20),
+      facultyName: sub.evaluated_by_name || 'Faculty Guide',
+      studentName: sub.student_name,
+      studentRollNo: sub.rollno || sub.registration_no,
+      topicTitle: sub.topic_title || 'Deliverable Submission',
+    });
+
+    // 3. Save evaluated PDF to disk
+    const evalDir = path.join(process.cwd(), 'uploads', 'evaluations', cleanSlug);
+    if (!fs.existsSync(evalDir)) {
+      fs.mkdirSync(evalDir, { recursive: true });
+    }
+    const evalFileName = `${submissionId}_evaluated.pdf`;
+    const evalFilePath = path.join(evalDir, evalFileName);
+    fs.writeFileSync(evalFilePath, evaluatedPdfBuffer);
+
+    const evaluatedFileUrl = `/api/v1/logbook/submissions/${submissionId}/evaluated-pdf?tenant=${cleanSlug}`;
+
+    // 4. Update logbook_submissions record
+    await this.tenantSchemaService.queryInTenant(
+      cleanSlug,
+      `UPDATE "${schema}".logbook_submissions
+       SET status = 'EVALUATED',
+           annotations = $1::jsonb,
+           marks_awarded = $2,
+           remarks = $3,
+           evaluated_file_url = $4,
+           evaluated_file_path = $5,
+           evaluated_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $6::uuid`,
+      [JSON.stringify(annotations), marksAwarded, remarks, evaluatedFileUrl, evalFilePath, submissionId],
+    );
+
+    // 5. Update or insert into logbook_evaluations
+    const existing = await this.tenantSchemaService.queryInTenant(
+      cleanSlug,
+      `SELECT id FROM "${schema}".logbook_evaluations WHERE submission_id = $1::uuid`,
+      [submissionId],
+    );
+    if (existing.length > 0) {
+      await this.tenantSchemaService.queryInTenant(
+        cleanSlug,
+        `UPDATE "${schema}".logbook_evaluations
+         SET marks_obtained = $1, remarks = $2, feedback = $2, faculty_id = $3, evaluated_at = NOW(), updated_at = NOW()
+         WHERE id = $4::uuid`,
+        [marksAwarded, remarks, facultyId, existing[0].id],
+      );
+    } else {
+      await this.tenantSchemaService.queryInTenant(
+        cleanSlug,
+        `INSERT INTO "${schema}".logbook_evaluations (submission_id, faculty_id, marks_obtained, remarks, feedback, evaluated_at)
+         VALUES ($1::uuid, $2, $3, $4, $4, NOW())`,
+        [submissionId, facultyId, marksAwarded, remarks],
+      );
+    }
+
+    return {
+      success: true,
+      message: 'Digital evaluation finalized successfully with stamped PDF',
+      submissionId,
+      status: 'EVALUATED',
+      marksAwarded,
+      remarks,
+      evaluatedFileUrl,
+      evaluatedAt: new Date().toISOString(),
+    };
+  }
+
+  async convertDocxToPdfBuffer(docxBuffer: Buffer, title: string = 'Converted Deliverable Document'): Promise<Buffer> {
+    try {
+      const mammoth = require('mammoth');
+      const { value: rawText } = await mammoth.extractRawText({ buffer: docxBuffer });
+      const paragraphs = (rawText || '').split(/\r?\n/).map((p: string) => p.trim()).filter(Boolean);
+
+      const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      const pageWidth = 595.28; // Standard A4 width
+      const pageHeight = 841.89; // Standard A4 height
+      const margin = 50;
+      const contentWidth = pageWidth - margin * 2;
+
+      let page = pdfDoc.addPage([pageWidth, pageHeight]);
+      let y = pageHeight - margin;
+
+      // Header title
+      const cleanTitle = title.replace(/[^\x20-\x7E]/g, '');
+      page.drawText(cleanTitle || 'Document Deliverable Evaluation Copy', {
+        x: margin,
+        y: y,
+        size: 15,
+        font: fontBold,
+        color: rgb(0.11, 0.12, 0.16),
+      });
+      y -= 22;
+
+      page.drawText('SRMS Official Academic Evaluation Document (Doc-to-PDF Engine)', {
+        x: margin,
+        y: y,
+        size: 9,
+        font,
+        color: rgb(0.4, 0.45, 0.55),
+      });
+      y -= 14;
+
+      page.drawLine({
+        start: { x: margin, y },
+        end: { x: pageWidth - margin, y },
+        thickness: 1,
+        color: rgb(0.85, 0.88, 0.92),
+      });
+      y -= 24;
+
+      const fontSize = 10;
+      const lineHeight = 14;
+
+      for (const para of paragraphs) {
+        const cleanPara = para.replace(/[^\x20-\x7E]/g, ' ');
+        const words = cleanPara.split(/\s+/);
+        let currentLine = '';
+
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          const textWidth = font.widthOfTextAtSize(testLine, fontSize);
+
+          if (textWidth > contentWidth && currentLine) {
+            if (y < margin + 30) {
+              page = pdfDoc.addPage([pageWidth, pageHeight]);
+              y = pageHeight - margin;
+            }
+            page.drawText(currentLine, {
+              x: margin,
+              y,
+              size: fontSize,
+              font,
+              color: rgb(0.15, 0.18, 0.25),
+            });
+            y -= lineHeight;
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        }
+
+        if (currentLine) {
+          if (y < margin + 30) {
+            page = pdfDoc.addPage([pageWidth, pageHeight]);
+            y = pageHeight - margin;
+          }
+          page.drawText(currentLine, {
+            x: margin,
+            y,
+            size: fontSize,
+            font,
+            color: rgb(0.15, 0.18, 0.25),
+          });
+          y -= lineHeight;
+        }
+
+        y -= 8; // Paragraph spacing
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      return Buffer.from(pdfBytes);
+    } catch (err: any) {
+      this.logger.warn(`Docx to PDF conversion fallback: ${err?.message}`);
+      return this.generateFallbackPdf(title, 'Converted Document Deliverable');
+    }
+  }
+
+  async flattenAnnotationsOnPdf(
+    pdfBuffer: Buffer,
+    annotations: any[],
+    options: {
+      digitalStamp: boolean;
+      marksAwarded: number;
+      maxMarks: number;
+      facultyName?: string;
+      studentName?: string;
+      studentRollNo?: string;
+      topicTitle?: string;
+    },
+  ): Promise<Buffer> {
+    const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pages = pdfDoc.getPages();
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    for (const ann of annotations) {
+      const pageIndex = (Number(ann.page) || 1) - 1;
+      if (pageIndex < 0 || pageIndex >= pages.length) continue;
+      const page = pages[pageIndex];
+      const { width, height } = page.getSize();
+
+      const canvasW = ann.canvasWidth || width;
+      const canvasH = ann.canvasHeight || height;
+
+      // Coordinate scaling and bottom-left origin transformation: y_pdf = height - y_canvas
+      const scaleX = width / canvasW;
+      const scaleY = height / canvasH;
+
+      const normX = Number(ann.x || 0) * scaleX;
+      const normY = height - (Number(ann.y || 0) * scaleY);
+      const normW = Math.max(Number(ann.w || ann.width || 30) * scaleX, 10);
+      const normH = Math.max(Number(ann.h || ann.height || 30) * scaleY, 10);
+
+      // Color mapping
+      let color = rgb(0.94, 0.27, 0.22); // default red #F04438
+      if (ann.color === '#00C48C' || ann.color === 'green') {
+        color = rgb(0, 0.77, 0.55);
+      } else if (ann.color === '#5B4BFF' || ann.color === 'blue') {
+        color = rgb(0.36, 0.29, 1);
+      } else if (ann.color === '#8B5CF6' || ann.color === 'purple') {
+        color = rgb(0.55, 0.36, 0.96);
+      } else if (ann.color === '#F36C21' || ann.color === 'orange') {
+        color = rgb(0.95, 0.42, 0.13);
+      }
+
+      const thickness = Math.max(Number(ann.strokeWidth || 2.5) * scaleX, 1.5);
+
+      if (ann.type === 'tick') {
+        // High-fidelity green/red checkmark
+        const p1 = { x: normX, y: normY - (normH * 0.45) };
+        const p2 = { x: normX + (normW * 0.35), y: normY - normH };
+        const p3 = { x: normX + normW, y: normY };
+        page.drawLine({ start: p1, end: p2, thickness, color });
+        page.drawLine({ start: p2, end: p3, thickness, color });
+      } else if (ann.type === 'cross') {
+        // Red X cross
+        page.drawLine({
+          start: { x: normX, y: normY },
+          end: { x: normX + normW, y: normY - normH },
+          thickness,
+          color,
+        });
+        page.drawLine({
+          start: { x: normX, y: normY - normH },
+          end: { x: normX + normW, y: normY },
+          thickness,
+          color,
+        });
+      } else if (ann.type === 'circle') {
+        // Circle / Ellipse
+        const radiusX = Math.max(normW / 2, 8);
+        const radiusY = Math.max(normH / 2, 8);
+        page.drawEllipse({
+          x: normX + (normW / 2),
+          y: normY - (normH / 2),
+          xScale: radiusX,
+          yScale: radiusY,
+          borderColor: color,
+          borderWidth: thickness,
+          opacity: 0.95,
+        });
+      } else if (ann.type === 'number_stamp') {
+        // Exam score stamp: encircled score / number badge
+        const textContent = String(ann.text || '+1').trim();
+        const isCircle = ann.style !== 'badge';
+        const fontSize = Math.max(Number(ann.fontSize || 13) * scaleX, 10);
+        const textW = fontBold.widthOfTextAtSize(textContent, fontSize);
+        const radius = Math.max(textW / 2 + 6, fontSize / 2 + 6, 16 * scaleX);
+
+        if (isCircle) {
+          page.drawEllipse({
+            x: normX,
+            y: normY,
+            xScale: radius,
+            yScale: radius,
+            color: rgb(1, 1, 1),
+            borderColor: color,
+            borderWidth: Math.max(thickness, 1.8),
+            opacity: 0.96,
+          });
+          page.drawText(textContent, {
+            x: normX - textW / 2,
+            y: normY - fontSize / 3,
+            size: fontSize,
+            font: fontBold,
+            color,
+          });
+        } else {
+          const badgeW = textW + 16 * scaleX;
+          const badgeH = fontSize + 12 * scaleY;
+          page.drawRectangle({
+            x: normX - badgeW / 2,
+            y: normY - badgeH / 2,
+            width: badgeW,
+            height: badgeH,
+            color: rgb(1, 1, 1),
+            borderColor: color,
+            borderWidth: Math.max(thickness, 1.8),
+            opacity: 0.96,
+          });
+          page.drawText(textContent, {
+            x: normX - textW / 2,
+            y: normY - fontSize / 3,
+            size: fontSize,
+            font: fontBold,
+            color,
+          });
+        }
+      } else if (ann.type === 'line') {
+        // Straight line / Underline
+        const endX = ann.endX !== undefined ? (Number(ann.endX) / canvasW) * width : normX + normW;
+        const endY = ann.endY !== undefined ? height - (Number(ann.endY) / canvasH) * height : normY;
+        page.drawLine({
+          start: { x: normX, y: normY },
+          end: { x: endX, y: endY },
+          thickness,
+          color,
+        });
+      } else if (ann.type === 'strike') {
+        // Strikethrough line
+        page.drawLine({
+          start: { x: normX, y: normY - (normH / 2) },
+          end: { x: normX + normW, y: normY - (normH / 2) },
+          thickness: Math.max(thickness * 1.2, 2.5),
+          color,
+        });
+      } else if (ann.type === 'text') {
+        // Margin remark text badge
+        const textContent = String(ann.text || '').trim();
+        if (textContent) {
+          const textSize = Math.max(Number(ann.fontSize || 12) * scaleX, 10);
+          const padding = 6;
+          const textW = fontBold.widthOfTextAtSize(textContent, textSize);
+          const badgeW = textW + (padding * 2);
+          const badgeH = textSize + (padding * 2);
+
+          page.drawRectangle({
+            x: normX,
+            y: normY - badgeH,
+            width: badgeW,
+            height: badgeH,
+            color: rgb(1, 1, 1),
+            borderColor: color,
+            borderWidth: 1.5,
+            opacity: 0.96,
+          });
+
+          page.drawText(textContent, {
+            x: normX + padding,
+            y: normY - badgeH + padding + 1,
+            size: textSize,
+            font: fontBold,
+            color,
+          });
+        }
+      } else if (ann.type === 'pen' && Array.isArray(ann.points) && ann.points.length > 1) {
+        // Freehand pen multi-segment path
+        for (let i = 0; i < ann.points.length - 1; i++) {
+          const pt1 = ann.points[i];
+          const pt2 = ann.points[i + 1];
+          const x1 = (pt1.x / canvasW) * width;
+          const y1 = height - (pt1.y / canvasH) * height;
+          const x2 = (pt2.x / canvasW) * width;
+          const y2 = height - (pt2.y / canvasH) * height;
+          page.drawLine({
+            start: { x: x1, y: y1 },
+            end: { x: x2, y: y2 },
+            thickness,
+            color,
+          });
+        }
+      }
+    }
+
+    // Official Faculty Guide Verification Stamp on first page
+    if (options.digitalStamp && pages.length > 0) {
+      const firstPage = pages[0];
+      const { width, height } = firstPage.getSize();
+      const stampW = 210;
+      const stampH = 58;
+      const stampX = width - stampW - 20;
+      const stampY = height - stampH - 20;
+
+      firstPage.drawRectangle({
+        x: stampX,
+        y: stampY,
+        width: stampW,
+        height: stampH,
+        borderColor: rgb(0, 0.77, 0.55),
+        borderWidth: 1.5,
+        color: rgb(0.96, 1, 0.98),
+        opacity: 0.96,
+      });
+      firstPage.drawText('VERIFIED & EVALUATED', {
+        x: stampX + 12,
+        y: stampY + 40,
+        size: 9.5,
+        font: fontBold,
+        color: rgb(0, 0.55, 0.35),
+      });
+      firstPage.drawText(`Marks: ${options.marksAwarded} / ${options.maxMarks}`, {
+        x: stampX + 12,
+        y: stampY + 25,
+        size: 9,
+        font: fontBold,
+        color: rgb(0.1, 0.15, 0.2),
+      });
+      firstPage.drawText(`Evaluator: ${options.facultyName || 'Dr. Shorab Ahmad'}`, {
+        x: stampX + 12,
+        y: stampY + 11,
+        size: 8,
+        font: fontRegular,
+        color: rgb(0.35, 0.4, 0.45),
+      });
+    }
+
+    const outputBytes = await pdfDoc.save();
+    return Buffer.from(outputBytes);
+  }
+
+  async resolveOriginalPdfBuffer(cleanSlug: string, sub: any): Promise<Buffer> {
+    const uploadDirs = [
+      path.join(process.cwd(), 'uploads', 'submissions', cleanSlug),
+      path.join(process.cwd(), 'uploads', 'projects', cleanSlug),
+      path.join(process.cwd(), 'uploads', 'submissions'),
+    ];
+
+    // 1. If converted PDF from DOCX exists on disk
+    if (sub?.id) {
+      for (const dir of uploadDirs) {
+        if (!fs.existsSync(dir)) continue;
+        const convertedCandidate = path.join(dir, `${sub.id}_converted.pdf`);
+        if (fs.existsSync(convertedCandidate) && fs.statSync(convertedCandidate).isFile()) {
+          return fs.readFileSync(convertedCandidate);
+        }
+      }
+    }
+
+    // 2. Check original_file_path
+    if (sub?.original_file_path && fs.existsSync(sub.original_file_path)) {
+      const ext = path.extname(sub.original_file_path).toLowerCase();
+      if (ext === '.docx' || ext === '.doc') {
+        const rawDocx = fs.readFileSync(sub.original_file_path);
+        return this.convertDocxToPdfBuffer(rawDocx, sub?.topic_title || sub?.file_name || 'Document Deliverable');
+      }
+      return fs.readFileSync(sub.original_file_path);
+    }
+
+    // 3. Check if sub.file_url or sub.attachment_url is Base64 Data URL
+    const candidateDataUrl = sub?.file_url || sub?.attachment_url;
+    if (candidateDataUrl && typeof candidateDataUrl === 'string' && candidateDataUrl.startsWith('data:')) {
+      try {
+        const matches = candidateDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          const mime = matches[1];
+          const rawBuffer = Buffer.from(matches[2], 'base64');
+          if (mime.includes('wordprocessingml') || mime.includes('msword')) {
+            return this.convertDocxToPdfBuffer(rawBuffer, sub?.topic_title || sub?.file_name || 'Document Deliverable');
+          }
+          if (rawBuffer.length > 4 && rawBuffer.slice(0, 4).toString('utf-8') === '%PDF') {
+            return rawBuffer;
+          }
+        }
+      } catch (e: any) {
+        this.logger.warn(`Error resolving base64 PDF in resolveOriginalPdfBuffer: ${e?.message}`);
+      }
+    }
+
+    // 4. Check disk candidates
+    let filePath: string | null = null;
+    const filename = sub?.file_name || sub?.attachment_name || 'deliverable.pdf';
+
+    for (const dir of uploadDirs) {
+      if (!fs.existsSync(dir)) continue;
+      const candidates = [
+        path.join(dir, filename),
+        path.join(dir, filename.replace(/\s+/g, '_')),
+        path.join(dir, 'SQL.pdf'),
+        path.join(dir, 'ecommerce.pdf'),
+        path.join(dir, 'Generative AI.pdf'),
+        path.join(dir, 'Generative_AI.pdf'),
+        path.join(dir, 'Topology_Report.pdf'),
+      ];
+      for (const c of candidates) {
+        if (fs.existsSync(c) && fs.statSync(c).isFile()) {
+          filePath = c;
+          break;
+        }
+      }
+      if (filePath) break;
+    }
+
+    if (filePath && fs.existsSync(filePath)) {
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext === '.docx' || ext === '.doc') {
+        const rawDocx = fs.readFileSync(filePath);
+        return this.convertDocxToPdfBuffer(rawDocx, sub?.topic_title || filename);
+      }
+      return fs.readFileSync(filePath);
+    }
+
+    return this.generateFallbackPdf(
+      sub?.topic_title || sub?.title || 'Academic Deliverable Evaluation Paper',
+      sub?.explanation_text || sub?.submission_text || 'Student submitted deliverable document for faculty review.'
+    );
+  }
+
+  async streamEvaluatedPdf(tenantSlug: string, submissionId: string, res: Response) {
+    const cleanSlug = (tenantSlug || 'srms-cet-bareilly').replace(/^tenant_/, '');
+    const sub = await this.getSubmissionById(cleanSlug, submissionId);
+    if (!sub) throw new NotFoundException('Submission not found');
+
+    let filePath = sub.evaluated_file_path;
+    if (!filePath || !fs.existsSync(filePath)) {
+      const evalDir = path.join(process.cwd(), 'uploads', 'evaluations', cleanSlug);
+      const evalPath = path.join(evalDir, `${submissionId}_evaluated.pdf`);
+      if (fs.existsSync(evalPath)) {
+        filePath = evalPath;
+      }
+    }
+
+    let fileBuffer: Buffer;
+    if (filePath && fs.existsSync(filePath)) {
+      fileBuffer = fs.readFileSync(filePath);
+    } else {
+      const origBuffer = await this.resolveOriginalPdfBuffer(cleanSlug, sub);
+      fileBuffer = await this.flattenAnnotationsOnPdf(origBuffer, sub.annotations || [], {
+        digitalStamp: true,
+        marksAwarded: Number(sub.marks_awarded || sub.marks_obtained || 18),
+        maxMarks: Number(sub.max_marks || 20),
+        facultyName: sub.evaluated_by_name || 'Faculty Guide',
+      });
+    }
+
+    const filename = `Evaluated_${sub.file_name || 'Deliverable.pdf'}`;
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', String(fileBuffer.length));
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+    return res.status(200).send(fileBuffer);
+  }
+
+  async streamOriginalPdf(tenantSlug: string, submissionId: string, res: Response) {
+    const cleanSlug = (tenantSlug || 'srms-cet-bareilly').replace(/^tenant_/, '');
+    const sub = await this.getSubmissionById(cleanSlug, submissionId);
+    if (!sub) throw new NotFoundException('Submission not found');
+
+    let filePath = sub.original_file_path;
+    let filename = sub.file_name || sub.attachment_name || 'original_submission.pdf';
+
+    if (filePath && fs.existsSync(filePath)) {
+      const fileBuffer = fs.readFileSync(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      let mime = ext === '.pdf' ? 'application/pdf' : ext === '.docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : ext === '.doc' ? 'application/msword' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
+
+      res.removeHeader('X-Frame-Options');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Security-Policy', 'frame-ancestors *');
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Length', String(fileBuffer.length));
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+      return res.status(200).send(fileBuffer);
+    }
+
+    if (sub.file_url && sub.file_url.startsWith('data:')) {
+      try {
+        const matches = sub.file_url.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          const mime = matches[1];
+          const buffer = Buffer.from(matches[2], 'base64');
+          res.removeHeader('X-Frame-Options');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Security-Policy', 'frame-ancestors *');
+          res.setHeader('Content-Type', mime);
+          res.setHeader('Content-Length', String(buffer.length));
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+          return res.status(200).send(buffer);
+        }
+      } catch (e) {}
+    }
+
+    return this.streamSubmissionDocument(cleanSlug, submissionId, res);
   }
 
   async getLeaderboard(

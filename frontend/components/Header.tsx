@@ -263,10 +263,33 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
     const gender = p.gender || data.gender || '';
     const staffType = p.staff_type || data.staffType || '';
 
+    // Auto-heal faculty roles: if user has a faculty designation / staffType / payroll_category or is on /dashboard/faculty, heal to FACULTY
+    let resolvedRole = role.toUpperCase();
+    const desigUpper = String(designation || '').toUpperCase();
+    const payrollUpper = String(p.payroll_category || data.payroll_category || '').toUpperCase();
+    const staffTypeUpper = String(staffType || '').toUpperCase();
+    const isFacultyMember =
+      desigUpper.includes('FACULTY') ||
+      desigUpper.includes('PROFESSOR') ||
+      desigUpper.includes('LECTURER') ||
+      desigUpper.includes('TEACH') ||
+      desigUpper.includes('INSTRUCTOR') ||
+      desigUpper.includes('TUTOR') ||
+      payrollUpper.includes('TEACH') ||
+      staffTypeUpper === 'FACULTY' ||
+      (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/faculty'));
+
+    if (isFacultyMember && (resolvedRole === 'CLERK' || resolvedRole === 'STAFF' || resolvedRole === 'USER')) {
+      resolvedRole = desigUpper.includes('HOD') ? 'HOD' : 'FACULTY';
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('role', resolvedRole);
+      }
+    }
+
     return {
       id: data.id || p.id || '',
       email,
-      role: role.toUpperCase(),
+      role: resolvedRole,
       name,
       photoUrl,
       registrationNo,
@@ -309,7 +332,8 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
         setImgError(false);
         setUser(formatted);
         if (typeof window !== 'undefined') {
-          localStorage.setItem('user', JSON.stringify(meData));
+          localStorage.setItem('user', JSON.stringify({ ...meData, role: formatted.role || 'USER' }));
+          localStorage.setItem('role', formatted.role || 'USER');
         }
       }
     } catch (err) {

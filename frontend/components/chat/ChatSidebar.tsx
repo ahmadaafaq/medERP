@@ -11,6 +11,8 @@ interface ChatSidebarProps {
   loading: boolean;
   searchQuery: string;
   onSearchChange: (q: string) => void;
+  selectedDeptFilter?: string;
+  onDeptFilterChange?: (dept: string) => void;
   selectedYearFilter: string;
   onYearFilterChange: (year: string) => void;
   role: 'FACULTY' | 'STUDENT' | 'ADMIN';
@@ -27,6 +29,8 @@ export default function ChatSidebar({
   loading,
   searchQuery,
   onSearchChange,
+  selectedDeptFilter = 'ALL',
+  onDeptFilterChange,
   selectedYearFilter,
   onYearFilterChange,
   role,
@@ -36,7 +40,27 @@ export default function ChatSidebar({
   isSidebarOpen,
 }: ChatSidebarProps) {
   // Extract distinct batch years from groups
-  const batchYears = Array.from(new Set(groups.map((g) => g.batch_year))).sort().reverse();
+  const batchYears = Array.from(new Set(groups.map((g) => g.batch_year).filter(Boolean))).sort().reverse();
+
+  // Track distinct departments across all groups
+  const [departmentsList, setDepartmentsList] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (groups.length > 0) {
+      const depts = Array.from(
+        new Set(
+          groups
+            .map((g) => g.department_name || (g.name ? g.name.replace(/^\d{4}\s*Batch\s*·\s*/i, '').trim() : ''))
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
+
+      setDepartmentsList((prev) => {
+        const merged = Array.from(new Set([...prev, ...depts])).sort((a, b) => a.localeCompare(b));
+        return merged;
+      });
+    }
+  }, [groups]);
 
   const formatMessageTime = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -62,7 +86,7 @@ export default function ChatSidebar({
             <span className="truncate">Batch Chat Groups</span>
           </h2>
           <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium truncate">
-            {role === 'ADMIN' ? 'All College Channels' : role === 'FACULTY' ? 'My Department Batches' : 'Enrolled Batch Discussions'}
+            {role === 'ADMIN' ? 'All College Channels' : role === 'FACULTY' ? 'All Department & Course Batches' : 'Enrolled Batch Discussions'}
           </p>
         </div>
 
@@ -103,18 +127,47 @@ export default function ChatSidebar({
         </div>
       </div>
 
-      {/* Search & Batch Year Filter */}
+      {/* Search & Department / Batch Year Filters */}
       <div className="p-3 border-b border-[#E7EAF3] dark:border-slate-800 space-y-2">
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search department or batch..."
+            placeholder="Search department or batch (e.g. BCA, MCA)..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
           />
         </div>
+
+        {/* Department Filter Dropdown for Faculty & Admin */}
+        {role !== 'STUDENT' && departmentsList.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <select
+                value={selectedDeptFilter || 'ALL'}
+                onChange={(e) => onDeptFilterChange?.(e.target.value)}
+                className="w-full px-2.5 py-1.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs font-semibold text-[#1B1E28] dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#F36C21] cursor-pointer"
+              >
+                <option value="ALL">All Departments & Courses ({departmentsList.length})</option>
+                {departmentsList.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectedDeptFilter && selectedDeptFilter !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => onDeptFilterChange?.('ALL')}
+                className="px-2 py-1 text-[10px] font-bold text-[#F36C21] hover:underline shrink-0 cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Year Filter Chips */}
         {batchYears.length > 1 && (

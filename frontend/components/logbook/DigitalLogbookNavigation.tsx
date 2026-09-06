@@ -42,7 +42,7 @@ export const LOGBOOK_TABS: TabItem[] = [
   { key: 'PROFILE', label: 'Student Profile', shortLabel: 'Profile', icon: User },
   { key: 'MINI_PROJECT', label: 'Mini Project & Tech Stack', shortLabel: 'Project', icon: FolderGit2 },
   { key: 'WEEKLY_LOG', label: 'Weekly Log', shortLabel: 'Weekly', icon: CalendarDays },
-  { key: 'SEMINARS', label: 'Seminars', shortLabel: 'Seminars', icon: Presentation },
+  { key: 'SEMINARS', label: 'Seminar / Tutorial', shortLabel: 'Seminars', icon: Presentation },
   { key: 'TUTORIALS', label: 'Tutorials', shortLabel: 'Tutorials', icon: BookOpenCheck },
   { key: 'TECHNICAL_ACTIVITIES', label: 'Technical Activities', shortLabel: 'Activities', icon: Award },
   { key: 'REVIEWS', label: 'Progress Reviews', shortLabel: 'Reviews', icon: Layers },

@@ -18,6 +18,9 @@ interface Props {
   maxMarks?: number;
   facultyRemarks?: string;
   submittedAt?: string;
+  isEvaluated?: boolean;
+  evaluatedPdfUrl?: string;
+  originalPdfUrl?: string;
 }
 
 function PdfCanvasViewer({ pdfData, blobUrl }: { pdfData: Uint8Array | ArrayBuffer | null; blobUrl?: string | null }) {
@@ -341,11 +344,21 @@ export default function DocumentPreviewModal({
   maxMarks,
   facultyRemarks,
   submittedAt,
+  isEvaluated,
+  evaluatedPdfUrl,
+  originalPdfUrl,
 }: Props) {
+  const [selectedCopy, setSelectedCopy] = React.useState<'evaluated' | 'original'>('evaluated');
   const [loadingDoc, setLoadingDoc] = React.useState<boolean>(false);
   const [pdfDataBuffer, setPdfDataBuffer] = React.useState<Uint8Array | null>(null);
   const [blobObjectUrl, setBlobObjectUrl] = React.useState<string | null>(null);
   const [viewMode, setViewMode] = React.useState<'canvas' | 'browser' | 'notes'>('browser');
+
+  const activeDocUrl = (isEvaluated && selectedCopy === 'evaluated' && evaluatedPdfUrl)
+    ? evaluatedPdfUrl
+    : (isEvaluated && selectedCopy === 'original' && originalPdfUrl)
+    ? originalPdfUrl
+    : documentUrl;
 
   React.useEffect(() => {
     if (!isOpen) {
@@ -368,12 +381,12 @@ export default function DocumentPreviewModal({
     setPdfDataBuffer(clientBuffer);
     setBlobObjectUrl(initialUrl);
 
-    if (!documentUrl) return;
+    if (!activeDocUrl) return;
 
     // 2. Handle Base64 Data URL
-    if (documentUrl.startsWith('data:')) {
+    if (activeDocUrl.startsWith('data:')) {
       try {
-        const parts = documentUrl.split(',');
+        const parts = activeDocUrl.split(',');
         const bstr = atob(parts[1] || parts[0]);
         let n = bstr.length;
         const u8arr = new Uint8Array(n);
@@ -395,7 +408,7 @@ export default function DocumentPreviewModal({
     const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
-    let fetchUrl = documentUrl;
+    let fetchUrl = activeDocUrl;
     const isLocal = fetchUrl.startsWith('/');
     if (!fetchUrl.includes('tenant=') && slug && isLocal) {
       fetchUrl += `${fetchUrl.includes('?') ? '&' : '?'}tenant=${encodeURIComponent(slug)}`;
@@ -433,31 +446,39 @@ export default function DocumentPreviewModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, documentUrl, title, documentName, studentName, studentRollNo, projectTitle, explanationText]);
+  }, [isOpen, activeDocUrl, title, documentName, studentName, studentRollNo, projectTitle, explanationText]);
 
   if (!isOpen) return null;
 
-  const isImage = documentUrl?.startsWith('data:image/') || /\.(png|jpg|jpeg|webp|svg)$/i.test(documentUrl || '') || /\.(png|jpg|jpeg|webp|svg)$/i.test(documentName || '');
+  const isImage = activeDocUrl?.startsWith('data:image/') || /\.(png|jpg|jpeg|webp|svg)$/i.test(activeDocUrl || '') || /\.(png|jpg|jpeg|webp|svg)$/i.test(documentName || '');
 
   const handleDownload = () => {
+    const downloadName = (isEvaluated && selectedCopy === 'evaluated')
+      ? `Evaluated_${documentName || 'Submission_Document.pdf'}`
+      : (documentName || 'Submission_Document.pdf');
+
     if (blobObjectUrl) {
       const a = document.createElement('a');
       a.href = blobObjectUrl;
-      a.download = documentName || 'Submission_Document.pdf';
+      a.download = downloadName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       return;
     }
-    if (documentUrl) {
+    if (activeDocUrl) {
       const a = document.createElement('a');
-      a.href = documentUrl;
-      a.download = documentName || 'Submission_Document.pdf';
+      a.href = activeDocUrl;
+      a.download = downloadName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
     }
   };
+
+  const hasEvaluationInfo = isEvaluated || (marksObtained !== null && marksObtained !== undefined);
+  const maxM = maxMarks || 20;
+  const marksPct = marksObtained !== null && marksObtained !== undefined ? Math.round((Number(marksObtained) / maxM) * 100) : null;
 
   return (
     <div
@@ -528,7 +549,7 @@ export default function DocumentPreviewModal({
               )}
             </div>
 
-            {documentUrl && (
+            {activeDocUrl && (
               <>
                 <button
                   type="button"
@@ -540,7 +561,7 @@ export default function DocumentPreviewModal({
                   <span className="hidden md:inline">Download</span>
                 </button>
                 <a
-                  href={blobObjectUrl || documentUrl}
+                  href={blobObjectUrl || activeDocUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-1.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors"
@@ -561,6 +582,61 @@ export default function DocumentPreviewModal({
             </button>
           </div>
         </div>
+
+        {/* Evaluated Results & Version Switcher Banner */}
+        {hasEvaluationInfo && (
+          <div className="w-full bg-emerald-50/90 dark:bg-emerald-950/40 border-b border-emerald-200/80 dark:border-emerald-800/60 px-5 py-2.5 flex items-center justify-between gap-3 flex-wrap text-xs shrink-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-600 text-white font-black text-[11px] shadow-xs">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>OFFICIALLY EVALUATED</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-700 dark:text-slate-200">Score:</span>
+                <span className="font-black text-emerald-700 dark:text-emerald-300 text-sm">
+                  {marksObtained} / {maxM} Marks
+                </span>
+                {marksPct !== null && (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 text-[10px] font-bold">
+                    {marksPct}%
+                  </span>
+                )}
+              </div>
+              {facultyRemarks && (
+                <div className="text-slate-600 dark:text-slate-300 italic truncate max-w-sm pl-2 border-l border-emerald-300 dark:border-emerald-700">
+                  &ldquo;{facultyRemarks}&rdquo;
+                </div>
+              )}
+            </div>
+
+            {evaluatedPdfUrl && originalPdfUrl && (
+              <div className="flex items-center bg-emerald-100/80 dark:bg-emerald-900/50 p-1 rounded-xl gap-1 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCopy('evaluated')}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    selectedCopy === 'evaluated'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-emerald-800 dark:text-emerald-200 hover:text-emerald-950'
+                  }`}
+                >
+                  Evaluated (Marked PDF)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCopy('original')}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    selectedCopy === 'original'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-emerald-800 dark:text-emerald-200 hover:text-emerald-950'
+                  }`}
+                >
+                  Original Submission
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Content Viewer Body */}
         <div className="flex-1 bg-slate-100 dark:bg-slate-950/60 p-3 sm:p-4 overflow-hidden flex flex-col items-center justify-center relative">

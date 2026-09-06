@@ -116,6 +116,9 @@ export default function FacultyLogbookPage() {
     maxMarks?: number;
     facultyRemarks?: string;
     submittedAt?: string;
+    isEvaluated?: boolean;
+    evaluatedPdfUrl?: string;
+    originalPdfUrl?: string;
   } | null>(null);
 
   // Modals
@@ -542,32 +545,46 @@ export default function FacultyLogbookPage() {
                             </td>
                             <td className="py-3.5 px-4">
                               <div className="font-semibold text-slate-800 dark:text-slate-200">{sub.topic_title}</div>
-                              {(sub.file_name || sub.file_url) && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setDocPreviewTarget({
-                                      url: sub.file_url || '',
-                                      name: sub.file_name || `${sub.topic_title || 'Submission'}.pdf`,
-                                      studentName: sub.student_name,
-                                      studentRollNo: sub.rollno || sub.registration_no,
-                                      projectTitle: sub.topic_title,
-                                      explanationText: sub.explanation_text,
-                                      category: 'Topic Deliverable',
-                                      marksObtained: sub.marks_obtained,
-                                      maxMarks: sub.max_marks || 20,
-                                      facultyRemarks: sub.remarks,
-                                      submittedAt: sub.submitted_at,
-                                    });
-                                    setIsDocPreviewOpen(true);
-                                  }}
-                                  className="text-[11px] font-bold text-[#F36C21] hover:text-[#D95510] hover:underline flex items-center gap-1 mt-0.5 cursor-pointer text-left"
-                                  title="Click to read document in popup preview modal"
-                                >
-                                  <span>{sub.file_name || 'View Deliverable'}</span>
-                                  <ExternalLink className="w-3 h-3" />
-                                </button>
-                              )}
+                              <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                {(sub.file_name || sub.file_url) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+                                      const isEval = sub.status === 'EVALUATED';
+                                      const evalUrl = `/api/v1/logbook/submissions/${sub.id}/evaluated-pdf?tenant=${slug}`;
+                                      const origUrl = `/api/v1/logbook/submissions/${sub.id}/original-pdf?tenant=${slug}`;
+                                      setDocPreviewTarget({
+                                        url: isEval ? evalUrl : (sub.file_url || origUrl),
+                                        name: sub.file_name || `${sub.topic_title || 'Submission'}.pdf`,
+                                        studentName: sub.student_name,
+                                        studentRollNo: sub.rollno || sub.registration_no,
+                                        projectTitle: sub.topic_title,
+                                        explanationText: sub.explanation_text,
+                                        category: 'Topic Deliverable',
+                                        marksObtained: sub.marks_obtained,
+                                        maxMarks: sub.max_marks || 20,
+                                        facultyRemarks: sub.remarks,
+                                        submittedAt: sub.submitted_at,
+                                        isEvaluated: isEval,
+                                        evaluatedPdfUrl: isEval ? evalUrl : undefined,
+                                        originalPdfUrl: origUrl,
+                                      });
+                                      setIsDocPreviewOpen(true);
+                                    }}
+                                    className="text-[11px] font-bold text-[#F36C21] hover:text-[#D95510] hover:underline flex items-center gap-1 cursor-pointer text-left"
+                                    title="Click to view deliverable"
+                                  >
+                                    <span>{sub.file_name || 'View Deliverable'}</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </button>
+                                )}
+                                {sub.status === 'EVALUATED' && (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
+                                    Marked Copy
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="py-3.5 px-4 text-slate-500">
                               {sub.submitted_at ? new Date(sub.submitted_at).toLocaleString() : 'N/A'}
@@ -1320,6 +1337,9 @@ export default function FacultyLogbookPage() {
         maxMarks={docPreviewTarget?.maxMarks}
         facultyRemarks={docPreviewTarget?.facultyRemarks}
         submittedAt={docPreviewTarget?.submittedAt}
+        isEvaluated={docPreviewTarget?.isEvaluated}
+        evaluatedPdfUrl={docPreviewTarget?.evaluatedPdfUrl}
+        originalPdfUrl={docPreviewTarget?.originalPdfUrl}
       />
     </div>
   );

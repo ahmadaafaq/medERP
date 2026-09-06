@@ -109,7 +109,31 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
             (u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : '') ||
             (p.firstName ? `${p.firstName} ${p.lastName || ''}`.trim() : '') ||
             userName;
-          userRole = u.role || userRole;
+          let currentRole = (u.role || userRole || '').toUpperCase();
+          const desig = String(p.designation || u.designation || '').toUpperCase();
+          const payroll = String(p.payroll_category || u.payroll_category || '').toUpperCase();
+          const staffType = String(p.staff_type || u.staff_type || '').toUpperCase();
+          const isFacultyMember =
+            role === 'FACULTY' ||
+            desig.includes('FACULTY') ||
+            desig.includes('PROFESSOR') ||
+            desig.includes('LECTURER') ||
+            desig.includes('TEACH') ||
+            desig.includes('INSTRUCTOR') ||
+            desig.includes('TUTOR') ||
+            payroll.includes('TEACH') ||
+            staffType === 'FACULTY' ||
+            (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/faculty'));
+
+          if (isFacultyMember && (currentRole === 'CLERK' || currentRole === 'STAFF' || currentRole === 'USER')) {
+            currentRole = desig.includes('HOD') ? 'HOD' : 'FACULTY';
+            u.role = currentRole;
+            try {
+              localStorage.setItem('user', JSON.stringify(u));
+              localStorage.setItem('role', currentRole);
+            } catch {}
+          }
+          userRole = currentRole;
           userAvatar = u.photo_url || p.photo_url || p.avatar_url || p.photoUrl || '';
         }
       } catch {}
@@ -168,23 +192,33 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
           }
         }
 
-        // ── Deduplicate: one entry per unique group name ──────────────────
-        // For students, multiple DB rows can map to the same chat group
-        // (one per batch/section). Keep the one with the latest message.
-        const seenNames = new Map<string, ChatGroup>();
-        for (const g of list) {
-          const key = (g.department_name || g.name || '').trim().toLowerCase();
-          const existing = seenNames.get(key);
-          if (!existing) {
-            seenNames.set(key, g);
-          } else {
-            // Keep whichever has the more recent last_message
-            const existTs = existing.last_message?.created_at ? new Date(existing.last_message.created_at).getTime() : 0;
-            const newTs = g.last_message?.created_at ? new Date(g.last_message.created_at).getTime() : 0;
-            if (newTs > existTs) seenNames.set(key, g);
+        // ── Deduplication logic ─────────────────────────────────────────
+        if (role === 'STUDENT') {
+          // For students, preserve their batch groups uniquely by name + batch year
+          const seenForStudent = new Map<string, ChatGroup>();
+          for (const g of list) {
+            const key = `${(g.department_name || g.name || '').trim().toLowerCase()}__${g.batch_year || ''}`;
+            const existing = seenForStudent.get(key);
+            if (!existing) {
+              seenForStudent.set(key, g);
+            } else {
+              const existTs = existing.last_message?.created_at ? new Date(existing.last_message.created_at).getTime() : 0;
+              const newTs = g.last_message?.created_at ? new Date(g.last_message.created_at).getTime() : 0;
+              if (newTs > existTs) seenForStudent.set(key, g);
+            }
           }
+          list = Array.from(seenForStudent.values());
+        } else {
+          // For FACULTY & ADMIN: Preserve ALL department batches and courses groups campus-wide!
+          // Deduplicate strictly by unique group ID so every batch year & department group is accessible.
+          const seenIds = new Map<string, ChatGroup>();
+          for (const g of list) {
+            if (!seenIds.has(g.id)) {
+              seenIds.set(g.id, g);
+            }
+          }
+          list = Array.from(seenIds.values());
         }
-        list = Array.from(seenNames.values());
         // ──────────────────────────────────────────────────────────────────
 
         setGroups(list);
@@ -297,7 +331,31 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
           const p = currentUser.profile || currentUser;
           senderId = currentUser.id || currentUser.sub || p.registration_no || p.rollno || senderId;
           senderName = currentUser.name || p.name || senderName;
-          senderRole = currentUser.role || senderRole;
+          let currentSenderRole = (currentUser.role || senderRole || '').toUpperCase();
+          const desig = String(p.designation || currentUser.designation || '').toUpperCase();
+          const payroll = String(p.payroll_category || currentUser.payroll_category || '').toUpperCase();
+          const staffType = String(p.staff_type || currentUser.staff_type || '').toUpperCase();
+          const isFacultyMember =
+            role === 'FACULTY' ||
+            desig.includes('FACULTY') ||
+            desig.includes('PROFESSOR') ||
+            desig.includes('LECTURER') ||
+            desig.includes('TEACH') ||
+            desig.includes('INSTRUCTOR') ||
+            desig.includes('TUTOR') ||
+            payroll.includes('TEACH') ||
+            staffType === 'FACULTY' ||
+            (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/faculty'));
+
+          if (isFacultyMember && (currentSenderRole === 'CLERK' || currentSenderRole === 'STAFF' || currentSenderRole === 'USER')) {
+            currentSenderRole = desig.includes('HOD') ? 'HOD' : 'FACULTY';
+            currentUser.role = currentSenderRole;
+            try {
+              localStorage.setItem('user', JSON.stringify(currentUser));
+              localStorage.setItem('role', currentSenderRole);
+            } catch {}
+          }
+          senderRole = currentSenderRole;
           senderAvatar = currentUser.photo_url || p.photo_url || p.avatar_url || '';
         }
       } catch {}
@@ -416,10 +474,13 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
     }
   }, [selectedGroup?.id, fetchMessages, markAsRead]);
 
-  // Initial group fetch
+  // Initial group fetch & reactive filter trigger
   useEffect(() => {
-    fetchGroups();
-  }, []);
+    const handler = setTimeout(() => {
+      fetchGroups();
+    }, searchQuery ? 250 : 0);
+    return () => clearTimeout(handler);
+  }, [fetchGroups, searchQuery, selectedDeptFilter, selectedYearFilter]);
 
   // Polling for live updates every 15 seconds (pauses when tab is hidden)
   useEffect(() => {

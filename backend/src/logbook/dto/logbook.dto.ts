@@ -140,6 +140,38 @@ export class EvaluateLogbookSubmissionDto {
   remarks?: string;
 }
 
+export class SaveAnnotationsDto {
+  @IsArray()
+  @IsOptional()
+  annotations?: any[];
+
+  @IsNumber()
+  @IsOptional()
+  marksAwarded?: number;
+
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+}
+
+export class FinalizeEvaluationDto {
+  @IsNumber()
+  @IsOptional()
+  marksAwarded?: number;
+
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  digitalStamp?: boolean;
+
+  @IsArray()
+  @IsOptional()
+  annotations?: any[];
+}
+
 // 3. Mini Project Assignment & Metadata
 export class CreateMiniProjectDto {
   @IsString()

@@ -47,3 +47,58 @@ export class IssueBookDto {
   @IsOptional()
   dueDate?: string;
 }
+
+export class SaveReadingProgressDto {
+  @IsString()
+  @IsNotEmpty()
+  bookId: string;
+
+  @IsString()
+  @IsOptional()
+  bookTitle?: string;
+
+  @IsString()
+  @IsOptional()
+  bookAuthor?: string;
+
+  @IsString()
+  @IsOptional()
+  coverUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  pdfUrl?: string;
+
+  @IsNumber()
+  @IsNotEmpty()
+  lastPageRead: number;
+
+  @IsNumber()
+  @IsOptional()
+  totalPages?: number;
+
+  @IsNumber()
+  @IsOptional()
+  percentageRead?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  isCompleted?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  readingTimeSeconds?: number;
+
+  @IsNumber()
+  @IsOptional()
+  scrollPosition?: number;
+
+  @IsOptional()
+  bookmarks?: any[];
+
+  @IsString()
+  @IsOptional()
+  lastLocationDescription?: string;
+}
+
+

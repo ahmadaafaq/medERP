@@ -315,46 +315,32 @@ export class ChatService implements OnModuleInit {
     // Never return old legacy batches (e.g. 2013, 2014)
     whereConditions.push(`(g.batch_year::text >= '2024' OR g.batch_year IS NULL)`);
 
-    // If not ADMIN, filter strictly by membership or active messages
-    if (role !== 'ADMIN' && role !== 'SUPER_ADMIN' && role !== 'COLLEGE_ADMIN') {
+    // Both ADMIN and FACULTY (and staff / instructors) have campus-wide access to ALL department batches groups.
+    // This allows any faculty (e.g. MCA department) to view and send messages to any other group (e.g. BCA department).
+    // Only pure STUDENT role is restricted to their enrolled department and batch.
+    const isStaffOrAdmin = [
+      'ADMIN',
+      'SUPER_ADMIN',
+      'COLLEGE_ADMIN',
+      'FACULTY',
+      'HOD',
+      'CLERK',
+      'STAFF',
+      'TEACHER',
+      'INSTRUCTOR',
+      'PROFESSOR',
+    ].includes(role);
+
+    if (!isStaffOrAdmin) {
+      // Check if user has a faculty record in DB
       const facultyRecord = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, user_id, emp_id, department_id, name FROM "${schema}".faculty 
-         WHERE (user_id::text = $1 OR emp_id = $1 OR id::text = $1) LIMIT 1`,
+        `SELECT id FROM "${schema}".faculty WHERE (user_id::text = $1 OR emp_id = $1 OR id::text = $1) LIMIT 1`,
         [userId],
       ).catch(() => []);
 
-      const isFacultyUser = facultyRecord.length > 0 || ['FACULTY', 'HOD', 'CLERK', 'STAFF', 'TEACHER'].includes(role);
-
-      if (isFacultyUser && facultyRecord.length > 0) {
-        const facultyDeptId = facultyRecord[0]?.department_id;
-        const facultyEmpId = facultyRecord[0]?.emp_id || userId;
-        const facultyUserId = facultyRecord[0]?.user_id || userId;
-
-        params.push(facultyUserId, facultyEmpId);
-        const pUser = params.length - 1;
-        const pEmp = params.length;
-
-        // Faculty rule:
-        // 1) Explicit member of the group
-        // 2) OR Has sent a message in this group
-        // 3) OR Group belongs to their department AND is an active current batch (>= 2024)
-        if (facultyDeptId) {
-          params.push(facultyDeptId);
-          const pDept = params.length;
-          whereConditions.push(`(
-            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND (m.user_id::text = $${pUser} OR m.user_id::text = $${pEmp}))
-            OR EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text AND (msg.sender_id::text = $${pUser} OR msg.sender_id::text = $${pEmp} OR msg.sender_name ILIKE '%${userName.replace(/'/g, "''")}%'))
-            OR (g.department_id::text = $${pDept}::text AND (g.batch_year::text >= '2024' OR g.batch_year IS NULL))
-          )`);
-        } else {
-          whereConditions.push(`(
-            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND (m.user_id::text = $${pUser} OR m.user_id::text = $${pEmp}))
-            OR EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text AND (msg.sender_id::text = $${pUser} OR msg.sender_id::text = $${pEmp} OR msg.sender_name ILIKE '%${userName.replace(/'/g, "''")}%'))
-          )`);
-        }
-      } else {
-        // Student: group membership, messages, or student's enrolled department/batch with active messages
+      if (facultyRecord.length === 0) {
+        // Pure Student: restrict to student's enrolled department and batch
         const studentRecord = await this.tenantSchemaService.queryInTenant(
           slug,
           `SELECT s.department_id, s.batch_cd, s.admission_year, b.year as batch_year
@@ -400,7 +386,10 @@ export class ChatService implements OnModuleInit {
 
     if (filters?.department_id) {
       params.push(filters.department_id);
-      whereConditions.push(`g.department_id::text = $${params.length}::text`);
+      const pDept = params.length;
+      params.push(`%${filters.department_id}%`);
+      const pDeptLike = params.length;
+      whereConditions.push(`(g.department_id::text = $${pDept}::text OR g.department_name ILIKE $${pDeptLike} OR g.name ILIKE $${pDeptLike})`);
     }
 
     if (filters?.batch_year) {
@@ -487,7 +476,13 @@ export class ChatService implements OnModuleInit {
         ) AS unread_count
       FROM "${schema}".chat_groups g
       WHERE ${whereConditions.join(' AND ')}
-      ORDER BY g.created_at DESC
+      ORDER BY 
+        COALESCE(
+          (SELECT MAX(msg.created_at) FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text),
+          g.created_at
+        ) DESC,
+        g.batch_year DESC,
+        g.name ASC
     `;
 
     try {
@@ -508,7 +503,13 @@ export class ChatService implements OnModuleInit {
             0 AS unread_count
            FROM "${schema}".chat_groups g
            WHERE ${whereConditions.join(' AND ')}
-           ORDER BY g.created_at DESC`,
+           ORDER BY 
+             COALESCE(
+               (SELECT MAX(msg.created_at) FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text),
+               g.created_at
+             ) DESC,
+             g.batch_year DESC,
+             g.name ASC`,
           params.slice(0, userParamIndex - 1),
         );
         return fallbackGroups.map((g: any) => ({
@@ -615,7 +616,15 @@ export class ChatService implements OnModuleInit {
           ),
           m.sender_name
         ) AS sender_name,
-        m.sender_role,
+        CASE 
+          WHEN m.sender_role = 'CLERK' AND EXISTS (
+            SELECT 1 FROM "${schema}".faculty f 
+            WHERE f.user_id::text = m.sender_id::text 
+               OR f.emp_id::text = m.sender_id::text 
+               OR UPPER(TRIM(f.name)) = UPPER(TRIM(m.sender_name))
+          ) THEN 'FACULTY'
+          ELSE m.sender_role 
+        END AS sender_role,
         COALESCE(
           NULLIF(m.sender_avatar, ''),
           (
@@ -739,18 +748,30 @@ export class ChatService implements OnModuleInit {
       const group = groupRows[0];
 
       // Ensure sender is enrolled in chat_group_members
+      let finalSenderRole = senderRole;
+      if (finalSenderRole === 'CLERK' || !finalSenderRole) {
+        const facRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, designation FROM "${schema}".faculty WHERE (user_id::text = $1::text OR emp_id::text = $1::text) LIMIT 1`,
+          [senderId],
+        ).catch(() => []);
+        if (facRows.length > 0) {
+          finalSenderRole = facRows[0].designation?.toUpperCase().includes('HOD') ? 'HOD' : 'FACULTY';
+        }
+      }
+
       if (senderId) {
         await this.tenantSchemaService.queryInTenant(
           slug,
           `INSERT INTO "${schema}".chat_group_members (chat_group_id, user_id, role, name, avatar_url)
            VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (chat_group_id, user_id) DO UPDATE SET name = EXCLUDED.name, avatar_url = COALESCE(EXCLUDED.avatar_url, "${schema}".chat_group_members.avatar_url)`,
-          [groupId, senderId, senderRole, senderName, senderAvatar],
+           ON CONFLICT (chat_group_id, user_id) DO UPDATE SET role = EXCLUDED.role, name = EXCLUDED.name, avatar_url = COALESCE(EXCLUDED.avatar_url, "${schema}".chat_group_members.avatar_url)`,
+          [groupId, senderId, finalSenderRole, senderName, senderAvatar],
         ).catch(async () => {
           await this.tenantSchemaService.queryInTenant(
             slug,
-            `UPDATE "${schema}".chat_group_members SET name = $1, avatar_url = COALESCE($4, avatar_url) WHERE chat_group_id::text = $2::text AND user_id::text = $3::text`,
-            [senderName, groupId, senderId, senderAvatar],
+            `UPDATE "${schema}".chat_group_members SET role = $1, name = $2, avatar_url = COALESCE($5, avatar_url) WHERE chat_group_id::text = $3::text AND user_id::text = $4::text`,
+            [finalSenderRole, senderName, groupId, senderId, senderAvatar],
           ).catch(() => null);
         });
       }
@@ -762,7 +783,7 @@ export class ChatService implements OnModuleInit {
           chat_group_id, sender_id, sender_name, sender_role, sender_avatar, body, created_at
         ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
         RETURNING *`,
-        [groupId, senderId, senderName, senderRole, senderAvatar, dto.body?.trim() || ''],
+        [groupId, senderId, senderName, finalSenderRole, senderAvatar, dto.body?.trim() || ''],
       );
 
       const message = msgRows[0];

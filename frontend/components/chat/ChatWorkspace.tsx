@@ -30,6 +30,8 @@ export default function ChatWorkspace({ role = 'FACULTY' }: ChatWorkspaceProps) 
     loadingMembers,
     searchQuery,
     setSearchQuery,
+    selectedDeptFilter,
+    setSelectedDeptFilter,
     selectedYearFilter,
     setSelectedYearFilter,
     sendMessage,
@@ -68,6 +70,8 @@ export default function ChatWorkspace({ role = 'FACULTY' }: ChatWorkspaceProps) 
             loading={loadingGroups}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
+            selectedDeptFilter={selectedDeptFilter}
+            onDeptFilterChange={setSelectedDeptFilter}
             selectedYearFilter={selectedYearFilter}
             onYearFilterChange={setSelectedYearFilter}
             role={role}

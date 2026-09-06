@@ -40,6 +40,8 @@ import {
   VerifyLogbookEntryDto,
   EvaluateWeeklyLogDto,
   FinalizeProjectLockDto,
+  SaveAnnotationsDto,
+  FinalizeEvaluationDto,
 } from './dto/logbook.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Tenant } from '../common/decorators/tenant.decorator';
@@ -606,6 +608,56 @@ export class LogbookController {
   async evaluateSubmission(@Tenant() tenantSlug: string, @CurrentUser() user: any, @Param('id') id: string, @Body() dto: EvaluateLogbookSubmissionDto) {
     const facultyId = user?.profile?.id || user?.userId || user?.id || user?.sub || '00000000-0000-0000-0000-000000000001';
     return this.logbookService.evaluateSubmission(tenantSlug, id, facultyId, dto);
+  }
+
+  @Public()
+  @Post('submissions/:id/annotations')
+  @ApiOperation({ summary: 'Autosave draft markup annotations, marks, and remarks for a submission' })
+  async saveAnnotations(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @Body() dto: SaveAnnotationsDto,
+  ) {
+    return this.logbookService.saveAnnotations(tenantSlug, id, dto);
+  }
+
+  @Public()
+  @Post('submissions/:id/finalize')
+  @ApiOperation({ summary: 'Finalize digital evaluation, stamp annotations with pdf-lib, and sign off' })
+  async finalizeEvaluation(
+    @Tenant() tenantSlug: string,
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: FinalizeEvaluationDto,
+  ) {
+    const facultyId = user?.profile?.id || user?.userId || user?.id || user?.sub || '00000000-0000-0000-0000-000000000001';
+    return this.logbookService.finalizeEvaluation(tenantSlug, id, facultyId, dto);
+  }
+
+  @Public()
+  @Get('submissions/:id/evaluated-pdf')
+  @ApiOperation({ summary: 'Stream evaluated PDF with visual markup and faculty verification seal' })
+  async streamEvaluatedPdf(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @Query('tenant') queryTenant: string,
+    @Res() res: Response,
+  ) {
+    const slug = queryTenant || tenantSlug || 'srms-cet-bareilly';
+    return this.logbookService.streamEvaluatedPdf(slug, id, res);
+  }
+
+  @Public()
+  @Get('submissions/:id/original-pdf')
+  @ApiOperation({ summary: 'Stream original submitted PDF before evaluation' })
+  async streamOriginalPdf(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @Query('tenant') queryTenant: string,
+    @Res() res: Response,
+  ) {
+    const slug = queryTenant || tenantSlug || 'srms-cet-bareilly';
+    return this.logbookService.streamOriginalPdf(slug, id, res);
   }
 
   @Public()
