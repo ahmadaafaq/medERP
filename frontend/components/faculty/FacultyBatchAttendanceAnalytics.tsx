@@ -152,11 +152,11 @@ export default function FacultyBatchAttendanceAnalytics() {
       }
 
       const isFacultyMca = deptName.includes('mca') || deptName.includes('master of computer') || deptCode.includes('mca');
-      const isFacultyBca = deptName.includes('bca') || deptName.includes('bachelor of computer') || deptCode.includes('bca');
+      const isFacultyBca = deptName.includes('bca') || deptName.includes('bachelor of computer') || deptCode.includes('bca') || deptName.includes('computer application');
       const isFacultyCompApp = isFacultyMca || isFacultyBca || deptName.includes('computer application');
       const isFacultyPharmacy = deptName.includes('pharm') || deptCode.includes('pharm');
       const isFacultyMba = deptName.includes('management') || deptName.includes('mba') || deptName.includes('business');
-      const isFacultyEngineering = deptName.includes('engineering') || deptName.includes('cse') || deptName.includes('tech') || deptName.includes('mechanical') || deptName.includes('electrical');
+      const isFacultyEngineering = !isFacultyCompApp && (deptName.includes('engineering') || deptName.includes('cse') || deptName.includes('tech') || deptName.includes('mechanical') || deptName.includes('electrical'));
 
       const sortedCourses = [...courses].sort((a, b) => {
         const aName = (a.course_name || a.name || '').toUpperCase();
@@ -166,11 +166,9 @@ export default function FacultyBatchAttendanceAnalytics() {
           if (isFacultyMca) {
             if (cName.includes('MCA')) return 100;
             if (cName.includes('BCA')) return 90;
-          } else if (isFacultyBca) {
+          } else if (isFacultyBca || isFacultyCompApp) {
             if (cName.includes('BCA')) return 100;
             if (cName.includes('MCA')) return 90;
-          } else if (isFacultyCompApp) {
-            if (cName.includes('BCA') || cName.includes('MCA')) return 100;
           } else if (isFacultyPharmacy) {
             if (cName.includes('PHARM')) return 100;
           } else if (isFacultyMba) {
@@ -228,8 +226,17 @@ export default function FacultyBatchAttendanceAnalytics() {
       }
 
       if (options.length > 0) {
-        setBatchOptions(options);
-        const initial = options[0];
+        // Sort options to put the faculty's active teaching cohort or active roster batch first
+        const sortedOptions = [...options].sort((a, b) => {
+          if ((isFacultyBca || isFacultyCompApp) && a.courseName.includes('BCA') && !b.courseName.includes('BCA')) return -1;
+          if ((isFacultyBca || isFacultyCompApp) && !a.courseName.includes('BCA') && b.courseName.includes('BCA')) return 1;
+          if (isFacultyMca && a.courseName.includes('MCA') && !b.courseName.includes('MCA')) return -1;
+          if (isFacultyMca && !a.courseName.includes('MCA') && b.courseName.includes('MCA')) return 1;
+          return 0;
+        });
+
+        setBatchOptions(sortedOptions);
+        const initial = sortedOptions[0];
         setSelectedBatchKey(initial.key);
         fetchBatchAnalytics(initial, slug);
       } else {

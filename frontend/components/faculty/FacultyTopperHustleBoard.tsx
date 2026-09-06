@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Trophy, Award, Flame, Star, FolderGit2, Rocket, Sparkles, BookOpen, FileCheck, CheckCircle2 } from 'lucide-react';
+import { Trophy, Award, Flame, Star, FolderGit2, Rocket, Sparkles, BookOpen, FileCheck, CheckCircle2, FileText, GraduationCap } from 'lucide-react';
 
 interface TopperStudent {
   rank: number;
@@ -46,7 +46,7 @@ interface TopperStudent {
 }
 
 export default function FacultyTopperHustleBoard() {
-  const [filterMode, setFilterMode] = useState<'all' | 'seminar' | 'mini_project' | 'tutorial' | 'certification' | 'incubation'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'theory' | 'seminar' | 'mini_project' | 'tutorial' | 'certification' | 'incubation'>('all');
   const [students, setStudents] = useState<TopperStudent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -186,14 +186,20 @@ export default function FacultyTopperHustleBoard() {
     fetchToppers();
   }, []);
 
-  const filteredStudents = students.filter((st) => {
-    if (filterMode === 'seminar') return (st.seminarsDone || 0) > 0;
-    if (filterMode === 'mini_project') return st.hasMiniProject || (st.totalMiniProjects || 0) > 0 || (st.miniProjectsDone || 0) > 0 || (st.miniProjectsInProgress || 0) > 0;
-    if (filterMode === 'tutorial') return (st.tutorialsDone || 0) > 0;
-    if (filterMode === 'certification') return (st.certificationsDone || 0) > 0;
-    if (filterMode === 'incubation') return st.isIncubationSelected || (st.incubationStatus && st.incubationStatus !== 'Under Review');
-    return true;
-  });
+  const filteredStudents = students
+    .filter((st) => {
+      if (filterMode === 'theory') return (st.theoryScore || 0) > 0;
+      if (filterMode === 'seminar') return (st.seminarsDone || 0) > 0;
+      if (filterMode === 'mini_project') return st.hasMiniProject || (st.totalMiniProjects || 0) > 0 || (st.miniProjectsDone || 0) > 0 || (st.miniProjectsInProgress || 0) > 0;
+      if (filterMode === 'tutorial') return (st.tutorialsDone || 0) > 0;
+      if (filterMode === 'certification') return (st.certificationsDone || 0) > 0;
+      if (filterMode === 'incubation') return st.isIncubationSelected || (st.incubationStatus && st.incubationStatus !== 'Under Review');
+      return true;
+    })
+    .sort((a, b) => {
+      if (filterMode === 'theory') return (b.theoryScore || 0) - (a.theoryScore || 0);
+      return 0;
+    });
 
   const totalPages = Math.ceil(filteredStudents.length / PAGE_SIZE) || 1;
   const paginatedStudents = filteredStudents.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -216,7 +222,7 @@ export default function FacultyTopperHustleBoard() {
               </span>
             </div>
             <p className="text-xs text-[#64748B] dark:text-slate-400 font-medium truncate">
-              Dynamic semester attendance, seminars, mini-projects, tutorials & certifications
+              Dynamic semester attendance, theory exam, seminars, mini-projects & certifications
             </p>
           </div>
         </div>
@@ -232,6 +238,16 @@ export default function FacultyTopperHustleBoard() {
             }`}
           >
             All Star Toppers
+          </button>
+          <button
+            onClick={() => { setFilterMode('theory'); setCurrentPage(1); }}
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+              filterMode === 'theory'
+                ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-xs font-extrabold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5 text-violet-500" /> Theory Exam
           </button>
           <button
             onClick={() => { setFilterMode('seminar'); setCurrentPage(1); }}
@@ -382,6 +398,17 @@ export default function FacultyTopperHustleBoard() {
                     <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-extrabold">Attendance</span>
                     <span className="font-black text-xs text-slate-800 dark:text-slate-100">
                       {st.attendancePct || 0}%
+                    </span>
+                  </div>
+
+                  {/* Theory Exam */}
+                  <div
+                    title={st.examName ? `${st.examName}: ${st.theoryScore}%` : 'Latest Sessional Theory Exam'}
+                    className="px-2.5 py-1.5 rounded-xl bg-violet-50/80 dark:bg-violet-950/40 border border-violet-200/60 dark:border-violet-800/40 text-center flex-1 min-w-[85px] transition-all hover:border-violet-400"
+                  >
+                    <span className="block text-[8px] uppercase tracking-wider text-violet-600 dark:text-violet-400 font-extrabold">Theory Exam</span>
+                    <span className="font-black text-xs text-violet-700 dark:text-violet-300">
+                      {st.theoryScore !== null && st.theoryScore !== undefined ? `${st.theoryScore}%` : 'N/A'}
                     </span>
                   </div>
 
