@@ -984,6 +984,17 @@ export default function StudentMasterPage() {
       const token = localStorage.getItem('token') || '';
       const headers = { 'Authorization': `Bearer ${token}` };
 
+      // Extract tenant slug from JWT token (most reliable source)
+      let jwtTenantSlug: string | null = null;
+      let jwtColgCd: string | null = null;
+      try {
+        if (token) {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          jwtTenantSlug = payload?.tenant_slug || payload?.tenantId || null;
+          jwtColgCd = payload?.colg_cd ? String(payload.colg_cd) : null;
+        }
+      } catch {}
+
       // 1. Fetch all colleges (tenants) from public schema
       const resCol = await fetch(`${API_BASE}/college-master/colleges`, { headers });
       const cols = await resCol.json();
@@ -997,15 +1008,15 @@ export default function StudentMasterPage() {
       }));
       setColleges(collegeList);
 
-      // 2. Auto-load data from active college (default: SRMS CET Bareilly)
+      // 2. Auto-load data from active college
+      // Priority: JWT token tenant > localStorage > first college
       if (collegeList.length > 0) {
-        const savedSlug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant')) : null;
-        const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
+        const savedSlug = jwtTenantSlug || (typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant')) : null);
+        const savedColgCd = jwtColgCd || (typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null);
+
         const defaultCollege = collegeList.find(c =>
           (savedSlug && (c.slug === savedSlug || c.id === savedSlug)) ||
-          (savedColgCd && (String((c as any).colg_cd) === savedColgCd || String(c.id) === savedColgCd || String(c.code) === savedColgCd)) ||
-          c.slug === 'srms-cet-bareilly' ||
-          String(c.code) === '1'
+          (savedColgCd && (String((c as any).colg_cd) === savedColgCd || String(c.id) === savedColgCd || String(c.code) === savedColgCd))
         ) || collegeList[0];
 
         const defaultColgCd = defaultCollege.code || defaultCollege.colg_cd || defaultCollege.slug || '1';
@@ -1032,86 +1043,32 @@ export default function StudentMasterPage() {
           setTargetGroupId(data.groups[0].id);
         }
 
-        // 3. Identify Default BTech Course, CS Branch, and Latest Batch
-        const defaultCourseObj = (data.courses || []).find((c: Course) =>
-          c.course_cd === '2' ||
-          c.code === '2' ||
-          c.course_cd === '1' ||
-          c.code === '1' ||
-          c.name.toLowerCase().includes('b.tech') ||
-          c.name.toLowerCase().includes('btech')
-        ) || (data.courses || [])[0];
+        // 3. Pick first course, branch, and latest batch dynamically (no BTech/CS hardcoding)
+        const courseList = data.courses || [];
+        const defaultCourseObj = courseList[0];
+        const defaultCourseCd = defaultCourseObj?.course_cd || defaultCourseObj?.code || 'all';
 
-        const defaultCourseCd = defaultCourseObj?.course_cd || defaultCourseObj?.code || '2';
+        const branchList = data.branches || [];
+        const defaultBranchObj = branchList[0];
+        const defaultBranchCd = defaultBranchObj?.branch_cd || defaultBranchObj?.code || 'all';
 
-        // Load branches for BTech
-        let finalBranches: Branch[] = data.branches || [];
-        try {
-          const resBr = await fetch(`/api/srms/branches?colgcd=${defaultColgCd}&coursecd=${defaultCourseCd}&tenant=${defaultCollege.slug}`);
-          const brList = await resBr.json().catch(() => []);
-          if (Array.isArray(brList) && brList.length > 0) {
-            finalBranches = brList.map((b: any) => ({
-              id: String(b.branch_cd || b.code || b.id),
-              code: String(b.branch_cd || b.code || b.id),
-              branch_cd: String(b.branch_cd || b.code || b.id),
-              name: String(b.branch_name || b.name || 'CS / Core').trim(),
-              college_id: String(b.colg_cd || defaultColgCd),
-              course_cd: String(b.course_cd || defaultCourseCd),
-            }));
-            setFilterBranches(finalBranches);
-          }
-        } catch (e) {}
+        const batchList = data.batches || [];
+        const sortedBatches = [...batchList].sort((a: Batch, b: Batch) => (Number(b.year) || 0) - (Number(a.year) || 0));
+        const defaultBatchObj = sortedBatches[0];
+        const defaultBatchCd = defaultBatchObj?.batch_cd || defaultBatchObj?.code || 'all';
 
-        const defaultBranchObj = finalBranches.find((b: Branch) =>
-          b.branch_cd === "'1'" ||
-          b.branch_cd === '1' ||
-          b.code === '1' ||
-          b.name.toLowerCase().includes('cs') ||
-          b.name.toLowerCase().includes('computer')
-        ) || finalBranches[0];
+        // Keep initial filter dropdowns open to 'all' so cohort table shows all students on page load
+        setSelectedCourse('all');
+        setSelectedBranch('all');
+        setSelectedBatch('all');
 
-        const defaultBranchCd = defaultBranchObj?.branch_cd || defaultBranchObj?.code || "'1'";
-
-        // Load batches for BTech and pick latest batch (Batch 2025 / code '18')
-        let finalBatches: Batch[] = data.batches || [];
-        try {
-          const resBat = await fetch(`/api/srms/batches?colgcd=${defaultColgCd}&coursecd=${defaultCourseCd}&tenant=${defaultCollege.slug}`);
-          const batList = await resBat.json().catch(() => []);
-          if (Array.isArray(batList) && batList.length > 0) {
-            finalBatches = batList.map((b: any) => ({
-              id: String(b.batch_cd || b.code || b.batch_name || b.id),
-              code: String(b.batch_name || b.year || b.batch_cd || b.code),
-              batch_cd: String(b.batch_cd || b.code || b.year),
-              year: Number(b.batch_name) || Number(b.year) || 2025,
-              course_cd: String(b.course_cd || defaultCourseCd),
-              colg_cd: String(b.colg_cd || defaultColgCd),
-            }));
-            setFilterBatches(finalBatches);
-          }
-        } catch (e) {}
-
-        const sortedBatches = [...finalBatches].sort((a: Batch, b: Batch) => (Number(b.year) || 0) - (Number(a.year) || 0));
-        const defaultBatchObj = sortedBatches.find((b: Batch) =>
-          String(b.year) === '2025' ||
-          b.batch_cd === "'18'" ||
-          b.batch_cd === '18' ||
-          b.code === "'18'"
-        ) || sortedBatches[0];
-
-        const defaultBatchCd = defaultBatchObj?.batch_cd || defaultBatchObj?.code || "'18'";
-
-        // Set UI Filters to BTech, CS, Latest Batch
-        setSelectedCourse(defaultCourseCd);
-        setSelectedBranch(defaultBranchCd);
-        setSelectedBatch(defaultBatchCd);
-
-        // Fetch students for BTech CS latest batch by default on page load
+        // Fetch students — start with all filters open so data always shows
         fetchStudents({
           overrideTenant: defaultCollege.slug,
           collegeId: defaultColgCd,
-          courseId: defaultCourseCd,
-          branchId: defaultBranchCd,
-          batchId: defaultBatchCd,
+          courseId: 'all',
+          branchId: 'all',
+          batchId: 'all',
           sessionId: 'all',
           residencyType: 'all',
           groupId: 'all',
@@ -1122,6 +1079,7 @@ export default function StudentMasterPage() {
       console.error('Failed to fetch metadata', err);
     }
   };
+
 
   const getActiveTenantSlug = () => {
     const savedSlug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null;
@@ -1183,86 +1141,73 @@ export default function StudentMasterPage() {
       const lkOnly = overrides?.linkedOnly !== undefined ? overrides.linkedOnly : linkedOnly;
       const qSearch = overrides?.search !== undefined ? overrides.search : searchQuery;
 
-      let url = `${API_BASE}/student-master?tenant=${tenantSlug}`;
-      if (qSearch) url += `&search=${encodeURIComponent(qSearch)}`;
-      if (cId !== 'all') {
-        const colgCode = targetCollege?.code || targetCollege?.colg_cd || cId;
-        url += `&collegeId=${encodeURIComponent(colgCode)}`;
-      }
-      if (crsId !== 'all') {
-        const crsObj = filterCourses.find(c => c.course_cd === crsId || c.code === crsId || c.id === crsId);
-        url += `&courseId=${encodeURIComponent(crsObj?.course_cd || crsObj?.code || crsId)}`;
-      }
-      if (batId !== 'all') {
-        const batObj = filterBatches.find(b => b.batch_cd === batId || b.code === batId || String(b.year) === batId || b.id === batId);
-        url += `&batchId=${encodeURIComponent(batObj?.batch_cd || batObj?.code || batId)}`;
-      }
-      if (brId !== 'all') {
-        const brObj = filterBranches.find(b => b.branch_cd === brId || b.code === brId || b.id === brId);
-        url += `&branchId=${encodeURIComponent(brObj?.branch_cd || brObj?.code || brId)}`;
-      }
-      if (sessId !== 'all') {
-        const sessObj = filterSessions.find(s => s.session_cd === sessId || s.code === sessId || s.name === sessId || s.id === sessId);
-        url += `&sessionId=${encodeURIComponent(sessObj?.session_cd || sessObj?.code || sessId)}`;
-      }
-      if (resType !== 'all') url += `&residencyType=${encodeURIComponent(resType)}`;
-      if (grpId !== 'all') url += `&groupId=${encodeURIComponent(grpId)}`;
-      if (profFilter !== 'all') url += `&professionalPhase=${encodeURIComponent(profFilter)}`;
-      if (lkOnly) url += `&linkedOnly=true`;
+      const buildUrl = (tenant: string, skipCollegeFilter = false) => {
+        let url = `${API_BASE}/student-master?tenant=${tenant}`;
+        if (qSearch) url += `&search=${encodeURIComponent(qSearch)}`;
+        if (!skipCollegeFilter && cId !== 'all') {
+          const colgCode = targetCollege?.code || targetCollege?.colg_cd || cId;
+          url += `&collegeId=${encodeURIComponent(colgCode)}`;
+        } else if (skipCollegeFilter || cId === 'all') {
+          url += `&collegeId=all`;
+        }
+        if (crsId !== 'all') {
+          const crsObj = filterCourses.find(c => c.course_cd === crsId || c.code === crsId || c.id === crsId);
+          url += `&courseId=${encodeURIComponent(crsObj?.course_cd || crsObj?.code || crsId)}`;
+        }
+        if (batId !== 'all') {
+          const batObj = filterBatches.find(b => b.batch_cd === batId || b.code === batId || String(b.year) === batId || b.id === batId);
+          url += `&batchId=${encodeURIComponent(batObj?.batch_cd || batObj?.code || batId)}`;
+        }
+        if (brId !== 'all') {
+          const brObj = filterBranches.find(b => b.branch_cd === brId || b.code === brId || b.id === brId);
+          url += `&branchId=${encodeURIComponent(brObj?.branch_cd || brObj?.code || brId)}`;
+        }
+        if (sessId !== 'all') {
+          const sessObj = filterSessions.find(s => s.session_cd === sessId || s.code === sessId || s.name === sessId || s.id === sessId);
+          url += `&sessionId=${encodeURIComponent(sessObj?.session_cd || sessObj?.code || sessId)}`;
+        }
+        if (resType !== 'all') url += `&residencyType=${encodeURIComponent(resType)}`;
+        if (grpId !== 'all') url += `&groupId=${encodeURIComponent(grpId)}`;
+        if (profFilter !== 'all') url += `&professionalPhase=${encodeURIComponent(profFilter)}`;
+        if (lkOnly) url += `&linkedOnly=true`;
+        return url;
+      };
 
-      // 1. Trigger live SRMS student sync if course and batch are selected
-      let liveSyncedList: Student[] = [];
-      if (crsId !== 'all' && batId !== 'all') {
+      // 1. Try local DB first (with college filter)
+      const res = await fetch(buildUrl(tenantSlug), {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const result = await res.json();
+      let list: Student[] = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.data?.data)
+          ? result.data.data
+          : Array.isArray(result?.data)
+            ? result.data
+            : [];
+
+      // 2. If local DB is empty, query ALL tenants WITHOUT college filter to get cross-tenant data
+      if (list.length === 0) {
         try {
-          const syncColCd = targetCollege?.code || targetCollege?.colg_cd || '1';
-          const syncCrsCd = crsId;
-          const syncBatCd = batId;
-          const syncBrCd = brId !== 'all' ? brId : '1';
-
-          const syncRes = await fetch(`/api/srms/students/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              colgcd: syncColCd,
-              coursecd: syncCrsCd,
-              batchcd: syncBatCd,
-              branchcd: syncBrCd,
-              tenant: tenantSlug,
-            }),
+          const allRes = await fetch(buildUrl('all', true), {  // skipCollegeFilter=true
+            headers: { 'Authorization': `Bearer ${token}` },
           });
-          const syncData = await syncRes.json().catch(() => ({}));
-          if (syncData.success && Array.isArray(syncData.data) && syncData.data.length > 0) {
-            liveSyncedList = syncData.data;
+          const allResult = await allRes.json();
+          const allList: Student[] = Array.isArray(allResult)
+            ? allResult
+            : Array.isArray(allResult?.data?.data)
+              ? allResult.data.data
+              : Array.isArray(allResult?.data)
+                ? allResult.data
+                : [];
+          if (allList.length > 0) {
+            list = allList;
           }
-        } catch (sErr) {
-          console.warn('Live SRMS student sync error:', sErr);
+        } catch (fallbackErr) {
+          console.warn('Fallback all-tenant fetch failed:', fallbackErr);
         }
       }
 
-      let list: Student[] = [];
-      if (liveSyncedList.length > 0) {
-        list = liveSyncedList;
-        if (qSearch) {
-          const q = qSearch.toLowerCase();
-          list = list.filter(s => 
-            s.name.toLowerCase().includes(q) || 
-            (s.registration_no && s.registration_no.toLowerCase().includes(q)) || 
-            (s.rollno && s.rollno.toLowerCase().includes(q))
-          );
-        }
-      } else {
-        const res = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        const result = await res.json();
-        list = Array.isArray(result)
-          ? result
-          : Array.isArray(result?.data?.data)
-            ? result.data.data
-            : Array.isArray(result?.data)
-              ? result.data
-              : [];
-      }
 
       const seen = new Set<string>();
       const deduped = list.filter((s) => {
@@ -1278,6 +1223,7 @@ export default function StudentMasterPage() {
       setLoading(false);
     }
   };
+
 
   const handleEdit = async (studentId: string) => {
     try {

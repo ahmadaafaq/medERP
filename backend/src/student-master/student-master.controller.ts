@@ -29,6 +29,7 @@ export class StudentMasterController {
   async listStudents(
     @CurrentUser() user: JwtPayload,
     @TenantSlug() tenantSlug: string,
+    @Query('tenant') queryTenant?: string,
     @Query('search') search?: string,
     @Query('collegeId') collegeId?: string,
     @Query('courseId') courseId?: string,
@@ -40,8 +41,12 @@ export class StudentMasterController {
     @Query('groupId') groupId?: string,
     @Query('linkedOnly') linkedOnly?: string,
   ) {
-    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenantSlug;
-    const effectiveCollegeId = (user && user.role !== UserRole.SUPER_ADMIN && user.colgCd) ? user.colgCd : collegeId;
+    const effectiveTenant = (queryTenant === 'all' || tenantSlug === 'all')
+      ? 'all'
+      : (queryTenant || (collegeId && collegeId !== 'all' ? collegeId : null) || tenantSlug || user?.tenantSlug || 'srms-cet-bareilly');
+    const effectiveCollegeId = (collegeId === 'all' || queryTenant === 'all')
+      ? 'all'
+      : (collegeId || user?.colgCd || undefined);
     return this.studentMasterService.listStudents(effectiveTenant, {
       search,
       collegeId: effectiveCollegeId,

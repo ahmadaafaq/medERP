@@ -204,7 +204,7 @@ export default function StudentLogbookPage() {
       documentName: docName,
       studentName: student.name,
       studentRollNo: student.rollno || student.registration_no,
-      projectTitle: miniProject?.title,
+      projectTitle: item.topic_title || item.title || miniProject?.title,
       explanationText: explanation,
       category,
       marksObtained: marks,

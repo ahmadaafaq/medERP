@@ -137,7 +137,7 @@ export class LogbookController {
   }
 
   @Public()
-  @Get('submission/:id/document')
+  @Get(['submission/:id/document', 'submissions/:id/document'])
   @ApiOperation({ summary: 'Stream and view/download seminar/topic submission document' })
   async downloadSubmissionDocument(
     @Tenant() tenantSlug: string,
@@ -599,8 +599,13 @@ export class LogbookController {
 
   @Public()
   @Get('submissions/:id')
-  async getSubmissionById(@Tenant() tenantSlug: string, @Param('id') id: string) {
-    return this.logbookService.getSubmissionById(tenantSlug, id);
+  async getSubmissionById(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @Query('tenant') queryTenant?: string,
+  ) {
+    const slug = queryTenant || tenantSlug || 'srms-cet-bareilly';
+    return this.logbookService.getSubmissionById(slug, id);
   }
 
   @Public()

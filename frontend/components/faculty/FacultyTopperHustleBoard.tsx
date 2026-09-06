@@ -431,7 +431,10 @@ export default function FacultyTopperHustleBoard() {
                   </div>
 
                   {/* Mini Projects */}
-                  <div className="px-2.5 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 text-center flex-1 min-w-[85px]">
+                  <div
+                    title={st.miniProjectTitle ? `Project: ${st.miniProjectTitle} (${st.miniProjectProgress || 'In Progress'})` : 'Mini Projects'}
+                    className="px-2.5 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 text-center flex-1 min-w-[85px] transition-all hover:border-emerald-400"
+                  >
                     <span className="block text-[8px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-extrabold">Mini-Projects</span>
                     <span className="font-black text-xs text-emerald-700 dark:text-emerald-300">
                       {(st.miniProjectsDone || 0) > 0
@@ -440,6 +443,11 @@ export default function FacultyTopperHustleBoard() {
                         ? 'In Progress'
                         : '0 Done'}
                     </span>
+                    {st.miniProjectTitle && (
+                      <span className="block text-[8px] text-emerald-800 dark:text-emerald-300 font-bold truncate max-w-[95px] mx-auto mt-0.5" title={st.miniProjectTitle}>
+                        {st.miniProjectTitle}
+                      </span>
+                    )}
                   </div>
 
                   {/* Seminars */}

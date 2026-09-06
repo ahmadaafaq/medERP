@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { MedicalTimetableService } from './medical-timetable.service';
 import { CreateMedicalScheduleDto, UpdateMedicalScheduleDto } from './dto/medical-timetable.dto';
 
-@Controller('v1/medical-timetable')
+@Controller('medical-timetable')
 @UseGuards(JwtAuthGuard)
 export class MedicalTimetableController {
   constructor(private readonly service: MedicalTimetableService) {}

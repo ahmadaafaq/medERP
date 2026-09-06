@@ -221,114 +221,6 @@ function PdfCanvasViewer({ pdfData, blobUrl }: { pdfData: Uint8Array | ArrayBuff
   );
 }
 
-function generateClientPdf(title: string, candidateName?: string, candidateRoll?: string, explanation?: string): Uint8Array {
-  const cTitle = (title || 'Generative AI Gen AI').replace(/[()]/g, '');
-  const cName = (candidateName || 'AAFREEN KHAN').replace(/[()]/g, '');
-  const cRoll = (candidateRoll || '2500141790001').replace(/[()]/g, '');
-  const cExp = (explanation || 'Generative Artificial Intelligence Gen AI is a branch of AI that can create new content based on the instructions given by a user.').replace(/[()]/g, '').slice(0, 95);
-
-  const contentStream = `BT
-/F1 18 Tf
-50 770 Td
-(${cTitle} - Seminar) Tj
-ET
-BT
-/F1 11 Tf
-50 745 Td
-(Candidate: ${cName} | Roll: ${cRoll} | Department of Computer Applications) Tj
-ET
-BT
-/F2 13 Tf
-50 705 Td
-(1. Introduction) Tj
-ET
-BT
-/F1 10 Tf
-50 685 Td
-(${cExp}) Tj
-ET
-BT
-/F2 13 Tf
-50 645 Td
-(2. How Gen AI Works) Tj
-ET
-BT
-/F1 10 Tf
-50 625 Td
-(Step 1: User Prompt Input) Tj
-ET
-BT
-/F1 10 Tf
-50 605 Td
-(Step 2: Gen AI Model processing via Large Language & Diffusion Transformers) Tj
-ET
-BT
-/F1 10 Tf
-50 585 Td
-(Step 3: Pattern matching against billions of trained weights) Tj
-ET
-BT
-/F1 10 Tf
-50 565 Td
-(Step 4: Generated High-Fidelity Output Text, Image, Code) Tj
-ET
-BT
-/F2 13 Tf
-50 525 Td
-(3. Real-World Applications) Tj
-ET
-BT
-/F1 10 Tf
-50 505 Td
-(Software engineering copilot and automated code completion) Tj
-ET
-BT
-/F1 10 Tf
-50 485 Td
-(Automated medical diagnosis and enterprise resource planning workflows) Tj
-ET
-`;
-
-  const streamLength = new TextEncoder().encode(contentStream).length;
-  const pdf = `%PDF-1.4
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>
-endobj
-4 0 obj
-<< /Length ${streamLength} >>
-stream
-${contentStream}
-endstream
-endobj
-5 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
-endobj
-6 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
-endobj
-xref
-0 7
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000244 00000 n 
-0000000300 00000 n 
-0000000377 00000 n 
-trailer
-<< /Size 7 /Root 1 0 R >>
-startxref
-455
-%%EOF`;
-  return new TextEncoder().encode(pdf);
-}
-
 export default function DocumentPreviewModal({
   isOpen,
   onClose,
@@ -350,9 +242,11 @@ export default function DocumentPreviewModal({
 }: Props) {
   const [selectedCopy, setSelectedCopy] = React.useState<'evaluated' | 'original'>('evaluated');
   const [loadingDoc, setLoadingDoc] = React.useState<boolean>(false);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [pdfDataBuffer, setPdfDataBuffer] = React.useState<Uint8Array | null>(null);
   const [blobObjectUrl, setBlobObjectUrl] = React.useState<string | null>(null);
   const [viewMode, setViewMode] = React.useState<'canvas' | 'browser' | 'notes'>('browser');
+  const [reloadKey, setReloadKey] = React.useState<number>(0);
 
   const activeDocUrl = (isEvaluated && selectedCopy === 'evaluated' && evaluatedPdfUrl)
     ? evaluatedPdfUrl
@@ -364,28 +258,25 @@ export default function DocumentPreviewModal({
     if (!isOpen) {
       setPdfDataBuffer(null);
       setBlobObjectUrl(null);
+      setLoadError(null);
+      setLoadingDoc(false);
       return;
     }
 
     let isMounted = true;
+    setPdfDataBuffer(null);
+    setBlobObjectUrl(null);
+    setLoadError(null);
 
-    // 1. Instantly generate fallback PDF so the reader is guaranteed to open immediately with zero 500 errors
-    const clientBuffer = generateClientPdf(
-      documentName || projectTitle || title || 'Generative AI',
-      studentName || 'AAFREEN KHAN',
-      studentRollNo || '2500141790001',
-      explanationText || 'Generative Artificial Intelligence Gen AI is transforming modern institutional workflows.'
-    );
-    const clientBlob = new Blob([clientBuffer as unknown as BlobPart], { type: 'application/pdf' });
-    const initialUrl = URL.createObjectURL(clientBlob);
-    setPdfDataBuffer(clientBuffer);
-    setBlobObjectUrl(initialUrl);
+    if (!activeDocUrl) {
+      setLoadingDoc(false);
+      return;
+    }
 
-    if (!activeDocUrl) return;
-
-    // 2. Handle Base64 Data URL
+    // 1. Handle Base64 Data URL
     if (activeDocUrl.startsWith('data:')) {
       try {
+        setLoadingDoc(true);
         const parts = activeDocUrl.split(',');
         const bstr = atob(parts[1] || parts[0]);
         let n = bstr.length;
@@ -395,15 +286,21 @@ export default function DocumentPreviewModal({
         }
         const b = new Blob([u8arr as unknown as BlobPart], { type: 'application/pdf' });
         const objUrl = URL.createObjectURL(b);
-        setPdfDataBuffer(u8arr);
-        setBlobObjectUrl(objUrl);
-      } catch (e) {
-        console.error('Error decoding Base64 PDF data', e);
+        if (isMounted) {
+          setPdfDataBuffer(u8arr);
+          setBlobObjectUrl(objUrl);
+          setLoadingDoc(false);
+        }
+      } catch (e: any) {
+        if (isMounted) {
+          setLoadError('Failed to parse Base64 document stream');
+          setLoadingDoc(false);
+        }
       }
       return;
     }
 
-    // 3. Asynchronously fetch backend stream if reachable
+    // 2. Asynchronously fetch backend stream
     setLoadingDoc(true);
     const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
@@ -423,7 +320,7 @@ export default function DocumentPreviewModal({
     fetch(fetchUrl, isLocal ? { headers } : {})
       .then(async (res) => {
         if (!res.ok) {
-          throw new Error(`Server returned ${res.status}`);
+          throw new Error(`Server returned ${res.status}: ${res.statusText || 'Unable to stream deliverable'}`);
         }
         const blob = await res.blob();
         const arrayBuffer = await blob.arrayBuffer();
@@ -434,19 +331,22 @@ export default function DocumentPreviewModal({
           setPdfDataBuffer(uint8);
           setBlobObjectUrl(objUrl);
           setLoadingDoc(false);
+          setLoadError(null);
+        } else if (isMounted) {
+          throw new Error('Received empty document content from server');
         }
       })
       .catch((err) => {
-        console.warn('Using client PDF buffer fallback:', err?.message);
         if (isMounted) {
           setLoadingDoc(false);
+          setLoadError(err?.message || 'Could not stream document preview');
         }
       });
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen, activeDocUrl, title, documentName, studentName, studentRollNo, projectTitle, explanationText]);
+  }, [isOpen, activeDocUrl, reloadKey]);
 
   if (!isOpen) return null;
 
@@ -689,12 +589,55 @@ export default function DocumentPreviewModal({
                 className="max-w-full max-h-full object-contain rounded-xl shadow-lg border border-slate-200 dark:border-slate-800"
               />
             </div>
+          ) : loadingDoc ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 my-auto">
+              <div className="w-10 h-10 border-3 border-[#5B4BFF] border-t-transparent rounded-full animate-spin" />
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-slate-800 dark:text-white">
+                  Loading {documentName || 'Submission Document'}...
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Streaming verified institutional deliverable
+                </p>
+              </div>
+            </div>
+          ) : loadError && !blobObjectUrl ? (
+            <div className="w-full max-w-md p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-4 shadow-sm my-auto">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/50 flex items-center justify-center mx-auto">
+                <FileText className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-slate-900 dark:text-white">Preview unavailable</h4>
+                <p className="text-xs text-slate-500 mt-1">{loadError}</p>
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  className="px-4 py-2 rounded-xl bg-[#5B4BFF] text-white text-xs font-bold hover:bg-[#4E3EE8] inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Retry</span>
+                </button>
+                {activeDocUrl && (
+                  <a
+                    href={activeDocUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 inline-flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Original</span>
+                  </a>
+                )}
+              </div>
+            </div>
           ) : viewMode === 'canvas' && pdfDataBuffer ? (
             <PdfCanvasViewer pdfData={pdfDataBuffer} blobUrl={blobObjectUrl || documentUrl} />
-          ) : (blobObjectUrl || documentUrl) ? (
+          ) : (blobObjectUrl || activeDocUrl) ? (
             <div className="w-full h-full relative rounded-xl overflow-hidden bg-white border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
               <iframe
-                src={blobObjectUrl || `${documentUrl}#toolbar=1&navpanes=0`}
+                src={blobObjectUrl || `${activeDocUrl}#toolbar=1&navpanes=0`}
                 title={documentName || 'Submission Document Preview'}
                 className="w-full h-full rounded-xl bg-white border-0 min-h-[480px]"
               />
@@ -711,7 +654,7 @@ export default function DocumentPreviewModal({
                       {documentName || projectTitle || title}
                     </h4>
                     <span className="text-xs text-slate-400">
-                      Academic Deliverable • Candidate: <strong className="text-slate-700 dark:text-slate-200">{studentName || 'Aafreen Khan'}</strong> {studentRollNo ? `(${studentRollNo})` : ''}
+                      Academic Deliverable • Candidate: <strong className="text-slate-700 dark:text-slate-200">{studentName || 'Student'}</strong> {studentRollNo ? `(${studentRollNo})` : ''}
                     </span>
                   </div>
                 </div>

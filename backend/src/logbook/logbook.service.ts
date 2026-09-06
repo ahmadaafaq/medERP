@@ -839,62 +839,70 @@ startxref
 
   async streamSubmissionDocument(tenantSlug: string, submissionId: string, res: Response) {
     const cleanSlug = (await this.tenantSchemaService.resolveTenantSlug(tenantSlug)) || 'srms-cet-bareilly';
-    const schema = `tenant_${cleanSlug}`;
 
     let sub: any = null;
     try {
-      const rows = await this.tenantSchemaService.queryInTenant(
-        cleanSlug,
-        `SELECT s.*, t.title FROM "${schema}".logbook_submissions s 
-         LEFT JOIN "${schema}".logbook_topics t ON t.id::text = s.topic_id::text
-         WHERE s.id::text = $1 OR t.title ILIKE $1 OR s.topic_id::text = $1
-         LIMIT 1`,
-        [submissionId],
-      );
-      if (rows && rows.length > 0) sub = rows[0];
+      sub = await this.getSubmissionById(cleanSlug, submissionId);
     } catch (e) {}
 
+    const subTenant = sub?.tenant_slug || cleanSlug;
     const uploadDirs = [
+      path.join(process.cwd(), 'uploads', 'submissions', subTenant),
+      path.join(process.cwd(), 'uploads', 'submissions', 'srms-cet-bareilly'),
       path.join(process.cwd(), 'uploads', 'submissions', cleanSlug),
+      path.join(process.cwd(), 'uploads', 'projects', subTenant),
       path.join(process.cwd(), 'uploads', 'projects', cleanSlug),
       path.join(process.cwd(), 'uploads', 'submissions'),
     ];
 
-    let filePath: string | null = null;
-    let filename = sub?.attachment_name || (sub?.title ? `${sub.title}.pdf` : 'Deliverable_Document.pdf');
+    let filePath: string | null = sub?.original_file_path || null;
+    let filename = sub?.file_name || sub?.attachment_name || (sub?.title ? `${sub.title}.pdf` : 'Deliverable_Document.pdf');
 
-    for (const dir of uploadDirs) {
-      if (!fs.existsSync(dir)) continue;
-      const cleanFileName = filename.replace(/\s+/g, '_');
-      const candidates = [
-        path.join(dir, filename),
-        path.join(dir, cleanFileName),
-        path.join(dir, 'Generative_AI.pdf'),
-        path.join(dir, 'Generative AI.pdf'),
-        path.join(dir, 'Topology_Report.pdf'),
-      ];
-      for (const c of candidates) {
-        if (fs.existsSync(c) && fs.statSync(c).isFile()) {
-          filePath = c;
-          break;
+    if (!filePath || !fs.existsSync(filePath)) {
+      filePath = null;
+      for (const dir of uploadDirs) {
+        if (!fs.existsSync(dir)) continue;
+        if (filename) {
+          const candidates = [
+            path.join(dir, filename),
+            path.join(dir, filename.replace(/\s+/g, '_')),
+          ];
+          for (const c of candidates) {
+            if (fs.existsSync(c) && fs.statSync(c).isFile()) {
+              filePath = c;
+              break;
+            }
+          }
         }
+        if (!filePath && submissionId) {
+          try {
+            const files = fs.readdirSync(dir);
+            const match = files.find(f => f.includes(submissionId) || (filename && f.includes(filename)));
+            if (match) {
+              filePath = path.join(dir, match);
+              break;
+            }
+          } catch (e) {}
+        }
+        if (filePath) break;
       }
-      if (filePath) break;
     }
 
     if (filePath && fs.existsSync(filePath)) {
       const fileBuffer = fs.readFileSync(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      let mime = ext === '.pdf' ? 'application/pdf' : ext === '.docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : ext === '.doc' ? 'application/msword' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
       res.removeHeader('X-Frame-Options');
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Security-Policy', 'frame-ancestors *');
-      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Type', mime);
       res.setHeader('Content-Length', String(fileBuffer.length));
       res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
       return res.status(200).send(fileBuffer);
     }
 
-    const fallbackBuffer = this.generateFallbackPdf(sub?.title || 'Academic Deliverable', sub?.submission_text || 'Verified Academic Deliverable');
+    const fallbackBuffer = await this.resolveOriginalPdfBuffer(subTenant, sub || { topic_title: 'Academic Deliverable' });
     res.removeHeader('X-Frame-Options');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1048,13 +1056,14 @@ startxref
        LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = st.course_cd::text)
        LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR (b.batch_cd::text = st.batch_cd::text AND b.course_cd::text = st.course_cd::text))
        LEFT JOIN "${schema}".logbook_mini_projects p ON (
-         (p.student_id = st.id OR p.student_id IS NULL)
+         (p.student_id = st.id OR (p.student_id IS NULL AND (p.batch_id IS NULL OR p.batch_id::text = st.batch_id::text OR p.batch_id::text = st.batch_cd::text)))
          AND ($1::text IS NULL OR p.id::text = $1 OR p.title ILIKE $1)
        )
        LEFT JOIN "${schema}".logbook_weekly_logs w ON (
          w.student_id = st.id
-         AND ($1::text IS NULL OR w.project_id::text = $1 OR w.project_id IS NULL)
+         AND ($1::text IS NULL OR w.project_id::text = $1)
        )
+       WHERE ($1::text IS NULL OR p.id IS NOT NULL OR w.id IS NOT NULL)
        GROUP BY st.id, st.name, st.rollno, st.registration_no, cr.name, b.name,
                 p.id, p.title, p.repository_url, p.live_demo_url, p.zip_submission_url,
                 p.documentation_url, p.documentation_name, p.file_path, p.file_size, p.file_mime,
@@ -1068,7 +1077,7 @@ startxref
       `SELECT w.*, st.name as student_name, st.rollno
        FROM "${schema}".logbook_weekly_logs w
        LEFT JOIN "${schema}".students st ON st.id = w.student_id
-       WHERE ($1::text IS NULL OR w.project_id::text = $1 OR w.project_id IS NULL)
+       WHERE ($1::text IS NULL OR w.project_id::text = $1)
        ORDER BY w.week_number ASC, w.created_at ASC`,
       [projectId || null],
     );
@@ -2218,32 +2227,46 @@ startxref
   }
 
   async getSubmissionById(tenantSlug: string, submissionId: string) {
-    const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
-    const res = await this.tenantSchemaService.queryInTenant(
-      tenantSlug,
-      `SELECT s.*,
-              st.name AS student_name, st.rollno, st.registration_no, st.photo_url, st.course_cd,
-              cr.name AS course_name,
-              COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, st.batch_cd) AS batch_name,
-              t.title AS topic_title, t.description AS topic_description, t.max_marks, t.submission_deadline,
-              e.id AS evaluation_id,
-              COALESCE(e.marks_obtained, s.marks_awarded::numeric) AS marks_obtained,
-              COALESCE(e.remarks, e.feedback, s.remarks) AS remarks,
-              COALESCE(e.evaluated_at, s.evaluated_at) AS evaluated_at,
-              ef.name AS evaluated_by_name
-       FROM "${schema}".logbook_submissions s
-       JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
-       LEFT JOIN "${schema}".logbook_categories c ON c.id = t.category_id
-       LEFT JOIN "${schema}".students st ON st.id::text = s.student_id::text
-       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text)
-       LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR (b.batch_cd::text = st.batch_cd::text AND b.course_cd::text = st.course_cd::text))
-       LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id = s.id
-       LEFT JOIN "${schema}".faculty ef ON (ef.id::text = COALESCE(e.faculty_id, e.evaluator_id)::text)
-       WHERE s.id = $1::uuid`,
-      [submissionId],
-    );
-    if (!res || res.length === 0) throw new NotFoundException('Submission not found');
-    return res[0];
+    const rawSlug = (tenantSlug || 'srms-cet-bareilly').replace(/^tenant_/, '').trim();
+    const candidateSlugs = [rawSlug, 'srms-cet-bareilly', 'srms-cetr-bareilly', 'srms-ibs-lucknow', 'srms-ims'];
+    const uniqueSlugs = Array.from(new Set(candidateSlugs.filter(Boolean)));
+
+    for (const slug of uniqueSlugs) {
+      try {
+        const schema = `tenant_${slug}`;
+        const res = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT s.*,
+                  st.name AS student_name, st.rollno, st.registration_no, st.photo_url, st.course_cd,
+                  cr.name AS course_name,
+                  COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, st.batch_cd) AS batch_name,
+                  t.title AS topic_title, t.description AS topic_description, t.max_marks, t.submission_deadline,
+                  e.id AS evaluation_id,
+                  COALESCE(e.marks_obtained, s.marks_awarded::numeric) AS marks_obtained,
+                  COALESCE(e.remarks, e.feedback, s.remarks) AS remarks,
+                  COALESCE(e.evaluated_at, s.evaluated_at) AS evaluated_at,
+                  ef.name AS evaluated_by_name
+           FROM "${schema}".logbook_submissions s
+           JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
+           LEFT JOIN "${schema}".logbook_categories c ON c.id = t.category_id
+           LEFT JOIN "${schema}".students st ON st.id::text = s.student_id::text
+           LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text)
+           LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR (b.batch_cd::text = st.batch_cd::text AND b.course_cd::text = st.course_cd::text))
+           LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id = s.id
+           LEFT JOIN "${schema}".faculty ef ON (ef.id::text = COALESCE(e.faculty_id, e.evaluator_id)::text)
+           WHERE s.id = $1::uuid`,
+          [submissionId],
+        );
+        if (res && res.length > 0) {
+          const sub = res[0];
+          sub.tenant_slug = slug;
+          return sub;
+        }
+      } catch (err) {
+        // Continue searching in next candidate schema if table does not exist
+      }
+    }
+    throw new NotFoundException('Submission not found');
   }
 
   async evaluateSubmission(
@@ -2778,8 +2801,12 @@ startxref
   }
 
   async resolveOriginalPdfBuffer(cleanSlug: string, sub: any): Promise<Buffer> {
+    const subTenant = sub?.tenant_slug || cleanSlug;
     const uploadDirs = [
+      path.join(process.cwd(), 'uploads', 'submissions', subTenant),
+      path.join(process.cwd(), 'uploads', 'submissions', 'srms-cet-bareilly'),
       path.join(process.cwd(), 'uploads', 'submissions', cleanSlug),
+      path.join(process.cwd(), 'uploads', 'projects', subTenant),
       path.join(process.cwd(), 'uploads', 'projects', cleanSlug),
       path.join(process.cwd(), 'uploads', 'submissions'),
     ];
@@ -2825,26 +2852,33 @@ startxref
       }
     }
 
-    // 4. Check disk candidates
+    // 4. Check disk candidates matching filename or submission ID
     let filePath: string | null = null;
-    const filename = sub?.file_name || sub?.attachment_name || 'deliverable.pdf';
+    const filename = sub?.file_name || sub?.attachment_name || '';
 
     for (const dir of uploadDirs) {
       if (!fs.existsSync(dir)) continue;
-      const candidates = [
-        path.join(dir, filename),
-        path.join(dir, filename.replace(/\s+/g, '_')),
-        path.join(dir, 'SQL.pdf'),
-        path.join(dir, 'ecommerce.pdf'),
-        path.join(dir, 'Generative AI.pdf'),
-        path.join(dir, 'Generative_AI.pdf'),
-        path.join(dir, 'Topology_Report.pdf'),
-      ];
-      for (const c of candidates) {
-        if (fs.existsSync(c) && fs.statSync(c).isFile()) {
-          filePath = c;
-          break;
+      if (filename) {
+        const candidates = [
+          path.join(dir, filename),
+          path.join(dir, filename.replace(/\s+/g, '_')),
+        ];
+        for (const c of candidates) {
+          if (fs.existsSync(c) && fs.statSync(c).isFile()) {
+            filePath = c;
+            break;
+          }
         }
+      }
+      if (!filePath && sub?.id) {
+        try {
+          const files = fs.readdirSync(dir);
+          const match = files.find(f => f.includes(sub.id) || (filename && f.includes(filename)));
+          if (match) {
+            filePath = path.join(dir, match);
+            break;
+          }
+        } catch (e) {}
       }
       if (filePath) break;
     }
@@ -2853,7 +2887,7 @@ startxref
       const ext = path.extname(filePath).toLowerCase();
       if (ext === '.docx' || ext === '.doc') {
         const rawDocx = fs.readFileSync(filePath);
-        return this.convertDocxToPdfBuffer(rawDocx, sub?.topic_title || filename);
+        return this.convertDocxToPdfBuffer(rawDocx, sub?.topic_title || filename || 'Deliverable');
       }
       return fs.readFileSync(filePath);
     }
@@ -2869,12 +2903,23 @@ startxref
     const sub = await this.getSubmissionById(cleanSlug, submissionId);
     if (!sub) throw new NotFoundException('Submission not found');
 
+    const subTenantSlug = sub.tenant_slug || cleanSlug;
+
     let filePath = sub.evaluated_file_path;
     if (!filePath || !fs.existsSync(filePath)) {
-      const evalDir = path.join(process.cwd(), 'uploads', 'evaluations', cleanSlug);
-      const evalPath = path.join(evalDir, `${submissionId}_evaluated.pdf`);
-      if (fs.existsSync(evalPath)) {
-        filePath = evalPath;
+      const candidateDirs = [
+        path.join(process.cwd(), 'uploads', 'evaluations', subTenantSlug),
+        path.join(process.cwd(), 'uploads', 'evaluations', cleanSlug),
+        path.join(process.cwd(), 'uploads', 'evaluations', 'srms-cet-bareilly'),
+        path.join(process.cwd(), 'uploads', 'evaluations'),
+      ];
+      for (const evalDir of candidateDirs) {
+        if (!fs.existsSync(evalDir)) continue;
+        const evalPath = path.join(evalDir, `${submissionId}_evaluated.pdf`);
+        if (fs.existsSync(evalPath)) {
+          filePath = evalPath;
+          break;
+        }
       }
     }
 
@@ -2882,13 +2927,18 @@ startxref
     if (filePath && fs.existsSync(filePath)) {
       fileBuffer = fs.readFileSync(filePath);
     } else {
-      const origBuffer = await this.resolveOriginalPdfBuffer(cleanSlug, sub);
+      const origBuffer = await this.resolveOriginalPdfBuffer(subTenantSlug, sub);
       fileBuffer = await this.flattenAnnotationsOnPdf(origBuffer, sub.annotations || [], {
         digitalStamp: true,
         marksAwarded: Number(sub.marks_awarded || sub.marks_obtained || 18),
         maxMarks: Number(sub.max_marks || 20),
         facultyName: sub.evaluated_by_name || 'Faculty Guide',
       });
+      try {
+        const outDir = path.join(process.cwd(), 'uploads', 'evaluations', subTenantSlug);
+        fs.mkdirSync(outDir, { recursive: true });
+        fs.writeFileSync(path.join(outDir, `${submissionId}_evaluated.pdf`), fileBuffer);
+      } catch (e) {}
     }
 
     const filename = `Evaluated_${sub.file_name || 'Deliverable.pdf'}`;
@@ -2907,8 +2957,30 @@ startxref
     const sub = await this.getSubmissionById(cleanSlug, submissionId);
     if (!sub) throw new NotFoundException('Submission not found');
 
+    const subTenantSlug = sub.tenant_slug || cleanSlug;
+
     let filePath = sub.original_file_path;
     let filename = sub.file_name || sub.attachment_name || 'original_submission.pdf';
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      const candidateDirs = [
+        path.join(process.cwd(), 'uploads', 'submissions', subTenantSlug),
+        path.join(process.cwd(), 'uploads', 'submissions', cleanSlug),
+        path.join(process.cwd(), 'uploads', 'submissions', 'srms-cet-bareilly'),
+        path.join(process.cwd(), 'uploads', 'submissions'),
+      ];
+      for (const dir of candidateDirs) {
+        if (!fs.existsSync(dir)) continue;
+        try {
+          const files = fs.readdirSync(dir);
+          const match = files.find(f => f.includes(submissionId) || (sub.file_name && f === sub.file_name) || (sub.file_name && f.includes(sub.file_name)));
+          if (match) {
+            filePath = path.join(dir, match);
+            break;
+          }
+        } catch (e) {}
+      }
+    }
 
     if (filePath && fs.existsSync(filePath)) {
       const fileBuffer = fs.readFileSync(filePath);
@@ -2943,7 +3015,15 @@ startxref
       } catch (e) {}
     }
 
-    return this.streamSubmissionDocument(cleanSlug, submissionId, res);
+    const buf = await this.resolveOriginalPdfBuffer(subTenantSlug, sub);
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Security-Policy', 'frame-ancestors *');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', String(buf.length));
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+    return res.status(200).send(buf);
   }
 
   async getLeaderboard(

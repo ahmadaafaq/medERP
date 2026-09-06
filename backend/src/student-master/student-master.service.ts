@@ -62,15 +62,18 @@ export class StudentMasterService {
     ).catch(() => []);
 
     let targetSlugs: string[] = [];
-    if (user && user.role && user.role !== 'SUPER_ADMIN' && user.tenantSlug) {
+    if (tenantSlug === 'all' || (query.collegeId && query.collegeId === 'all')) {
+      targetSlugs = colleges.map((c: any) => c.slug).filter(Boolean);
+    } else if (query.collegeId && query.collegeId !== 'all') {
+      const resolvedSlug = await this.resolveTenantSlug(query.collegeId);
+      targetSlugs = [colleges.find((c: any) => c.slug === resolvedSlug || c.id === resolvedSlug || c.code === resolvedSlug)?.slug || resolvedSlug];
+    } else if (tenantSlug && tenantSlug !== 'all') {
+      const resolvedSlug = await this.resolveTenantSlug(tenantSlug);
+      targetSlugs = [colleges.find((c: any) => c.slug === resolvedSlug || c.id === resolvedSlug || c.code === resolvedSlug)?.slug || resolvedSlug];
+    } else if (user && user.role && user.role !== 'SUPER_ADMIN' && user.tenantSlug) {
       targetSlugs = [user.tenantSlug];
     } else {
-      const rawSlug = query.collegeId && query.collegeId !== 'all' ? query.collegeId : tenantSlug;
-      const resolvedSlug = await this.resolveTenantSlug(rawSlug);
-
-      targetSlugs = resolvedSlug === 'all'
-        ? colleges.map((c: any) => c.slug).filter(Boolean)
-        : [colleges.find((c: any) => c.slug === resolvedSlug || c.id === resolvedSlug || c.code === resolvedSlug)?.slug || resolvedSlug];
+      targetSlugs = colleges.map((c: any) => c.slug).filter(Boolean);
     }
 
     const allResults: any[] = [];
@@ -85,10 +88,10 @@ export class StudentMasterService {
                  COALESCE(sa.course_code, s.course_cd) AS course_code,
                  sa.academic_session,
                  COALESCE(sa.batch_code, s.batch_cd) AS batch_code,
-                 COALESCE(sa.batch_id, s.batch_id) AS batch_id,
+                 COALESCE(sa.batch_id::text, s.batch_id::text) AS batch_id,
                  sa.residency_type, sa.admission_type, sa.professional_id, sa.professional_phase,
-                 COALESCE(sa.group_id, s.group_id) AS group_id, sa.group_code, sa.group_name,
-                 sa.branch_id, sa.branch_code
+                 COALESCE(sa.group_id::text, s.group_id::text) AS group_id, sa.group_code, sa.group_name,
+                 sa.branch_id::text AS branch_id, sa.branch_code
           FROM students s
           LEFT JOIN student_admissions sa ON sa.student_id::text = s.id::text
           WHERE 1=1
@@ -155,6 +158,46 @@ export class StudentMasterService {
         });
       } catch (e) {
         this.logger.warn(`Failed querying students in tenant ${slug}: ${e.message}`);
+      }
+    }
+
+    // Graceful fallback: If the requested single tenant returned 0 students, search other populated tenants
+    if (allResults.length === 0 && tenantSlug !== 'all' && (!query.collegeId || query.collegeId !== 'all')) {
+      for (const col of colleges) {
+        if (!col.slug || targetSlugs.includes(col.slug)) continue;
+        try {
+          const fallbackParams: any[] = [];
+          let fallbackSql = `
+            SELECT DISTINCT ON (s.id) s.id, s.name, s.rollno, s.registration_no, s.is_active, s.created_at, s.photo_url,
+                   sa.college_name,
+                   COALESCE(sa.course_code, s.course_cd) AS course_code,
+                   sa.academic_session,
+                   COALESCE(sa.batch_code, s.batch_cd) AS batch_code,
+                   COALESCE(sa.batch_id::text, s.batch_id::text) AS batch_id,
+                   sa.residency_type, sa.admission_type, sa.professional_id, sa.professional_phase,
+                   COALESCE(sa.group_id::text, s.group_id::text) AS group_id, sa.group_code, sa.group_name,
+                   sa.branch_id::text AS branch_id, sa.branch_code
+            FROM students s
+            LEFT JOIN student_admissions sa ON sa.student_id::text = s.id::text
+            WHERE 1=1
+          `;
+          if (query.search) {
+            fallbackParams.push(`%${query.search}%`);
+            fallbackSql += ` AND (s.name ILIKE $${fallbackParams.length} OR s.rollno ILIKE $${fallbackParams.length} OR s.registration_no ILIKE $${fallbackParams.length})`;
+          }
+          fallbackSql += ` ORDER BY s.id, s.created_at DESC`;
+          const fallbackRows = await this.tenantSchemaService.queryInTenant(col.slug, fallbackSql, fallbackParams);
+          if (fallbackRows && fallbackRows.length > 0) {
+            fallbackRows.forEach((r: any) => {
+              allResults.push({
+                ...r,
+                college_name: r.college_name || col?.name,
+                college_slug: col.slug,
+              });
+            });
+            break;
+          }
+        } catch {}
       }
     }
 
@@ -1393,25 +1436,34 @@ export class StudentMasterService {
           FROM "${schema}".attendance_records ar
           GROUP BY ar.student_id
         ),
+        mini_project_candidates AS (
+          SELECT p.student_id, p.id AS project_id, p.title, p.project_status, p.approved_at, p.is_locked, p.final_grade, p.final_percentage, p.guide_marks
+          FROM "${schema}".logbook_mini_projects p
+          WHERE p.student_id IS NOT NULL
+          UNION
+          SELECT w.student_id, w.project_id, p.title, p.project_status, p.approved_at, p.is_locked, p.final_grade, p.final_percentage, p.guide_marks
+          FROM "${schema}".logbook_weekly_logs w
+          LEFT JOIN "${schema}".logbook_mini_projects p ON p.id::text = w.project_id::text
+          WHERE w.student_id IS NOT NULL
+        ),
         mini_project_metrics AS (
           SELECT 
-            p.student_id,
-            COUNT(p.id) FILTER (WHERE p.project_status IN ('APPROVED', 'COMPLETED') OR p.approved_at IS NOT NULL) AS mini_projects_done,
-            COUNT(p.id) FILTER (WHERE p.project_status NOT IN ('APPROVED', 'COMPLETED') AND p.approved_at IS NULL) AS mini_projects_in_progress,
-            COUNT(p.id) AS total_mini_projects,
-            MAX(p.title) AS mini_project_title,
-            MAX(p.project_status) AS mini_project_status,
-            MAX(p.final_grade) AS mini_project_grade,
-            MAX(COALESCE(NULLIF(regexp_replace(p.final_percentage::text, '[^0-9.]', '', 'g'), '')::numeric, NULLIF(regexp_replace(p.guide_marks::text, '[^0-9.]', '', 'g'), '')::numeric, 0)) AS mini_project_score,
+            mpc.student_id,
+            COUNT(DISTINCT mpc.project_id) FILTER (WHERE mpc.project_status IN ('APPROVED', 'COMPLETED', 'CLOSED') OR mpc.approved_at IS NOT NULL OR mpc.is_locked = TRUE) AS mini_projects_done,
+            COUNT(DISTINCT mpc.project_id) FILTER (WHERE (mpc.project_status NOT IN ('APPROVED', 'COMPLETED', 'CLOSED') AND mpc.approved_at IS NULL AND (mpc.is_locked IS NULL OR mpc.is_locked = FALSE)) OR mpc.project_status IS NULL) AS mini_projects_in_progress,
+            COUNT(DISTINCT mpc.project_id) AS total_mini_projects,
+            MAX(mpc.title) AS mini_project_title,
+            COALESCE(MAX(mpc.project_status), 'IN_PROGRESS') AS mini_project_status,
+            MAX(mpc.final_grade) AS mini_project_grade,
+            MAX(COALESCE(NULLIF(regexp_replace(mpc.final_percentage::text, '[^0-9.]', '', 'g'), '')::numeric, NULLIF(regexp_replace(mpc.guide_marks::text, '[^0-9.]', '', 'g'), '')::numeric, 0)) AS mini_project_score,
             COALESCE(MAX(wl.logs_count), 0) AS mini_project_logs_count
-          FROM "${schema}".logbook_mini_projects p
+          FROM mini_project_candidates mpc
           LEFT JOIN (
             SELECT student_id, COUNT(*) AS logs_count
             FROM "${schema}".logbook_weekly_logs
             GROUP BY student_id
-          ) wl ON (wl.student_id::text = p.student_id::text)
-          WHERE p.student_id IS NOT NULL
-          GROUP BY p.student_id
+          ) wl ON (wl.student_id::text = mpc.student_id::text)
+          GROUP BY mpc.student_id
         ),
         seminar_metrics AS (
           SELECT
