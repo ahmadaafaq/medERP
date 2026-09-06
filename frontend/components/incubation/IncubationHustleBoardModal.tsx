@@ -17,7 +17,9 @@ import {
   Star,
   Flame,
   ArrowUpRight,
-  Filter
+  Filter,
+  Crown,
+  Medal
 } from 'lucide-react';
 
 export interface IncubationItem {
@@ -351,16 +353,19 @@ export default function IncubationHustleBoardModal({
                       {/* Rank Medal */}
                       <div className="flex flex-col items-center justify-center shrink-0 w-10">
                         {isTop1 ? (
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-900 font-black text-sm flex items-center justify-center shadow-md shadow-amber-500/30 border border-yellow-200">
-                            🥇 #1
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 text-amber-950 flex flex-col items-center justify-center shadow-md shadow-amber-500/30 border-2 border-amber-200 shrink-0">
+                            <Crown className="w-4 h-4 fill-amber-950 stroke-[2.5]" />
+                            <span className="text-[10px] font-black leading-none mt-0.5 tracking-tight">#1</span>
                           </div>
                         ) : isTop2 ? (
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-300 to-slate-400 text-slate-900 font-black text-sm flex items-center justify-center shadow-md border border-slate-200">
-                            🥈 #2
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-200 via-slate-100 to-slate-300 text-slate-800 flex flex-col items-center justify-center shadow-md border-2 border-white dark:border-slate-400 shrink-0">
+                            <Medal className="w-4 h-4 fill-slate-400 stroke-[2.5]" />
+                            <span className="text-[10px] font-black leading-none mt-0.5 tracking-tight">#2</span>
                           </div>
                         ) : isTop3 ? (
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-600 to-orange-700 text-white font-black text-sm flex items-center justify-center shadow-md border border-orange-400">
-                            🥉 #3
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600 to-orange-700 text-white flex flex-col items-center justify-center shadow-md border-2 border-amber-400 shrink-0">
+                            <Award className="w-4 h-4 fill-amber-300 stroke-[2.5]" />
+                            <span className="text-[10px] font-black leading-none mt-0.5 tracking-tight">#3</span>
                           </div>
                         ) : (
                           <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300 font-black text-xs flex items-center justify-center border border-slate-200 dark:border-slate-600">

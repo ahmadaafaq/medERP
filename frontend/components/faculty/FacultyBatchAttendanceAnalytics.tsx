@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { BarChart3, Users, AlertTriangle, CheckCircle2, ChevronDown, Download, Sparkles } from 'lucide-react';
+import { BarChart3, Users, AlertTriangle, CheckCircle2, ChevronDown, Download, Sparkles, BookOpen, TrendingUp } from 'lucide-react';
 
 interface SubjectAttendance {
   id: string;
@@ -511,23 +511,23 @@ export default function FacultyBatchAttendanceAnalytics() {
           <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
             <button
               onClick={() => setActiveTab('graph')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'graph'
                   ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] shadow-xs'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
               }`}
             >
-              📊 Cohort Curve ({studentsToDisplay.length})
+              <BarChart3 className="w-3.5 h-3.5 text-[#5B4BFF]" /> Cohort Curve ({studentsToDisplay.length})
             </button>
             <button
               onClick={() => setActiveTab('subjects')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'subjects'
                   ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] shadow-xs'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
               }`}
             >
-              📚 Subjects ({subjectsToDisplay.length})
+              <BookOpen className="w-3.5 h-3.5 text-indigo-500" /> Subjects ({subjectsToDisplay.length})
             </button>
           </div>
 
@@ -633,7 +633,7 @@ export default function FacultyBatchAttendanceAnalytics() {
           <div className="p-4 rounded-2xl bg-[#F6F8FC] dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 flex flex-col flex-1 min-h-0 space-y-3">
             <div className="flex items-center justify-between shrink-0">
               <span className="text-xs font-black text-[#1B1E28] dark:text-white flex items-center gap-1.5">
-                <span>📈</span> Cohort Attendance Curve ({studentsToDisplay.length} Students)
+                <TrendingUp className="w-4 h-4 text-[#5B4BFF]" /> Cohort Attendance Curve ({studentsToDisplay.length} Students)
               </span>
               <span className="text-[10px] font-bold text-rose-500 flex items-center gap-1">
                 <span className="inline-block w-2 h-2 rounded-full bg-rose-500"></span>

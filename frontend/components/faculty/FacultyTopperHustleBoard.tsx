@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Trophy, Award, Flame, Star, FolderGit2, Rocket, Sparkles, BookOpen, FileCheck, CheckCircle2, FileText, GraduationCap } from 'lucide-react';
+import { Trophy, Award, Flame, Star, FolderGit2, Rocket, Sparkles, BookOpen, FileCheck, CheckCircle2, FileText, GraduationCap, Crown, Medal } from 'lucide-react';
 
 interface TopperStudent {
   rank: number;
@@ -306,14 +306,6 @@ export default function FacultyTopperHustleBoard() {
         ) : (
           paginatedStudents.map((st) => {
             const isTop3 = st.rank <= 3;
-            const rankBadgeColor =
-              st.rank === 1
-                ? 'bg-gradient-to-br from-amber-300 to-amber-500 text-slate-950 shadow-amber-500/30'
-                : st.rank === 2
-                ? 'bg-gradient-to-br from-slate-200 to-slate-400 text-slate-950 shadow-slate-400/20'
-                : st.rank === 3
-                ? 'bg-gradient-to-br from-amber-600 to-amber-800 text-white shadow-amber-800/20'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700';
 
             return (
               <div
@@ -327,12 +319,27 @@ export default function FacultyTopperHustleBoard() {
                 {/* SECTION 1: TOP ROW (Rank + Avatar + Name & Program + Composite Score) */}
                 <div className="flex items-center justify-between gap-3 min-w-0">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Rank Badge */}
-                    <div
-                      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 shadow-xs ${rankBadgeColor}`}
-                    >
-                      {st.rank === 1 ? '🥇' : st.rank === 2 ? '🥈' : st.rank === 3 ? '🥉' : `#${st.rank}`}
-                    </div>
+                    {/* Rank Badge: High-definition Vector Medallions */}
+                    {st.rank === 1 ? (
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 text-amber-950 flex flex-col items-center justify-center shadow-md shadow-amber-500/35 border-2 border-amber-200 shrink-0">
+                        <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-950 fill-amber-950 stroke-[2.5]" />
+                        <span className="text-[10px] sm:text-[11px] font-black leading-none mt-0.5 tracking-tight text-amber-950">#1</span>
+                      </div>
+                    ) : st.rank === 2 ? (
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-slate-100 via-slate-200 to-slate-400 text-slate-800 flex flex-col items-center justify-center shadow-md shadow-slate-400/25 border-2 border-white dark:border-slate-300 shrink-0">
+                        <Medal className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700 fill-slate-400 stroke-[2.5]" />
+                        <span className="text-[10px] sm:text-[11px] font-black leading-none mt-0.5 tracking-tight text-slate-800">#2</span>
+                      </div>
+                    ) : st.rank === 3 ? (
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-600 via-amber-700 to-orange-700 text-white flex flex-col items-center justify-center shadow-md shadow-amber-800/30 border-2 border-amber-300/80 shrink-0">
+                        <Award className="w-4 h-4 sm:w-5 sm:h-5 text-amber-200 fill-amber-300 stroke-[2.5]" />
+                        <span className="text-[10px] sm:text-[11px] font-black leading-none mt-0.5 tracking-tight text-white">#3</span>
+                      </div>
+                    ) : (
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-black text-xs sm:text-sm shrink-0 border border-slate-200 dark:border-slate-700 shadow-xs">
+                        #{st.rank}
+                      </div>
+                    )}
 
                     {/* Student Avatar */}
                     <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden flex items-center justify-center text-xs font-black text-[#5B4BFF] shrink-0 shadow-xs">
@@ -385,8 +392,19 @@ export default function FacultyTopperHustleBoard() {
                 {/* SECTION 2: MIDDLE ROW (Hustle Tag / Achievement Badge if present) */}
                 {st.hustleTag && (
                   <div className="pt-0.5">
-                    <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-extrabold border border-amber-500/20 inline-flex items-center gap-1.5">
-                      {st.hustleTag}
+                    <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-extrabold border border-amber-500/20 inline-flex items-center gap-1.5">
+                      {st.rank === 1 ? (
+                        <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 fill-amber-500/40 shrink-0" />
+                      ) : st.hustleTag.includes('Seminar') ? (
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                      ) : st.hustleTag.includes('Certified') ? (
+                        <FileCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      ) : st.hustleTag.includes('Attendance') ? (
+                        <Flame className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 fill-orange-500/40 shrink-0" />
+                      ) : (
+                        <Award className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      )}
+                      <span>{st.hustleTag.replace(/^[^a-zA-Z0-9\s]+/, '').trim()}</span>
                     </span>
                   </div>
                 )}
