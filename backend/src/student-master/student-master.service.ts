@@ -13,7 +13,7 @@ export class StudentMasterService {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly tenantSchemaService: TenantSchemaService,
-  ) {}
+  ) { }
 
   private async resolveTenantSlug(tenantSlugOrCollege?: string): Promise<string> {
     if (!tenantSlugOrCollege) {
@@ -37,7 +37,7 @@ export class StudentMasterService {
           (t.code && t.code.toLowerCase() === input)
       );
       if (match) return match.slug;
-    } catch (e) {}
+    } catch (e) { }
     return input;
   }
 
@@ -197,7 +197,7 @@ export class StudentMasterService {
             });
             break;
           }
-        } catch {}
+        } catch { }
       }
     }
 
@@ -225,7 +225,7 @@ export class StudentMasterService {
             slug = col.slug;
             break;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
     }
 
@@ -683,7 +683,7 @@ export class StudentMasterService {
             slug = col.slug;
             break;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
     }
 
@@ -730,7 +730,7 @@ export class StudentMasterService {
            FROM students s
            WHERE s.id = $2 AND s.user_id = u.id`,
           [dto.emailAddress.toLowerCase().trim(), id],
-        ).catch(() => {});
+        ).catch(() => { });
       }
 
       // 2. Upsert student_admissions
@@ -1004,7 +1004,7 @@ export class StudentMasterService {
             slug = col.slug;
             break;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
     }
     if (!slug) throw new NotFoundException('Tenant not resolved for student delete');
@@ -1038,7 +1038,7 @@ export class StudentMasterService {
         } catch (e) {
           try {
             await runner.query(`ROLLBACK TO SAVEPOINT sp_sub`);
-          } catch (rErr) {}
+          } catch (rErr) { }
         }
       }
 
@@ -1067,7 +1067,7 @@ export class StudentMasterService {
         } catch (e) {
           try {
             await runner.query(`ROLLBACK TO SAVEPOINT ${spName}`);
-          } catch (rErr) {}
+          } catch (rErr) { }
         }
       }
 
@@ -1081,7 +1081,7 @@ export class StudentMasterService {
         } catch (e) {
           try {
             await runner.query(`ROLLBACK TO SAVEPOINT sp_user`);
-          } catch (rErr) {}
+          } catch (rErr) { }
         }
       }
 

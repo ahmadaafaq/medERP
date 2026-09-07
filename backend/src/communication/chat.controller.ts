@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -118,6 +119,31 @@ export class ChatController {
   ) {
     const user = this.extractUser(req, dto);
     const data = await this.chatService.sendMessage(tenantSlug, user, id, dto);
+    return { success: true, data };
+  }
+
+  @Patch('messages/:id')
+  @ApiOperation({ summary: 'Edit message body (WhatsApp style)' })
+  async editMessage(
+    @TenantSlug() tenantSlug: string,
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body('body') body: string,
+  ) {
+    const user = this.extractUser(req);
+    const data = await this.chatService.editMessage(tenantSlug, user, id, body);
+    return { success: true, data };
+  }
+
+  @Delete('messages/:id')
+  @ApiOperation({ summary: 'Delete message (WhatsApp style soft-delete)' })
+  async deleteMessage(
+    @TenantSlug() tenantSlug: string,
+    @Req() req: any,
+    @Param('id') id: string,
+  ) {
+    const user = this.extractUser(req);
+    const data = await this.chatService.deleteMessage(tenantSlug, user, id);
     return { success: true, data };
   }
 

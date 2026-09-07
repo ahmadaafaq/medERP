@@ -18,6 +18,9 @@ export interface ChatMessage {
   sender_role: string;
   sender_avatar?: string;
   body?: string;
+  is_edited?: boolean;
+  is_deleted?: boolean;
+  updated_at?: string;
   created_at: string;
   attachments?: ChatAttachment[];
 }
@@ -416,6 +419,105 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
     }
   };
 
+  // Edit message
+  const editMessage = async (messageId: string, newBody: string): Promise<boolean> => {
+    if (!messageId || !newBody?.trim()) return false;
+    try {
+      const slug = getTenantSlug();
+      const res = await fetch(`${API_BASE}/chat/messages/${messageId}?tenant=${slug}`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify({ body: newBody.trim() }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const updated = json.data;
+        // Optimistically update message
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  body: newBody.trim(),
+                  is_edited: true,
+                  updated_at: updated?.updated_at || new Date().toISOString(),
+                }
+              : msg,
+          ),
+        );
+
+        // Update group last_message if it matches
+        setGroups((prev) =>
+          prev.map((g) =>
+            g.last_message?.id === messageId
+              ? {
+                  ...g,
+                  last_message: {
+                    ...g.last_message,
+                    body: newBody.trim(),
+                  },
+                }
+              : g,
+          ),
+        );
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to edit message:', err);
+      return false;
+    }
+  };
+
+  // Delete message
+  const deleteMessage = async (messageId: string): Promise<boolean> => {
+    if (!messageId) return false;
+    try {
+      const slug = getTenantSlug();
+      const res = await fetch(`${API_BASE}/chat/messages/${messageId}?tenant=${slug}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+
+      if (res.ok) {
+        // Optimistically soft-delete message
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  body: 'This message was deleted',
+                  is_deleted: true,
+                  attachments: [],
+                }
+              : msg,
+          ),
+        );
+
+        // Update group last_message if it matches
+        setGroups((prev) =>
+          prev.map((g) =>
+            g.last_message?.id === messageId
+              ? {
+                  ...g,
+                  last_message: {
+                    ...g.last_message,
+                    body: 'This message was deleted',
+                  },
+                }
+              : g,
+          ),
+        );
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to delete message:', err);
+      return false;
+    }
+  };
+
   // Upload attachment file
   const uploadAttachment = async (file: File): Promise<ChatAttachment | null> => {
     try {
@@ -590,6 +692,8 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
     fetchMessages,
     fetchMembers,
     sendMessage,
+    editMessage,
+    deleteMessage,
     uploadAttachment,
     markAsRead,
     syncGroups,

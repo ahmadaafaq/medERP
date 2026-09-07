@@ -30,6 +30,7 @@ import {
   Save,
   Hash,
   Slash,
+  Move,
 } from 'lucide-react';
 
 export interface PdfAnnotation {
@@ -139,6 +140,8 @@ export default function EvaluateSubmissionModal({
   const [scale, setScale] = useState<number>(1.2);
   const [pdfLoading, setPdfLoading] = useState<boolean>(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [imageDoc, setImageDoc] = useState<HTMLImageElement | null>(null);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
 
   // Canvas Refs
   const pdfCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -153,166 +156,7 @@ export default function EvaluateSubmissionModal({
   const [evaluatedPdfUrl, setEvaluatedPdfUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Initialize submission state
-  useEffect(() => {
-    if (!submission) return;
-
-    const initialMarks = submission.marks_awarded !== undefined && submission.marks_awarded !== null
-      ? submission.marks_awarded
-      : submission.marks_obtained !== undefined && submission.marks_obtained !== null
-      ? submission.marks_obtained
-      : Math.min(10, maxMarks);
-
-    setMarks(initialMarks);
-    setRemarks(
-      submission.remarks ||
-        'Overall performance was satisfactory and satisfactory progress was observed.'
-    );
-    setStatus(submission.status || 'SUBMITTED');
-    setEvaluatedPdfUrl(submission.evaluated_file_url || null);
-    setAnnotations(Array.isArray(submission.annotations) ? submission.annotations : []);
-    setEvalSuccess(submission.status === 'EVALUATED');
-    setActiveView('STUDIO');
-    setError(null);
-  }, [submission, maxMarks]);
-
-  // 2. Fetch latest submission annotations & details
-  useEffect(() => {
-    if (!submission?.id || !isOpen) return;
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
-
-    async function fetchDetails() {
-      try {
-        const res = await fetch(`${API_BASE}/logbook/submissions/${submission?.id}?tenant=${slug}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.annotations)) {
-            setAnnotations(data.annotations);
-          }
-          if (data.evaluated_file_url) {
-            setEvaluatedPdfUrl(data.evaluated_file_url);
-          }
-          if (data.status) {
-            setStatus(data.status);
-            if (data.status === 'EVALUATED') setEvalSuccess(true);
-          }
-        }
-      } catch (e) {
-        console.warn('Could not fetch latest submission markup:', e);
-      }
-    }
-    fetchDetails();
-  }, [submission?.id, isOpen]);
-
-  // 3. Load PDF Document via pdfjs-dist
-  useEffect(() => {
-    if (!isOpen || !submission) return;
-
-    let active = true;
-    setPdfLoading(true);
-    setPdfError(null);
-
-    async function loadPdf() {
-      try {
-        const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
-        const docUrl = submission?.file_url || `${API_BASE}/logbook/submission/${submission?.id}/document?tenant=${slug}`;
-
-        const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
-        try {
-          pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-        } catch (e) {}
-
-        const docRes = await fetch(docUrl);
-        if (!docRes.ok) {
-          throw new Error(`Failed to load document (${docRes.status})`);
-        }
-
-        const buffer = await docRes.arrayBuffer();
-        const uint8 = new Uint8Array(buffer);
-
-        let doc: any = null;
-        try {
-          const task = pdfjs.getDocument({
-            data: uint8,
-            cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-            cMapPacked: true,
-          });
-          doc = await task.promise;
-        } catch (firstErr) {
-          const fallbackTask = pdfjs.getDocument({
-            data: uint8,
-            disableWorker: true,
-          } as any);
-          doc = await fallbackTask.promise;
-        }
-
-        if (active && doc) {
-          setPdfDoc(doc);
-          setNumPages(doc.numPages || 1);
-          setCurrentPage(1);
-          setPdfLoading(false);
-        }
-      } catch (err: any) {
-        if (active) {
-          console.error('PDF Canvas loading error:', err);
-          setPdfError(err?.message || 'Unable to render PDF document canvas');
-          setPdfLoading(false);
-        }
-      }
-    }
-
-    loadPdf();
-
-    return () => {
-      active = false;
-    };
-  }, [isOpen, submission]);
-
-  // 4. Render Active PDF Page on Background Canvas
-  useEffect(() => {
-    if (!pdfDoc || !pdfCanvasRef.current || pdfLoading) return;
-
-    let active = true;
-
-    async function renderPage() {
-      try {
-        const page = await pdfDoc.getPage(currentPage);
-        if (!active || !pdfCanvasRef.current) return;
-
-        const viewport = page.getViewport({ scale });
-        const canvas = pdfCanvasRef.current;
-        const markCanvas = markCanvasRef.current;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        if (markCanvas) {
-          markCanvas.width = viewport.width;
-          markCanvas.height = viewport.height;
-        }
-
-        await page.render({
-          canvasContext: ctx,
-          viewport,
-        }).promise;
-
-        // Trigger redrawing of annotations on the overlay canvas
-        redrawAnnotations();
-      } catch (err) {
-        console.warn('Page rendering error:', err);
-      }
-    }
-
-    renderPage();
-
-    return () => {
-      active = false;
-    };
-  }, [pdfDoc, currentPage, scale, pdfLoading]);
-
-  // 5. Redraw Annotations on Foreground Canvas
+  // Redraw Annotations on Foreground Canvas (defined before useEffect hooks)
   const redrawAnnotations = useCallback(() => {
     const markCanvas = markCanvasRef.current;
     if (!markCanvas) return;
@@ -490,6 +334,244 @@ export default function EvaluateSubmissionModal({
       ctx.restore();
     }
   }, [annotations, currentPage]);
+
+  // 1. Initialize submission state
+  useEffect(() => {
+    if (!submission) return;
+
+    const initialMarks = submission.marks_awarded !== undefined && submission.marks_awarded !== null
+      ? submission.marks_awarded
+      : submission.marks_obtained !== undefined && submission.marks_obtained !== null
+      ? submission.marks_obtained
+      : Math.min(10, maxMarks);
+
+    setMarks(initialMarks);
+    setRemarks(
+      submission.remarks ||
+        'Overall performance was satisfactory and satisfactory progress was observed.'
+    );
+    setStatus(submission.status || 'SUBMITTED');
+    setEvaluatedPdfUrl(submission.evaluated_file_url || null);
+    setAnnotations(Array.isArray(submission.annotations) ? submission.annotations : []);
+    setEvalSuccess(submission.status === 'EVALUATED');
+    setActiveView('STUDIO');
+    setError(null);
+  }, [submission, maxMarks]);
+
+  // 2. Fetch latest submission annotations & details
+  useEffect(() => {
+    if (!submission?.id || !isOpen) return;
+    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+
+    async function fetchDetails() {
+      try {
+        const res = await fetch(`${API_BASE}/logbook/submissions/${submission?.id}?tenant=${slug}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.annotations)) {
+            setAnnotations(data.annotations);
+          }
+          if (data.evaluated_file_url) {
+            setEvaluatedPdfUrl(data.evaluated_file_url);
+          }
+          if (data.status) {
+            setStatus(data.status);
+            if (data.status === 'EVALUATED') setEvalSuccess(true);
+          }
+        }
+      } catch (e) {
+        console.warn('Could not fetch latest submission markup:', e);
+      }
+    }
+    fetchDetails();
+  }, [submission?.id, isOpen]);
+
+  // 3. Load PDF Document or Image via pdfjs-dist / Image loader
+  useEffect(() => {
+    if (!isOpen || !submission) return;
+
+    let active = true;
+    setPdfLoading(true);
+    setPdfError(null);
+    setImageDoc(null);
+    setPdfDoc(null);
+
+    async function loadDocument() {
+      try {
+        const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+        const docUrl = submission?.file_url || `${API_BASE}/logbook/submission/${submission?.id}/document?tenant=${slug}`;
+
+        const fileName = submission?.file_name || '';
+        const isImageByName = /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(fileName) || /\.(jpe?g|png|webp|gif|bmp|svg)/i.test(docUrl);
+
+        const docRes = await fetch(docUrl);
+        if (!docRes.ok) {
+          throw new Error(`Failed to load document (${docRes.status})`);
+        }
+
+        const contentType = docRes.headers.get('content-type') || '';
+        const blob = await docRes.blob();
+
+        // Check if document is an image (by extension, MIME type, or fallback)
+        if (isImageByName || contentType.startsWith('image/')) {
+          const blobUrl = URL.createObjectURL(blob);
+          const img = new window.Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            if (!active) return;
+            setImageDoc(img);
+            setNumPages(1);
+            setCurrentPage(1);
+            setPdfLoading(false);
+          };
+          img.onerror = () => {
+            if (!active) return;
+            setPdfError('Failed to load deliverable image');
+            setPdfLoading(false);
+          };
+          img.src = blobUrl;
+          return;
+        }
+
+        // PDF rendering via pdfjs-dist
+        const buffer = await blob.arrayBuffer();
+        const uint8 = new Uint8Array(buffer);
+
+        // Check JPEG / PNG magic bytes in binary stream
+        if (uint8.length > 4 && ((uint8[0] === 0xff && uint8[1] === 0xd8) || (uint8[0] === 0x89 && uint8[1] === 0x50))) {
+          const blobUrl = URL.createObjectURL(blob);
+          const img = new window.Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            if (!active) return;
+            setImageDoc(img);
+            setNumPages(1);
+            setCurrentPage(1);
+            setPdfLoading(false);
+          };
+          img.onerror = () => {
+            if (!active) return;
+            setPdfError('Failed to load image');
+            setPdfLoading(false);
+          };
+          img.src = blobUrl;
+          return;
+        }
+
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
+        try {
+          pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+        } catch (e) {}
+
+        let doc: any = null;
+        try {
+          const task = pdfjs.getDocument({
+            data: uint8,
+            cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+            cMapPacked: true,
+          });
+          doc = await task.promise;
+        } catch (firstErr) {
+          const fallbackTask = pdfjs.getDocument({
+            data: uint8,
+            disableWorker: true,
+          } as any);
+          doc = await fallbackTask.promise;
+        }
+
+        if (active && doc) {
+          setPdfDoc(doc);
+          setNumPages(doc.numPages || 1);
+          setCurrentPage(1);
+          setPdfLoading(false);
+        }
+      } catch (err: any) {
+        if (active) {
+          console.error('Document Canvas loading error:', err);
+          setPdfError(err?.message || 'Unable to render document canvas');
+          setPdfLoading(false);
+        }
+      }
+    }
+
+    loadDocument();
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, submission]);
+
+  // 4. Render Active PDF Page or Image on Background Canvas
+  useEffect(() => {
+    if (pdfLoading) return;
+
+    // A) If Image Document
+    if (imageDoc && pdfCanvasRef.current) {
+      const canvas = pdfCanvasRef.current;
+      const markCanvas = markCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const baseWidth = Math.min(imageDoc.naturalWidth || 800, 1000);
+      const aspect = (imageDoc.naturalHeight || 1000) / (imageDoc.naturalWidth || 800);
+      const renderW = Math.round(baseWidth * scale);
+      const renderH = Math.round(renderW * aspect);
+
+      canvas.width = renderW;
+      canvas.height = renderH;
+
+      if (markCanvas) {
+        markCanvas.width = renderW;
+        markCanvas.height = renderH;
+      }
+
+      ctx.drawImage(imageDoc, 0, 0, renderW, renderH);
+      redrawAnnotations();
+      return;
+    }
+
+    // B) If PDF Document
+    if (!pdfDoc || !pdfCanvasRef.current) return;
+
+    let active = true;
+
+    async function renderPage() {
+      try {
+        const page = await pdfDoc.getPage(currentPage);
+        if (!active || !pdfCanvasRef.current) return;
+
+        const viewport = page.getViewport({ scale });
+        const canvas = pdfCanvasRef.current;
+        const markCanvas = markCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        if (markCanvas) {
+          markCanvas.width = viewport.width;
+          markCanvas.height = viewport.height;
+        }
+
+        await page.render({
+          canvasContext: ctx,
+          viewport,
+        }).promise;
+
+        // Trigger redrawing of annotations on the overlay canvas
+        redrawAnnotations();
+      } catch (err) {
+        console.warn('Page rendering error:', err);
+      }
+    }
+
+    renderPage();
+
+    return () => {
+      active = false;
+    };
+  }, [pdfDoc, imageDoc, currentPage, scale, pdfLoading, redrawAnnotations]);
 
   useEffect(() => {
     redrawAnnotations();
@@ -981,21 +1063,225 @@ export default function EvaluateSubmissionModal({
     submission.file_url?.includes('.pdf') ||
     !submission.file_name;
 
+  // Reusable Evaluation Form for Desktop Sidebar and Mobile Slide Drawer
+  const renderEvaluationForm = (isMobileDrawer: boolean) => (
+    <form onSubmit={handleFinalize} className="space-y-4">
+      {/* Candidate Info Card */}
+      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 flex items-center justify-between">
+        <div>
+          <div className="text-xs font-bold text-[#5B4BFF]">Candidate Details</div>
+          <h4 className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
+            {submission.student_name}
+          </h4>
+          <div className="text-[11px] text-slate-500 font-mono">
+            Roll: {submission.rollno || submission.registration_no || 'Reg N/A'}
+          </div>
+        </div>
+        <div className="text-right">
+          <span className="text-[10px] text-slate-400 block">Submitted</span>
+          <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+            {submission.submitted_at ? new Date(submission.submitted_at).toLocaleDateString() : '5/9/2026'}
+          </span>
+        </div>
+      </div>
+
+      {/* Evaluation Success Banner */}
+      {evalSuccess && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 space-y-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="text-xs font-black">Evaluated &amp; Stamped</span>
+          </div>
+          <p className="text-[11px] leading-relaxed">
+            Digital annotations have been permanently flattened onto the submission deliverable using <code>pdf-lib</code>.
+          </p>
+          {evaluatedPdfUrl && (
+            <div className="pt-1 flex items-center gap-2">
+              <a
+                href={evaluatedPdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                download={`Evaluated_${submission.file_name || 'Document.pdf'}`}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition-all flex items-center gap-1.5 shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Marked PDF</span>
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Marks Awarded Input */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-black uppercase text-slate-800 dark:text-white tracking-wider block">
+            Marks Awarded (Out of {maxMarks}) *
+          </label>
+          {pct !== null && (
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-black border ${
+                pct >= 75
+                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300'
+                  : pct >= 50
+                  ? 'bg-indigo-50 text-[#5B4BFF] border-indigo-200'
+                  : 'bg-rose-50 text-rose-700 border-rose-200'
+              }`}
+            >
+              {pct}% Score
+            </span>
+          )}
+        </div>
+
+        <div className="relative">
+          <input
+            type="number"
+            min="0"
+            max={maxMarks}
+            step="0.5"
+            value={marks}
+            onChange={(e) => setMarks(e.target.value)}
+            placeholder={`0 - ${maxMarks}`}
+            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-base font-black focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] font-mono"
+            required
+          />
+          <span className="absolute right-3.5 top-2.5 text-xs font-mono font-bold text-slate-400">
+            / {maxMarks} Marks
+          </span>
+        </div>
+
+        {/* Quick Score Presets */}
+        <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+          {[
+            { label: `Full (${maxMarks})`, val: maxMarks },
+            { label: `80% (${Math.round(maxMarks * 0.8)})`, val: Math.round(maxMarks * 0.8) },
+            { label: `60% (${Math.round(maxMarks * 0.6)})`, val: Math.round(maxMarks * 0.6) },
+            { label: `40% (${Math.round(maxMarks * 0.4)})`, val: Math.round(maxMarks * 0.4) },
+          ].map((p, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setMarks(p.val)}
+              className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 text-[10px] font-bold transition-all cursor-pointer"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Remarks Textarea */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-black uppercase text-slate-800 dark:text-white tracking-wider block">
+          Faculty Evaluation Remarks &amp; Feedback
+        </label>
+        <textarea
+          rows={3}
+          value={remarks}
+          onChange={(e) => setRemarks(e.target.value)}
+          placeholder="Provide feedback on technical methodology, problem formulation, and solution quality..."
+          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] resize-none"
+        />
+
+        {/* Quick Feedback Chips */}
+        <div className="flex flex-wrap gap-1 pt-1">
+          {[
+            'Overall performance was satisfactory and satisfactory progress was observed.',
+            'Well explained with accurate technical methodology.',
+            'Good attempt, need to improve edge cases.',
+            'Correct solution and clean diagrammatic illustrations.',
+          ].map((chip, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setRemarks(chip)}
+              className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 transition-all text-left truncate max-w-xs cursor-pointer"
+            >
+              + {chip}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Digital Guide Signature Seal */}
+      <div className="p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-[#5B4BFF]" />
+          <div>
+            <div className="text-xs font-bold text-slate-800 dark:text-white">Apply Digital Guide Seal</div>
+            <div className="text-[10px] text-slate-500">Official faculty verification stamp on PDF</div>
+          </div>
+        </div>
+        <input
+          type="checkbox"
+          checked={digitalStamp}
+          onChange={(e) => setDigitalStamp(e.target.checked)}
+          className="w-4 h-4 text-[#5B4BFF] rounded cursor-pointer"
+        />
+      </div>
+
+      {/* Action Buttons */}
+      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+        {isMobileDrawer ? (
+          <button
+            type="button"
+            onClick={() => setIsMobileDrawerOpen(false)}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+          >
+            ← Back to Canvas
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+          >
+            Close
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={finalizing}
+          className="px-5 py-2.5 rounded-xl bg-[#F36C21] hover:bg-[#e05a10] text-white text-xs font-black shadow-lg shadow-[#F36C21]/25 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 ml-auto"
+        >
+          {finalizing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Flattening &amp; Stamping...</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{status === 'EVALUATED' ? 'Re-Finalize Evaluation' : 'Sign Off & Award Marks'}</span>
+            </>
+          )}
+        </button>
+      </div>
+    </form>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[24px] shadow-2xl max-w-7xl w-[98vw] h-[94vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-2 lg:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-none sm:rounded-[24px] shadow-2xl max-w-7xl w-full h-full sm:h-[95vh] sm:w-[98vw] flex flex-col overflow-hidden relative">
         {/* Header */}
-        <div className="px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-[#2D2575] via-[#3730A3] to-[#4F46E5] text-white shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center font-black text-white shadow-md">
-              <Award className="w-5 h-5 text-[#F36C21]" />
+        <div className="px-4 sm:px-6 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-[#2D2575] via-[#3730A3] to-[#4F46E5] text-white shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center font-black text-white shadow-md shrink-0">
+              <Award className="w-4 h-4 sm:w-5 sm:h-5 text-[#F36C21]" />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base sm:text-lg font-black tracking-tight">
-                  Detailed PDF Deliverable Visualizer &amp; Evaluation Studio
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base lg:text-lg font-black tracking-tight leading-tight">
+                  Evaluation Studio
                 </h3>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
+                <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black border ${
                   status === 'EVALUATED'
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
                     : 'bg-orange-500/20 text-orange-300 border-orange-400/40'
@@ -1003,23 +1289,34 @@ export default function EvaluateSubmissionModal({
                   {status}
                 </span>
                 {autosaveStatus === 'saving' && (
-                  <span className="text-[11px] text-amber-300 flex items-center gap-1 font-mono">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Autosaving...
+                  <span className="text-[10px] text-amber-300 flex items-center gap-1 font-mono">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Saving...
                   </span>
                 )}
                 {autosaveStatus === 'saved' && (
-                  <span className="text-[11px] text-emerald-300 flex items-center gap-1 font-mono">
-                    <Check className="w-3 h-3" /> Draft Saved
+                  <span className="text-[10px] text-emerald-300 flex items-center gap-1 font-mono">
+                    <Check className="w-3 h-3" /> Saved
                   </span>
                 )}
               </div>
-              <p className="text-xs text-white/80 font-medium mt-0.5">
-                Topic: <strong className="text-white">{submission.topic_title}</strong> (Max Marks: {maxMarks})
+              <p className="text-[11px] text-white/80 font-medium truncate max-w-[220px] sm:max-w-md">
+                Topic: <strong className="text-white">{submission.topic_title}</strong> (Max: {maxMarks})
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Mobile Slide-over Drawer Trigger Button */}
+            <button
+              type="button"
+              onClick={() => setIsMobileDrawerOpen(true)}
+              className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-bold shadow-md shadow-[#F36C21]/20 active:scale-95 transition-all"
+              title="Open Marks and Evaluation Drawer"
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>{marks !== '' ? `${marks}/${maxMarks}` : 'Grade'}</span>
+            </button>
+
             {evaluatedPdfUrl && (
               <a
                 href={evaluatedPdfUrl}
@@ -1054,59 +1351,59 @@ export default function EvaluateSubmissionModal({
         </div>
 
         {/* Content Layout: Left = Interactive Canvas Workspace, Right = Rubric & Mark Panel */}
-        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-slate-800">
-          {/* Left Column: PDF & Canvas Markup Studio */}
-          <div className="lg:col-span-8 xl:col-span-8 flex flex-col h-full bg-slate-100 dark:bg-slate-950 overflow-hidden">
+        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 lg:divide-x divide-slate-200 dark:divide-slate-800 relative">
+          {/* Left Column: PDF & Canvas Markup Studio (Full View on Mobile) */}
+          <div className="col-span-1 lg:col-span-8 xl:col-span-8 flex flex-col h-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
             {/* Top Toolbar */}
-            <div className="px-4 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-[#5B4BFF]" />
-                  <span>{submission.file_name || 'SQL.pdf'}</span>
+            <div className="px-3 sm:px-4 py-1.5 sm:py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 truncate max-w-[150px] sm:max-w-xs">
+                  <FileText className="w-4 h-4 text-[#5B4BFF] shrink-0" />
+                  <span className="truncate">{submission.file_name || 'Deliverable'}</span>
                 </span>
                 {submission.file_size && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono">
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono shrink-0">
                     {submission.file_size}
                   </span>
                 )}
               </div>
 
               {/* View Switcher: Annotation Studio vs Evaluated Stamped PDF vs Written Summary */}
-              <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5 text-xs font-bold">
+              <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5 text-xs font-bold shrink-0">
                 <button
                   onClick={() => setActiveView('STUDIO')}
-                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2.5 sm:px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
                     activeView === 'STUDIO'
                       ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] shadow-xs'
                       : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
                   }`}
                 >
                   <PenTool className="w-3.5 h-3.5" />
-                  <span>Annotation Studio</span>
+                  <span>Studio</span>
                 </button>
                 {evaluatedPdfUrl && (
                   <button
                     onClick={() => setActiveView('FINAL_PDF')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 sm:px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
                       activeView === 'FINAL_PDF'
                         ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
                         : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
                     }`}
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    <span>Stamped Result</span>
+                    <span>Result</span>
                   </button>
                 )}
                 {submission.explanation_text && (
                   <button
                     onClick={() => setActiveView('TEXT')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    className={`px-2.5 sm:px-3 py-1 rounded-lg transition-all cursor-pointer ${
                       activeView === 'TEXT'
                         ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] shadow-xs'
                         : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
                     }`}
                   >
-                    Written Summary
+                    Summary
                   </button>
                 )}
               </div>
@@ -1114,15 +1411,27 @@ export default function EvaluateSubmissionModal({
 
             {/* Exam Marking Tool Strip (When in STUDIO mode) */}
             {activeView === 'STUDIO' && (
-              <div className="bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 divide-y divide-slate-200/80 dark:divide-slate-800 text-xs">
-                {/* Row 1: Primary Tools, Color, Size, Undo, Pages */}
-                <div className="px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
-                  {/* Tools: Tick, Cross, Circle, Line/Underline, Strike, Pen, Stamp (Marks), Text */}
-                  <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+              <div className="bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 divide-y divide-slate-200/80 dark:divide-slate-800 text-xs shrink-0">
+                {/* Row 1: Primary Tools, Color, Size, Undo, Pages - Horizontally Scrollable on Mobile */}
+                <div className="px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2 sm:gap-3 overflow-x-auto no-scrollbar flex-nowrap">
+                  {/* Tools: Hand (Pan/Scroll), Tick, Cross, Circle, Line/Underline, Strike, Pen, Stamp (Marks), Text */}
+                  <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs shrink-0">
+                    <button
+                      onClick={() => setActiveTool('hand')}
+                      title="Hand Pan / Scroll Image (Swipe freely)"
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                        activeTool === 'hand'
+                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 ring-2 ring-purple-500'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      <Move className="w-4 h-4 text-purple-600" />
+                      <span>Pan</span>
+                    </button>
                     <button
                       onClick={() => setActiveTool('tick')}
                       title="Stamp Checkmark (Tick)"
-                      className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                         activeTool === 'tick'
                           ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 ring-2 ring-emerald-500'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
@@ -1134,7 +1443,7 @@ export default function EvaluateSubmissionModal({
                     <button
                       onClick={() => setActiveTool('cross')}
                       title="Stamp Wrong Mark (Cross)"
-                      className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                         activeTool === 'cross'
                           ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 ring-2 ring-rose-500'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
@@ -1146,7 +1455,7 @@ export default function EvaluateSubmissionModal({
                     <button
                       onClick={() => setActiveTool('circle')}
                       title="1-Click Circle or Drag Ellipse"
-                      className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                         activeTool === 'circle'
                           ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 ring-2 ring-amber-500'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
@@ -1158,7 +1467,7 @@ export default function EvaluateSubmissionModal({
                     <button
                       onClick={() => setActiveTool('line')}
                       title="1-Click Underline or Drag Straight Line"
-                      className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                         activeTool === 'line'
                           ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300 ring-2 ring-cyan-500'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
@@ -1170,7 +1479,7 @@ export default function EvaluateSubmissionModal({
                     <button
                       onClick={() => setActiveTool('strike')}
                       title="Strike-through"
-                      className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                         activeTool === 'strike'
                           ? 'bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-white ring-2 ring-slate-400'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
@@ -1182,43 +1491,43 @@ export default function EvaluateSubmissionModal({
                     <button
                       onClick={() => setActiveTool('pen')}
                       title="Smooth Curved Exam Pen"
-                      className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                         activeTool === 'pen'
                           ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 ring-2 ring-indigo-500'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       <PenTool className="w-4 h-4 text-indigo-600" />
-                      <span>Smooth Pen</span>
+                      <span>Pen</span>
                     </button>
                     <button
                       onClick={() => setActiveTool('stamp')}
                       title="1-Click Score Stamper (+1, +2, etc.)"
-                      className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                         activeTool === 'stamp'
                           ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 ring-2 ring-orange-500'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       <Hash className="w-4 h-4 text-orange-600" />
-                      <span>Marks Stamp</span>
+                      <span>Marks</span>
                     </button>
                     <button
                       onClick={() => setActiveTool('text')}
                       title="Margin Remark & Score Callout"
-                      className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                         activeTool === 'text'
                           ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 ring-2 ring-purple-500'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       <Type className="w-4 h-4 text-purple-600" />
-                      <span>Remark</span>
+                      <span>Note</span>
                     </button>
                   </div>
 
                   {/* Ink Color Picker */}
-                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs shrink-0">
                     <span className="text-[10px] uppercase font-black text-slate-400 mr-0.5">Ink:</span>
                     {(['red', 'green', 'blue', 'purple'] as const).map((c) => (
                       <button
@@ -1234,7 +1543,7 @@ export default function EvaluateSubmissionModal({
                   </div>
 
                   {/* Pen / Stroke Thickness */}
-                  <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+                  <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs shrink-0">
                     <span className="text-[10px] uppercase font-black text-slate-400 mr-0.5">Size:</span>
                     {[
                       { label: 'Fine', val: 1.5 },
@@ -1256,7 +1565,7 @@ export default function EvaluateSubmissionModal({
                   </div>
 
                   {/* Undo & Clear Controls */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={handleUndo}
                       title="Undo last markup"
@@ -1276,7 +1585,7 @@ export default function EvaluateSubmissionModal({
                   </div>
 
                   {/* Page Navigation & Zoom */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-[11px] font-bold">
                       <button
                         disabled={currentPage <= 1}
@@ -1299,15 +1608,21 @@ export default function EvaluateSubmissionModal({
 
                     <div className="flex items-center gap-0.5 bg-white dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
                       <button
-                        onClick={() => setScale((s) => Math.max(0.8, s - 0.15))}
+                        onClick={() => setScale((s) => Math.max(0.35, Number((s - 0.15).toFixed(2))))}
                         className="p-1 hover:text-[#5B4BFF] text-slate-500 cursor-pointer"
                         title="Zoom Out"
                       >
                         <ZoomOut className="w-3.5 h-3.5" />
                       </button>
-                      <span className="text-[10px] font-mono px-1">{Math.round(scale * 100)}%</span>
                       <button
-                        onClick={() => setScale((s) => Math.min(2.0, s + 0.15))}
+                        onClick={() => setScale(0.75)}
+                        title="Click to reset zoom"
+                        className="text-[10px] font-mono px-1 hover:text-[#5B4BFF] font-bold cursor-pointer"
+                      >
+                        {Math.round(scale * 100)}%
+                      </button>
+                      <button
+                        onClick={() => setScale((s) => Math.min(3.0, Number((s + 0.15).toFixed(2))))}
                         className="p-1 hover:text-[#5B4BFF] text-slate-500 cursor-pointer"
                         title="Zoom In"
                       >
@@ -1317,10 +1632,10 @@ export default function EvaluateSubmissionModal({
                   </div>
                 </div>
 
-                {/* Row 2: FAST EXAM MARKS & QUICK REMARK STAMPER BAR */}
-                <div className="px-4 py-1.5 bg-indigo-50/70 dark:bg-indigo-950/40 flex items-center justify-between gap-2 flex-wrap text-xs">
+                {/* Row 2: FAST EXAM MARKS & QUICK REMARK STAMPER BAR - Horizontally Scrollable on Mobile */}
+                <div className="px-3 sm:px-4 py-1.5 bg-indigo-50/70 dark:bg-indigo-950/40 flex items-center gap-2 sm:gap-3 overflow-x-auto no-scrollbar flex-nowrap text-xs">
                   {/* Quick Score Chips */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
                     <span className="text-[11px] font-black uppercase text-indigo-900 dark:text-indigo-300 flex items-center gap-1">
                       <Award className="w-3.5 h-3.5 text-[#F36C21]" />
                       <span>Marks:</span>
@@ -1334,7 +1649,7 @@ export default function EvaluateSubmissionModal({
                             setActiveStampText(score);
                             setActiveTool('stamp');
                           }}
-                          className={`px-2 py-0.5 rounded-lg font-black font-mono text-[11px] transition-all cursor-pointer shadow-2xs ${
+                          className={`px-2 py-0.5 rounded-lg font-black font-mono text-[11px] transition-all cursor-pointer shadow-2xs shrink-0 ${
                             isSelected
                               ? 'bg-[#F36C21] text-white ring-2 ring-orange-300 scale-105'
                               : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
@@ -1346,7 +1661,7 @@ export default function EvaluateSubmissionModal({
                     })}
 
                     {/* Custom Score input */}
-                    <div className="flex items-center gap-1 ml-1">
+                    <div className="flex items-center gap-1 ml-1 shrink-0">
                       <input
                         type="text"
                         value={customStampInput}
@@ -1358,7 +1673,7 @@ export default function EvaluateSubmissionModal({
                           }
                         }}
                         placeholder="e.g. 2.5"
-                        className="w-16 px-1.5 py-0.5 text-[11px] font-bold rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#5B4BFF]"
+                        className="w-14 px-1.5 py-0.5 text-[11px] font-bold rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#5B4BFF]"
                       />
                       <button
                         onClick={() => {
@@ -1374,7 +1689,7 @@ export default function EvaluateSubmissionModal({
                     </div>
 
                     {/* Style Toggle: Circle vs Badge */}
-                    <div className="flex items-center gap-0.5 bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 ml-1">
+                    <div className="flex items-center gap-0.5 bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 ml-1 shrink-0">
                       <button
                         onClick={() => setStampStyle('circle')}
                         title="Encircled mark (e.g. ②)"
@@ -1401,7 +1716,7 @@ export default function EvaluateSubmissionModal({
                   </div>
 
                   {/* Quick Remarks Presets */}
-                  <div className="flex items-center gap-1 flex-wrap">
+                  <div className="flex items-center gap-1 flex-nowrap shrink-0">
                     <span className="text-[10px] uppercase font-black text-slate-400 mr-0.5">Remarks:</span>
                     {[
                       { label: '✓ Correct', text: 'Correct' },
@@ -1420,7 +1735,7 @@ export default function EvaluateSubmissionModal({
                             setStampStyle('badge');
                             setActiveTool('stamp');
                           }}
-                          className={`px-2 py-0.5 rounded-md font-bold text-[10px] transition-all cursor-pointer ${
+                          className={`px-2 py-0.5 rounded-md font-bold text-[10px] transition-all cursor-pointer shrink-0 ${
                             isSelected
                               ? 'bg-purple-600 text-white shadow-xs'
                               : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
@@ -1433,26 +1748,28 @@ export default function EvaluateSubmissionModal({
                   </div>
 
                   {/* Active Tool Status / Instruction Pill */}
-                  <div className="flex items-center gap-1.5 bg-white/90 dark:bg-slate-800/90 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-900 text-[11px] font-bold text-indigo-900 dark:text-indigo-200">
+                  <div className="flex items-center gap-1.5 bg-white/90 dark:bg-slate-800/90 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-900 text-[11px] font-bold text-indigo-900 dark:text-indigo-200 shrink-0">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     {activeTool === 'stamp' ? (
                       <span>
                         Click paper to stamp: <strong className="text-[#F36C21] font-mono">{activeStampText}</strong>
                       </span>
                     ) : activeTool === 'circle' ? (
-                      <span>Click to circle word, or drag to enclose area</span>
+                      <span>Click to circle or drag</span>
                     ) : activeTool === 'line' ? (
-                      <span>Click to underline text, or drag to draw line</span>
+                      <span>Click to underline or drag</span>
                     ) : activeTool === 'pen' ? (
-                      <span>Smooth Curved Pen ready (drag to write)</span>
+                      <span>Pen ready (drag to write)</span>
                     ) : activeTool === 'tick' ? (
                       <span>Click anywhere to stamp Checkmark</span>
                     ) : activeTool === 'cross' ? (
                       <span>Click anywhere to stamp Cross (X)</span>
                     ) : activeTool === 'strike' ? (
-                      <span>Click to strikethrough or drag across text</span>
+                      <span>Click to strikethrough</span>
+                    ) : activeTool === 'hand' ? (
+                      <span>Pan / Scroll mode (drag or swipe freely)</span>
                     ) : activeTool === 'text' ? (
-                      <span>Click paper to type margin remark</span>
+                      <span>Click paper to type remark</span>
                     ) : (
                       <span>Hand navigation mode</span>
                     )}
@@ -1461,69 +1778,71 @@ export default function EvaluateSubmissionModal({
               </div>
             )}
 
-            {/* Visualizer Body */}
-            <div className="flex-1 overflow-auto p-4 flex justify-center items-start relative select-none">
-              {activeView === 'FINAL_PDF' && evaluatedPdfUrl ? (
-                <div className="w-full h-full min-h-[500px] bg-slate-900 rounded-2xl overflow-hidden shadow-inner flex flex-col border border-slate-700">
-                  <iframe
-                    src={evaluatedPdfUrl}
-                    title="Stamped Evaluated PDF"
-                    className="w-full h-full min-h-[550px] flex-1 border-0 bg-slate-800"
-                  />
-                </div>
-              ) : activeView === 'TEXT' && submission.explanation_text ? (
-                <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 max-w-2xl w-full space-y-3 shadow-xs">
-                  <h4 className="text-xs font-bold uppercase text-[#5B4BFF] tracking-wider">
-                    Student Written Scope &amp; Technical Explanation:
-                  </h4>
-                  <div className="text-sm text-slate-800 dark:text-slate-200 font-sans leading-relaxed whitespace-pre-wrap">
-                    {submission.explanation_text}
-                  </div>
-                </div>
-              ) : (
-                <div className="relative shadow-xl rounded-xl overflow-hidden bg-white border border-slate-300">
-                  {pdfLoading && (
-                    <div className="p-16 flex flex-col items-center justify-center space-y-3">
-                      <Loader2 className="w-8 h-8 text-[#5B4BFF] animate-spin" />
-                      <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                        Rendering PDF Canvas Studio...
-                      </p>
-                    </div>
-                  )}
-
-                  {pdfError && (
-                    <div className="p-8 max-w-md text-center space-y-3">
-                      <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
-                      <div className="text-xs font-bold text-rose-700">Could not render PDF canvas</div>
-                      <p className="text-[11px] text-slate-500">{pdfError}</p>
-                      {submission.file_url && (
-                        <iframe
-                          src={submission.file_url}
-                          title="Fallback PDF View"
-                          className="w-[600px] h-[500px] rounded-lg border border-slate-300"
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  {/* Dual Layer Canvas: PDF Document Background + Foreground Markup Layer */}
-                  <div className={`relative ${pdfLoading || pdfError ? 'hidden' : 'block'}`}>
-                    <canvas ref={pdfCanvasRef} className="block shadow-md bg-white" />
-                    <canvas
-                      ref={markCanvasRef}
-                      onPointerDown={handlePointerDown}
-                      onPointerMove={handlePointerMove}
-                      onPointerUp={handlePointerUp}
-                      className={`absolute inset-0 z-10 ${
-                        activeTool === 'hand'
-                          ? 'cursor-grab active:cursor-grabbing'
-                          : activeTool === 'text'
-                          ? 'cursor-text'
-                          : activeTool === 'stamp'
-                          ? 'cursor-copy'
-                          : 'cursor-crosshair'
-                      }`}
+            {/* Visualizer Body (Smooth Pan & Bidirectional Scroll on Mobile/Desktop) */}
+            <div className="flex-1 overflow-x-auto overflow-y-auto p-2 sm:p-4 w-full h-full relative select-none overscroll-contain">
+              <div className="min-w-max min-h-full flex justify-center items-start mx-auto">
+                {activeView === 'FINAL_PDF' && evaluatedPdfUrl ? (
+                  <div className="w-full min-w-[320px] sm:min-w-[600px] h-full min-h-[500px] bg-slate-900 rounded-2xl overflow-hidden shadow-inner flex flex-col border border-slate-700">
+                    <iframe
+                      src={evaluatedPdfUrl}
+                      title="Stamped Evaluated PDF"
+                      className="w-full h-full min-h-[550px] flex-1 border-0 bg-slate-800"
                     />
+                  </div>
+                ) : activeView === 'TEXT' && submission.explanation_text ? (
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 max-w-2xl w-full space-y-3 shadow-xs">
+                    <h4 className="text-xs font-bold uppercase text-[#5B4BFF] tracking-wider">
+                      Student Written Scope &amp; Technical Explanation:
+                    </h4>
+                    <div className="text-sm text-slate-800 dark:text-slate-200 font-sans leading-relaxed whitespace-pre-wrap">
+                      {submission.explanation_text}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative shadow-xl rounded-xl overflow-visible bg-white border border-slate-300">
+                    {pdfLoading && (
+                      <div className="p-16 flex flex-col items-center justify-center space-y-3">
+                        <Loader2 className="w-8 h-8 text-[#5B4BFF] animate-spin" />
+                        <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                          Rendering Canvas Studio...
+                        </p>
+                      </div>
+                    )}
+
+                    {pdfError && (
+                      <div className="p-8 max-w-md text-center space-y-3">
+                        <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                        <div className="text-xs font-bold text-rose-700">Could not render deliverable canvas</div>
+                        <p className="text-[11px] text-slate-500">{pdfError}</p>
+                        {submission.file_url && (
+                          <iframe
+                            src={submission.file_url}
+                            title="Fallback PDF View"
+                            className="w-[600px] h-[500px] rounded-lg border border-slate-300"
+                          />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Dual Layer Canvas: PDF/Image Document Background + Foreground Markup Layer */}
+                    <div className={`relative ${pdfLoading || pdfError ? 'hidden' : 'block'}`}>
+                      <canvas ref={pdfCanvasRef} className="block shadow-md bg-white max-w-none" />
+                      <canvas
+                        ref={markCanvasRef}
+                        onPointerDown={handlePointerDown}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                        style={{ touchAction: activeTool === 'hand' ? 'pan-x pan-y' : 'none' }}
+                        className={`absolute inset-0 z-10 ${
+                          activeTool === 'hand'
+                            ? 'cursor-grab active:cursor-grabbing pointer-events-none'
+                            : activeTool === 'text'
+                            ? 'cursor-text'
+                            : activeTool === 'stamp'
+                            ? 'cursor-copy'
+                            : 'cursor-crosshair'
+                        }`}
+                      />
 
                     {/* Inline Margin Textbox Prompt */}
                     {textPrompt && (
@@ -1578,203 +1897,64 @@ export default function EvaluateSubmissionModal({
                   </div>
                 </div>
               )}
+              </div>
+            </div>
+
+            {/* Floating Mobile Action Button (FAB) to Slide In Evaluation Form */}
+            <div className="lg:hidden absolute bottom-4 right-4 z-20 pointer-events-auto">
+              <button
+                type="button"
+                onClick={() => setIsMobileDrawerOpen(true)}
+                className="px-4 py-2.5 rounded-full bg-[#2D2575] hover:bg-[#3730A3] text-white font-bold text-xs shadow-2xl shadow-[#2D2575]/50 flex items-center gap-2 border border-white/25 active:scale-95 transition-all"
+              >
+                <Award className="w-4 h-4 text-[#F36C21]" />
+                <span>Give Marks &amp; Sign Off</span>
+                <span className="px-2 py-0.5 rounded-full bg-[#F36C21] text-white font-mono font-black text-[10px]">
+                  {marks !== '' ? `${marks}/${maxMarks}` : '0/30'}
+                </span>
+              </button>
             </div>
           </div>
 
-          {/* Right Column: Faculty Evaluation Rubric & Sign-off Panel */}
-          <div className="lg:col-span-4 xl:col-span-4 p-6 bg-white dark:bg-slate-900 flex flex-col justify-between overflow-y-auto">
-            <form onSubmit={handleFinalize} className="space-y-4">
-              {/* Candidate Info Card */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-[#5B4BFF]">Candidate Details</div>
-                  <h4 className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
-                    {submission.student_name}
-                  </h4>
-                  <div className="text-[11px] text-slate-500 font-mono">
-                    Roll: {submission.rollno || submission.registration_no || 'Reg N/A'}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-400 block">Submitted</span>
-                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                    {submission.submitted_at ? new Date(submission.submitted_at).toLocaleDateString() : '5/9/2026'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Evaluation Success Banner */}
-              {evalSuccess && (
-                <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="text-xs font-black">Evaluated &amp; Stamped</span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed">
-                    Digital annotations have been permanently flattened onto the submission PDF using <code>pdf-lib</code>.
-                  </p>
-                  {evaluatedPdfUrl && (
-                    <div className="pt-1 flex items-center gap-2">
-                      <a
-                        href={evaluatedPdfUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        download={`Evaluated_${submission.file_name || 'Document.pdf'}`}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition-all flex items-center gap-1.5 shadow-xs"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download Marked PDF</span>
-                      </a>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {error && (
-                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {/* Marks Awarded Input */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-black uppercase text-slate-800 dark:text-white tracking-wider block">
-                    Marks Awarded (Out of {maxMarks}) *
-                  </label>
-                  {pct !== null && (
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-black border ${
-                        pct >= 75
-                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300'
-                          : pct >= 50
-                          ? 'bg-indigo-50 text-[#5B4BFF] border-indigo-200'
-                          : 'bg-rose-50 text-rose-700 border-rose-200'
-                      }`}
-                    >
-                      {pct}% Score
-                    </span>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="0"
-                    max={maxMarks}
-                    step="0.5"
-                    value={marks}
-                    onChange={(e) => setMarks(e.target.value)}
-                    placeholder={`0 - ${maxMarks}`}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-base font-black focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] font-mono"
-                    required
-                  />
-                  <span className="absolute right-3.5 top-2.5 text-xs font-mono font-bold text-slate-400">
-                    / {maxMarks} Marks
-                  </span>
-                </div>
-
-                {/* Quick Score Presets */}
-                <div className="flex items-center gap-1.5 pt-1">
-                  {[
-                    { label: `Full (${maxMarks})`, val: maxMarks },
-                    { label: `80% (${Math.round(maxMarks * 0.8)})`, val: Math.round(maxMarks * 0.8) },
-                    { label: `60% (${Math.round(maxMarks * 0.6)})`, val: Math.round(maxMarks * 0.6) },
-                    { label: `40% (${Math.round(maxMarks * 0.4)})`, val: Math.round(maxMarks * 0.4) },
-                  ].map((p, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setMarks(p.val)}
-                      className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 text-[10px] font-bold transition-all cursor-pointer"
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Remarks Textarea */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-black uppercase text-slate-800 dark:text-white tracking-wider block">
-                  Faculty Evaluation Remarks &amp; Feedback
-                </label>
-                <textarea
-                  rows={3}
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Provide feedback on technical methodology, problem formulation, and solution quality..."
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] resize-none"
-                />
-
-                {/* Quick Feedback Chips */}
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {[
-                    'Overall performance was satisfactory and satisfactory progress was observed.',
-                    'Well explained with accurate technical methodology.',
-                    'Good attempt, need to improve edge cases.',
-                    'Correct solution and clean diagrammatic illustrations.',
-                  ].map((chip, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setRemarks(chip)}
-                      className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 transition-all text-left truncate max-w-xs cursor-pointer"
-                    >
-                      + {chip}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Digital Guide Signature Seal */}
-              <div className="p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-[#5B4BFF]" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-800 dark:text-white">Apply Digital Guide Seal</div>
-                    <div className="text-[10px] text-slate-500">Official faculty verification stamp on PDF</div>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={digitalStamp}
-                  onChange={(e) => setDigitalStamp(e.target.checked)}
-                  className="w-4 h-4 text-[#5B4BFF] rounded cursor-pointer"
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
-                >
-                  Close
-                </button>
-                <button
-                  type="submit"
-                  disabled={finalizing}
-                  className="px-5 py-2.5 rounded-xl bg-[#F36C21] hover:bg-[#e05a10] text-white text-xs font-black shadow-lg shadow-[#F36C21]/25 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {finalizing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Flattening &amp; Stamping PDF...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>{status === 'EVALUATED' ? 'Re-Finalize Evaluation' : 'Sign Off & Award Marks'}</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+          {/* Right Column: Desktop Faculty Evaluation Rubric & Sign-off Panel (Hidden on Mobile) */}
+          <div className="hidden lg:flex lg:col-span-4 xl:col-span-4 p-6 bg-white dark:bg-slate-900 flex-col justify-between overflow-y-auto">
+            {renderEvaluationForm(false)}
           </div>
         </div>
+
+        {/* Mobile Slide-over Drawer / Bottom-side Sheet for Evaluation Rubric */}
+        {isMobileDrawerOpen && (
+          <div className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
+            <div className="w-full sm:max-w-md h-full bg-white dark:bg-slate-900 shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-300">
+              {/* Drawer Top Navigation Header */}
+              <div className="px-5 py-3.5 bg-gradient-to-r from-[#2D2575] via-[#3730A3] to-[#4F46E5] text-white flex items-center justify-between shadow-md shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                    <Award className="w-4 h-4 text-[#F36C21]" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm">Evaluation &amp; Sign-off</h4>
+                    <p className="text-[11px] text-white/80 font-mono">{submission.student_name}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileDrawerOpen(false)}
+                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer flex items-center gap-1 text-xs font-bold px-2.5"
+                  title="Close & Return to Markup Canvas"
+                >
+                  <span>Back</span>
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto p-5">
+                {renderEvaluationForm(true)}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

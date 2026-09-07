@@ -14,7 +14,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   public resolveTenantSlug(slug?: string): string {
     if (!slug) return '';
@@ -121,7 +121,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     } finally {
       try {
         await runner.release();
-      } catch (e) {}
+      } catch (e) { }
     }
   }
 
@@ -333,7 +333,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       // 8. Seed default Super Admin if missing
       await runner.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS uq_super_admins_email ON public.super_admins (email);
-      `).catch(() => {});
+      `).catch(() => { });
 
       await runner.query(`
         INSERT INTO public.super_admins (id, username, email, password_hash, name, role, is_active, created_at, updated_at)
@@ -348,7 +348,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           NOW(),
           NOW()
         WHERE NOT EXISTS (SELECT 1 FROM public.super_admins WHERE email = 'nornx@mederp.app');
-      `).catch(() => {});
+      `).catch(() => { });
 
       // 9. Seed default Firms & License Keys
       const defaultFirms = [
@@ -393,7 +393,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           WHERE a.ctid < b.ctid AND a.slug = b.slug;
         `);
         await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_slug ON public.tenants (slug);`);
-      } catch {}
+      } catch { }
 
       try {
         await runner.query(`
@@ -401,7 +401,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           WHERE a.ctid < b.ctid AND a.slug = b.slug;
         `);
         await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_firms_slug ON public.firms (slug);`);
-      } catch {}
+      } catch { }
 
       for (const f of defaultFirms) {
         // Insert tenant
@@ -409,7 +409,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           INSERT INTO public.tenants (id, name, slug, domain, colg_cd, firm_mode, schema_provisioned, is_active)
           SELECT '${f.id}', '${f.title}', '${f.slug}', '${f.domain}', '1', '${f.firm_mode}', true, true
           WHERE NOT EXISTS (SELECT 1 FROM public.tenants WHERE slug = '${f.slug}');
-        `).catch(() => {});
+        `).catch(() => { });
 
         // Insert firm
         await runner.query(`
@@ -421,7 +421,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             'STANDARD', '#5B4BFF', '${f.firm_mode}', 'ACTIVE',
             365, NOW(), NOW() + INTERVAL '365 days', NOW(), NOW()
           WHERE NOT EXISTS (SELECT 1 FROM public.firms WHERE slug = '${f.slug}');
-        `).catch(() => {});
+        `).catch(() => { });
 
         const firmRow = await runner.query(`SELECT id FROM public.firms WHERE slug = $1 LIMIT 1`, [f.slug]);
         const actualFirmId = firmRow[0]?.id || f.id;
@@ -487,18 +487,18 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         await runner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
         await runner.query(`SET search_path TO "${schema}", public`);
 
-      // 1. Check if base tables exist in tenant schema, if not create and seed them
-      const usersTableExists = await runner.query(
-        `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'users'`,
-        [schema]
-      );
-      if (usersTableExists.length === 0) {
-        await this.createTenantTables(runner, schema);
-        await this.seedDefaultData(runner, resolvedSlug);
-      }
-      
-      // Alter users table to add username, name, phone, emp_id, usr_id, devicecd, loc_cd, department, must_change_password if missing
-      await runner.query(`
+        // 1. Check if base tables exist in tenant schema, if not create and seed them
+        const usersTableExists = await runner.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'users'`,
+          [schema]
+        );
+        if (usersTableExists.length === 0) {
+          await this.createTenantTables(runner, schema);
+          await this.seedDefaultData(runner, resolvedSlug);
+        }
+
+        // Alter users table to add username, name, phone, emp_id, usr_id, devicecd, loc_cd, department, must_change_password if missing
+        await runner.query(`
         ALTER TABLE "${schema}".users 
           ADD COLUMN IF NOT EXISTS username VARCHAR(100),
           ADD COLUMN IF NOT EXISTS name VARCHAR(255),
@@ -514,10 +514,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ,
           ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT true,
           ADD COLUMN IF NOT EXISTS onboarding_step INT DEFAULT 0;
-      `).catch(() => {});
+      `).catch(() => { });
 
-      // Alter faculty table to add usr_id, devicecd, loc_cd, employment_status and all HR sync columns if missing
-      await runner.query(`
+        // Alter faculty table to add usr_id, devicecd, loc_cd, employment_status and all HR sync columns if missing
+        await runner.query(`
         ALTER TABLE "${schema}".faculty 
           ADD COLUMN IF NOT EXISTS usr_id VARCHAR(50),
           ADD COLUMN IF NOT EXISTS devicecd BIGINT,
@@ -566,14 +566,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           ADD COLUMN IF NOT EXISTS highest_education VARCHAR(200),
           ADD COLUMN IF NOT EXISTS category VARCHAR(100),
           ADD COLUMN IF NOT EXISTS payroll_category VARCHAR(100);
-      `).catch(() => {});
-      
-      // Alter students table
-      await runner.query(`ALTER TABLE "${schema}".students ALTER COLUMN rollno DROP NOT NULL;`).catch(() => {});
-      await runner.query(`ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS registration_no VARCHAR(50) UNIQUE;`).catch(() => {});
-      
-      // Create student_admissions
-      await runner.query(`
+      `).catch(() => { });
+
+        // Alter students table
+        await runner.query(`ALTER TABLE "${schema}".students ALTER COLUMN rollno DROP NOT NULL;`).catch(() => { });
+        await runner.query(`ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS registration_no VARCHAR(50) UNIQUE;`).catch(() => { });
+
+        // Create student_admissions
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_admissions (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           college_id UUID,
@@ -594,7 +594,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      await runner.query(`
+        await runner.query(`
         ALTER TABLE "${schema}".student_admissions 
           ADD COLUMN IF NOT EXISTS group_id UUID,
           ADD COLUMN IF NOT EXISTS group_code VARCHAR(50),
@@ -604,14 +604,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           ADD COLUMN IF NOT EXISTS branch_name VARCHAR(100);
       `);
 
-      await runner.query(`
+        await runner.query(`
         ALTER TABLE "${schema}".students 
           ADD COLUMN IF NOT EXISTS group_id UUID,
           ADD COLUMN IF NOT EXISTS branch_id UUID;
       `);
 
-      // Create student_academic_details
-      await runner.query(`
+        // Create student_academic_details
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_academic_details (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           class_10_board VARCHAR(100),
@@ -625,8 +625,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_neet_details
-      await runner.query(`
+        // Create student_neet_details
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_neet_details (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           neet_roll_no VARCHAR(50),
@@ -637,8 +637,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_parents
-      await runner.query(`
+        // Create student_parents
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_parents (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           father_name VARCHAR(200),
@@ -651,8 +651,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_addresses
-      await runner.query(`
+        // Create student_addresses
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_addresses (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           permanent_address_1 TEXT,
@@ -665,8 +665,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_documents
-      await runner.query(`
+        // Create student_documents
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_documents (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           passport_photo_url TEXT,
@@ -679,8 +679,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_fees
-      await runner.query(`
+        // Create student_fees
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_fees (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           paid_fees NUMERIC(12,2) DEFAULT 0,
@@ -689,8 +689,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_hostel
-      await runner.query(`
+        // Create student_hostel
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_hostel (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           hostel_required BOOLEAN DEFAULT false,
@@ -699,8 +699,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_transport
-      await runner.query(`
+        // Create student_transport
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_transport (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           bus_required BOOLEAN DEFAULT false,
@@ -708,8 +708,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_library
-      await runner.query(`
+        // Create student_library
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_library (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           library_card_no VARCHAR(50),
@@ -717,8 +717,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_medical
-      await runner.query(`
+        // Create student_medical
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_medical (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           medical_history TEXT,
@@ -727,8 +727,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_bank_accounts
-      await runner.query(`
+        // Create student_bank_accounts
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_bank_accounts (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           bank_name VARCHAR(150),
@@ -737,8 +737,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Create student_emergency_contacts
-      await runner.query(`
+        // Create student_emergency_contacts
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_emergency_contacts (
           student_id UUID PRIMARY KEY REFERENCES "${schema}".students(id) ON DELETE CASCADE,
           contact_name VARCHAR(200),
@@ -747,8 +747,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // ── Courses (added in later migration) ───────────────────────────────
-      await runner.query(`
+        // ── Courses (added in later migration) ───────────────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".courses (
           id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
           code               VARCHAR(30) UNIQUE NOT NULL,
@@ -763,7 +763,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           created_at         TIMESTAMPTZ DEFAULT NOW()
         );
       `);
-      await runner.query(`
+        await runner.query(`
         ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS academic_system VARCHAR(50) DEFAULT 'semester';
         ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
         ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_type VARCHAR(50);
@@ -771,8 +771,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ALTER TABLE "${schema}".courses ALTER COLUMN duration_years TYPE NUMERIC(4,1) USING NULLIF(regexp_replace(duration_years::text, '[^0-9.]', '', 'g'), '')::numeric(4,1);
       `);
 
-      // ── Academic Sessions (added in later migration) ──────────────────────
-      await runner.query(`
+        // ── Academic Sessions (added in later migration) ──────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".academic_sessions (
           id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
           code         VARCHAR(50),
@@ -790,8 +790,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ALTER TABLE "${schema}".academic_sessions ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50) DEFAULT '1';
       `);
 
-      // ── Professional Linkers ──────────────────────────────────────────────
-      await runner.query(`
+        // ── Professional Linkers ──────────────────────────────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".professional_linkers (
           id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
           code               VARCHAR(50) NOT NULL,
@@ -805,8 +805,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // ── Topic Master ──────────────────────────────────────────────────────
-      await runner.query(`
+        // ── Topic Master ──────────────────────────────────────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".topics (
           id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
           subject_id   UUID,
@@ -820,8 +820,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // ── Competency Master ─────────────────────────────────────────────────
-      await runner.query(`
+        // ── Competency Master ─────────────────────────────────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".competencies (
           id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
           subject_id   UUID,
@@ -837,8 +837,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // ── Professional Phases ───────────────────────────────────────────────
-      await runner.query(`
+        // ── Professional Phases ───────────────────────────────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".professional_phases (
           id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
           college_id       VARCHAR(50),
@@ -851,8 +851,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // ── Student Phase Progressions (Promotion History) ────────────────────
-      await runner.query(`
+        // ── Student Phase Progressions (Promotion History) ────────────────────
+        await runner.query(`
         DO $$ BEGIN
           IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'students') THEN
             IF NOT EXISTS (
@@ -864,9 +864,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             END IF;
           END IF;
         END $$;
-      `).catch(() => {});
+      `).catch(() => { });
 
-      await runner.query(`
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".student_phase_progressions (
           id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
           student_id       UUID,
@@ -879,9 +879,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           is_active        BOOLEAN     DEFAULT true,
           promoted_at      TIMESTAMPTZ DEFAULT NOW()
         );
-      `).catch(() => {});
+      `).catch(() => { });
 
-      await runner.query(`
+        await runner.query(`
         DO $$ BEGIN
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.table_constraints 
@@ -891,10 +891,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             ADD CONSTRAINT "fk_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_spp_student" FOREIGN KEY (student_id) REFERENCES "${schema}".students(id) ON DELETE CASCADE;
           END IF;
         END $$;
-      `).catch(() => {});
+      `).catch(() => { });
 
-      // ── Delivery Types Master ──
-      await runner.query(`
+        // ── Delivery Types Master ──
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".delivery_types (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           code VARCHAR(10) UNIQUE NOT NULL,
@@ -903,10 +903,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Seed standard NMC delivery types
-      const existingDTypes = await runner.query(`SELECT id FROM "${schema}".delivery_types LIMIT 1`);
-      if (existingDTypes.length === 0) {
-        await runner.query(`
+        // Seed standard NMC delivery types
+        const existingDTypes = await runner.query(`SELECT id FROM "${schema}".delivery_types LIMIT 1`);
+        if (existingDTypes.length === 0) {
+          await runner.query(`
           INSERT INTO "${schema}".delivery_types (code, name) VALUES
             ('TH', 'Theory'),
             ('PR', 'Practical'),
@@ -914,10 +914,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             ('PD', 'Pandemic Module'),
             ('CP', 'Clinical Posting');
         `);
-      }
+        }
 
-      // ── Subject Offerings Junction Table ──
-      await runner.query(`
+        // ── Subject Offerings Junction Table ──
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".subject_offerings (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           subject_id UUID,
@@ -927,10 +927,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           hours_allotted INTEGER DEFAULT 0 NOT NULL,
           is_active BOOLEAN DEFAULT true NOT NULL
         );
-      `).catch(() => {});
+      `).catch(() => { });
 
-      // Alter attendance_sessions & subjects tables inside safe PL/pgSQL block
-      await runner.query(`
+        // Alter attendance_sessions & subjects tables inside safe PL/pgSQL block
+        await runner.query(`
         DO $$ BEGIN
           IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'attendance_sessions') THEN
             ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS offering_id UUID;
@@ -942,8 +942,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         END $$;
       `);
 
-      // ── Units Master (Medical Curriculum) ──
-      await runner.query(`
+        // ── Units Master (Medical Curriculum) ──
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".units (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           subject_id UUID REFERENCES "${schema}".subjects(id) ON DELETE CASCADE,
@@ -957,14 +957,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         CREATE INDEX IF NOT EXISTS idx_units_subject ON "${schema}".units (subject_id);
       `);
 
-      // Alter topics table to add unit_id
-      await runner.query(`
+        // Alter topics table to add unit_id
+        await runner.query(`
         ALTER TABLE "${schema}".topics 
         ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES "${schema}".units(id) ON DELETE SET NULL;
       `);
 
-      // ── Medical Schedule Entries (Parallel Medical Timetable Module) ──
-      await runner.query(`
+        // ── Medical Schedule Entries (Parallel Medical Timetable Module) ──
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".medical_schedule_entries (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           course_id VARCHAR(50) DEFAULT 'MBBS',
@@ -1003,27 +1003,27 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         CREATE INDEX IF NOT EXISTS idx_med_sched_day_time ON "${schema}".medical_schedule_entries (day_of_week, start_time, end_time);
       `);
 
-      // Alter topics and competencies to add linker_id column
-      await runner.query(`
+        // Alter topics and competencies to add linker_id column
+        await runner.query(`
         ALTER TABLE "${schema}".topics 
         ADD COLUMN IF NOT EXISTS linker_id UUID;
-      `).catch(() => {});
-      await runner.query(`
+      `).catch(() => { });
+        await runner.query(`
         ALTER TABLE "${schema}".competencies 
         ADD COLUMN IF NOT EXISTS linker_id UUID;
-      `).catch(() => {});
+      `).catch(() => { });
 
-      // Alter faculty table for Staff Master
-      await runner.query(`
+        // Alter faculty table for Staff Master
+        await runner.query(`
         ALTER TABLE "${schema}".faculty 
         ADD COLUMN IF NOT EXISTS subject_id UUID,
         ADD COLUMN IF NOT EXISTS gender VARCHAR(20),
         ADD COLUMN IF NOT EXISTS experience VARCHAR(100),
         ADD COLUMN IF NOT EXISTS staff_type VARCHAR(50) DEFAULT 'Faculty';
-      `).catch(() => {});
+      `).catch(() => { });
 
-      // Create faculty_subjects table for Subject Linker
-      await runner.query(`
+        // Create faculty_subjects table for Subject Linker
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".faculty_subjects (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           faculty_id UUID NOT NULL,
@@ -1032,10 +1032,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           created_at TIMESTAMPTZ DEFAULT NOW(),
           CONSTRAINT uq_faculty_subject UNIQUE (faculty_id, subject_id)
         );
-      `).catch(() => {});
+      `).catch(() => { });
 
-      // ── My Repository Tables ────────────────────────────────────────────────
-      await runner.query(`
+        // ── My Repository Tables ────────────────────────────────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".repositories (
           repo_id                SERIAL PRIMARY KEY,
           colg_cd                VARCHAR(20) NOT NULL DEFAULT '1',
@@ -1058,7 +1058,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      await runner.query(`
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".repository_reviews (
           review_id      SERIAL PRIMARY KEY,
           repo_id        INT NOT NULL REFERENCES "${schema}".repositories(repo_id) ON DELETE CASCADE,
@@ -1071,8 +1071,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // ── Placement Drive Tables ──────────────────────────────────────────────
-      await runner.query(`
+        // ── Placement Drive Tables ──────────────────────────────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".placement_drives (
           drive_id               SERIAL PRIMARY KEY,
           colg_cd                VARCHAR(20) NOT NULL DEFAULT '1',
@@ -1093,7 +1093,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      await runner.query(`
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".placement_applications (
           application_id    SERIAL PRIMARY KEY,
           drive_id          INT NOT NULL,
@@ -1111,8 +1111,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // ── Notices & Circulars Tables ──────────────────────────────────────────
-      await runner.query(`
+        // ── Notices & Circulars Tables ──────────────────────────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".notices (
           id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           college_id               UUID,
@@ -1132,7 +1132,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      await runner.query(`
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".notice_attachments (
           id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           notice_id    UUID REFERENCES "${schema}".notices(id) ON DELETE CASCADE,
@@ -1144,7 +1144,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      await runner.query(`
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".notice_targets (
           id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           notice_id    UUID REFERENCES "${schema}".notices(id) ON DELETE CASCADE,
@@ -1155,7 +1155,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      await runner.query(`
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".notice_recipients (
           id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           notice_id       UUID REFERENCES "${schema}".notices(id) ON DELETE CASCADE,
@@ -1168,14 +1168,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      await runner.query(`
+        await runner.query(`
         DO $$ BEGIN
           CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_noticerec 
           ON "${schema}".notice_recipients (notice_id, user_id);
         EXCEPTION WHEN OTHERS THEN NULL; END $$;
-      `).catch(() => {});
+      `).catch(() => { });
 
-      await runner.query(`
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".notice_group_templates (
           id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name         VARCHAR(200) NOT NULL,
@@ -1188,8 +1188,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // ── Batch & Department Chat Communication Tables ──────────────────────
-      await runner.query(`
+        // ── Batch & Department Chat Communication Tables ──────────────────────
+        await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".chat_groups (
           id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           college_id      VARCHAR(255),
@@ -1247,8 +1247,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         );
       `);
 
-      // Column migrations for chat tables
-      await runner.query(`
+        // Column migrations for chat tables
+        await runner.query(`
         DO $$ 
         BEGIN 
           BEGIN
@@ -1295,27 +1295,27 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           EXCEPTION WHEN OTHERS THEN NULL;
           END;
         END $$;
-      `).catch(() => {});
+      `).catch(() => { });
 
-      try {
-        await this.seedDefaultData(runner, slug);
-      } catch (seedErr) {
-        this.logger.warn(`Non-fatal warning in seedDefaultData for ${slug}: ${seedErr.message}`);
+        try {
+          await this.seedDefaultData(runner, slug);
+        } catch (seedErr) {
+          this.logger.warn(`Non-fatal warning in seedDefaultData for ${slug}: ${seedErr.message}`);
+        }
+        TenantSchemaService.ensuredSchemas.add(resolvedSlug);
+        TenantSchemaService.provisionedSchemas.add(resolvedSlug);
+      } catch (err) {
+        this.logger.error(`Failed to ensure latest schema for ${slug}:`, err);
+        throw err;
+      } finally {
+        await runner.release();
+        TenantSchemaService.inFlightEnsureSchema.delete(resolvedSlug);
       }
-      TenantSchemaService.ensuredSchemas.add(resolvedSlug);
-      TenantSchemaService.provisionedSchemas.add(resolvedSlug);
-    } catch (err) {
-      this.logger.error(`Failed to ensure latest schema for ${slug}:`, err);
-      throw err;
-    } finally {
-      await runner.release();
-      TenantSchemaService.inFlightEnsureSchema.delete(resolvedSlug);
-    }
-  })();
+    })();
 
-  TenantSchemaService.inFlightEnsureSchema.set(resolvedSlug, promise);
-  return await promise;
-}
+    TenantSchemaService.inFlightEnsureSchema.set(resolvedSlug, promise);
+    return await promise;
+  }
 
   private async createTenantTables(runner: QueryRunner, schema: string): Promise<void> {
     // ── Users ──────────────────────────────────────────────────────────────
@@ -1362,12 +1362,12 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         is_active   BOOLEAN      DEFAULT true,
         created_at  TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
-    await runner.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);`).catch(() => {});
-    await runner.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);`).catch(() => {});
-    await runner.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);`).catch(() => {});
-    await runner.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);`).catch(() => {});
+    await runner.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);`).catch(() => { });
 
     // ── Faculty ────────────────────────────────────────────────────────────
     await runner.query(`
@@ -1395,9 +1395,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         created_at      TIMESTAMPTZ  DEFAULT NOW(),
         updated_at      TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_faculty_emp_id ON "${schema}".faculty(emp_id)`).catch(() => {});
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_faculty_dept ON "${schema}".faculty(department_id)`).catch(() => {});
+    `).catch(() => { });
+    await runner.query(`CREATE INDEX IF NOT EXISTS idx_faculty_emp_id ON "${schema}".faculty(emp_id)`).catch(() => { });
+    await runner.query(`CREATE INDEX IF NOT EXISTS idx_faculty_dept ON "${schema}".faculty(department_id)`).catch(() => { });
 
     // ── Batches ────────────────────────────────────────────────────────────
     await runner.query(`
@@ -1412,7 +1412,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         is_active     BOOLEAN      DEFAULT true,
         CONSTRAINT unq_batches_code UNIQUE (code)
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // Clean up duplicate batches keeping only the oldest record per code
     await runner.query(`
@@ -1424,7 +1424,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ) t
         WHERE t.rnum > 1
       );
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Groups Master (Batch Sub-Groups like A, B, C, D) ───────────────────
     await runner.query(`
@@ -1441,7 +1441,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         created_at    TIMESTAMPTZ  DEFAULT NOW(),
         updated_at    TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Students ───────────────────────────────────────────────────────────
     await runner.query(`
@@ -1469,7 +1469,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         created_at        TIMESTAMPTZ  DEFAULT NOW(),
         updated_at        TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     await runner.query(`
       DO $$ BEGIN
@@ -1480,11 +1480,11 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS attendance_percentage NUMERIC(5,2) DEFAULT 0;
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
-    `).catch(() => {});
+    `).catch(() => { });
 
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_students_rollno ON "${schema}".students(rollno)`).catch(() => {});
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_students_dept ON "${schema}".students(department_id)`).catch(() => {});
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_students_batch ON "${schema}".students(batch_id)`).catch(() => {});
+    await runner.query(`CREATE INDEX IF NOT EXISTS idx_students_rollno ON "${schema}".students(rollno)`).catch(() => { });
+    await runner.query(`CREATE INDEX IF NOT EXISTS idx_students_dept ON "${schema}".students(department_id)`).catch(() => { });
+    await runner.query(`CREATE INDEX IF NOT EXISTS idx_students_batch ON "${schema}".students(batch_id)`).catch(() => { });
 
     // Create student_admissions
     await runner.query(`
@@ -1707,7 +1707,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         hours_allotted INTEGER     DEFAULT 0 NOT NULL,
         is_active      BOOLEAN     DEFAULT true NOT NULL
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Attendance Sessions ────────────────────────────────────────────────
     await runner.query(`
@@ -1723,8 +1723,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         created_by    UUID,
         created_at    TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_att_sess_date ON "${schema}".attendance_sessions(session_date)`).catch(() => {});
+    `).catch(() => { });
+    await runner.query(`CREATE INDEX IF NOT EXISTS idx_att_sess_date ON "${schema}".attendance_sessions(session_date)`).catch(() => { });
 
     // ── Attendance Records ─────────────────────────────────────────────────
     await runner.query(`
@@ -1737,7 +1737,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         marked_by   UUID,
         UNIQUE(session_id, student_id)
       )
-    `).catch(() => {});
+    `).catch(() => { });
     await runner.query(`CREATE INDEX IF NOT EXISTS idx_att_rec_student ON "${schema}".attendance_records(student_id)`);
 
     // ── Faculty Punch Logs ─────────────────────────────────────────────────
@@ -1764,7 +1764,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         activity_type VARCHAR(20),
         is_active     BOOLEAN      DEFAULT true
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Logbook Entries ────────────────────────────────────────────────────
     await runner.query(`
@@ -1781,8 +1781,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         created_at        TIMESTAMPTZ  DEFAULT NOW(),
         updated_at        TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_lb_entry_student ON "${schema}".logbook_entries(student_id)`).catch(() => {});
+    `).catch(() => { });
+    await runner.query(`CREATE INDEX IF NOT EXISTS idx_lb_entry_student ON "${schema}".logbook_entries(student_id)`).catch(() => { });
 
     // ── Logbook Verifications ──────────────────────────────────────────────
     await runner.query(`
@@ -1796,7 +1796,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         remarks       TEXT,
         created_at    TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Examination Papers ─────────────────────────────────────────────────
     await runner.query(`
@@ -1816,11 +1816,11 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         created_at     TIMESTAMPTZ  DEFAULT NOW(),
         updated_at     TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
-    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS duration_minutes INT DEFAULT 60;`).catch(() => {});
-    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS sections JSONB DEFAULT '[]'::jsonb;`).catch(() => {});
-    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`).catch(() => {});
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS duration_minutes INT DEFAULT 60;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS sections JSONB DEFAULT '[]'::jsonb;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`).catch(() => { });
 
     // ── Examination Competencies ───────────────────────────────────────────
     await runner.query(`
@@ -1832,7 +1832,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         max_marks        NUMERIC(6,2),
         weight_percentage NUMERIC(5,2)
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Student Results ────────────────────────────────────────────────────
     await runner.query(`
@@ -1847,15 +1847,15 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         created_at      TIMESTAMPTZ  DEFAULT NOW(),
         UNIQUE(student_id, paper_id, attempt_number)
       )
-    `).catch(() => {});
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_results_student ON "${schema}".student_results(student_id)`).catch(() => {});
-    await runner.query(`DO $$ BEGIN CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_res_stud_paper_att ON "${schema}".student_results(student_id, paper_id, attempt_number); EXCEPTION WHEN OTHERS THEN NULL; END $$;`).catch(() => {});
+    `).catch(() => { });
+    await runner.query(`CREATE INDEX IF NOT EXISTS idx_results_student ON "${schema}".student_results(student_id)`).catch(() => { });
+    await runner.query(`DO $$ BEGIN CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_res_stud_paper_att ON "${schema}".student_results(student_id, paper_id, attempt_number); EXCEPTION WHEN OTHERS THEN NULL; END $$;`).catch(() => { });
 
-    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS question_marks JSONB DEFAULT '{}'::jsonb;`).catch(() => {});
-    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS sub_part_marks JSONB DEFAULT '{}'::jsonb;`).catch(() => {});
-    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS practical_mark NUMERIC(6,2) DEFAULT 0;`).catch(() => {});
-    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS eval_status VARCHAR(50) DEFAULT 'EVALUATED';`).catch(() => {});
-    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`).catch(() => {});
+    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS question_marks JSONB DEFAULT '{}'::jsonb;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS sub_part_marks JSONB DEFAULT '{}'::jsonb;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS practical_mark NUMERIC(6,2) DEFAULT 0;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS eval_status VARCHAR(50) DEFAULT 'EVALUATED';`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`).catch(() => { });
 
     // ── Competency Results ─────────────────────────────────────────────────
     await runner.query(`
@@ -1865,7 +1865,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         competency_id   UUID,
         marks_obtained  NUMERIC(6,2)
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Question Bank ──────────────────────────────────────────────────────
     await runner.query(`
@@ -1891,12 +1891,12 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         is_active          BOOLEAN      DEFAULT true,
         created_at         TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
+    `).catch(() => { });
     await runner.query(`
       DO $$ BEGIN
         ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS topic VARCHAR(250);
       EXCEPTION WHEN OTHERS THEN NULL; END $$;
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Timetable Slots ────────────────────────────────────────────────────
     await runner.query(`
@@ -1917,7 +1917,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         topic           VARCHAR(255),
         competency_codes VARCHAR(255)
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Leave Types ────────────────────────────────────────────────────────
     await runner.query(`
@@ -1927,7 +1927,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         name              VARCHAR(100) NOT NULL,
         max_days_per_year INT          DEFAULT 0
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Leave Applications ─────────────────────────────────────────────────
     await runner.query(`
@@ -1943,7 +1943,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         applied_at      TIMESTAMPTZ  DEFAULT NOW(),
         actioned_at     TIMESTAMPTZ
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Salary Records ─────────────────────────────────────────────────────
     await runner.query(`
@@ -1993,7 +1993,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         returned_at TIMESTAMPTZ,
         fine_amount NUMERIC(8,2) DEFAULT 0
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Chat Groups ────────────────────────────────────────────────────────
     await runner.query(`
@@ -2005,7 +2005,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         created_by    UUID,
         created_at    TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Chat Messages ──────────────────────────────────────────────────────
     await runner.query(`
@@ -2019,7 +2019,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         sent_at     TIMESTAMPTZ  DEFAULT NOW(),
         is_deleted  BOOLEAN      DEFAULT false
       )
-    `).catch(() => {});
+    `).catch(() => { });
     await runner.query(`
       DO $$ BEGIN
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'chat_messages' AND column_name = 'chat_group_id')
@@ -2030,7 +2030,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           CREATE INDEX IF NOT EXISTS "idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cm_g" ON "${schema}".chat_messages(group_id, sent_at DESC);
         END IF;
       END $$;
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Notifications ──────────────────────────────────────────────────────
     await runner.query(`
@@ -2043,8 +2043,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         is_read       BOOLEAN      DEFAULT false,
         created_at    TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
-    await runner.query(`CREATE INDEX IF NOT EXISTS idx_notif_recipient ON "${schema}".notifications(recipient_id, is_read, created_at DESC)`).catch(() => {});
+    `).catch(() => { });
+    await runner.query(`CREATE INDEX IF NOT EXISTS idx_notif_recipient ON "${schema}".notifications(recipient_id, is_read, created_at DESC)`).catch(() => { });
 
     // ── Fee Structure ──────────────────────────────────────────────────────
     await runner.query(`
@@ -2057,7 +2057,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         due_date    DATE,
         is_active   BOOLEAN      DEFAULT true
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Student Fee Records ────────────────────────────────────────────────
     await runner.query(`
@@ -2071,7 +2071,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         receipt_no        VARCHAR(100) UNIQUE,
         created_at        TIMESTAMPTZ  DEFAULT NOW()
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Hostel Blocks ──────────────────────────────────────────────────────
     await runner.query(`
@@ -2082,7 +2082,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         warden_id   UUID,
         total_rooms INT
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Hostel Rooms ───────────────────────────────────────────────────────
     await runner.query(`
@@ -2094,7 +2094,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         occupied    INT          DEFAULT 0,
         room_type   VARCHAR(20)
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Hostel Allotments ──────────────────────────────────────────────────
     await runner.query(`
@@ -2106,7 +2106,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         allotted_until DATE,
         is_active      BOOLEAN      DEFAULT true
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     // ── Courses ────────────────────────────────────────────────────────────
     await runner.query(`
@@ -2216,7 +2216,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         is_active        BOOLEAN     DEFAULT true,
         promoted_at      TIMESTAMPTZ DEFAULT NOW()
       )
-    `).catch(() => {});
+    `).catch(() => { });
 
     await runner.query(`
       DO $$ BEGIN
@@ -2228,7 +2228,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           ADD CONSTRAINT "fk_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_spp_student" FOREIGN KEY (student_id) REFERENCES "${schema}".students(id) ON DELETE CASCADE;
         END IF;
       END $$;
-    `).catch(() => {});
+    `).catch(() => { });
 
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".lessons (
@@ -2377,7 +2377,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         DO $$ BEGIN
           CREATE UNIQUE INDEX IF NOT EXISTS leave_types_code_uq_idx ON "${schema}".leave_types (code);
         EXCEPTION WHEN OTHERS THEN NULL; END $$;
-      `).catch(() => {});
+      `).catch(() => { });
       const existingLT = await runner.query(`SELECT id FROM "${schema}".leave_types LIMIT 1`).catch(() => []);
       if (existingLT.length === 0) {
         await runner.query(`
@@ -2387,9 +2387,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             ('EL',  'Earned Leave',          30),
             ('ML',  'Maternity Leave',       180),
             ('COL', 'Compensatory Off Leave', 0);
-        `).catch(() => {});
+        `).catch(() => { });
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Seed default delivery types
     try {
@@ -2397,7 +2397,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         DO $$ BEGIN
           CREATE UNIQUE INDEX IF NOT EXISTS delivery_types_code_uq_idx ON "${schema}".delivery_types (code);
         EXCEPTION WHEN OTHERS THEN NULL; END $$;
-      `).catch(() => {});
+      `).catch(() => { });
       const existingDT = await runner.query(`SELECT id FROM "${schema}".delivery_types LIMIT 1`).catch(() => []);
       if (existingDT.length === 0) {
         await runner.query(`
@@ -2407,9 +2407,9 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             ('AE',  'AETCOM'),
             ('PD',  'Pandemic Module'),
             ('CP',  'Clinical Posting');
-        `).catch(() => {});
+        `).catch(() => { });
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // ── Seed Demo Records ONLY for baseline Demo Tenants (srms-cet-bareilly, srms-ims) ──
     const isDemoSeedTenant = resolvedSlug === 'srms-cet-bareilly' || resolvedSlug === 'srms-ims';
@@ -2419,8 +2419,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     }
 
     // Safely ensure unique indexes exist before inserting seed data
-    await runner.query(`DO $$ BEGIN CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_users_email" ON "${schema}".users (email); EXCEPTION WHEN OTHERS THEN NULL; END $$;`).catch(() => {});
-    await runner.query(`DO $$ BEGIN CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_fac_emp_id" ON "${schema}".faculty (emp_id); EXCEPTION WHEN OTHERS THEN NULL; END $$;`).catch(() => {});
+    await runner.query(`DO $$ BEGIN CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_users_email" ON "${schema}".users (email); EXCEPTION WHEN OTHERS THEN NULL; END $$;`).catch(() => { });
+    await runner.query(`DO $$ BEGIN CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_fac_emp_id" ON "${schema}".faculty (emp_id); EXCEPTION WHEN OTHERS THEN NULL; END $$;`).catch(() => { });
 
     const defaultPasswordHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.'; // Default password hash for 'Password@123' / 'admin@123' / '1234'
 
@@ -2429,21 +2429,21 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
       SELECT 'admin@srms.edu', $1, 'COLLEGE_ADMIN', true, false
       WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE email = 'admin@srms.edu');
-    `, [defaultPasswordHash]).catch(() => {});
+    `, [defaultPasswordHash]).catch(() => { });
 
     // 2. Clerk (1234 / 1234)
     await runner.query(`
       INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
       SELECT 'clerk@srms.edu', $1, 'CLERK', true, false
       WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE email = 'clerk@srms.edu');
-    `, [defaultPasswordHash]).catch(() => {});
+    `, [defaultPasswordHash]).catch(() => { });
 
     // 3. Warden (warden / warden123)
     await runner.query(`
       INSERT INTO "${schema}".users (email, password_hash, role, onboarding_completed, must_change_password)
       SELECT 'warden@srms.edu', $1, 'WARDEN', true, false
       WHERE NOT EXISTS (SELECT 1 FROM "${schema}".users WHERE email = 'warden@srms.edu');
-    `, [defaultPasswordHash]).catch(() => {});
+    `, [defaultPasswordHash]).catch(() => { });
 
     const isMedicalTenant = ['srms-ims', 'unicamp-med', 'aiims-delhi', 'aiims-jodhpur', 'kmc-manipal', 'rajshreemri'].includes(resolvedSlug);
 
@@ -2463,7 +2463,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
             SELECT $1, 'EMP1001', 'Dr. Sanjay Singh', 'Professor & HOD', 'Physiology & Biophysics', '/avatars/dr_sanjay_singh.png'
             WHERE NOT EXISTS (SELECT 1 FROM "${schema}".faculty WHERE emp_id = 'EMP1001' OR user_id = $1);
-          `, [facUserId1]).catch(() => {});
+          `, [facUserId1]).catch(() => { });
         }
 
         let facRes2 = await runner.query(`
@@ -2481,10 +2481,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
               INSERT INTO "${schema}".faculty (user_id, emp_id, name, designation, specialization, photo_url)
               SELECT $1, 'EMP1002', 'Dr. Aparna Tyagi', 'Associate Professor', 'Human Anatomy & Histology', '/avatars/dr_sarah_sharma.png'
               WHERE NOT EXISTS (SELECT 1 FROM "${schema}".faculty WHERE emp_id = 'EMP1002' OR user_id = $1);
-            `, [facUserId2]).catch(() => {});
+            `, [facUserId2]).catch(() => { });
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // 5. Medical Students (Rahul Verma & Kabir Rao Deshmukh)
       try {
@@ -2505,7 +2505,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             `, [studUserId]);
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     } else {
       // 4. Engineering Faculty (Dr. Prabhakar Gupta, Dr. Anuj Kumar, Er. Shailesh Saxena)
       try {
@@ -2515,7 +2515,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           DELETE FROM "${schema}".batches WHERE code ILIKE '%MBBS%' OR course_cd = 'MBBS';
           DELETE FROM "${schema}".professional_phases WHERE course_cd = 'MBBS';
           DELETE FROM "${schema}".notice_group_templates WHERE name ILIKE '%MBBS%';
-        `).catch(() => {});
+        `).catch(() => { });
 
         const engFaculty = [
           { email: 'prabhakar.gupta@srms.ac.in', name: 'Dr. Prabhakar Gupta', emp_id: 'CET-FAC-001', designation: 'Professor & Dean Academics', dept: 'CSE', spec: 'Computer Networks & Distributed Systems', photo: '/avatars/dr_sanjay_singh.png', phone: '9876500001', gender: 'Male', exp: '18 Years Exp.', staff_type: 'Faculty' },
@@ -2559,7 +2559,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             `, [uId, f.emp_id, f.name, f.designation, f.spec, deptId, f.photo, f.phone || null, f.gender || 'Male', f.exp || null, f.staff_type || 'Faculty']);
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // 7. Auto-link any remaining unlinked students in students table to users table for authentic login
@@ -2584,10 +2584,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         }
 
         if (uId) {
-          await runner.query(`UPDATE "${schema}".students SET user_id = $1 WHERE id = $2 AND user_id IS NULL`, [uId, st.id]).catch(() => {});
+          await runner.query(`UPDATE "${schema}".students SET user_id = $1 WHERE id = $2 AND user_id IS NULL`, [uId, st.id]).catch(() => { });
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // 8. Auto-link any remaining unlinked faculty in faculty table to users table for authentic login
     try {
@@ -2612,10 +2612,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         }
 
         if (uId) {
-          await runner.query(`UPDATE "${schema}".faculty SET user_id = $1 WHERE id = $2 AND user_id IS NULL`, [uId, f.id]).catch(() => {});
+          await runner.query(`UPDATE "${schema}".faculty SET user_id = $1 WHERE id = $2 AND user_id IS NULL`, [uId, f.id]).catch(() => { });
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // 9. Seed authentic timetable slots & competencies / subtopics depending on college type
     try {
@@ -2634,7 +2634,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           WHERE NOT EXISTS (
             SELECT 1 FROM "${schema}".courses c WHERE c.code = v.code
           );
-        `).catch(() => {});
+        `).catch(() => { });
 
         // Medical Departments
         await runner.query(`
@@ -2658,7 +2658,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           WHERE NOT EXISTS (
             SELECT 1 FROM "${schema}".departments d WHERE d.code = v.code
           );
-        `).catch(() => {});
+        `).catch(() => { });
 
         // Professional Phases (Medical & BAMS)
         await runner.query(`
@@ -2676,7 +2676,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           WHERE NOT EXISTS (
             SELECT 1 FROM "${schema}".professional_phases p WHERE p.name = v.name AND p.course_cd = v.course_cd
           );
-        `).catch(() => {});
+        `).catch(() => { });
 
         // Medical Subjects
         await runner.query(`
@@ -2694,7 +2694,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           WHERE NOT EXISTS (
             SELECT 1 FROM "${schema}".subjects s WHERE s.code = v.code
           );
-        `).catch(() => {});
+        `).catch(() => { });
 
         // Link subjects to departments
         await runner.query(`
@@ -2706,7 +2706,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='MIC' LIMIT 1) WHERE code='MIC201' AND department_id IS NULL;
           UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='RAC' LIMIT 1) WHERE code='RAC101' AND department_id IS NULL;
           UPDATE "${schema}".subjects SET department_id = (SELECT id FROM "${schema}".departments WHERE code='KRI' LIMIT 1) WHERE code='KRI101' AND department_id IS NULL;
-        `).catch(() => {});
+        `).catch(() => { });
 
         // Seed Units for Anatomy and Physiology
         const anaSubId = (await runner.query(`SELECT id FROM "${schema}".subjects WHERE code='ANA101'`))[0]?.id;
@@ -2724,7 +2724,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             WHERE NOT EXISTS (
               SELECT 1 FROM "${schema}".units u WHERE u.subject_id = $1 AND (u.unit_order = v.unit_order OR u.code = 'U' || v.unit_order)
             );
-          `, [anaSubId]).catch(() => {});
+          `, [anaSubId]).catch(() => { });
         }
 
         if (phySubId) {
@@ -2739,7 +2739,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             WHERE NOT EXISTS (
               SELECT 1 FROM "${schema}".units u WHERE u.subject_id = $1 AND (u.unit_order = v.unit_order OR u.code = 'U' || v.unit_order)
             );
-          `, [phySubId]).catch(() => {});
+          `, [phySubId]).catch(() => { });
         }
 
         // Seed Topics
@@ -2758,7 +2758,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             WHERE NOT EXISTS (
               SELECT 1 FROM "${schema}".topics t WHERE t.subject_id = $1 AND t.code = v.code
             );
-          `, [anaSubId, anaUnit2]).catch(() => {});
+          `, [anaSubId, anaUnit2]).catch(() => { });
         }
 
         if (phyUnit2 && phySubId) {
@@ -2772,7 +2772,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             WHERE NOT EXISTS (
               SELECT 1 FROM "${schema}".topics t WHERE t.subject_id = $1 AND t.code = v.code
             );
-          `, [phySubId, phyUnit2]).catch(() => {});
+          `, [phySubId, phyUnit2]).catch(() => { });
         }
 
         if (phyUnit3 && phySubId) {
@@ -2785,7 +2785,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             WHERE NOT EXISTS (
               SELECT 1 FROM "${schema}".topics t WHERE t.subject_id = $1 AND t.code = v.code
             );
-          `, [phySubId, phyUnit3]).catch(() => {});
+          `, [phySubId, phyUnit3]).catch(() => { });
         }
 
         // Competencies
@@ -2793,7 +2793,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           DO $$ BEGIN
             CREATE UNIQUE INDEX IF NOT EXISTS competencies_code_uidx ON "${schema}".competencies (code);
           EXCEPTION WHEN OTHERS THEN NULL; END $$;
-        `).catch(() => {});
+        `).catch(() => { });
 
         const topAn01 = (await runner.query(`SELECT id FROM "${schema}".topics WHERE code='TOP-AN-01'`))[0]?.id;
         const topAn02 = (await runner.query(`SELECT id FROM "${schema}".topics WHERE code='TOP-AN-02'`))[0]?.id;
@@ -2818,7 +2818,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             WHERE NOT EXISTS (
               SELECT 1 FROM "${schema}".competencies c WHERE c.code = v.code
             );
-          `).catch(() => {});
+          `).catch(() => { });
         }
 
         const phyDept = (await runner.query(`SELECT id FROM "${schema}".departments WHERE code='PHY'`))[0]?.id;
@@ -2829,17 +2829,17 @@ export class TenantSchemaService implements OnApplicationBootstrap {
 
         // Ensure faculty department IDs are linked properly
         if (sarahFacId && phyDept) {
-          await runner.query(`UPDATE "${schema}".faculty SET department_id = $1 WHERE id = $2`, [phyDept, sarahFacId]).catch(() => {});
+          await runner.query(`UPDATE "${schema}".faculty SET department_id = $1 WHERE id = $2`, [phyDept, sarahFacId]).catch(() => { });
         }
         if (aparnaFacId && anaDept) {
-          await runner.query(`UPDATE "${schema}".faculty SET department_id = $1 WHERE id = $2`, [anaDept, aparnaFacId]).catch(() => {});
+          await runner.query(`UPDATE "${schema}".faculty SET department_id = $1 WHERE id = $2`, [anaDept, aparnaFacId]).catch(() => { });
         }
 
         // Purge unregistered or non-Anatomy/Physiology dummy slots
         await runner.query(`
           DELETE FROM "${schema}".timetable_slots 
           WHERE subject_id NOT IN ($1, $2) OR faculty_id NOT IN ($3, $4) OR faculty_id IS NULL;
-        `, [phySubId, anaSubId, sarahFacId || '00000000-0000-0000-0000-000000000000', aparnaFacId || '00000000-0000-0000-0000-000000000000']).catch(() => {});
+        `, [phySubId, anaSubId, sarahFacId || '00000000-0000-0000-0000-000000000000', aparnaFacId || '00000000-0000-0000-0000-000000000000']).catch(() => { });
 
         const countRes = await runner.query(`SELECT COUNT(*) as count FROM "${schema}".timetable_slots`);
         if (parseInt(countRes[0]?.count || '0', 10) === 0 && mbbsBatch && phySubId && anaSubId && sarahFacId && aparnaFacId) {
@@ -2864,22 +2864,22 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         }
       } else {
         // Engineering / Management schemas (SRMS CET, CETR, IBS, Law, etc.)
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_sub_code" ON "${schema}".subjects (code);`).catch(() => {});
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_unt_code" ON "${schema}".units (code);`).catch(() => {});
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_top_code" ON "${schema}".topics (code);`).catch(() => {});
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cmp_code" ON "${schema}".competencies (code);`).catch(() => {});
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_sub_code" ON "${schema}".subjects (code);`).catch(() => { });
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_unt_code" ON "${schema}".units (code);`).catch(() => { });
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_top_code" ON "${schema}".topics (code);`).catch(() => { });
+        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cmp_code" ON "${schema}".competencies (code);`).catch(() => { });
 
         // Purge any accidental medical Anatomy/Physiology records from engineering schemas
         await runner.query(`
           DELETE FROM "${schema}".competencies 
           WHERE code LIKE 'AN%' OR code LIKE 'PY1%' OR code LIKE 'PY2%' OR code LIKE 'PY3%' OR code LIKE 'PY4%' OR code LIKE 'PY5%'
              OR description ILIKE '%osteology%' OR description ILIKE '%brachial%' OR description ILIKE '%scapular%';
-        `).catch(() => {});
+        `).catch(() => { });
 
         await runner.query(`
           DELETE FROM "${schema}".subjects 
           WHERE code IN ('ANA101', 'PHY101') OR name ILIKE '%Human Anatomy%' OR name ILIKE '%Human Physiology%';
-        `).catch(() => {});
+        `).catch(() => { });
       }
     } catch (e) {
       this.logger.error('Error seeding default timetable_slots/academic structures:', e);

@@ -16,6 +16,7 @@ export default function ChatWorkspace({ role = 'FACULTY' }: ChatWorkspaceProps) 
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [isAddBatchModalOpen, setIsAddBatchModalOpen] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<{ id: string; body: string } | null>(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -35,6 +36,8 @@ export default function ChatWorkspace({ role = 'FACULTY' }: ChatWorkspaceProps) 
     selectedYearFilter,
     setSelectedYearFilter,
     sendMessage,
+    editMessage,
+    deleteMessage,
     uploadAttachment,
     syncGroups,
     joinBatchGroup,
@@ -47,6 +50,11 @@ export default function ChatWorkspace({ role = 'FACULTY' }: ChatWorkspaceProps) 
       if (raw) setCurrentUser(JSON.parse(raw));
     } catch {}
   }, []);
+
+  // Reset editing message when switching chat groups
+  useEffect(() => {
+    setEditingMessage(null);
+  }, [selectedGroup?.id]);
 
   return (
     <div className="flex flex-col h-full w-full min-h-0 rounded-2xl md:rounded-[22px] overflow-hidden bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-xl shadow-purple-950/5 font-sans">
@@ -103,12 +111,17 @@ export default function ChatWorkspace({ role = 'FACULTY' }: ChatWorkspaceProps) 
             isSidebarOpen={isSidebarOpen}
             currentUserId={currentUser?.id || currentUser?.sub}
             currentUserRole={currentUser?.role || role}
+            onEditMessage={(msg) => setEditingMessage({ id: msg.id, body: msg.body || '' })}
+            onDeleteMessage={deleteMessage}
           />
 
           {selectedGroup && (
             <ChatComposer
               onSend={sendMessage}
               onUploadAttachment={uploadAttachment}
+              editingMessage={editingMessage}
+              onSaveEdit={editMessage}
+              onCancelEdit={() => setEditingMessage(null)}
             />
           )}
         </div>

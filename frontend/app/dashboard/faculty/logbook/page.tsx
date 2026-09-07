@@ -317,74 +317,108 @@ export default function FacultyLogbookPage() {
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <div className="flex flex-row items-center gap-2 sm:gap-3 shrink-0 w-full md:w-auto">
                   <button
                     onClick={() => setIsAssignProjectModalOpen(true)}
-                    className="px-4 py-2.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white font-bold text-xs shadow-lg shadow-[#F36C21]/25 flex items-center gap-2 transition-all scale-[1.02]"
+                    className="flex-1 md:flex-initial px-3 sm:px-4 py-2.5 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white font-bold text-xs shadow-lg shadow-[#F36C21]/25 flex items-center justify-center gap-1.5 sm:gap-2 transition-all scale-[1.02]"
                   >
-                    <FolderPlus className="w-4 h-4" />
-                    <span>Assign Mini Project</span>
+                    <FolderPlus className="w-4 h-4 shrink-0" />
+                    <span className="truncate">Assign Mini Project</span>
                   </button>
 
                   <button
                     onClick={() => setIsPublishModalOpen(true)}
-                    className="px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-semibold text-xs border border-white/20 backdrop-blur-md flex items-center gap-2 transition-all"
+                    className="flex-1 md:flex-initial px-3 sm:px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-semibold text-xs border border-white/20 backdrop-blur-md flex items-center justify-center gap-1.5 sm:gap-2 transition-all"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>Post Activity Topic</span>
+                    <Plus className="w-4 h-4 shrink-0" />
+                    <span className="truncate">Post Activity Topic</span>
                   </button>
                 </div>
               </div>
             </div>
 
             {/* 4 Summary Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Assigned Project</span>
-                  <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-[#5B4BFF]">
-                    <FolderGit2 className="w-5 h-5" />
+            <div className="grid grid-cols-4 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-4">
+              <div
+                title="Assigned Project"
+                className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-[22px] p-2 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between group cursor-default"
+              >
+                <div className="flex items-center justify-between mb-1 sm:mb-3">
+                  <span className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider">
+                    <span className="sm:hidden">Project</span>
+                    <span className="hidden sm:inline">Assigned Project</span>
+                  </span>
+                  <div className="p-1 sm:p-2 rounded-lg sm:rounded-xl bg-purple-50 dark:bg-purple-950/50 text-[#5B4BFF] shrink-0">
+                    <FolderGit2 className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                   </div>
                 </div>
-                <div className="text-lg font-bold text-slate-900 dark:text-white truncate">
+                <div className="text-xs sm:text-lg font-bold text-slate-900 dark:text-white truncate" title={miniProject?.title || 'React Crud Operation'}>
                   {miniProject?.title || 'React Crud Operation'}
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Stack: {(miniProject?.technologies || ['React', 'PostgreSQL']).slice(0, 3).join(', ')}
+                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate">
+                  <span className="hidden sm:inline">Stack: </span>
+                  {(miniProject?.technologies || ['React', 'PostgreSQL']).slice(0, 3).join(', ')}
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Submissions</span>
-                  <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600">
-                    <FileText className="w-5 h-5" />
+              <div
+                title="Total Submissions Across all candidate cohorts"
+                className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-[22px] p-2 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between group cursor-default"
+              >
+                <div className="flex items-center justify-between mb-1 sm:mb-3">
+                  <span className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider">
+                    <span className="sm:hidden">Total Subs</span>
+                    <span className="hidden sm:inline">Total Submissions</span>
+                  </span>
+                  <div className="p-1 sm:p-2 rounded-lg sm:rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 shrink-0">
+                    <FileText className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                   </div>
                 </div>
-                <div className="text-2xl font-black text-slate-900 dark:text-white">{totalSubmissions}</div>
-                <div className="text-xs text-slate-500 mt-1">Across all candidate cohorts</div>
+                <div className="text-xs sm:text-2xl font-black text-slate-900 dark:text-white">{totalSubmissions}</div>
+                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate">
+                  <span className="sm:hidden">All cohorts</span>
+                  <span className="hidden sm:inline">Across all candidate cohorts</span>
+                </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Awaiting Sign-off</span>
-                  <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600">
-                    <Clock className="w-5 h-5" />
+              <div
+                title="Awaiting Sign-off (Pending review & grading)"
+                className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-[22px] p-2 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between group cursor-default"
+              >
+                <div className="flex items-center justify-between mb-1 sm:mb-3">
+                  <span className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider">
+                    <span className="sm:hidden">Awaiting</span>
+                    <span className="hidden sm:inline">Awaiting Sign-off</span>
+                  </span>
+                  <div className="p-1 sm:p-2 rounded-lg sm:rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 shrink-0">
+                    <Clock className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                   </div>
                 </div>
-                <div className="text-2xl font-black text-amber-600">{pendingEvaluation}</div>
-                <div className="text-xs text-slate-500 mt-1">Pending review & grading</div>
+                <div className="text-xs sm:text-2xl font-black text-amber-600">{pendingEvaluation}</div>
+                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate">
+                  <span className="sm:hidden">Pending</span>
+                  <span className="hidden sm:inline">Pending review & grading</span>
+                </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Evaluated & Signed</span>
-                  <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
-                    <CheckCircle2 className="w-5 h-5" />
+              <div
+                title="Evaluated & Signed (Digitally approved by guide)"
+                className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-[22px] p-2 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between group cursor-default"
+              >
+                <div className="flex items-center justify-between mb-1 sm:mb-3">
+                  <span className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider">
+                    <span className="sm:hidden">Evaluated</span>
+                    <span className="hidden sm:inline">Evaluated & Signed</span>
+                  </span>
+                  <div className="p-1 sm:p-2 rounded-lg sm:rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 shrink-0">
+                    <CheckCircle2 className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                   </div>
                 </div>
-                <div className="text-2xl font-black text-emerald-600">{evaluatedCount}</div>
-                <div className="text-xs text-slate-500 mt-1">Digitally approved by guide</div>
+                <div className="text-xs sm:text-2xl font-black text-emerald-600">{evaluatedCount}</div>
+                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate">
+                  <span className="sm:hidden">Approved</span>
+                  <span className="hidden sm:inline">Digitally approved by guide</span>
+                </div>
               </div>
             </div>
 

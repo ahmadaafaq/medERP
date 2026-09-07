@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Search, Users, RefreshCw, MessageSquare, Plus, Filter, PanelLeftClose } from 'lucide-react';
+import { Search, Users, RefreshCw, MessageSquare, Plus, Filter } from 'lucide-react';
 import { ChatGroup } from '../../hooks/useChat';
 
 interface ChatSidebarProps {
@@ -111,17 +111,6 @@ export default function ChatSidebar({
               title="Sync & provision latest batch groups"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {onToggleSidebar && (
-            <button
-              type="button"
-              onClick={onToggleSidebar}
-              className="hidden md:flex p-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-[#F36C21]/10 text-[#4E5969] hover:text-[#F36C21] dark:text-slate-300 dark:hover:text-[#F36C21] border border-[#E7EAF3] dark:border-slate-700 transition-all shadow-xs cursor-pointer"
-              title="Collapse Batches List"
-            >
-              <PanelLeftClose className="w-4 h-4" />
             </button>
           )}
         </div>

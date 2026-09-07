@@ -409,9 +409,9 @@ export class UsersService {
           ADD COLUMN IF NOT EXISTS category VARCHAR(100),
           ADD COLUMN IF NOT EXISTS payroll_category VARCHAR(100),
           ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
-      `).catch(() => {});
+      `).catch(() => { });
       UsersService.ensuredFacultySchemas.add(schema);
-    } catch (e) {}
+    } catch (e) { }
   }
 
   async getFaculty(tenantSlug: string, pagination: PaginationDto, filters: {

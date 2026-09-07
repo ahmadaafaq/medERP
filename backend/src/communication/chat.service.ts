@@ -132,6 +132,9 @@ export class ChatService implements OnModuleInit {
       `ALTER TABLE "${schema}".chat_messages ADD COLUMN IF NOT EXISTS sender_role VARCHAR(50) DEFAULT 'FACULTY'`,
       `ALTER TABLE "${schema}".chat_messages ADD COLUMN IF NOT EXISTS sender_avatar TEXT`,
       `ALTER TABLE "${schema}".chat_messages ADD COLUMN IF NOT EXISTS body TEXT`,
+      `ALTER TABLE "${schema}".chat_messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT false`,
+      `ALTER TABLE "${schema}".chat_messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false`,
+      `ALTER TABLE "${schema}".chat_messages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
       `ALTER TABLE "${schema}".chat_messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
 
       `ALTER TABLE "${schema}".chat_attachments ADD COLUMN IF NOT EXISTS message_id UUID`,
@@ -660,23 +663,29 @@ export class ChatService implements OnModuleInit {
           )
         ) AS sender_avatar,
         m.body,
+        COALESCE(m.is_edited, false) AS is_edited,
+        COALESCE(m.is_deleted, false) AS is_deleted,
         m.created_at,
-        COALESCE(
-          (
-            SELECT json_agg(
-              json_build_object(
-                'id', a.id,
-                'file_name', a.file_name,
-                'file_type', a.file_type,
-                'file_url', a.file_url,
-                'file_size_kb', a.file_size_kb,
-                'created_at', a.created_at
+        m.updated_at,
+        CASE
+          WHEN COALESCE(m.is_deleted, false) = true THEN '[]'::json
+          ELSE COALESCE(
+            (
+              SELECT json_agg(
+                json_build_object(
+                  'id', a.id,
+                  'file_name', a.file_name,
+                  'file_type', a.file_type,
+                  'file_url', a.file_url,
+                  'file_size_kb', a.file_size_kb,
+                  'created_at', a.created_at
+                )
               )
-            )
-            FROM "${schema}".chat_attachments a
-            WHERE a.message_id::text = m.id::text
-          ), '[]'::json
-        ) AS attachments
+              FROM "${schema}".chat_attachments a
+              WHERE a.message_id::text = m.id::text
+            ), '[]'::json
+          )
+        END AS attachments
       FROM "${schema}".chat_messages m
       WHERE m.chat_group_id::text = $1::text ${beforeClause}
       ORDER BY m.created_at DESC
@@ -1264,5 +1273,124 @@ export class ChatService implements OnModuleInit {
       ],
     };
   }
+
+  /**
+   * Edit a sent message (WhatsApp style)
+   */
+  async editMessage(tenantSlug: string, user: any, messageId: string, newBody: string) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+    await this.ensureTables(slug);
+
+    if (!newBody || !newBody.trim()) {
+      throw new BadRequestException('Message body cannot be empty');
+    }
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM "${schema}".chat_messages WHERE id::text = $1::text`,
+      [messageId],
+    );
+
+    if (!rows[0]) {
+      throw new NotFoundException('Message not found');
+    }
+
+    const message = rows[0];
+    if (message.is_deleted) {
+      throw new BadRequestException('Cannot edit a deleted message');
+    }
+
+    const userId = user?.id || user?.sub || 'FAC001';
+    const userRole = (user?.role || '').toUpperCase();
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'COLLEGE_ADMIN'].includes(userRole);
+
+    if (String(message.sender_id).toLowerCase() !== String(userId).toLowerCase() && !isAdmin) {
+      throw new ForbiddenException('You can only edit your own messages');
+    }
+
+    const updateRows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE "${schema}".chat_messages
+       SET body = $1, is_edited = true, updated_at = NOW()
+       WHERE id::text = $2::text
+       RETURNING *`,
+      [newBody.trim(), messageId],
+    );
+
+    const updated = updateRows[0] || { ...message, body: newBody.trim(), is_edited: true };
+
+    // Broadcast over WebSocket
+    this.chatGateway.server?.to(`group:${message.chat_group_id}`).emit('chat:message:edited', {
+      groupId: message.chat_group_id,
+      message: {
+        ...updated,
+        is_edited: true,
+      },
+    });
+
+    return {
+      ...updated,
+      is_edited: true,
+    };
+  }
+
+  /**
+   * Delete a message (WhatsApp style - soft delete for group)
+   */
+  async deleteMessage(tenantSlug: string, user: any, messageId: string) {
+    const slug = this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+    await this.ensureTables(slug);
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM "${schema}".chat_messages WHERE id::text = $1::text`,
+      [messageId],
+    );
+
+    if (!rows[0]) {
+      throw new NotFoundException('Message not found');
+    }
+
+    const message = rows[0];
+    const userId = user?.id || user?.sub || 'FAC001';
+    const userRole = (user?.role || '').toUpperCase();
+    const isFacultyOrAdmin = ['FACULTY', 'HOD', 'ADMIN', 'SUPER_ADMIN', 'COLLEGE_ADMIN'].includes(userRole);
+
+    if (String(message.sender_id).toLowerCase() !== String(userId).toLowerCase() && !isFacultyOrAdmin) {
+      throw new ForbiddenException('You do not have permission to delete this message');
+    }
+
+    // Soft delete: mark is_deleted = true, body = 'This message was deleted', clear attachments
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE "${schema}".chat_messages
+       SET is_deleted = true, body = 'This message was deleted', updated_at = NOW()
+       WHERE id::text = $1::text`,
+      [messageId],
+    );
+
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM "${schema}".chat_attachments WHERE message_id::text = $1::text`,
+      [messageId],
+    ).catch(() => null);
+
+    // Broadcast over WebSocket
+    this.chatGateway.server?.to(`group:${message.chat_group_id}`).emit('chat:message:deleted', {
+      groupId: message.chat_group_id,
+      messageId,
+    });
+
+    return {
+      success: true,
+      messageId,
+      groupId: message.chat_group_id,
+      body: 'This message was deleted',
+      is_deleted: true,
+    };
+  }
 }
+
 

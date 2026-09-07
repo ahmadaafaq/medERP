@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import { Users, Sparkles, MessageSquare, Clock, CheckCheck, ShieldCheck, ArrowLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Users, Sparkles, MessageSquare, Clock, CheckCheck, ShieldCheck, ArrowLeft, PanelLeftClose, PanelLeftOpen, MoreVertical, Edit2, Trash2, Ban, Loader2 } from 'lucide-react';
 import { ChatMessage, ChatGroup } from '../../hooks/useChat';
 import ChatAttachmentChip from './ChatAttachmentChip';
 
@@ -15,6 +15,8 @@ interface ChatThreadProps {
   isSidebarOpen?: boolean;
   currentUserId?: string;
   currentUserRole?: string;
+  onEditMessage?: (message: ChatMessage) => void;
+  onDeleteMessage?: (messageId: string) => Promise<boolean>;
 }
 
 export default function ChatThread({
@@ -27,12 +29,27 @@ export default function ChatThread({
   isSidebarOpen = true,
   currentUserId,
   currentUserRole,
+  onEditMessage,
+  onDeleteMessage,
 }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [activeMenuMessageId, setActiveMenuMessageId] = useState<string | null>(null);
+  const [deleteConfirmMessageId, setDeleteConfirmMessageId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<boolean>(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement)?.closest('.message-action-menu')) {
+        setActiveMenuMessageId(null);
+      }
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   // Build a map of known sender names & avatars across thread messages & group members
   const { senderAvatarMap, senderNameMap } = React.useMemo(() => {
@@ -333,7 +350,7 @@ export default function ChatThread({
                   </div>
 
                   {/* Message Bubble Content */}
-                  <div className={`flex flex-col min-w-0 ${isOwn ? 'items-end' : 'items-start'}`}>
+                  <div className={`flex flex-col min-w-0 relative group/msg ${isOwn ? 'items-end' : 'items-start'}`}>
                     {/* Sender Header with DP Badge and Full Name */}
                     <div className="flex items-center gap-1.5 mb-1 px-1">
                       <span className="text-xs font-black text-[#1B1E28] dark:text-white">
@@ -352,37 +369,118 @@ export default function ChatThread({
                       </span>
                     </div>
 
-                    {/* Bubble */}
-                    <div
-                      className={`p-3.5 rounded-2xl text-xs sm:text-sm font-medium leading-relaxed break-words shadow-sm transition-all ${
-                        isOwn
-                          ? 'bg-[#2D2575] text-white rounded-br-none'
-                          : 'bg-white dark:bg-slate-800 text-[#1B1E28] dark:text-slate-100 border border-[#E7EAF3] dark:border-slate-700/80 rounded-bl-none'
-                      }`}
-                    >
-                      {/* Body text */}
-                      {msg.body && (
-                        <p className="whitespace-pre-wrap">{msg.body}</p>
-                      )}
+                    {/* Bubble Container with Hover Options */}
+                    <div className="relative flex items-center gap-1.5 max-w-full">
+                      {/* WhatsApp 3-Dots Action Button (on own side or outside bubble) */}
+                      {!msg.is_deleted && (isOwn || isFaculty || isAdmin) && (
+                        <div
+                          className={`message-action-menu absolute top-1 z-20 transition-opacity ${
+                            isOwn ? 'right-full mr-1.5' : 'left-full ml-1.5'
+                          } opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 ${
+                            activeMenuMessageId === msg.id ? '!opacity-100' : ''
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuMessageId((prev) => (prev === msg.id ? null : msg.id));
+                            }}
+                            className="p-1.5 rounded-xl bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-all cursor-pointer flex items-center justify-center"
+                            title="Message options"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
 
-                      {/* Attachments inside bubble */}
-                      {msg.attachments && msg.attachments.length > 0 && (
-                        <div className={`space-y-2 ${msg.body ? 'mt-2.5 pt-2.5 border-t ' + (isOwn ? 'border-white/20' : 'border-slate-100 dark:border-slate-700') : ''}`}>
-                          {msg.attachments.map((att, attIdx) => (
-                            <ChatAttachmentChip
-                              key={attIdx}
-                              attachment={att}
-                            />
-                          ))}
+                          {/* Floating Dropdown Menu */}
+                          {activeMenuMessageId === msg.id && (
+                            <div
+                              className={`absolute top-8 z-30 w-32 bg-white dark:bg-slate-850 rounded-xl shadow-xl border border-slate-200/80 dark:border-slate-700 p-1 text-xs animate-in zoom-in-95 duration-100 ${
+                                isOwn ? 'right-0' : 'left-0'
+                              }`}
+                            >
+                              {isOwn && !msg.is_deleted && onEditMessage && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveMenuMessageId(null);
+                                    onEditMessage(msg);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-indigo-50 hover:text-[#5B4BFF] dark:hover:bg-indigo-950/60 dark:hover:text-indigo-400 font-medium transition-colors text-left"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                  <span>Edit</span>
+                                </button>
+                              )}
+                              {(isOwn || isFaculty || isAdmin) && onDeleteMessage && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveMenuMessageId(null);
+                                    setDeleteConfirmMessageId(msg.id);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 font-medium transition-colors text-left"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
+
+                      {/* Bubble */}
+                      <div
+                        className={`p-3.5 rounded-2xl text-xs sm:text-sm font-medium leading-relaxed break-words shadow-sm transition-all ${
+                          msg.is_deleted
+                            ? 'bg-slate-100/90 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 rounded-br-none'
+                            : isOwn
+                            ? 'bg-[#2D2575] text-white rounded-br-none'
+                            : 'bg-white dark:bg-slate-800 text-[#1B1E28] dark:text-slate-100 border border-[#E7EAF3] dark:border-slate-700/80 rounded-bl-none'
+                        }`}
+                      >
+                        {/* Deleted Message Placeholder */}
+                        {msg.is_deleted ? (
+                          <div className="flex items-center gap-2 italic text-xs py-0.5 select-none text-slate-500 dark:text-slate-400 font-normal">
+                            <Ban className="w-3.5 h-3.5 opacity-70 shrink-0" />
+                            <span>This message was deleted</span>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Body text */}
+                            {msg.body && (
+                              <p className="whitespace-pre-wrap">{msg.body}</p>
+                            )}
+
+                            {/* Attachments inside bubble */}
+                            {msg.attachments && msg.attachments.length > 0 && (
+                              <div className={`space-y-2 ${msg.body ? 'mt-2.5 pt-2.5 border-t ' + (isOwn ? 'border-white/20' : 'border-slate-100 dark:border-slate-700') : ''}`}>
+                                {msg.attachments.map((att, attIdx) => (
+                                  <ChatAttachmentChip
+                                    key={attIdx}
+                                    attachment={att}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Timestamp */}
-                    <div className="flex items-center gap-1 mt-1 px-1 text-[10px] text-[#4E5969] dark:text-slate-400 font-semibold">
+                    {/* Timestamp & (edited) indicator */}
+                    <div className="flex items-center gap-1.5 mt-1 px-1 text-[10px] text-[#4E5969] dark:text-slate-400 font-semibold">
                       <Clock className="w-2.5 h-2.5" />
                       <span>{formatTimestamp(msg.created_at)}</span>
-                      {isOwn && <CheckCheck className="w-3 h-3 text-[#00C48C] ml-0.5" />}
+                      {msg.is_edited && !msg.is_deleted && (
+                        <span className="text-[9px] text-[#5B4BFF] dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/70 px-1 py-0.2 rounded" title={`Edited ${msg.updated_at ? formatTimestamp(msg.updated_at) : ''}`}>
+                          edited
+                        </span>
+                      )}
+                      {isOwn && !msg.is_deleted && <CheckCheck className="w-3 h-3 text-[#00C48C] ml-0.5" />}
                     </div>
                   </div>
                 </div>
@@ -392,6 +490,50 @@ export default function ChatThread({
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Delete Message Confirmation Modal */}
+      {deleteConfirmMessageId && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/70 text-red-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Delete Message?</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  This message will be deleted for everyone in this batch discussion.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmMessageId(null)}
+                disabled={deleting}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!deleteConfirmMessageId || !onDeleteMessage) return;
+                  setDeleting(true);
+                  await onDeleteMessage(deleteConfirmMessageId);
+                  setDeleting(false);
+                  setDeleteConfirmMessageId(null);
+                }}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                <span>Delete for everyone</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
