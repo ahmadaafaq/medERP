@@ -284,7 +284,15 @@ export default function DocumentPreviewModal({
         while (n--) {
           u8arr[n] = bstr.charCodeAt(n);
         }
-        const b = new Blob([u8arr as unknown as BlobPart], { type: 'application/pdf' });
+        const isPdf = u8arr.length > 4 && u8arr[0] === 0x25 && u8arr[1] === 0x50 && u8arr[2] === 0x44 && u8arr[3] === 0x46;
+        const isImg = !isPdf && (
+          (u8arr.length > 4 && ((u8arr[0] === 0xff && u8arr[1] === 0xd8) || (u8arr[0] === 0x89 && u8arr[1] === 0x50) || (u8arr[0] === 0x47 && u8arr[1] === 0x49))) ||
+          /\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(documentName || '') ||
+          activeDocUrl.startsWith('data:image/')
+        );
+        const mimeMatch = activeDocUrl.match(/^data:([^;]+);/);
+        const mimeType = mimeMatch ? mimeMatch[1] : (isImg ? 'image/jpeg' : 'application/pdf');
+        const b = new Blob([u8arr as unknown as BlobPart], { type: mimeType });
         const objUrl = URL.createObjectURL(b);
         if (isMounted) {
           setPdfDataBuffer(u8arr);
@@ -326,8 +334,17 @@ export default function DocumentPreviewModal({
         const arrayBuffer = await blob.arrayBuffer();
         if (isMounted && arrayBuffer.byteLength > 0) {
           const uint8 = new Uint8Array(arrayBuffer);
-          const pdfBlob = new Blob([uint8 as unknown as BlobPart], { type: 'application/pdf' });
-          const objUrl = URL.createObjectURL(pdfBlob);
+          const isPdf = uint8.length > 4 && uint8[0] === 0x25 && uint8[1] === 0x50 && uint8[2] === 0x44 && uint8[3] === 0x46; // %PDF-
+          const isImg = !isPdf && (
+            (blob.type && blob.type.startsWith('image/')) ||
+            (uint8.length > 4 && ((uint8[0] === 0xff && uint8[1] === 0xd8) || (uint8[0] === 0x89 && uint8[1] === 0x50) || (uint8[0] === 0x47 && uint8[1] === 0x49))) ||
+            /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(documentName || '') ||
+            /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(fetchUrl)
+          );
+            
+          const mimeType = isPdf ? 'application/pdf' : (isImg ? (blob.type?.startsWith('image/') ? blob.type : 'image/jpeg') : (blob.type || 'application/pdf'));
+          const fileBlob = new Blob([uint8 as unknown as BlobPart], { type: mimeType });
+          const objUrl = URL.createObjectURL(fileBlob);
           setPdfDataBuffer(uint8);
           setBlobObjectUrl(objUrl);
           setLoadingDoc(false);
@@ -350,7 +367,14 @@ export default function DocumentPreviewModal({
 
   if (!isOpen) return null;
 
-  const isImage = activeDocUrl?.startsWith('data:image/') || /\.(png|jpg|jpeg|webp|svg)$/i.test(activeDocUrl || '') || /\.(png|jpg|jpeg|webp|svg)$/i.test(documentName || '');
+  const isPdfByBuffer = pdfDataBuffer && pdfDataBuffer.length > 4 && pdfDataBuffer[0] === 0x25 && pdfDataBuffer[1] === 0x50 && pdfDataBuffer[2] === 0x44 && pdfDataBuffer[3] === 0x46;
+  const isImageByBuffer = pdfDataBuffer && pdfDataBuffer.length > 4 && (
+    (pdfDataBuffer[0] === 0xff && pdfDataBuffer[1] === 0xd8) || // JPEG
+    (pdfDataBuffer[0] === 0x89 && pdfDataBuffer[1] === 0x50) || // PNG
+    (pdfDataBuffer[0] === 0x47 && pdfDataBuffer[1] === 0x49)    // GIF
+  );
+  const isImageByName = /\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(documentName || '') || /\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(activeDocUrl || '');
+  const isImage = !isPdfByBuffer && (isImageByBuffer || (isImageByName && !activeDocUrl?.includes('evaluated-pdf')) || (typeof activeDocUrl === 'string' && activeDocUrl.startsWith('data:image/')));
 
   const handleDownload = () => {
     const downloadName = (isEvaluated && selectedCopy === 'evaluated')
@@ -580,15 +604,6 @@ export default function DocumentPreviewModal({
                 </div>
               )}
             </div>
-          ) : isImage && documentUrl ? (
-            <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={documentUrl}
-                alt="Document Preview"
-                className="max-w-full max-h-full object-contain rounded-xl shadow-lg border border-slate-200 dark:border-slate-800"
-              />
-            </div>
           ) : loadingDoc ? (
             <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 my-auto">
               <div className="w-10 h-10 border-3 border-[#5B4BFF] border-t-transparent rounded-full animate-spin" />
@@ -621,7 +636,7 @@ export default function DocumentPreviewModal({
                 </button>
                 {activeDocUrl && (
                   <a
-                    href={activeDocUrl}
+                    href={blobObjectUrl || activeDocUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 inline-flex items-center gap-1.5"
@@ -631,6 +646,15 @@ export default function DocumentPreviewModal({
                   </a>
                 )}
               </div>
+            </div>
+          ) : isImage && (blobObjectUrl || activeDocUrl || documentUrl) ? (
+            <div className="w-full h-full overflow-auto flex items-center justify-center p-2 sm:p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={blobObjectUrl || activeDocUrl || documentUrl}
+                alt={documentName || "Document Preview"}
+                className="max-w-full max-h-full object-contain rounded-xl shadow-lg border border-slate-200 dark:border-slate-800"
+              />
             </div>
           ) : viewMode === 'canvas' && pdfDataBuffer ? (
             <PdfCanvasViewer pdfData={pdfDataBuffer} blobUrl={blobObjectUrl || documentUrl} />

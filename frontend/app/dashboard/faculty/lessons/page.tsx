@@ -11,6 +11,22 @@ interface DropdownItem {
   [key: string]: any;
 }
 
+interface AcademicCourse {
+  code: string;
+  name: string;
+}
+
+interface AcademicBranch {
+  code: string;
+  name: string;
+}
+
+interface AcademicBatch {
+  code: string;
+  name: string;
+  year?: number;
+}
+
 interface Lesson {
   id: number;
   title: string;
@@ -35,20 +51,19 @@ interface Lesson {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export default function FacultyLessonsPage() {
-  const [userRole, setUserRole] = useState('FACULTY');
-  const [colgCd, setColgCd] = useState('1');
+  const [colgCd, setColgCd] = useState<string>('1');
+  const [colgName, setColgName] = useState<string>('SRMS College of Engineering & Technology (CET Bareilly)');
 
   // Academic Cascading Selectors
-  const [collegesList, setCollegesList] = useState<DropdownItem[]>([]);
-  const [coursesList, setCoursesList] = useState<DropdownItem[]>([]);
-  const [branchesList, setBranchesList] = useState<DropdownItem[]>([]);
-  const [batchesList, setBatchesList] = useState<DropdownItem[]>([]);
+  const [coursesList, setCoursesList] = useState<AcademicCourse[]>([]);
+  const [branchesList, setBranchesList] = useState<AcademicBranch[]>([]);
+  const [batchesList, setBatchesList] = useState<AcademicBatch[]>([]);
+  const [semestersList, setSemestersList] = useState<{ code: string; label: string }[]>([]);
 
-  const [selectedCollege, setSelectedCollege] = useState('1');
-  const [selectedCourse, setSelectedCourse] = useState('13'); // Default BCA
-  const [selectedBranch, setSelectedBranch] = useState('1');
-  const [selectedBatch, setSelectedBatch] = useState('2');
-  const [selectedSem, setSelectedSem] = useState('1');
+  const [selectedCourse, setSelectedCourse] = useState<string>('13'); // Default BCA
+  const [selectedBranch, setSelectedBranch] = useState<string>('1');
+  const [selectedBatch, setSelectedBatch] = useState<string>('2');
+  const [selectedSem, setSelectedSem] = useState<string>('1');
 
   // Curriculum Hierarchy Selectors (Master Data from Backend)
   const [rawUnits, setRawUnits] = useState<any[]>([]);
@@ -70,16 +85,152 @@ export default function FacultyLessonsPage() {
   const [uploading, setUploading] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const [semestersList, setSemestersList] = useState<{ code: string; label: string }[]>([
-    { code: '1', label: 'Semester 1 (Year 1)' },
-    { code: '2', label: 'Semester 2 (Year 1)' },
-    { code: '3', label: 'Semester 3 (Year 2)' },
-    { code: '4', label: 'Semester 4 (Year 2)' },
-    { code: '5', label: 'Semester 5 (Year 3)' },
-    { code: '6', label: 'Semester 6 (Year 3)' },
-    { code: '7', label: 'Semester 7 (Year 4)' },
-    { code: '8', label: 'Semester 8 (Year 4)' },
-  ]);
+  const getTenantSlug = () => {
+    if (typeof window === 'undefined') return 'srms-cet-bareilly';
+    const slug =
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('colg_slug') ||
+      'srms-cet-bareilly';
+    return (slug || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '');
+  };
+
+  const getColgCd = () => {
+    if (typeof window === 'undefined') return '1';
+    return localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+  };
+
+  const getColgName = () => {
+    if (typeof window === 'undefined') return 'SRMS College of Engineering & Technology (CET Bareilly)';
+    const savedName =
+      localStorage.getItem('college_name') ||
+      localStorage.getItem('colg_name') ||
+      localStorage.getItem('tenantName');
+    if (savedName) return savedName;
+    const slug = getTenantSlug();
+    if (slug.includes('cetr')) return 'SRMS College of Engineering, Technology & Research (CETR Bareilly)';
+    if (slug.includes('cet-lucknow') || slug.includes('cetl')) return 'SRMS College of Engineering & Technology (CET Lucknow)';
+    if (slug.includes('pharm')) return 'SRMS College of Pharmacy (Bareilly)';
+    if (slug.includes('ibs')) return 'SRMS Institute of Business Studies (IBS Lucknow)';
+    if (slug.includes('ims')) return 'SRMS Institute of Medical Sciences (IMS Bareilly)';
+    return 'SRMS College of Engineering & Technology (CET Bareilly)';
+  };
+
+  const fetchCourses = async (cd: string, slug: string): Promise<AcademicCourse[]> => {
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map((c: any) => ({
+            code: String(c.course_cd || c.code || '1'),
+            name: c.course_name || c.name || `Course ${c.course_cd}`,
+          }));
+        }
+      }
+    } catch {}
+    return [
+      { code: '13', name: 'BCA' },
+      { code: '1', name: 'B.Tech' },
+      { code: '3', name: 'MCA' },
+      { code: '2', name: 'B.Pharm' },
+      { code: '4', name: 'MBA' },
+    ];
+  };
+
+  const fetchBranches = async (cd: string, crs: string, slug: string, allCourses: AcademicCourse[]): Promise<AcademicBranch[]> => {
+    try {
+      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const courseObj = allCourses.find((c) => String(c.code) === String(crs));
+          const courseName = courseObj?.name || 'BCA';
+          return list.map((b: any) => {
+            const rawName = (b.branch_name || b.name || '').trim();
+            const validName =
+              rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE'
+                ? rawName
+                : `${b.course_name || courseName} General`;
+            return {
+              code: String(b.branch_cd || b.code || '1'),
+              name: validName,
+            };
+          });
+        }
+      }
+    } catch {}
+    if (crs === '13') return [{ code: '1', name: 'BCA General' }];
+    if (crs === '1') {
+      return [
+        { code: '1', name: 'Computer Science & Engineering (CSE)' },
+        { code: '2', name: 'Information Technology (IT)' },
+        { code: '3', name: 'Electronics & Communication (ECE)' },
+        { code: '4', name: 'Mechanical Engineering (ME)' },
+      ];
+    }
+    if (crs === '3') return [{ code: '1', name: 'MCA Core' }];
+    if (crs === '2') return [{ code: '1', name: 'B.Pharm Core' }];
+    if (crs === '4') return [{ code: '1', name: 'MBA Core' }];
+    return [{ code: '1', name: 'General Branch' }];
+  };
+
+  const fetchBatches = async (cd: string, crs: string, slug: string): Promise<AcademicBatch[]> => {
+    try {
+      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map((b: any) => ({
+            code: String(b.batch_cd || b.code || b.batch_name || '1'),
+            name: String(b.batch_name || b.name || b.year || b.batch_cd),
+            year: Number(b.batch_name || b.year || 2025),
+          }));
+        }
+      }
+    } catch {}
+    if (crs === '13') {
+      return [
+        { code: '3', name: '2026', year: 2026 },
+        { code: '2', name: '2025', year: 2025 },
+        { code: '1', name: '2024', year: 2024 },
+      ];
+    }
+    if (crs === '1') {
+      return [
+        { code: '19', name: '2026', year: 2026 },
+        { code: '18', name: '2025', year: 2025 },
+        { code: '17', name: '2024', year: 2024 },
+      ];
+    }
+    return [
+      { code: '1', name: '2025', year: 2025 },
+      { code: '2', name: '2024', year: 2024 },
+    ];
+  };
+
+  const getSemestersForCourse = (courseCd: string, courseName?: string) => {
+    const cName = (courseName || '').toLowerCase();
+    let maxSem = 6;
+    if (courseCd === '1' || courseCd === '2' || cName.includes('b.tech') || cName.includes('b.pharm')) {
+      maxSem = 8;
+    } else if (courseCd === '13' || cName.includes('bca')) {
+      maxSem = 6;
+    } else if (courseCd === '3' || courseCd === '4' || courseCd === '5' || courseCd === '21' || cName.includes('mca') || cName.includes('mba') || cName.includes('m.tech') || cName.includes('m.pharm')) {
+      maxSem = 4;
+    } else if (courseCd === '24' || cName.includes('pharm.d')) {
+      maxSem = 10;
+    } else {
+      maxSem = 8;
+    }
+
+    const sems: { code: string; label: string }[] = [];
+    for (let i = 1; i <= maxSem; i++) {
+      const year = Math.ceil(i / 2);
+      sems.push({ code: String(i), label: `${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Semester (Year ${year})` });
+    }
+    return sems;
+  };
 
   // 1. Available Units filtered by Academic Scoping (Colg, Course, Branch, Batch, Sem)
   const availableUnits = useMemo(() => {
@@ -153,144 +304,75 @@ export default function FacultyLessonsPage() {
     }));
   }, [rawSubtopics, selectedTopic, selectedUnit]);
 
+  const handleCourseChange = async (newCourseCd: string) => {
+    setSelectedCourse(newCourseCd);
+    const cd = getColgCd();
+    const slug = getTenantSlug();
+
+    const selectedCourseObj = coursesList.find((c) => String(c.code) === String(newCourseCd));
+    const [branches, batches] = await Promise.all([
+      fetchBranches(cd, newCourseCd, slug, coursesList),
+      fetchBatches(cd, newCourseCd, slug),
+    ]);
+
+    setBranchesList(branches);
+    setBatchesList(batches);
+
+    const sems = getSemestersForCourse(newCourseCd, selectedCourseObj?.name);
+    setSemestersList(sems);
+
+    const defaultBranch = branches[0]?.code || '1';
+    const defaultBatch = batches.find((b) => b.name === '2025' || b.name === '2026' || b.year === 2025 || b.year === 2026)?.code || batches[0]?.code || '1';
+
+    setSelectedBranch(defaultBranch);
+    setSelectedBatch(defaultBatch);
+    setSelectedSem((prev) => (sems.some((s) => s.code === prev) ? prev : sems[0]?.code || '1'));
+  };
+
   useEffect(() => {
-    fetchAcademicMetadata();
+    const cd = getColgCd();
+    const name = getColgName();
+    const slug = getTenantSlug();
+
+    setColgCd(cd);
+    setColgName(name);
+
+    const initAcademicMetadata = async () => {
+      try {
+        const courses = await fetchCourses(cd, slug);
+        setCoursesList(courses);
+
+        const defaultCourse = courses.find((c) => c.code === '13' || c.name.toLowerCase().includes('bca')) || courses[0];
+        const initialCourseCd = defaultCourse ? defaultCourse.code : '13';
+        setSelectedCourse(initialCourseCd);
+
+        const [branches, batches] = await Promise.all([
+          fetchBranches(cd, initialCourseCd, slug, courses),
+          fetchBatches(cd, initialCourseCd, slug),
+        ]);
+
+        setBranchesList(branches);
+        setBatchesList(batches);
+
+        const sems = getSemestersForCourse(initialCourseCd, defaultCourse?.name);
+        setSemestersList(sems);
+
+        const defaultBranch = branches[0]?.code || '1';
+        const defaultBatch = batches.find((b) => b.name === '2025' || b.name === '2026' || b.year === 2025 || b.year === 2026)?.code || batches[0]?.code || '1';
+
+        setSelectedBranch(defaultBranch);
+        setSelectedBatch(defaultBatch);
+        setSelectedSem(sems[0]?.code || '1');
+
+        fetchCurriculumHierarchy();
+      } catch (err) {
+        console.warn('Error loading academic metadata:', err);
+      }
+    };
+
+    initAcademicMetadata();
     fetchLessons();
   }, []);
-
-  useEffect(() => {
-    if (selectedCollege && selectedCourse) {
-      fetchBranchesAndBatches(selectedCollege, selectedCourse);
-    }
-  }, [selectedCollege, selectedCourse]);
-
-  const fetchSemestersFromApi = async () => {
-    try {
-      const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
-      const res = await fetch(`${API_BASE}/college-master/professionals?tenant=${tenant}`).catch(() => null);
-      if (res && res.ok) {
-        const json = await res.json();
-        const list = Array.isArray(json.data) ? json.data : [];
-        if (list.length > 0) {
-          const mapped = list.map((item: any, idx: number) => ({
-            code: String(item.phase_order || idx + 1),
-            label: item.name || `Semester ${item.phase_order || idx + 1}`,
-          }));
-          setSemestersList(mapped);
-          if (mapped.length > 0) setSelectedSem(mapped[0].code);
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to fetch semesters from API:', err);
-    }
-
-    setSemestersList([
-      { code: '1', label: 'Semester 1 (Year 1)' },
-      { code: '2', label: 'Semester 2 (Year 1)' },
-      { code: '3', label: 'Semester 3 (Year 2)' },
-      { code: '4', label: 'Semester 4 (Year 2)' },
-      { code: '5', label: 'Semester 5 (Year 3)' },
-      { code: '6', label: 'Semester 6 (Year 3)' },
-      { code: '7', label: 'Semester 7 (Year 4)' },
-      { code: '8', label: 'Semester 8 (Year 4)' },
-    ]);
-  };
-
-  const fetchAcademicMetadata = async () => {
-    try {
-      fetchSemestersFromApi();
-      const [colgRes, crsRes] = await Promise.all([
-        fetch('/api/srms/colleges').catch(() => null),
-        fetch('/api/srms/courses?colgcd=1').catch(() => null),
-      ]);
-
-      if (colgRes && colgRes.ok) {
-        const j = await colgRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
-        const mapped = list.map((c: any) => ({
-          id: String(c.colg_cd || c.code || c.id || '1'),
-          code: String(c.colg_cd || c.code || c.id || '1'),
-          name: c.colg_name || c.name || `College ${c.colg_cd || 1}`,
-        }));
-        setCollegesList(mapped.length > 0 ? mapped : [
-          { id: '1', code: '1', name: 'SRMS College of Engineering & Technology, Bareilly' }
-        ]);
-      } else {
-        setCollegesList([
-          { id: '1', code: '1', name: 'SRMS College of Engineering & Technology, Bareilly' }
-        ]);
-      }
-
-      let activeCourse = '13';
-      if (crsRes && crsRes.ok) {
-        const j = await crsRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
-        const mapped = list.map((c: any) => ({
-          id: String(c.course_cd || c.code || c.id || '1'),
-          code: String(c.course_cd || c.code || c.id || '1'),
-          name: c.course_name || c.name || `Course ${c.course_cd || 1}`,
-        }));
-        setCoursesList(mapped);
-        if (mapped.length > 0) {
-          activeCourse = mapped[0].code;
-          setSelectedCourse(activeCourse);
-        }
-      } else {
-        setCoursesList([]);
-      }
-
-      fetchBranchesAndBatches('1', activeCourse);
-      fetchCurriculumHierarchy();
-    } catch (err) {
-      console.warn('Error loading academic metadata:', err);
-    }
-  };
-
-  const fetchBranchesAndBatches = async (colg: string, crs: string) => {
-    try {
-      const cd = colg || '1';
-      const course = crs || '13';
-      const [brRes, btRes] = await Promise.all([
-        fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${course}`).catch(() => null),
-        fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${course}`).catch(() => null),
-      ]);
-
-      if (brRes && brRes.ok) {
-        const j = await brRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
-        const mapped = list.map((b: any) => {
-          const rawName = b.branch_name || b.name;
-          const validName = (rawName && rawName !== '-' && rawName !== 'null') ? rawName : 'General Branch';
-          return {
-            id: String(b.branch_cd || b.code || '1'),
-            code: String(b.branch_cd || b.code || '1'),
-            name: validName,
-          };
-        });
-        setBranchesList(mapped);
-        if (mapped.length > 0) setSelectedBranch(mapped[0].code);
-      } else {
-        setBranchesList([]);
-      }
-
-      if (btRes && btRes.ok) {
-        const j = await btRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
-        const mapped = list.map((b: any) => ({
-          id: String(b.batch_cd || b.code || b.batch_name || '1'),
-          code: String(b.batch_cd || b.code || b.batch_name || '1'),
-          name: String(b.batch_name || b.name || b.year || b.batch_cd),
-        }));
-        setBatchesList(mapped);
-        if (mapped.length > 0) setSelectedBatch(mapped[0].code);
-      } else {
-        setBatchesList([]);
-      }
-    } catch (err) {
-      console.warn('Error fetching branches/batches:', err);
-    }
-  };
 
   const fetchCurriculumHierarchy = async () => {
     try {
@@ -380,7 +462,7 @@ export default function FacultyLessonsPage() {
       const formData = new FormData();
       formData.append('title', title);
       formData.append('description', description);
-      formData.append('colgCd', selectedCollege);
+      formData.append('colgCd', colgCd);
       formData.append('courseCd', selectedCourse);
       formData.append('branchCd', selectedBranch);
       formData.append('batchCd', selectedBatch);
@@ -494,37 +576,34 @@ export default function FacultyLessonsPage() {
             {/* 5-Level Academic Cascading Selectors */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
 
-              {/* 1. College */}
+              {/* 1. College (Locked to Active Tenant) */}
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">1. College</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700 dark:text-slate-300">1. College</label>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 rounded border border-emerald-200 dark:border-emerald-800">
+                    🔒 Active Tenant
+                  </span>
+                </div>
                 <select
-                  value={selectedCollege}
-                  disabled={userRole !== 'SUPER_ADMIN'}
-                  onChange={(e) => setSelectedCollege(e.target.value)}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-80"
+                  value={colgCd}
+                  disabled
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold cursor-not-allowed opacity-90 text-slate-800 dark:text-slate-200 shadow-sm"
                 >
-                  {collegesList.map((colg) => (
-                    <option key={colg.code || colg.id} value={colg.code || colg.id}>
-                      [{colg.code}] {colg.name}
-                    </option>
-                  ))}
+                  <option value={colgCd}>[{colgCd}] {colgName}</option>
                 </select>
               </div>
 
               {/* 2. Course */}
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">2. Course</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">2. Course *</label>
                 <select
                   value={selectedCourse}
-                  onChange={(e) => {
-                    setSelectedCourse(e.target.value);
-                    fetchBranchesAndBatches(selectedCollege, e.target.value);
-                  }}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                  onChange={(e) => handleCourseChange(e.target.value)}
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {coursesList.map((crs) => (
-                    <option key={crs.code || crs.id} value={crs.code || crs.id}>
-                      [{crs.code}] {crs.name}
+                    <option key={crs.code} value={crs.code}>
+                      [#{crs.code}] {crs.name}
                     </option>
                   ))}
                 </select>
@@ -532,15 +611,17 @@ export default function FacultyLessonsPage() {
 
               {/* 3. Branch */}
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">3. Branch</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  3. Branch * <span className="text-[#5B4BFF]">({branchesList.length})</span>
+                </label>
                 <select
                   value={selectedBranch}
                   onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {branchesList.map((br) => (
-                    <option key={br.code || br.id} value={br.code || br.id}>
-                      [{br.code}] {br.name}
+                    <option key={br.code} value={br.code}>
+                      [#{br.code}] {br.name}
                     </option>
                   ))}
                 </select>
@@ -548,15 +629,15 @@ export default function FacultyLessonsPage() {
 
               {/* 4. Batch */}
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">4. Batch</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">4. Batch *</label>
                 <select
                   value={selectedBatch}
                   onChange={(e) => setSelectedBatch(e.target.value)}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {batchesList.map((bt) => (
-                    <option key={bt.code || bt.id} value={bt.code || bt.id}>
-                      [{bt.code}] {bt.name || bt.year}
+                    <option key={bt.code} value={bt.code}>
+                      [#{bt.code}] {bt.name}
                     </option>
                   ))}
                 </select>
@@ -564,11 +645,11 @@ export default function FacultyLessonsPage() {
 
               {/* 5. Semester */}
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">5. Semester</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">5. Semester *</label>
                 <select
                   value={selectedSem}
                   onChange={(e) => setSelectedSem(e.target.value)}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#5B4BFF] dark:text-indigo-300"
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#5B4BFF] dark:text-indigo-300 focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {semestersList.map((s) => (
                     <option key={s.code} value={s.code}>

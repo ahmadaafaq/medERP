@@ -91,7 +91,7 @@ export default function RecentLessonsWidget({ role = 'FACULTY' }: { role?: strin
   const getCurriculumLink = () => {
     if (role === 'ADMIN') return '/dashboard/admin/assessment';
     if (role === 'CLERK') return '/dashboard/clerk/assessment';
-    return '/dashboard/faculty/curriculum';
+    return '/dashboard/faculty/lessons';
   };
 
   return (

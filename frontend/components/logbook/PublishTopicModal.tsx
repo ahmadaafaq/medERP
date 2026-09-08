@@ -15,6 +15,22 @@ interface PublishTopicModalProps {
   onSuccess: () => void;
 }
 
+interface AcademicCourse {
+  code: string;
+  name: string;
+}
+
+interface AcademicBranch {
+  code: string;
+  name: string;
+}
+
+interface AcademicBatch {
+  code: string;
+  name: string;
+  year?: number;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export default function PublishTopicModal({ isOpen, onClose, onSuccess }: PublishTopicModalProps) {
@@ -24,6 +40,12 @@ export default function PublishTopicModal({ isOpen, onClose, onSuccess }: Publis
   const [description, setDescription] = useState<string>('');
   const [maxMarks, setMaxMarks] = useState<number>(100);
   const [submissionDeadline, setSubmissionDeadline] = useState<string>('');
+
+  // Academic Cohort Structure
+  const [coursesList, setCoursesList] = useState<AcademicCourse[]>([]);
+  const [branchesList, setBranchesList] = useState<AcademicBranch[]>([]);
+  const [batchesList, setBatchesList] = useState<AcademicBatch[]>([]);
+
   const [courseId, setCourseId] = useState<string>('13'); // Default BCA
   const [branchId, setBranchId] = useState<string>('1');
   const [batchId, setBatchId] = useState<string>('2'); // Default Batch 2025
@@ -31,19 +53,168 @@ export default function PublishTopicModal({ isOpen, onClose, onSuccess }: Publis
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getTenantSlug = () => {
+    if (typeof window === 'undefined') return 'srms-cet-bareilly';
+    const slug =
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('colg_slug') ||
+      'srms-cet-bareilly';
+    return (slug || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '');
+  };
+
+  const getColgCd = () => {
+    if (typeof window === 'undefined') return '1';
+    return localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+  };
+
+  const fetchCourses = async (cd: string, slug: string): Promise<AcademicCourse[]> => {
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map((c: any) => ({
+            code: String(c.course_cd || c.code || '1'),
+            name: c.course_name || c.name || `Course ${c.course_cd}`,
+          }));
+        }
+      }
+    } catch {}
+    return [
+      { code: '13', name: 'BCA' },
+      { code: '1', name: 'B.Tech' },
+      { code: '3', name: 'MCA' },
+      { code: '2', name: 'B.Pharm' },
+      { code: '4', name: 'MBA' },
+    ];
+  };
+
+  const fetchBranches = async (cd: string, crs: string, slug: string, allCourses: AcademicCourse[]): Promise<AcademicBranch[]> => {
+    try {
+      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const courseObj = allCourses.find((c) => String(c.code) === String(crs));
+          const courseName = courseObj?.name || 'BCA';
+          return list.map((b: any) => {
+            const rawName = (b.branch_name || b.name || '').trim();
+            const validName =
+              rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE'
+                ? rawName
+                : `${b.course_name || courseName} General`;
+            return {
+              code: String(b.branch_cd || b.code || '1'),
+              name: validName,
+            };
+          });
+        }
+      }
+    } catch {}
+    if (crs === '13') return [{ code: '1', name: 'BCA General' }];
+    if (crs === '1') {
+      return [
+        { code: '1', name: 'Computer Science & Engineering (CSE)' },
+        { code: '2', name: 'Information Technology (IT)' },
+        { code: '3', name: 'Electronics & Communication (ECE)' },
+        { code: '4', name: 'Mechanical Engineering (ME)' },
+      ];
+    }
+    return [{ code: '1', name: 'General Branch' }];
+  };
+
+  const fetchBatches = async (cd: string, crs: string, slug: string): Promise<AcademicBatch[]> => {
+    try {
+      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map((b: any) => ({
+            code: String(b.batch_cd || b.code || b.batch_name || '1'),
+            name: String(b.batch_name || b.name || b.year || b.batch_cd),
+            year: Number(b.batch_name || b.year || 2025),
+          }));
+        }
+      }
+    } catch {}
+    if (crs === '13') {
+      return [
+        { code: '3', name: '2026', year: 2026 },
+        { code: '2', name: '2025', year: 2025 },
+        { code: '1', name: '2024', year: 2024 },
+      ];
+    }
+    return [
+      { code: '19', name: '2026', year: 2026 },
+      { code: '18', name: '2025', year: 2025 },
+      { code: '17', name: '2024', year: 2024 },
+    ];
+  };
+
+  const handleCourseChange = async (newCourseCd: string) => {
+    setCourseId(newCourseCd);
+    const cd = getColgCd();
+    const slug = getTenantSlug();
+
+    const [branches, batches] = await Promise.all([
+      fetchBranches(cd, newCourseCd, slug, coursesList),
+      fetchBatches(cd, newCourseCd, slug),
+    ]);
+
+    setBranchesList(branches);
+    setBatchesList(batches);
+
+    const defaultBranch = branches[0]?.code || '1';
+    const defaultBatch = batches.find((b) => b.name === '2025' || b.year === 2025)?.code || batches[0]?.code || '2';
+
+    setBranchId(defaultBranch);
+    setBatchId(defaultBatch);
+  };
+
   useEffect(() => {
     if (isOpen) {
       fetchCategories();
+
       // Set default deadline to 7 days from now
       const d = new Date();
       d.setDate(d.getDate() + 7);
       setSubmissionDeadline(d.toISOString().slice(0, 16));
+
+      // Fetch academic cohort structure for logged-in tenant
+      const initAcademicStructure = async () => {
+        const cd = getColgCd();
+        const slug = getTenantSlug();
+
+        const courses = await fetchCourses(cd, slug);
+        setCoursesList(courses);
+
+        const defaultCourse = courses.find((c) => c.code === '13' || c.name.toLowerCase().includes('bca')) || courses[0];
+        const initialCourseCd = defaultCourse ? defaultCourse.code : '13';
+        setCourseId(initialCourseCd);
+
+        const [branches, batches] = await Promise.all([
+          fetchBranches(cd, initialCourseCd, slug, courses),
+          fetchBatches(cd, initialCourseCd, slug),
+        ]);
+
+        setBranchesList(branches);
+        setBatchesList(batches);
+
+        const defaultBranch = branches[0]?.code || '1';
+        const defaultBatch = batches.find((b) => b.name === '2025' || b.year === 2025)?.code || batches[0]?.code || '2';
+
+        setBranchId(defaultBranch);
+        setBatchId(defaultBatch);
+      };
+
+      initAcademicStructure();
     }
   }, [isOpen]);
 
   const fetchCategories = async () => {
     try {
-      const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+      const slug = getTenantSlug();
       const token = localStorage.getItem('token') || '';
       const res = await fetch(`${API_BASE}/logbook/categories?tenant=${slug}`, {
         headers: {
@@ -79,7 +250,7 @@ export default function PublishTopicModal({ isOpen, onClose, onSuccess }: Publis
 
     setLoading(true);
     try {
-      const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+      const slug = getTenantSlug();
       const token = localStorage.getItem('token') || '';
 
       const res = await fetch(`${API_BASE}/logbook/topics?tenant=${slug}`, {
@@ -227,69 +398,81 @@ export default function PublishTopicModal({ isOpen, onClose, onSuccess }: Publis
             </div>
           </div>
 
-          {/* Target Student Cohort Scoping */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850 border border-[#E7EAF3] dark:border-slate-800 space-y-3">
-            <span className="text-[11px] font-black uppercase text-[#5B4BFF] tracking-wider block">
-              🎯 Target Student Cohort Scope
+          {/* Target Student Cohort Scoping (Photo 1 exact match styling & dependency) */}
+          <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/80 p-4 rounded-2xl space-y-3">
+            <span className="font-extrabold text-xs text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+              <span>🎯</span> Target Academic Cohorts (Course • Branch • Batch • Semester)
             </span>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               <div>
-                <label className="text-[10px] font-extrabold text-[#7B8794] uppercase block mb-1">
-                  Course
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  🎓 Course *
                 </label>
                 <select
                   value={courseId}
-                  onChange={(e) => setCourseId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                  onChange={(e) => handleCourseChange(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  <option value="13">BCA</option>
-                  <option value="1">B.Tech</option>
-                  <option value="3">MCA</option>
-                  <option value="2">B.Pharm</option>
-                  <option value="4">MBA</option>
-                  <option value="11">MBBS</option>
+                  {coursesList.map((crs, idx) => (
+                    <option key={crs.code || idx} value={crs.code}>
+                      [#{crs.code}] {crs.name}
+                    </option>
+                  ))}
                 </select>
               </div>
+
               <div>
-                <label className="text-[10px] font-extrabold text-[#7B8794] uppercase block mb-1">
-                  Branch
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  🏢 Branch * <span className="text-[#5B4BFF]">({branchesList.length})</span>
                 </label>
                 <select
                   value={branchId}
                   onChange={(e) => setBranchId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  <option value="1">Core Branch</option>
-                  <option value="all">All Branches</option>
+                  {branchesList.map((br, idx) => (
+                    <option key={br.code || idx} value={br.code}>
+                      [#{br.code}] {br.name}
+                    </option>
+                  ))}
                 </select>
               </div>
+
               <div>
-                <label className="text-[10px] font-extrabold text-[#7B8794] uppercase block mb-1">
-                  Batch
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  👥 Batch * <span className="text-[#5B4BFF]">({batchesList.length})</span>
                 </label>
                 <select
                   value={batchId}
                   onChange={(e) => setBatchId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  <option value="2">Batch 2025</option>
-                  <option value="1">Batch 2024</option>
-                  <option value="all">Entire Department</option>
+                  {batchesList.map((batch, idx) => (
+                    <option key={batch.code || idx} value={batch.code}>
+                      [#{batch.code}] Batch {batch.name || batch.year} {batch.year && batch.name !== String(batch.year) ? `(${batch.year})` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
+
               <div>
-                <label className="text-[10px] font-extrabold text-[#7B8794] uppercase block mb-1">
-                  Semester
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  📅 Semester
                 </label>
                 <select
                   value={semesterId}
                   onChange={(e) => setSemesterId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  <option value="3">Semester 3</option>
-                  <option value="1">Semester 1</option>
-                  <option value="5">Semester 5</option>
                   <option value="all">All Semesters</option>
+                  <option value="1">Semester 1</option>
+                  <option value="2">Semester 2</option>
+                  <option value="3">Semester 3</option>
+                  <option value="4">Semester 4</option>
+                  <option value="5">Semester 5</option>
+                  <option value="6">Semester 6</option>
+                  <option value="7">Semester 7</option>
+                  <option value="8">Semester 8</option>
                 </select>
               </div>
             </div>

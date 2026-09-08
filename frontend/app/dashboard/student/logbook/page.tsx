@@ -144,16 +144,16 @@ export default function StudentLogbookPage() {
     const evaluatedPdfUrl = (isEval && item.id && !item.id.startsWith('sample'))
       ? `/api/v1/logbook/submissions/${item.id}/evaluated-pdf?tenant=${slug}`
       : item.evaluated_file_url || undefined;
-    const originalPdfUrl = (item.id && !item.id.startsWith('sample'))
+    const originalPdfUrl = item.file_url || (item.id && !item.id.startsWith('sample')
       ? `/api/v1/logbook/submissions/${item.id}/original-pdf?tenant=${slug}`
-      : undefined;
+      : undefined);
 
     const docUrl =
+      item.file_url ||
       item.docUrl ||
       (isEval && evaluatedPdfUrl ? evaluatedPdfUrl : '') ||
       (item.id && !item.id.startsWith('sample') ? `/api/v1/logbook/submissions/${item.id}/document?tenant=${slug}` : '') ||
       item.attachment_url ||
-      item.file_url ||
       item.slide_deck_url ||
       item.document_url ||
       item.certificate_url ||
@@ -797,55 +797,55 @@ export default function StudentLogbookPage() {
             {activeTab === 'DASHBOARD' && (
               <div className="space-y-6">
                 {/* 4 Primary Quick Metric Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Mini Project</span>
-                      <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-[#5B4BFF]">
-                        <FolderGit2 className="w-5 h-5" />
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-3.5 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-2 sm:mb-3">
+                      <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider truncate">Mini Project</span>
+                      <div className="p-1.5 sm:p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-[#5B4BFF] shrink-0">
+                        <FolderGit2 className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                     </div>
-                    <div className="text-lg font-bold text-slate-900 dark:text-white truncate">
+                    <div className="text-sm sm:text-lg font-bold text-slate-900 dark:text-white truncate">
                       {miniProject?.title || 'React Crud Operation'}
                     </div>
-                    <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Status: Active Topic
+                    <div className="text-[11px] sm:text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1 flex items-center gap-1 truncate">
+                      <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" /> <span className="truncate">Status: Active Topic</span>
                     </div>
                   </div>
 
-                  <div className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Uploaded Submissions</span>
-                      <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600">
-                        <FileCheck className="w-5 h-5" />
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-3.5 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-2 sm:mb-3">
+                      <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider truncate">Submissions</span>
+                      <div className="p-1.5 sm:p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 shrink-0">
+                        <FileCheck className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                     </div>
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">{mySubmissions.length} Delivered</div>
-                    <div className="text-xs text-slate-500 mt-1">PDF reports & code verification</div>
+                    <div className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white">{mySubmissions.length} Delivered</div>
+                    <div className="text-[11px] sm:text-xs text-slate-500 mt-1 truncate">PDF reports &amp; code</div>
                   </div>
 
-                  <div className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Weekly Work Logs</span>
-                      <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600">
-                        <Calendar className="w-5 h-5" />
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-3.5 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-2 sm:mb-3">
+                      <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider truncate">Weekly Logs</span>
+                      <div className="p-1.5 sm:p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 shrink-0">
+                        <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                     </div>
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">{weeklyLogs.length} Recorded</div>
-                    <div className="text-xs text-slate-500 mt-1">{stats.totalHoursLogged} engineering hours</div>
+                    <div className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white">{weeklyLogs.length} Recorded</div>
+                    <div className="text-[11px] sm:text-xs text-slate-500 mt-1 truncate">{stats.totalHoursLogged} eng. hours</div>
                   </div>
 
-                  <div className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Evaluation Score</span>
-                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
-                        <Award className="w-5 h-5" />
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-3.5 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-2 sm:mb-3">
+                      <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider truncate">Evaluation</span>
+                      <div className="p-1.5 sm:p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 shrink-0">
+                        <Award className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                     </div>
-                    <div className="text-2xl font-black text-emerald-600">
+                    <div className="text-lg sm:text-2xl font-black text-emerald-600 truncate">
                       {mySubmissions[0]?.marks_obtained !== undefined ? `${mySubmissions[0].marks_obtained} / ${mySubmissions[0].max_marks || 20}` : 'Evaluated'}
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">Status: {mySubmissions[0]?.status || 'Pending'}</div>
+                    <div className="text-[11px] sm:text-xs text-slate-500 mt-1 truncate">Status: {mySubmissions[0]?.status || 'Pending'}</div>
                   </div>
                 </div>
 
@@ -2186,58 +2186,58 @@ export default function StudentLogbookPage() {
             {/* 5 & 6. TAB: SEMINARS & TUTORIALS (Two Classified Sub-Tabs) */}
             {/* ======================================================== */}
             {(activeTab === 'SEMINARS' || activeTab === 'TUTORIALS') && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {/* Header Section */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                   <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] dark:text-indigo-400 text-xs font-bold mb-2">
+                    <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] dark:text-indigo-400 text-[11px] sm:text-xs font-bold mb-1.5 sm:mb-2">
                       <Sparkles className="w-3.5 h-3.5 text-[#F36C21]" />
                       <span>Academic Portfolio Deliverable Submissions</span>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                      <Presentation className="w-6 h-6 text-[#F36C21]" />
+                    <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <Presentation className="w-5 h-5 sm:w-6 sm:h-6 text-[#F36C21]" />
                       <span>Seminar &amp; Tutorial Academic Portfolio</span>
                     </h2>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">
                       Access newly assigned technical topics, submit slide deck / solution deliverables, and track faculty progressive scoring.
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="flex flex-row items-center gap-2 shrink-0 w-full sm:w-auto">
                     {/* Auto-refresh / Reload Content Button */}
                     <button
                       type="button"
                       onClick={handleRefreshSubmissions}
                       disabled={isRefreshingStatus}
-                      className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer"
+                      className="flex-1 sm:flex-initial px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 sm:gap-2 shadow-xs transition-all cursor-pointer"
                       title="Reload latest submissions and faculty evaluation status"
                     >
                       <RotateCcw className={`w-3.5 h-3.5 ${isRefreshingStatus ? 'animate-spin text-[#5B4BFF]' : 'text-slate-500'}`} />
-                      <span>{isRefreshingStatus ? 'Refreshing...' : 'Refresh Status'}</span>
+                      <span className="truncate">{isRefreshingStatus ? 'Refreshing...' : 'Refresh Status'}</span>
                     </button>
 
                     <button
                       onClick={() => { setEditingSeminar(null); setIsSeminarModalOpen(true); }}
-                      className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer"
+                      className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer"
                     >
-                      <Plus className="w-4 h-4 text-[#F36C21]" />
-                      <span>Log External Seminar</span>
+                      <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#F36C21]" />
+                      <span className="truncate">Log External</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Submission Success & Reload Notification Banner */}
                 {submissionSuccessBanner && (
-                  <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-3 text-emerald-800 dark:text-emerald-200 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
-                        <CheckCircle2 className="w-5 h-5" />
+                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-3 text-emerald-800 dark:text-emerald-200 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-2.5 sm:gap-3">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                        <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                       <div>
-                        <div className="text-xs font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-100">
+                        <div className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-100">
                           Auto-Refreshed With Latest Status
                         </div>
-                        <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                        <div className="text-[11px] sm:text-xs font-medium text-emerald-700 dark:text-emerald-300">
                           {submissionSuccessBanner}
                         </div>
                       </div>
@@ -2245,7 +2245,7 @@ export default function StudentLogbookPage() {
                     <button
                       type="button"
                       onClick={() => setSubmissionSuccessBanner(null)}
-                      className="p-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-600 transition cursor-pointer"
+                      className="p-1 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-600 transition cursor-pointer"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -2253,21 +2253,22 @@ export default function StudentLogbookPage() {
                 )}
 
                 {/* Sub-Tabs Switcher Bar */}
-                <div className="bg-slate-100/90 dark:bg-slate-800/80 p-1.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border border-slate-200/80 dark:border-slate-700">
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="bg-slate-100/90 dark:bg-slate-800/80 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 border border-slate-200/80 dark:border-slate-700">
+                  <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
                     {/* Tab 1: Newly Topics */}
                     <button
                       type="button"
                       onClick={() => setSeminarSubTab('NEW_TOPICS')}
-                      className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      className={`flex-1 sm:flex-initial px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
                         seminarSubTab === 'NEW_TOPICS'
                           ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/25 scale-[1.01]'
                           : 'text-slate-600 dark:text-slate-300 hover:text-[#5B4BFF] hover:bg-white/60 dark:hover:bg-slate-700/60'
                       }`}
                     >
-                      <Presentation className="w-4 h-4" />
-                      <span>1. Academic &amp; Technical Seminars</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                      <Presentation className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      <span className="sm:hidden">1. Seminars</span>
+                      <span className="hidden sm:inline">1. Academic &amp; Technical Seminars</span>
+                      <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold ${
                         seminarSubTab === 'NEW_TOPICS'
                           ? 'bg-white/20 text-white'
                           : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
@@ -2280,15 +2281,16 @@ export default function StudentLogbookPage() {
                     <button
                       type="button"
                       onClick={() => setSeminarSubTab('SUBMITTED_DELIVERABLES')}
-                      className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      className={`flex-1 sm:flex-initial px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
                         seminarSubTab === 'SUBMITTED_DELIVERABLES'
                           ? 'bg-[#F36C21] text-white shadow-md shadow-[#F36C21]/25 scale-[1.01]'
                           : 'text-slate-600 dark:text-slate-300 hover:text-[#F36C21] hover:bg-white/60 dark:hover:bg-slate-700/60'
                       }`}
                     >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>2. Submitted Seminar Deliverables &amp; Faculty Scores</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                      <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      <span className="sm:hidden">2. Submissions</span>
+                      <span className="hidden sm:inline">2. Submitted Seminar Deliverables &amp; Faculty Scores</span>
+                      <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold ${
                         seminarSubTab === 'SUBMITTED_DELIVERABLES'
                           ? 'bg-white/20 text-white'
                           : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
@@ -2300,12 +2302,12 @@ export default function StudentLogbookPage() {
 
                   {/* Filter Pills for Tab 1 */}
                   {seminarSubTab === 'NEW_TOPICS' && (
-                    <div className="flex items-center gap-1.5 self-end sm:self-auto">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden md:inline">Filter:</span>
+                    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 sm:py-0 self-start sm:self-auto">
+                      <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden md:inline">Filter:</span>
                       <button
                         type="button"
                         onClick={() => setTopicTypeFilter('ALL')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        className={`px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                           topicTypeFilter === 'ALL'
                             ? 'bg-white dark:bg-slate-900 text-[#5B4BFF] shadow-xs'
                             : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -2316,7 +2318,7 @@ export default function StudentLogbookPage() {
                       <button
                         type="button"
                         onClick={() => setTopicTypeFilter('SEMINAR')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        className={`px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                           topicTypeFilter === 'SEMINAR'
                             ? 'bg-white dark:bg-slate-900 text-[#5B4BFF] shadow-xs'
                             : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -2327,7 +2329,7 @@ export default function StudentLogbookPage() {
                       <button
                         type="button"
                         onClick={() => setTopicTypeFilter('TUTORIAL')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        className={`px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                           topicTypeFilter === 'TUTORIAL'
                             ? 'bg-white dark:bg-slate-900 text-[#00C48C] shadow-xs'
                             : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -2343,14 +2345,14 @@ export default function StudentLogbookPage() {
                 {/* 1. ACADEMIC & TECHNICAL SEMINARS (MODERN UI CARD: 1 ROW 4 CARDS) */}
                 {/* ========================================================================= */}
                 {seminarSubTab === 'NEW_TOPICS' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-sm font-black uppercase text-[#5B4BFF] tracking-wider flex items-center gap-2">
-                          <Layers className="w-4 h-4" />
+                        <h3 className="text-xs sm:text-sm font-black uppercase text-[#5B4BFF] tracking-wider flex items-center gap-1.5 sm:gap-2">
+                          <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           <span>Active Seminar &amp; Tutorial Topics ({filteredTopics.length})</span>
                         </h3>
-                        <p className="text-xs text-slate-500">Every topic either seminar or tutorial displayed in modern stylish cards. Click below to submit deliverables.</p>
+                        <p className="text-[11px] sm:text-xs text-slate-500">Every topic either seminar or tutorial displayed in modern stylish cards. Click below to submit deliverables.</p>
                       </div>
                       <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full hidden sm:inline-block">
                         1 Row 4 Cards Layout
@@ -2358,13 +2360,13 @@ export default function StudentLogbookPage() {
                     </div>
 
                     {filteredTopics.length === 0 ? (
-                      <div className="bg-white dark:bg-slate-900 rounded-[22px] p-12 text-center shadow-soft border border-slate-200/80 dark:border-slate-800 space-y-3">
-                        <BookOpenCheck className="w-12 h-12 text-slate-300 mx-auto" />
-                        <h4 className="font-bold text-base text-slate-800 dark:text-slate-200">No Topics Found</h4>
+                      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-8 sm:p-12 text-center shadow-soft border border-slate-200/80 dark:border-slate-800 space-y-3">
+                        <BookOpenCheck className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto" />
+                        <h4 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">No Topics Found</h4>
                         <p className="text-xs text-slate-500">There are currently no topics matching this category filter.</p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
                         {filteredTopics.map((top) => {
                           const existingSub = mySubmissions.find((s) => s.topic_id === top.id);
                           const isTutorial = top.category_code === 'TUTORIAL' || top.title?.toLowerCase().includes('tutorial');
@@ -2372,45 +2374,45 @@ export default function StudentLogbookPage() {
                           return (
                             <div
                               key={top.id}
-                              className="bg-white dark:bg-slate-900 rounded-[22px] p-5 shadow-soft border border-slate-200/80 dark:border-slate-800 hover:shadow-xl hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden"
+                              className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-4 sm:p-5 shadow-soft border border-slate-200/80 dark:border-slate-800 hover:shadow-xl hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-300 flex flex-col justify-between space-y-3 sm:space-y-4 group relative overflow-hidden"
                             >
                               {/* Card Top colored accent bar */}
-                              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+                              <div className={`absolute top-0 left-0 right-0 h-1 sm:h-1.5 ${
                                 isTutorial ? 'bg-gradient-to-r from-emerald-400 to-teal-500' : 'bg-gradient-to-r from-[#5B4BFF] to-[#7867FF]'
                               }`} />
 
-                              <div className="space-y-3 pt-1">
+                              <div className="space-y-2.5 sm:space-y-3 pt-0.5 sm:pt-1">
                                 {/* Badges Header */}
                                 <div className="flex items-center justify-between gap-1 flex-wrap">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                  <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${
                                     isTutorial
                                       ? 'bg-emerald-50 dark:bg-emerald-950/70 text-[#00C48C] border border-emerald-200/60 dark:border-emerald-800'
                                       : 'bg-purple-50 dark:bg-purple-950/70 text-[#5B4BFF] border border-purple-200/60 dark:border-purple-800'
                                   }`}>
                                     {isTutorial ? 'Unit Tutorial' : 'Academic Seminar'}
                                   </span>
-                                  <span className="text-[11px] font-mono font-black text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                                  <span className="text-[10px] sm:text-[11px] font-mono font-black text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
                                     Max {top.max_marks} Marks
                                   </span>
                                 </div>
 
                                 {/* Title & Description */}
                                 <div>
-                                  <h4 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-[#5B4BFF] transition line-clamp-1" title={top.title}>
+                                  <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white group-hover:text-[#5B4BFF] transition line-clamp-1" title={top.title}>
                                     {top.title}
                                   </h4>
-                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed min-h-[36px]" title={top.description || ''}>
+                                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed min-h-[30px] sm:min-h-[36px]" title={top.description || ''}>
                                     {top.description || 'Deliverable presentation and technical demonstration.'}
                                   </p>
                                 </div>
 
                                 {/* Metadata Info */}
-                                <div className="space-y-1.5 text-xs text-slate-500 pt-1">
-                                  <div className="flex items-center justify-between text-[11px]">
+                                <div className="space-y-1 sm:space-y-1.5 text-xs text-slate-500 pt-1">
+                                  <div className="flex items-center justify-between text-[10px] sm:text-[11px]">
                                     <span className="text-slate-400">Course / Batch:</span>
                                     <span className="font-bold text-slate-700 dark:text-slate-300">{top.course_name || 'BCA'} • {top.batch_name || '2025'}</span>
                                   </div>
-                                  <div className="flex items-center justify-between text-[11px]">
+                                  <div className="flex items-center justify-between text-[10px] sm:text-[11px]">
                                     <span className="text-slate-400">Supervisor:</span>
                                     <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[130px]">{top.faculty_name || 'Dr. Shorab Ahmad'}</span>
                                   </div>
@@ -2418,21 +2420,21 @@ export default function StudentLogbookPage() {
                               </div>
 
                               {/* Footer Action & Due Date */}
-                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                                <div className="flex items-center justify-between text-[11px]">
+                              <div className="pt-2.5 sm:pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5 sm:space-y-3">
+                                <div className="flex items-center justify-between text-[10px] sm:text-[11px]">
                                   <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
-                                    <Clock className="w-3.5 h-3.5" />
+                                    <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                     <span>{top.submission_deadline ? `Due ${new Date(top.submission_deadline).toLocaleDateString()}` : 'Open Deadline'}</span>
                                   </span>
                                   {existingSub && (
-                                    <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                                    <span className="text-[9px] sm:text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
                                       {existingSub.status}
                                     </span>
                                   )}
                                 </div>
 
                                 {existingSub ? (
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1.5 sm:gap-2">
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -2440,8 +2442,8 @@ export default function StudentLogbookPage() {
                                       }}
                                       className="flex-1 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-1.5 transition cursor-pointer"
                                     >
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                      <span>View Score ({existingSub.marks_obtained !== undefined ? `${existingSub.marks_obtained}/${top.max_marks}` : 'Submitted'})</span>
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                      <span className="truncate">View Score ({existingSub.marks_obtained !== undefined ? `${existingSub.marks_obtained}/${top.max_marks}` : 'Submitted'})</span>
                                     </button>
                                     <button
                                       type="button"
@@ -2450,7 +2452,7 @@ export default function StudentLogbookPage() {
                                         setIsSubmitModalOpen(true);
                                       }}
                                       title="Submit Revision"
-                                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer shrink-0"
                                     >
                                       <UploadCloud className="w-3.5 h-3.5" />
                                     </button>
@@ -2462,9 +2464,9 @@ export default function StudentLogbookPage() {
                                       setSelectedTopic(top);
                                       setIsSubmitModalOpen(true);
                                     }}
-                                    className="w-full py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold shadow-md shadow-[#5B4BFF]/20 flex items-center justify-center gap-1.5 transition duration-200 cursor-pointer group-hover:scale-[1.01]"
+                                    className="w-full py-2 sm:py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold shadow-md shadow-[#5B4BFF]/20 flex items-center justify-center gap-1.5 transition duration-200 cursor-pointer group-hover:scale-[1.01]"
                                   >
-                                    <UploadCloud className="w-4 h-4" />
+                                    <UploadCloud className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                                     <span>Submit Deliverable</span>
                                   </button>
                                 )}
@@ -2481,14 +2483,14 @@ export default function StudentLogbookPage() {
                 {/* 2. SUBMITTED SEMINAR DELIVERABLES & FACULTY SCORES (MODERN UI: 1 ROW 3 CARDS WITH PROGRESSIVE BAR) */}
                 {/* ========================================================================= */}
                 {seminarSubTab === 'SUBMITTED_DELIVERABLES' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div>
-                        <h3 className="text-sm font-black uppercase text-[#F36C21] tracking-wider flex items-center gap-2">
-                          <Award className="w-4 h-4" />
+                        <h3 className="text-xs sm:text-sm font-black uppercase text-[#F36C21] tracking-wider flex items-center gap-1.5 sm:gap-2">
+                          <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           <span>Submitted Deliverables &amp; Continuous Faculty Scoring ({mySubmissions.length})</span>
                         </h3>
-                        <p className="text-xs text-slate-500">Real-time faculty evaluation records, progressive score bars, and exam-grade marked PDF documents.</p>
+                        <p className="text-[11px] sm:text-xs text-slate-500">Real-time faculty evaluation records, progressive score bars, and exam-grade marked PDF documents.</p>
                       </div>
                       <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full hidden sm:inline-block">
                         1 Row 3 Cards with Progressive Bar
@@ -2496,22 +2498,22 @@ export default function StudentLogbookPage() {
                     </div>
 
                     {mySubmissions.length === 0 ? (
-                      <div className="bg-white dark:bg-slate-900 rounded-[22px] p-12 text-center shadow-soft border border-slate-200/80 dark:border-slate-800 space-y-4">
-                        <Presentation className="w-12 h-12 text-slate-300 mx-auto" />
-                        <h4 className="font-bold text-base text-slate-800 dark:text-slate-200">No Deliverables Submitted Yet</h4>
+                      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-8 sm:p-12 text-center shadow-soft border border-slate-200/80 dark:border-slate-800 space-y-3 sm:space-y-4">
+                        <Presentation className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto" />
+                        <h4 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">No Deliverables Submitted Yet</h4>
                         <p className="text-xs text-slate-500 max-w-md mx-auto">
                           You haven&apos;t submitted any seminar presentation slide decks or tutorial problem sheets yet. Select an assigned topic from Tab 1 to submit your deliverable.
                         </p>
                         <button
                           type="button"
                           onClick={() => setSeminarSubTab('NEW_TOPICS')}
-                          className="px-5 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold transition shadow-md shadow-[#5B4BFF]/25 cursor-pointer"
+                          className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold transition shadow-md shadow-[#5B4BFF]/25 cursor-pointer"
                         >
                           Browse Assigned Topics &amp; Submit
                         </button>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                         {mySubmissions.map((sub) => {
                           const marks = Number(sub.marks_obtained ?? sub.marks_awarded ?? 0);
                           const maxMarks = Number(sub.max_marks || 20);
@@ -2541,10 +2543,10 @@ export default function StudentLogbookPage() {
                           return (
                             <div
                               key={sub.id}
-                              className="bg-white dark:bg-slate-900 rounded-[22px] p-6 shadow-soft border border-slate-200/80 dark:border-slate-800 hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden"
+                              className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-4 sm:p-6 shadow-soft border border-slate-200/80 dark:border-slate-800 hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-3 sm:space-y-4 group relative overflow-hidden"
                             >
                               {/* Card Top accent bar */}
-                              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+                              <div className={`absolute top-0 left-0 right-0 h-1 sm:h-1.5 ${
                                 isEvaluated
                                   ? pct >= 75
                                     ? 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
@@ -2552,10 +2554,10 @@ export default function StudentLogbookPage() {
                                   : 'bg-gradient-to-r from-blue-400 to-indigo-500'
                               }`} />
 
-                              <div className="space-y-3.5">
+                              <div className="space-y-2.5 sm:space-y-3.5">
                                 {/* Header badges */}
-                                <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                <div className="flex items-center justify-between gap-1.5 sm:gap-2 flex-wrap">
+                                  <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${
                                     isTutorial
                                       ? 'bg-emerald-50 dark:bg-emerald-950/60 text-[#00C48C]'
                                       : 'bg-purple-50 dark:bg-purple-950/60 text-[#5B4BFF]'
@@ -2565,12 +2567,12 @@ export default function StudentLogbookPage() {
 
                                   <div className="flex items-center gap-1.5">
                                     {isEvaluated ? (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 text-[10px] font-extrabold border border-emerald-200 dark:border-emerald-800">
+                                      <span className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 text-[9px] sm:text-[10px] font-extrabold border border-emerald-200 dark:border-emerald-800">
                                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                                         <span>Evaluated</span>
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 text-[10px] font-extrabold border border-amber-200 dark:border-amber-800">
+                                      <span className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 text-[9px] sm:text-[10px] font-extrabold border border-amber-200 dark:border-amber-800">
                                         <Clock className="w-3 h-3 animate-spin" />
                                         <span>Under Review</span>
                                       </span>
@@ -2580,41 +2582,41 @@ export default function StudentLogbookPage() {
 
                                 {/* Title & Submission Info */}
                                 <div>
-                                  <h4 className="font-extrabold text-base text-slate-900 dark:text-white line-clamp-1" title={sub.topic_title || 'Deliverable'}>
+                                  <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white line-clamp-1" title={sub.topic_title || 'Deliverable'}>
                                     {sub.topic_title || sub.title || 'Seminar Topic'}
                                   </h4>
-                                  <p className="text-[11px] text-slate-500 mt-0.5">
+                                  <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
                                     Submitted on {new Date(sub.submitted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • {sub.file_name || sub.attachment_name || 'PDF Document'}
                                   </p>
                                 </div>
 
                                 {/* PROGRESSIVE BAR SECTION */}
-                                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700 space-y-2.5">
+                                <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700 space-y-2 sm:space-y-2.5">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-[11px] font-black uppercase text-slate-600 dark:text-slate-300 tracking-wider flex items-center gap-1">
+                                    <span className="text-[10px] sm:text-[11px] font-black uppercase text-slate-600 dark:text-slate-300 tracking-wider flex items-center gap-1">
                                       <TrendingUp className="w-3.5 h-3.5 text-[#5B4BFF]" />
                                       <span>Faculty Score Progress</span>
                                     </span>
                                     {isEvaluated ? (
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-sm font-black text-slate-900 dark:text-white">
-                                          {marks} <span className="text-xs text-slate-400 font-normal">/ {maxMarks}</span>
+                                        <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                                          {marks} <span className="text-[10px] sm:text-xs text-slate-400 font-normal">/ {maxMarks}</span>
                                         </span>
-                                        <span className={`text-xs font-black px-2 py-0.5 rounded-full ${
+                                        <span className={`text-[10px] sm:text-xs font-black px-1.5 sm:px-2 py-0.5 rounded-full ${
                                           pct >= 75 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300'
                                         }`}>
                                           {pct}%
                                         </span>
                                       </div>
                                     ) : (
-                                      <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                                      <span className="text-[11px] sm:text-xs font-bold text-amber-600 dark:text-amber-400">
                                         Pending Grading
                                       </span>
                                     )}
                                   </div>
 
                                   {/* Progress Track */}
-                                  <div className="h-3 rounded-full bg-slate-200/80 dark:bg-slate-700 p-0.5 overflow-hidden shadow-inner">
+                                  <div className="h-2 sm:h-3 rounded-full bg-slate-200/80 dark:bg-slate-700 p-0.5 overflow-hidden shadow-inner">
                                     <div
                                       className={`h-full rounded-full transition-all duration-1000 ${
                                         isEvaluated
@@ -2630,8 +2632,8 @@ export default function StudentLogbookPage() {
                                   </div>
 
                                   {/* Qualitative Performance Badge */}
-                                  <div className="flex items-center justify-between text-[11px] pt-0.5">
-                                    <span className={`px-2 py-0.5 rounded-md font-bold border text-[10px] ${tierBadgeClass}`}>
+                                  <div className="flex items-center justify-between text-[10px] sm:text-[11px] pt-0.5">
+                                    <span className={`px-2 py-0.5 rounded-md font-bold border text-[9px] sm:text-[10px] ${tierBadgeClass}`}>
                                       {tierLabel}
                                     </span>
                                     <span className="text-slate-500 font-medium">
@@ -2641,16 +2643,16 @@ export default function StudentLogbookPage() {
                                 </div>
 
                                 {/* Attached Document Preview Card */}
-                                <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/30 flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-[#F36C21] shrink-0">
-                                      <FileText className="w-4 h-4" />
+                                <div className="p-2.5 sm:p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/30 flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                                    <div className="p-1.5 sm:p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-[#F36C21] shrink-0">
+                                      <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                     </div>
                                     <div className="min-w-0">
-                                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                      <div className="text-[11px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
                                         {sub.file_name || sub.attachment_name || `${sub.topic_title || 'Seminar'}.pdf`}
                                       </div>
-                                      <div className="text-[10px] text-slate-500">
+                                      <div className="text-[9px] sm:text-[10px] text-slate-500">
                                         {sub.file_size || 'Attached PDF Document'}
                                       </div>
                                     </div>
@@ -2659,21 +2661,21 @@ export default function StudentLogbookPage() {
                                   <button
                                     type="button"
                                     onClick={() => handleOpenDocumentPreview(sub)}
-                                    className="px-3 py-1.5 rounded-lg bg-[#F36C21] hover:bg-[#E05B10] text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition cursor-pointer shrink-0"
+                                    className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#F36C21] hover:bg-[#E05B10] text-white text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-xs transition cursor-pointer shrink-0"
                                   >
-                                    <Eye className="w-3.5 h-3.5" />
+                                    <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                     <span>Preview</span>
                                   </button>
                                 </div>
 
                                 {/* Remarks quote if evaluated */}
                                 {sub.remarks && (
-                                  <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 text-xs text-slate-700 dark:text-slate-300 space-y-1">
-                                    <div className="font-bold text-emerald-800 dark:text-emerald-300 text-[10px] uppercase tracking-wider flex items-center gap-1">
+                                  <div className="p-2.5 sm:p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                                    <div className="font-bold text-emerald-800 dark:text-emerald-300 text-[9px] sm:text-[10px] uppercase tracking-wider flex items-center gap-1">
                                       <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                                       <span>Faculty Feedback:</span>
                                     </div>
-                                    <p className="italic text-slate-600 dark:text-slate-300 line-clamp-2">
+                                    <p className="italic text-slate-600 dark:text-slate-300 text-[11px] sm:text-xs line-clamp-2">
                                       &ldquo;{sub.remarks}&rdquo;
                                     </p>
                                   </div>
@@ -2681,17 +2683,17 @@ export default function StudentLogbookPage() {
                               </div>
 
                               {/* Footer Details */}
-                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                                <span className="text-slate-400 text-[11px]">
+                              <div className="pt-2.5 sm:pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                                <span className="text-slate-400 text-[10px] sm:text-[11px]">
                                   {sub.evaluated_at ? `Graded ${new Date(sub.evaluated_at).toLocaleDateString()}` : 'Awaiting Faculty Grading'}
                                 </span>
                                 {sub.evaluated_file_url ? (
-                                  <span className="text-[11px] font-bold text-[#5B4BFF] flex items-center gap-1">
+                                  <span className="text-[10px] sm:text-[11px] font-bold text-[#5B4BFF] flex items-center gap-1">
                                     <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                                     <span>Exam-Grade Markup</span>
                                   </span>
                                 ) : (
-                                  <span className="text-[11px] font-semibold text-slate-500">
+                                  <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500">
                                     Deliverable Active
                                   </span>
                                 )}

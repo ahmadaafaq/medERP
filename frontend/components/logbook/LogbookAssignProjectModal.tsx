@@ -106,8 +106,8 @@ const DISCIPLINE_CONFIGS: Record<DisciplineType, DisciplineConfig> = {
         ],
       },
       {
-        id: '4',
-        code: '4',
+        id: '3',
+        code: '3',
         name: 'MCA (Master of Computer Applications)',
         duration: 4,
         branches: [
@@ -199,19 +199,8 @@ const DISCIPLINE_CONFIGS: Record<DisciplineType, DisciplineConfig> = {
     promptPlaceholder: 'Instructions for students on primary survey sampling, statistical data validation, financial projections, and weekly progress logs...',
     courses: [
       {
-        id: '31',
-        code: '31',
-        name: 'BBA (Bachelor of Business Administration)',
-        duration: 6,
-        branches: [
-          { id: '1', code: '1', name: 'General Business Administration' },
-          { id: '2', code: '2', name: 'E-Commerce & Digital Marketing' },
-          { id: '3', code: '3', name: 'Banking & Financial Services' },
-        ],
-      },
-      {
-        id: '3',
-        code: '3',
+        id: '4',
+        code: '4',
         name: 'MBA (Master of Business Administration)',
         duration: 4,
         branches: [
@@ -221,6 +210,17 @@ const DISCIPLINE_CONFIGS: Record<DisciplineType, DisciplineConfig> = {
           { id: '4', code: '4', name: 'Operations & Supply Chain Logistics' },
           { id: '5', code: '5', name: 'Business Analytics & Data Intelligence' },
           { id: '6', code: '6', name: 'International Business' },
+        ],
+      },
+      {
+        id: '12',
+        code: '12',
+        name: 'BBA (Bachelor of Business Administration)',
+        duration: 6,
+        branches: [
+          { id: '1', code: '1', name: 'General Business Administration' },
+          { id: '2', code: '2', name: 'E-Commerce & Digital Marketing' },
+          { id: '3', code: '3', name: 'Banking & Financial Services' },
         ],
       },
       {
@@ -245,10 +245,11 @@ const BATCHES_STATIC: OptionItem[] = [
 ];
 
 export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }: Props) {
-  // 1. College Selection (First)
+  // 1. College Selection (Locked to Logged-in Tenant)
   const [colgCd, setColgCd] = useState<string>('1');
+  const [colgName, setColgName] = useState<string>('SRMS College of Engineering & Technology (CET Bareilly)');
 
-  // 2. Discipline / Category Selection (Second, changes below labels)
+  // 2. Discipline / Category Selection (Second, changes below labels & course list)
   const [discipline, setDiscipline] = useState<DisciplineType>('ENGINEERING');
 
   // 3. Academic Hierarchy
@@ -260,6 +261,7 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
   // Dynamic Lists
   const [coursesList, setCoursesList] = useState<CourseItem[]>(DISCIPLINE_CONFIGS.ENGINEERING.courses);
   const [branchesList, setBranchesList] = useState<OptionItem[]>(DISCIPLINE_CONFIGS.ENGINEERING.courses[0].branches);
+  const [batchesList, setBatchesList] = useState<OptionItem[]>(BATCHES_STATIC);
   const [semestersList, setSemestersList] = useState<OptionItem[]>([]);
 
   // 4. Form Fields
@@ -277,6 +279,31 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
   const currentConfig = DISCIPLINE_CONFIGS[discipline];
   const DisciplineIcon = currentConfig.icon;
 
+  const getTenantSlug = () => {
+    if (typeof window === 'undefined') return 'srms-cet-bareilly';
+    const slug =
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('colg_slug') ||
+      'srms-cet-bareilly';
+    return (slug || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '');
+  };
+
+  const getActiveColgCd = () => {
+    if (typeof window === 'undefined') return '1';
+    return localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+  };
+
+  const getActiveColgName = () => {
+    if (typeof window === 'undefined') return 'SRMS College of Engineering & Technology (CET Bareilly)';
+    return (
+      localStorage.getItem('college_name') ||
+      localStorage.getItem('colg_name') ||
+      localStorage.getItem('tenantName') ||
+      'SRMS College of Engineering & Technology (CET Bareilly)'
+    );
+  };
+
   // Build semesters list
   const buildSemesters = useCallback((duration: number) => {
     const sems: OptionItem[] = [];
@@ -286,51 +313,221 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
     setSemestersList(sems);
   }, []);
 
-  // Handle Category / Discipline Change
-  const handleDisciplineChange = (newDiscipline: DisciplineType) => {
+  // Filter courses by selected discipline tab
+  const isCourseInDiscipline = (c: { code: string; name: string }, disc: DisciplineType) => {
+    const code = String(c.code).trim();
+    const name = (c.name || '').toLowerCase();
+
+    if (disc === 'ENGINEERING') {
+      return (
+        code === '1' ||
+        code === '13' ||
+        code === '3' || // Course #3 is MCA in tenant database
+        code === '5' ||
+        name.includes('tech') ||
+        name.includes('bca') ||
+        name.includes('mca') ||
+        name.includes('computer') ||
+        name.includes('engineering')
+      );
+    }
+    if (disc === 'PHARMACEUTICAL') {
+      return (
+        code === '2' ||
+        code === '21' ||
+        code === '24' ||
+        name.includes('pharm') ||
+        name.includes('drug') ||
+        name.includes('medical')
+      );
+    }
+    if (disc === 'MANAGEMENT') {
+      // Strictly exclude MCA or Engineering courses
+      if (code === '3' || name.includes('mca') || name.includes('computer') || name.includes('engineering') || name.includes('tech')) {
+        return false;
+      }
+      return (
+        code === '4' || // Course #4 is MBA
+        code === '12' || // Course #12 is BBA
+        code === '31' ||
+        code === '32' ||
+        name.includes('mba') ||
+        name.includes('bba') ||
+        name.includes('pgdm') ||
+        name.includes('management') ||
+        name.includes('business')
+      );
+    }
+    return true;
+  };
+
+  const fetchCoursesForDiscipline = async (cd: string, slug: string, disc: DisciplineType): Promise<CourseItem[]> => {
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const filtered = list.filter((c: any) => isCourseInDiscipline({ code: String(c.course_cd || c.code), name: c.course_name || c.name }, disc));
+          if (filtered.length > 0) {
+            return filtered.map((c: any) => {
+              const code = String(c.course_cd || c.code || '1');
+              const staticMatch = DISCIPLINE_CONFIGS[disc].courses.find((sc) => sc.code === code);
+              return {
+                id: code,
+                code,
+                name: c.course_name || c.name || `Course ${code}`,
+                duration: staticMatch ? staticMatch.duration : (code === '1' || code === '2' ? 8 : code === '13' || code === '31' ? 6 : 4),
+                branches: staticMatch ? staticMatch.branches : [{ id: '1', code: '1', name: `${c.course_name || 'Core'} General` }],
+              };
+            });
+          }
+        }
+      }
+    } catch {}
+    return DISCIPLINE_CONFIGS[disc].courses;
+  };
+
+  const fetchBranchesForCourse = async (cd: string, crs: string, slug: string, allCourses: CourseItem[]): Promise<OptionItem[]> => {
+    try {
+      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const courseObj = allCourses.find((c) => String(c.code) === String(crs));
+          const courseName = courseObj?.name || 'Core';
+          return list.map((b: any) => {
+            const rawName = (b.branch_name || b.name || '').trim();
+            const validName =
+              rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE'
+                ? rawName
+                : `${b.course_name || courseName} General`;
+            return {
+              id: String(b.branch_cd || b.code || '1'),
+              code: String(b.branch_cd || b.code || '1'),
+              name: validName,
+            };
+          });
+        }
+      }
+    } catch {}
+    const matched = allCourses.find((c) => c.code === crs);
+    return matched?.branches && matched.branches.length > 0
+      ? matched.branches
+      : [{ id: '1', code: '1', name: 'General Branch' }];
+  };
+
+  const fetchBatchesForCourse = async (cd: string, crs: string, slug: string): Promise<OptionItem[]> => {
+    try {
+      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map((b: any) => ({
+            id: String(b.batch_cd || b.code || b.batch_name || '1'),
+            code: String(b.batch_cd || b.code || b.batch_name || '1'),
+            name: b.batch_name ? (b.batch_name.toLowerCase().includes('batch') ? b.batch_name : `Batch ${b.batch_name}`) : `Batch ${b.year || b.code}`,
+          }));
+        }
+      }
+    } catch {}
+    if (crs === '13') {
+      return [
+        { id: '3', code: '3', name: 'Batch 2026 (2026 - 2029)' },
+        { id: '2', code: '2', name: 'Batch 2025 (2025 - 2028)' },
+        { id: '1', code: '1', name: 'Batch 2024 (2024 - 2027)' },
+      ];
+    }
+    return BATCHES_STATIC;
+  };
+
+  // Handle Category / Discipline Tab Change
+  const handleDisciplineChange = async (newDiscipline: DisciplineType) => {
     setDiscipline(newDiscipline);
     const cfg = DISCIPLINE_CONFIGS[newDiscipline];
+    const cd = getActiveColgCd();
+    const slug = getTenantSlug();
 
-    const newCourses = cfg.courses;
+    const newCourses = await fetchCoursesForDiscipline(cd, slug, newDiscipline);
     setCoursesList(newCourses);
 
     const firstCourse = newCourses[0];
-    setCourseCd(firstCourse.code);
-    setBranchesList(firstCourse.branches);
-    setBranchCd(firstCourse.branches[0]?.code || '1');
+    const initialCourseCd = firstCourse ? firstCourse.code : '1';
+    setCourseCd(initialCourseCd);
+
+    const [branches, batches] = await Promise.all([
+      fetchBranchesForCourse(cd, initialCourseCd, slug, newCourses),
+      fetchBatchesForCourse(cd, initialCourseCd, slug),
+    ]);
+
+    setBranchesList(branches);
+    setBatchesList(batches);
+    setBranchCd(branches[0]?.code || '1');
+    setBatchCd(batches.find((b) => b.name.includes('2025'))?.code || batches[0]?.code || '2');
 
     setTechnologies([...cfg.defaultChips]);
-    buildSemesters(firstCourse.duration);
-    setSemesterCd(firstCourse.duration >= 5 ? '5' : '1');
+    const duration = firstCourse ? firstCourse.duration : 8;
+    buildSemesters(duration);
+    setSemesterCd(duration >= 5 ? '5' : '1');
   };
 
   // Handle Course Change
-  const handleCourseChange = (newCourseCd: string) => {
+  const handleCourseChange = async (newCourseCd: string) => {
     setCourseCd(newCourseCd);
+    const cd = getActiveColgCd();
+    const slug = getTenantSlug();
+
+    const [branches, batches] = await Promise.all([
+      fetchBranchesForCourse(cd, newCourseCd, slug, coursesList),
+      fetchBatchesForCourse(cd, newCourseCd, slug),
+    ]);
+
+    setBranchesList(branches);
+    setBatchesList(batches);
+    setBranchCd(branches[0]?.code || '1');
+    setBatchCd(batches.find((b) => b.name.includes('2025'))?.code || batches[0]?.code || '2');
+
     const selectedCourseObj = coursesList.find((c) => c.code === newCourseCd);
-    if (selectedCourseObj) {
-      setBranchesList(selectedCourseObj.branches);
-      setBranchCd(selectedCourseObj.branches[0]?.code || '1');
-      buildSemesters(selectedCourseObj.duration);
-      setSemesterCd(selectedCourseObj.duration >= 5 ? '5' : '1');
-    }
+    const duration = selectedCourseObj ? selectedCourseObj.duration : 8;
+    buildSemesters(duration);
+    setSemesterCd(duration >= 5 ? '5' : '1');
   };
 
   // Initialize modal state on open
   useEffect(() => {
     if (isOpen) {
-      const cfg = DISCIPLINE_CONFIGS[discipline];
-      setColgCd('1');
-      setCoursesList(cfg.courses);
-      const firstCourse = cfg.courses[0];
-      setCourseCd(firstCourse.code);
-      setBranchesList(firstCourse.branches);
-      setBranchCd(firstCourse.branches[0]?.code || '1');
-      setTechnologies([...cfg.defaultChips]);
-      buildSemesters(firstCourse.duration);
-      setSemesterCd(firstCourse.duration >= 5 ? '5' : '1');
-      setBatchCd('2');
-      setError(null);
+      const activeCd = getActiveColgCd();
+      const activeName = getActiveColgName();
+      const slug = getTenantSlug();
+
+      setColgCd(activeCd);
+      setColgName(activeName);
+
+      const initData = async () => {
+        const cfg = DISCIPLINE_CONFIGS[discipline];
+        const courses = await fetchCoursesForDiscipline(activeCd, slug, discipline);
+        setCoursesList(courses);
+
+        const firstCourse = courses[0] || cfg.courses[0];
+        const initialCourseCd = firstCourse.code;
+        setCourseCd(initialCourseCd);
+
+        const [branches, batches] = await Promise.all([
+          fetchBranchesForCourse(activeCd, initialCourseCd, slug, courses),
+          fetchBatchesForCourse(activeCd, initialCourseCd, slug),
+        ]);
+
+        setBranchesList(branches);
+        setBatchesList(batches);
+        setBranchCd(branches[0]?.code || '1');
+        setBatchCd(batches.find((b) => b.name.includes('2025'))?.code || batches[0]?.code || '2');
+
+        setTechnologies([...cfg.defaultChips]);
+        buildSemesters(firstCourse.duration || 8);
+        setSemesterCd(firstCourse.duration >= 5 ? '5' : '1');
+        setError(null);
+      };
+
+      initData();
     }
   }, [isOpen, buildSemesters]);
 
@@ -357,7 +554,7 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
     setSubmitting(true);
     setError(null);
 
-    const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+    const slug = getTenantSlug();
     const token = localStorage.getItem('token') || '';
 
     const payload = {
@@ -421,7 +618,7 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+            className="p-1.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -435,22 +632,23 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
             </div>
           )}
 
-          {/* STEP 1: FIRST COLLEGE CARD / SELECTION */}
+          {/* STEP 1: FIRST COLLEGE CARD / SELECTION (LOCKED TO LOGGED-IN TENANT) */}
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-              <Building2 className="w-4 h-4 text-[#5B4BFF]" />
-              <span>1. College / Institute</span>
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-[#5B4BFF]" />
+                <span>1. College / Institute</span>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                🔒 Active Tenant
+              </span>
             </div>
             <select
               value={colgCd}
-              onChange={(e) => setColgCd(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-[#5B4BFF] shadow-sm"
+              disabled
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold cursor-not-allowed opacity-90 shadow-sm"
             >
-              {COLLEGES_STATIC.map((col) => (
-                <option key={col.id} value={col.code}>
-                  {col.name}
-                </option>
-              ))}
+              <option value={colgCd}>{colgName}</option>
             </select>
           </div>
 
@@ -470,7 +668,7 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
                     key={dType}
                     type="button"
                     onClick={() => handleDisciplineChange(dType)}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 ${
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
                       isSelected
                         ? 'bg-[#2D2575] text-white border-[#2D2575] shadow-md ring-2 ring-[#5B4BFF]/40 scale-[1.01]'
                         : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 hover:border-slate-300'
@@ -500,27 +698,27 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
           </div>
 
           {/* STEP 3: COURSE, BRANCH, BATCH, SEMESTER DROPDOWNS */}
-          <div className="p-4 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/60 space-y-3">
+          <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/80 p-4 rounded-2xl space-y-3">
             <div className="flex items-center gap-2 text-xs font-bold text-[#5B4BFF] uppercase tracking-wider pb-1 border-b border-indigo-100 dark:border-indigo-900/60">
               <GraduationCap className="w-4 h-4" />
               <span>3. Target Degree, Branch &amp; Cohort</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {/* Course Dropdown */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
                   <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Course / Degree Program</span>
+                  <span>🎓 Course *</span>
                 </label>
                 <select
                   value={courseCd}
                   onChange={(e) => handleCourseChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-[#5B4BFF]"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  {coursesList.map((crs) => (
-                    <option key={crs.id} value={crs.code}>
-                      {crs.name}
+                  {coursesList.map((crs, idx) => (
+                    <option key={crs.code || idx} value={crs.code}>
+                      [#{crs.code}] {crs.name}
                     </option>
                   ))}
                 </select>
@@ -528,39 +726,37 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
 
               {/* Branch / Specialization Dropdown */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
                   <GitBranch className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Branch / Specialization</span>
+                  <span>🏢 Branch * <span className="text-[#5B4BFF]">({branchesList.length})</span></span>
                 </label>
                 <select
                   value={branchCd}
                   onChange={(e) => setBranchCd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-[#5B4BFF]"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  {branchesList.map((b) => (
-                    <option key={b.id} value={b.code}>
-                      {b.name}
+                  {branchesList.map((b, idx) => (
+                    <option key={b.code || idx} value={b.code}>
+                      [#{b.code}] {b.name}
                     </option>
                   ))}
                 </select>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Batch Dropdown */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Academic Batch</span>
+                  <span>👥 Batch * <span className="text-[#5B4BFF]">({batchesList.length})</span></span>
                 </label>
                 <select
                   value={batchCd}
                   onChange={(e) => setBatchCd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-[#5B4BFF]"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  {BATCHES_STATIC.map((bt) => (
-                    <option key={bt.id} value={bt.code}>
-                      {bt.name}
+                  {batchesList.map((bt, idx) => (
+                    <option key={bt.code || idx} value={bt.code}>
+                      [#{bt.code}] Batch {bt.name}
                     </option>
                   ))}
                 </select>
@@ -568,17 +764,18 @@ export default function LogbookAssignProjectModal({ isOpen, onClose, onSuccess }
 
               {/* Semester Dropdown */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
                   <Layers className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Semester</span>
+                  <span>📅 Semester</span>
                 </label>
                 <select
                   value={semesterCd}
                   onChange={(e) => setSemesterCd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-[#5B4BFF]"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  {semestersList.map((sem) => (
-                    <option key={sem.id} value={sem.code}>
+                  <option value="all">All Semesters</option>
+                  {semestersList.map((sem, idx) => (
+                    <option key={sem.code || idx} value={sem.code}>
                       {sem.name}
                     </option>
                   ))}
