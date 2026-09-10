@@ -2062,29 +2062,32 @@ export class CollegeMasterService implements OnApplicationBootstrap {
 
       try {
         await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
-        let rows = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT d.*,
-                  COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
-                  d.course_cd AS course_code,
-                  COALESCE(d.branch_cd, d.code) AS branch_cd
-           FROM departments d
-           LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
-           ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
-        ).catch(() => []);
+        const branchQuery = `
+          SELECT * FROM (
+            SELECT DISTINCT ON (d.id)
+              d.id,
+              d.name,
+              d.code,
+              d.type,
+              d.hod_user_id,
+              d.is_active,
+              d.created_at,
+              COALESCE(d.branch_cd, d.code) AS branch_cd,
+              d.course_cd,
+              d.course_cd AS course_code,
+              COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
+              d.colg_cd
+            FROM departments d
+            LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
+            ORDER BY d.id
+          ) sub
+          ORDER BY CAST(NULLIF(regexp_replace(COALESCE(sub.branch_cd, sub.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, sub.name ASC
+        `;
+        let rows = await this.tenantSchemaService.queryInTenant(slug, branchQuery).catch(() => []);
 
         if (rows.length === 0) {
           await this.syncExternalBranches(slug);
-          rows = await this.tenantSchemaService.queryInTenant(
-            slug,
-            `SELECT d.*,
-                    COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
-                    d.course_cd AS course_code,
-                    COALESCE(d.branch_cd, d.code) AS branch_cd
-             FROM departments d
-             LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
-             ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
-          ).catch(() => []);
+          rows = await this.tenantSchemaService.queryInTenant(slug, branchQuery).catch(() => []);
         }
 
         return rows.map(r => ({
@@ -2104,16 +2107,28 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     const allBranches: any[] = [];
     for (const col of colleges) {
       try {
-        const rows = await this.tenantSchemaService.queryInTenant(
-          col.slug,
-          `SELECT d.*,
-                  COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
-                  d.course_cd AS course_code,
-                  COALESCE(d.branch_cd, d.code) AS branch_cd
-           FROM departments d
-           LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
-           ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
-        ).catch(() => []);
+        const branchQuery = `
+          SELECT * FROM (
+            SELECT DISTINCT ON (d.id)
+              d.id,
+              d.name,
+              d.code,
+              d.type,
+              d.hod_user_id,
+              d.is_active,
+              d.created_at,
+              COALESCE(d.branch_cd, d.code) AS branch_cd,
+              d.course_cd,
+              d.course_cd AS course_code,
+              COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
+              d.colg_cd
+            FROM departments d
+            LEFT JOIN courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
+            ORDER BY d.id
+          ) sub
+          ORDER BY CAST(NULLIF(regexp_replace(COALESCE(sub.branch_cd, sub.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, sub.name ASC
+        `;
+        const rows = await this.tenantSchemaService.queryInTenant(col.slug, branchQuery).catch(() => []);
 
         allBranches.push(
           ...rows.map(r => ({
@@ -2193,15 +2208,23 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     }
     const slug = await this.resolveTenantSlug(tenantSlug);
     const collegeId = await this.getCollegeIdBySlug(slug);
+    const sessionQuery = `
+      SELECT * FROM (
+        SELECT DISTINCT ON (id) *
+        FROM academic_sessions
+        ORDER BY id
+      ) s
+      ORDER BY start_date DESC
+    `;
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT * FROM academic_sessions ORDER BY start_date DESC`,
+      sessionQuery,
     );
     if (rows.length === 0) {
       await this.syncExternalSessions(slug);
       const synced = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT * FROM academic_sessions ORDER BY start_date DESC`,
+        sessionQuery,
       );
       return synced.map(r => ({
         ...r,

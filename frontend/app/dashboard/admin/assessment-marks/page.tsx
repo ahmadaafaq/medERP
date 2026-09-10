@@ -200,6 +200,8 @@ export default function AdminAssessmentMarksPage() {
   // Batch MUST be selected by user before subjects/papers are shown
   const [selectedBatchCd, setSelectedBatchCd] = useState<string>('');
 
+  const [departments, setDepartments] = useState<Department[]>([]);
+
   // Semester MUST be selected by user before subjects/papers are shown
   const [selectedSemCd, setSelectedSemCd] = useState<string>('');
 
@@ -296,8 +298,97 @@ export default function AdminAssessmentMarksPage() {
   };
 
   // ─── 2. Fetch Master Hierarchy Data (Strict Schema-per-Tenant) ─────────────
-  const fetchMetadata = async (slug: string) => {
+  const fetchBranchesAndBatchesForCourse = async (
+    colgCd: string,
+    courseCd: string,
+    customCourses?: CourseItem[],
+    slug?: string
+  ) => {
+    const tenant = slug || selectedCollegeSlug || getInitialTenantSlug();
+    const effectiveColg = colgCd || selectedColgCd || '1';
+    const effectiveCrs = courseCd || selectedCourseCd || '13';
+    const activeCourses = customCourses || courses;
+
+    try {
+      const [brRes, btRes] = await Promise.all([
+        fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+        fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+      ]);
+
+      const courseObj = activeCourses.find(
+        (c) => String(c.course_cd || c.code || c.id) === String(effectiveCrs)
+      );
+      const courseName = (courseObj?.name || (effectiveCrs === '13' ? 'BCA' : effectiveCrs === '1' ? 'B.Tech' : 'Course'))
+        .replace(/^\[#\d+\]\s*/, '')
+        .trim();
+
+      // 1. Branches Mapping
+      let mappedBranches: BranchItem[] = [];
+      if (brRes && brRes.ok) {
+        const j = await brRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBranches = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
+          const rawName = (b.branch_name || b.name || '').trim();
+          const validName =
+            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
+              ? rawName
+              : (effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
+          return {
+            id: String(b.branch_cd || b.code || '1'),
+            code: String(b.branch_cd || b.code || '1'),
+            branch_cd: String(b.branch_cd || b.code || '1'),
+            name: validName,
+            course_cd: String(b.course_cd || effectiveCrs),
+            colg_cd: String(b.colg_cd || effectiveColg),
+          };
+        });
+      }
+
+      if (mappedBranches.length === 0) {
+        mappedBranches = [{
+          id: '1',
+          code: '1',
+          branch_cd: '1',
+          name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department`,
+          course_cd: effectiveCrs,
+          colg_cd: effectiveColg,
+        }];
+      }
+
+      // Deduplicate mapped branches
+      const dedupedBranches = dedupeBy(mappedBranches, b => String(b.branch_cd || b.code));
+      setBranches(dedupedBranches);
+      setSelectedBranchCd((prev) => {
+        const exists = dedupedBranches.some((b) => String(b.branch_cd || b.code) === String(prev));
+        return exists && prev ? prev : (dedupedBranches[0]?.branch_cd || dedupedBranches[0]?.code || '1');
+      });
+
+      // 2. Batches Mapping
+      let mappedBatches: BatchItem[] = [];
+      if (btRes && btRes.ok) {
+        const j = await btRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBatches = list.map((b: any) => ({
+          id: String(b.batch_cd || b.code || b.batch_id || '2'),
+          code: String(b.batch_cd || b.code || b.batch_id || '2'),
+          batch_cd: String(b.batch_cd || b.code || b.batch_id || '2'),
+          name: String(b.batch_name || b.name || b.year || b.batch_cd || '2025'),
+          year: Number(b.batch_name || b.year || 2025),
+          course_cd: String(b.course_cd || effectiveCrs),
+          colg_cd: String(b.colg_cd || effectiveColg),
+        }));
+      }
+
+      const dedupedBatches = dedupeBy(mappedBatches, b => String(b.batch_cd || b.code));
+      setBatches(dedupedBatches);
+    } catch (err) {
+      console.warn('Failed to fetch branches and batches for course:', err);
+    }
+  };
+
+  const fetchMetadata = async (slug: string, customColgCd?: string) => {
     setLoading(true);
+    const activeColg = customColgCd || selectedColgCd || '1';
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = {
@@ -306,21 +397,42 @@ export default function AdminAssessmentMarksPage() {
       };
       const parse = (j: any) => Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
 
-      const [cRes, brRes, bRes, dRes, sRes, pRes] = await Promise.all([
+      const [cRes, srmsCRes, dRes, sRes, pRes] = await Promise.all([
         fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/branches?tenant=${slug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`/api/srms/courses?colgcd=${activeColg}&tenant=${slug}`).catch(() => null),
         fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers }).catch(() => null),
       ]);
 
       // 1. Courses
-      if (cRes && cRes.ok) {
+      let mappedCourses: CourseItem[] = [];
+      if (srmsCRes && srmsCRes.ok) {
+        const j = await srmsCRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        if (list.length > 0) {
+          mappedCourses = list.map((c: any) => ({
+            id: String(c.course_cd || c.code || '13'),
+            code: String(c.course_cd || c.code || '13'),
+            course_cd: String(c.course_cd || c.code || '13'),
+            name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+            colg_cd: String(c.colg_cd || activeColg),
+          }));
+        }
+      }
+
+      if (mappedCourses.length === 0 && cRes && cRes.ok) {
         const cList: CourseItem[] = parse(await cRes.json());
-        setCourses(cList);
-      } else {
-        setCourses([
+        if (cList.length > 0) {
+          mappedCourses = cList.map((c: any) => ({
+            ...c,
+            course_cd: String(c.course_cd || c.code || c.id),
+          }));
+        }
+      }
+
+      if (mappedCourses.length === 0) {
+        mappedCourses = [
           { code: 'BCA', course_cd: '13', name: 'Bachelor of Computer Applications' },
           { code: 'B.TECH', course_cd: '1', name: 'Bachelor of Technology' },
           { code: 'B.PHARM', course_cd: '2', name: 'Bachelor of Pharmacy' },
@@ -329,22 +441,35 @@ export default function AdminAssessmentMarksPage() {
           { code: 'M.TECH', course_cd: '5', name: 'Master of Technology' },
           { code: 'M. PHARM', course_cd: '6', name: 'Master of Pharmacy' },
           { code: 'BBA', course_cd: '12', name: 'Bachelor of Business Administration' },
-        ]);
+        ];
       }
 
-      // 2. Branches
-      if (brRes && brRes.ok) {
-        const brList: BranchItem[] = parse(await brRes.json());
-        setBranches(brList);
+      setCourses(mappedCourses);
+
+      const isMed = activeColg === '2' || slug.includes('ims');
+      const filtered = mappedCourses.filter(c => {
+        const cName = (c.name || '').toLowerCase();
+        const cCode = (c.code || '').toLowerCase();
+        const isMedCourse = cName.includes('mbbs') || cCode === 'mbbs' || cName.includes('medicine');
+        return isMed ? (isMedCourse || c.colg_cd === '2') : !isMedCourse;
+      });
+
+      const initialCrs = (selectedCourseCd && filtered.some(c => String(c.course_cd || c.code) === selectedCourseCd))
+        ? selectedCourseCd
+        : (filtered[0]?.course_cd || filtered[0]?.code || '13');
+      
+      setSelectedCourseCd(initialCrs);
+
+      // Fetch dynamic branches and batches specifically for this course
+      await fetchBranchesAndBatchesForCourse(activeColg, initialCrs, mappedCourses, slug);
+
+      // 4. Departments
+      if (dRes && dRes.ok) {
+        const dList: Department[] = parse(await dRes.json());
+        setDepartments(dList);
       }
 
-      // 3. Batches
-      if (bRes && bRes.ok) {
-        const bList: BatchItem[] = parse(await bRes.json());
-        setBatches(bList);
-      }
-
-      // 4. Subjects
+      // 5. Subjects
       if (sRes && sRes.ok) {
         const sList: Subject[] = parse(await sRes.json());
         setAllSubjects(sList);
@@ -382,7 +507,6 @@ export default function AdminAssessmentMarksPage() {
             sections: Array.isArray(p.sections) ? p.sections : [],
           }));
         setAllFetchedPapers(mappedPapers);
-        // Do not auto-select paper - user must choose paper explicitly
         setSelectedPaperCode('');
       }
     } catch (e) {
@@ -394,7 +518,7 @@ export default function AdminAssessmentMarksPage() {
 
   useEffect(() => {
     if (selectedCollegeSlug) {
-      fetchMetadata(selectedCollegeSlug);
+      fetchMetadata(selectedCollegeSlug, selectedColgCd);
     }
   }, [selectedCollegeSlug]);
 
@@ -416,48 +540,30 @@ export default function AdminAssessmentMarksPage() {
     return dedupeBy(list, c => String(c.course_cd || c.code || c.id));
   }, [courses, isMedicalCollege]);
 
-  // Do NOT auto-select course — user must pick manually
-  // (But if previously selected and list reloads, keep it if still valid)
-  useEffect(() => {
-    if (filteredCourses.length > 0 && selectedCourseCd) {
-      const exists = filteredCourses.some(c => String(c.course_cd) === selectedCourseCd || c.code === selectedCourseCd);
-      if (!exists) {
-        // If previous selection no longer valid, reset to empty
-        setSelectedCourseCd('');
-      }
-    }
-  }, [filteredCourses]);
-
   // ─── Filter Branches by Selected Course ────────────────────────────────────
   const filteredBranches = useMemo(() => {
-    const list = branches.filter(b => {
-      if (isMedicalCollege) {
-        return b.name.includes('Department of') || b.code === 'ANA' || b.code === 'PHY';
-      }
-      const isMed = b.code === 'ANA' || b.code === 'PHY' || b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology');
-      if (isMed) return false;
-      if (!selectedCourseCd) return true;
-      // First try exact match by course_cd
-      return String(b.course_cd) === String(selectedCourseCd);
-    });
-    // Fallback: show all non-medical if no course-specific ones found
-    const nonMed = branches.filter(b => {
-      const isMed = b.code === 'ANA' || b.code === 'PHY' || b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology');
-      return !isMed;
-    });
-    const base = list.length > 0 ? list : (nonMed.length > 0 ? nonMed : [{ branch_cd: '1', code: '1', name: 'General Branch (1)' }]);
-    // Composite key: branch_cd + course_cd so BCA(1) and CSE(1) coexist
-    return dedupeBy(base, b => `${b.branch_cd || b.code || b.id}|${(b as any).course_cd || ''}`);
-  }, [branches, selectedCourseCd, isMedicalCollege]);
+    return dedupeBy(branches, b => String(b.branch_cd || b.code || b.id));
+  }, [branches]);
 
   useEffect(() => {
-    if (filteredBranches.length > 0 && selectedBranchCd) {
-      const exists = filteredBranches.some(b => b.branch_cd === selectedBranchCd || b.code === selectedBranchCd);
+    if (filteredBranches.length > 0) {
+      const exists = filteredBranches.some(b => String(b.branch_cd || b.code) === selectedBranchCd);
       if (!exists) {
-        setSelectedBranchCd('');
+        setSelectedBranchCd(filteredBranches[0].branch_cd || filteredBranches[0].code || '1');
       }
     }
-  }, [filteredBranches]);
+  }, [filteredBranches, selectedBranchCd]);
+
+  const handleCourseChange = async (courseCode: string) => {
+    setSelectedCourseCd(courseCode);
+    setSelectedPaperCode('');
+    setSelectedBatchCd('');
+    setSelectedSemCd('');
+    setSelectedSubjectCd('');
+    setStudents([]);
+    setSelectedStudentRollno(null);
+    await fetchBranchesAndBatchesForCourse(selectedColgCd, courseCode, filteredCourses, selectedCollegeSlug);
+  };
 
   // ─── Filter Batches by Selected Course & Branch ────────────────────────────
   const filteredBatches = useMemo(() => {
@@ -1080,12 +1186,7 @@ export default function AdminAssessmentMarksPage() {
                 <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">2. Course *</label>
                 <select
                   value={selectedCourseCd}
-                  onChange={(e) => {
-                    setSelectedCourseCd(e.target.value);
-                    setSelectedPaperCode('');
-                    setStudents([]);
-                    setSelectedStudentRollno(null);
-                  }}
+                  onChange={(e) => handleCourseChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {filteredCourses.map(c => (
@@ -1136,11 +1237,15 @@ export default function AdminAssessmentMarksPage() {
                   {filteredBatches.length === 0 ? (
                     <option disabled value="">No batches found</option>
                   ) : (
-                    filteredBatches.map(b => (
-                      <option key={b.code || b.batch_cd} value={b.code || b.batch_cd}>
-                        {b.name || `Batch ${b.year}`} ({b.code || b.batch_cd})
-                      </option>
-                    ))
+                    filteredBatches.map(b => {
+                      const raw = String(b.name || b.year || '');
+                      const label = raw.toLowerCase().startsWith('batch') ? raw : `Batch ${raw}`;
+                      return (
+                        <option key={b.code || b.batch_cd || b.id} value={b.code || b.batch_cd || b.id}>
+                          {label} ({b.batch_cd || b.code})
+                        </option>
+                      );
+                    })
                   )}
                 </select>
               </div>

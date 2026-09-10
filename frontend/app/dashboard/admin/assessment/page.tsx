@@ -81,6 +81,7 @@ interface UnitItem {
   id: string;
   code: string;
   name: string;
+  description?: string;
   subject_id?: string;
   subject_code?: string;
   subject_name?: string;
@@ -95,6 +96,7 @@ interface TopicItem {
   id: string;
   name: string;
   code: string;
+  description?: string;
   unit_id?: string;
   unit_code?: string;
   unit_name?: string;
@@ -425,6 +427,7 @@ export default function AssessmentMasterPage() {
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('88534'); // Default Web Technology
 
+  const [academicSessions, setAcademicSessions] = useState<{ id: string; code: string; name: string; is_current?: boolean }[]>([]);
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('2026-2027');
 
   // ─── 3-Tier Hierarchy Selections (Unit -> Topic -> Sub-Topic) ─────────────
@@ -620,9 +623,99 @@ export default function AssessmentMasterPage() {
     }
   };
 
+  // ─── 2. Fetch Master Hierarchy Data (Strict Schema-per-Tenant) ─────────────
+  const fetchBranchesAndBatchesForCourse = async (
+    colgCd: string,
+    courseCd: string,
+    customCourses?: CourseItem[],
+    slug?: string
+  ) => {
+    const tenant = slug || selectedCollegeSlug || getInitialTenantSlug();
+    const effectiveColg = colgCd || selectedColgCd || '1';
+    const effectiveCrs = courseCd || selectedCourseCd || '13';
+    const activeCourses = customCourses || courses;
+
+    try {
+      const [brRes, btRes] = await Promise.all([
+        fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+        fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+      ]);
+
+      const courseObj = activeCourses.find(
+        (c) => String(c.course_cd || c.code || c.id) === String(effectiveCrs)
+      );
+      const courseName = (courseObj?.name || (effectiveCrs === '13' ? 'BCA' : effectiveCrs === '1' ? 'B.Tech' : 'Course'))
+        .replace(/^\[#\d+\]\s*/, '')
+        .trim();
+
+      // 1. Branches Mapping
+      let mappedBranches: BranchItem[] = [];
+      if (brRes && brRes.ok) {
+        const j = await brRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBranches = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
+          const rawName = (b.branch_name || b.name || '').trim();
+          const validName =
+            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
+              ? rawName
+              : (effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
+          return {
+            id: String(b.branch_cd || b.code || '1'),
+            code: String(b.branch_cd || b.code || '1'),
+            branch_cd: String(b.branch_cd || b.code || '1'),
+            name: validName,
+            course_cd: String(b.course_cd || effectiveCrs),
+            colg_cd: String(b.colg_cd || effectiveColg),
+          };
+        });
+      }
+
+      if (mappedBranches.length === 0) {
+        mappedBranches = [{
+          id: '1',
+          code: '1',
+          branch_cd: '1',
+          name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department`,
+          course_cd: effectiveCrs,
+          colg_cd: effectiveColg,
+        }];
+      }
+
+      const dedupedBranches = dedupeBy(mappedBranches, b => String(b.branch_cd || b.code));
+      setBranches(dedupedBranches);
+      setSelectedBranchCd((prev) => {
+        const exists = dedupedBranches.some((b) => String(b.branch_cd || b.code) === String(prev));
+        return exists && prev ? prev : (dedupedBranches[0]?.branch_cd || dedupedBranches[0]?.code || '1');
+      });
+
+      // 2. Batches Mapping
+      let mappedBatches: BatchItem[] = [];
+      if (btRes && btRes.ok) {
+        const j = await btRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBatches = list.map((b: any) => ({
+          id: String(b.batch_cd || b.code || b.batch_id || '2'),
+          code: String(b.batch_cd || b.code || b.batch_id || '2'),
+          batch_cd: String(b.batch_cd || b.code || b.batch_id || '2'),
+          name: String(b.batch_name || b.name || b.year || b.batch_cd || '2025'),
+          year: Number(b.batch_name || b.year || 2025),
+          course_cd: String(b.course_cd || effectiveCrs),
+          colg_cd: String(b.colg_cd || effectiveColg),
+        }));
+      }
+
+      const dedupedBatches = dedupeBy(mappedBatches, b => String(b.batch_cd || b.code));
+      setBatches(dedupedBatches);
+      setCollegeBatches(dedupedBatches);
+    } catch (err) {
+      console.warn('Failed to fetch branches and batches for course:', err);
+    }
+  };
+
   // 2. Fetch all metadata whenever selected college changes
-  const fetchMetadata = async (slug: string) => {
+  const fetchMetadata = async (slug: string, customColgCd?: string) => {
     setMetaLoading(true);
+    const activeColg = customColgCd || selectedColgCd || '1';
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const h: Record<string, string> = {
@@ -634,18 +727,8 @@ export default function AssessmentMasterPage() {
         const raw = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
         return dedupeBy(raw, (item: any) => String(item.id || item.code || item.name));
       };
-      // Branch parser: dedupe by branch_cd + course_cd composite (branches share code across courses)
-      const parseBranches = (j: any) => {
-        const raw = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-        return dedupeBy(raw, (item: any) => `${item.branch_cd || item.code}|${item.course_cd || ''}`);
-      };
-      // Batch parser: dedupe by batch_cd + course_cd composite
-      const parseBatches = (j: any) => {
-        const raw = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-        return dedupeBy(raw, (item: any) => `${item.batch_cd || item.code}|${item.course_cd || ''}`);
-      };
 
-      const [deptRes, subjRes, unitRes, topicRes, compRes, linkRes, profRes, qRes, papersRes, coursesRes, branchesRes, batchesRes] = await Promise.all([
+      const [deptRes, subjRes, unitRes, topicRes, compRes, linkRes, profRes, qRes, papersRes, coursesRes, srmsCoursesRes, sessionsRes] = await Promise.all([
         fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/admin-master/units?tenant=${slug}`, { headers: h }).catch(() => null),
@@ -656,8 +739,8 @@ export default function AssessmentMasterPage() {
         fetch(`${API_BASE}/exams/question-bank?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`${API_BASE}/college-master/branches?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers: h }).catch(() => null),
+        fetch(`/api/srms/courses?colgcd=${activeColg}&tenant=${slug}`).catch(() => null),
+        fetch(`/api/srms/sessions?colgcd=${activeColg}&tenant=${slug}`).catch(() => fetch(`${API_BASE}/college-master/sessions?tenant=${slug}`, { headers: h })).catch(() => null),
       ]);
 
       if (deptRes && deptRes.ok) { const j = await deptRes.json(); setDepartments(parse(j)); }
@@ -667,10 +750,75 @@ export default function AssessmentMasterPage() {
       if (compRes && compRes.ok) { const j = await compRes.json(); setDbSubTopics(parse(j)); }
       if (linkRes && linkRes.ok) { const j = await linkRes.json(); setAllLinkers(parse(j)); }
       if (profRes && profRes.ok) { const j = await profRes.json(); setCollegeProfessionals(parse(j)); }
-      if (coursesRes && coursesRes.ok) { const j = await coursesRes.json(); const cList = parse(j); setCourses(cList); setCollegeCourses(cList); }
-      // Use composite-key parsers so BCA (code=1, course=13) & B.Tech (code=1, course=1) both survive
-      if (branchesRes && branchesRes.ok) { const j = await branchesRes.json(); setBranches(parseBranches(j)); }
-      if (batchesRes && batchesRes.ok) { const j = await batchesRes.json(); const bList = parseBatches(j); setBatches(bList); setCollegeBatches(bList); }
+      
+      let mappedCourses: CourseItem[] = [];
+      if (srmsCoursesRes && srmsCoursesRes.ok) {
+        const j = await srmsCoursesRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        if (list.length > 0) {
+          mappedCourses = list.map((c: any) => ({
+            id: String(c.course_cd || c.code || '13'),
+            code: String(c.course_cd || c.code || '13'),
+            course_cd: String(c.course_cd || c.code || '13'),
+            name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+            colg_cd: String(c.colg_cd || activeColg),
+          }));
+        }
+      }
+      if (mappedCourses.length === 0 && coursesRes && coursesRes.ok) {
+        const j = await coursesRes.json();
+        const cList = parse(j);
+        mappedCourses = cList.map((c: any) => ({
+          ...c,
+          course_cd: String(c.course_cd || c.code || c.id),
+        }));
+      }
+      if (mappedCourses.length === 0) {
+        mappedCourses = [
+          { code: 'BCA', course_cd: '13', name: 'Bachelor of Computer Applications (BCA)', id: '13' },
+          { code: 'B.TECH', course_cd: '1', name: 'Bachelor of Technology (B.Tech)', id: '1' },
+          { code: 'B.PHARM', course_cd: '2', name: 'Bachelor of Pharmacy (B.Pharm)', id: '2' },
+          { code: 'MCA', course_cd: '3', name: 'Master of Computer Applications (MCA)', id: '3' },
+          { code: 'MBA', course_cd: '4', name: 'Master of Business Administration (MBA)', id: '4' },
+        ];
+      }
+      setCourses(mappedCourses);
+      setCollegeCourses(mappedCourses);
+
+      const isMed = activeColg === '2' || slug.includes('ims');
+      const filtered = mappedCourses.filter(c => {
+        const cName = (c.name || '').toLowerCase();
+        const cCode = (c.code || '').toLowerCase();
+        const isMedCourse = cName.includes('mbbs') || cCode === 'mbbs' || cName.includes('medicine');
+        return isMed ? (isMedCourse || c.colg_cd === '2') : !isMedCourse;
+      });
+
+      const initialCrs = (selectedCourseCd && filtered.some(c => String(c.course_cd || c.code) === selectedCourseCd))
+        ? selectedCourseCd
+        : (filtered[0]?.course_cd || filtered[0]?.code || '13');
+
+      setSelectedCourseCd(initialCrs);
+      await fetchBranchesAndBatchesForCourse(activeColg, initialCrs, mappedCourses, slug);
+
+      if (sessionsRes && sessionsRes.ok) {
+        try {
+          const j = await sessionsRes.json();
+          const rawSessions = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+          const sList = dedupeBy(rawSessions, (s: any) => String(s.session_cd || s.code || s.name)).map((s: any) => ({
+            id: String(s.session_cd || s.code || s.name),
+            code: String(s.session_cd || s.code || s.name),
+            name: s.session_name || s.name || s.code,
+            is_current: s.current_flg === '1' || s.is_current || false,
+          }));
+          if (sList.length > 0) {
+            setAcademicSessions(sList);
+            const curr = sList.find(s => s.is_current) || sList[0];
+            if (curr) {
+              setSelectedAcademicYear(curr.name || curr.code);
+            }
+          }
+        } catch { }
+      }
 
       if (qRes && qRes.ok) {
         const j = await qRes.json();
@@ -718,7 +866,7 @@ export default function AssessmentMasterPage() {
 
   useEffect(() => {
     if (selectedCollegeSlug) {
-      fetchMetadata(selectedCollegeSlug);
+      fetchMetadata(selectedCollegeSlug, selectedColgCd);
     }
   }, [selectedCollegeSlug]);
 
@@ -755,55 +903,24 @@ export default function AssessmentMasterPage() {
     return dedupeBy(base, c => String(c.course_cd || c.code || c.id));
   }, [courses, isMedicalCollege]);
 
-  useEffect(() => {
-    if (filteredCourses.length > 0) {
-      const exists = filteredCourses.some(c => String(c.course_cd || c.code) === selectedCourseCd);
-      if (!exists) {
-        setSelectedCourseCd(String(filteredCourses[0].course_cd || filteredCourses[0].code));
-      }
-    }
-  }, [filteredCourses, selectedCourseCd]);
-
   // Filter Branches by Course
   const filteredBranches = useMemo(() => {
-    // All non-medical branches for this college
-    const nonMedBranches = branches.filter(b => {
-      if (isMedicalCollege) return (b.name && b.name.includes('Department of')) || b.code === 'ANA' || b.code === 'PHY';
-      const isMed = b.code === 'ANA' || b.code === 'PHY' || (b.name && (b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology')));
-      return !isMed;
-    });
-
-    const courseFiltered = nonMedBranches.filter(b => {
-      if (!selectedCourseCd) return true;
-      return String(b.course_cd) === String(selectedCourseCd);
-    });
-
-    const curCourse = filteredCourses.find(c => String(c.course_cd || c.code) === String(selectedCourseCd));
-    const courseName = curCourse?.name?.replace(/^\[#\d+\]\s*/, '').trim() || (selectedCourseCd === '13' ? 'BCA' : 'General');
-
-    const list = courseFiltered.length > 0 ? courseFiltered : nonMedBranches;
-    const mapped = (list.length > 0 ? list : [{ branch_cd: '1', code: '1', name: '-', course_cd: selectedCourseCd }]).map(b => {
-      const rawName = (b.name || '').trim();
-      const validName = (rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE')
-        ? rawName
-        : `${courseName} General`;
-      return {
-        ...b,
-        name: validName,
-      };
-    });
-
-    return dedupeBy(mapped, b => `${b.branch_cd || b.code || b.id}|${b.course_cd || ''}`);
-  }, [branches, selectedCourseCd, isMedicalCollege, filteredCourses]);
+    return dedupeBy(branches, b => String(b.branch_cd || b.code || b.id));
+  }, [branches]);
 
   useEffect(() => {
     if (filteredBranches.length > 0) {
-      const exists = filteredBranches.some(b => b.branch_cd === selectedBranchCd || b.code === selectedBranchCd);
+      const exists = filteredBranches.some(b => String(b.branch_cd || b.code) === selectedBranchCd);
       if (!exists) {
-        setSelectedBranchCd(filteredBranches[0].branch_cd || filteredBranches[0].code);
+        setSelectedBranchCd(filteredBranches[0].branch_cd || filteredBranches[0].code || '1');
       }
     }
   }, [filteredBranches, selectedBranchCd]);
+
+  const handleCourseChange = async (courseCode: string) => {
+    setSelectedCourseCd(courseCode);
+    await fetchBranchesAndBatchesForCourse(selectedColgCd, courseCode, filteredCourses, selectedCollegeSlug);
+  };
 
   // Filter Batches by Course
   const filteredBatches = useMemo(() => {
@@ -927,15 +1044,19 @@ export default function AssessmentMasterPage() {
     }
   };
 
-  // 1. Units filtered by selected Subject & Course
+  // 1. Units filtered by selected Subject & Course (from Admin Master /units)
   const availableUnits = useMemo(() => {
     const subObj = filteredSubjects.find(s => s.id === selectedSubject || s.code === selectedSubject);
     const matched = allUnits.filter(u => {
       if (selectedSubject) {
         return (
-          u.subject_id === selectedSubject ||
-          u.subject_code === selectedSubject ||
-          (subObj && (u.subject_id === subObj.id || u.subject_code === subObj.code))
+          String(u.subject_id) === String(selectedSubject) ||
+          String(u.subject_code) === String(selectedSubject) ||
+          (subObj && (
+            String(u.subject_id) === String(subObj.id) ||
+            String(u.subject_code) === String(subObj.code) ||
+            String(u.subject_id) === String(subObj.code)
+          ))
         );
       }
       if (selectedCourseCd) {
@@ -952,19 +1073,19 @@ export default function AssessmentMasterPage() {
       return dedupeBy(allUnits, u => u.id || u.code);
     }
 
-    return [
-      { id: 'u1', code: 'CO1', name: 'Unit 1: Fundamentals & Core Architecture' },
-      { id: 'u2', code: 'CO2', name: 'Unit 2: Frameworks & Client-Side Execution' },
-      { id: 'u3', code: 'CO3', name: 'Unit 3: Full-Stack Web Services & APIs' },
-      { id: 'u4', code: 'CO4', name: 'Unit 4: Database Integration & Storage' },
-    ];
+    return [];
   }, [allUnits, selectedSubject, filteredSubjects, selectedCourseCd]);
 
   // Keep selectedUnitId in sync with availableUnits
   useEffect(() => {
     if (availableUnits.length > 0) {
-      const exists = availableUnits.some(u => u.id === selectedUnitId || u.code === selectedUnitId);
-      if (!exists) {
+      const match = availableUnits.find(u => u.id === selectedUnitId || u.code === selectedUnitId);
+      if (match) {
+        const primaryId = match.id || match.code;
+        if (selectedUnitId !== primaryId) {
+          setSelectedUnitId(primaryId);
+        }
+      } else {
         setSelectedUnitId(availableUnits[0].id || availableUnits[0].code);
       }
     } else {
@@ -972,7 +1093,7 @@ export default function AssessmentMasterPage() {
     }
   }, [availableUnits, selectedUnitId]);
 
-  // 2. Topics filtered strictly by selected Unit & Subject
+  // 2. Topics filtered strictly by selected Unit & Subject (from Admin Master /topics)
   const availableTopics = useMemo(() => {
     const subObj = filteredSubjects.find(s => s.id === selectedSubject || s.code === selectedSubject);
     const unitObj = availableUnits.find(u => u.id === selectedUnitId || u.code === selectedUnitId);
@@ -983,16 +1104,24 @@ export default function AssessmentMasterPage() {
         const matchUnit = (
           t.unit_id === selectedUnitId ||
           t.unit_code === selectedUnitId ||
-          (unitObj && (t.unit_id === unitObj.id || t.unit_code === unitObj.code))
+          (unitObj && (
+            t.unit_id === unitObj.id ||
+            t.unit_code === unitObj.code ||
+            (t.unit_code && unitObj.code && t.unit_code.toLowerCase() === unitObj.code.toLowerCase())
+          ))
         );
         if (!matchUnit) return false;
       }
       // Must match Subject if selectedSubject is set
       if (selectedSubject) {
         const matchSubj = (
-          t.subject_id === selectedSubject ||
-          t.subject_code === selectedSubject ||
-          (subObj && (t.subject_id === subObj.id || t.subject_code === subObj.code))
+          String(t.subject_id) === String(selectedSubject) ||
+          String(t.subject_code) === String(selectedSubject) ||
+          (subObj && (
+            String(t.subject_id) === String(subObj.id) ||
+            String(t.subject_code) === String(subObj.code) ||
+            String(t.subject_id) === String(subObj.code)
+          ))
         );
         if (!matchSubj) return false;
       }
@@ -1006,18 +1135,13 @@ export default function AssessmentMasterPage() {
       const unitOnly = dbTopics.filter(t =>
         t.unit_id === selectedUnitId ||
         t.unit_code === selectedUnitId ||
-        (unitObj && (t.unit_id === unitObj.id || t.unit_code === unitObj.code))
+        (unitObj && (
+          t.unit_id === unitObj.id ||
+          t.unit_code === unitObj.code ||
+          (t.unit_code && unitObj.code && t.unit_code.toLowerCase() === unitObj.code.toLowerCase())
+        ))
       );
       if (unitOnly.length > 0) return dedupeBy(unitOnly, t => t.id || t.code);
-    }
-
-    // Only return fallback topics if no database topics exist at all
-    if (dbTopics.length === 0) {
-      return [
-        { id: 't1', code: 'T1', name: 'HTTP Protocol & REST Architecture', unit_code: selectedUnitId || 'CO1' },
-        { id: 't2', code: 'T2', name: 'Next.js 14 App Router & Components', unit_code: selectedUnitId || 'CO2' },
-        { id: 't3', code: 'T3', name: 'Relational Schema & PostgreSQL Storage', unit_code: selectedUnitId || 'CO4' },
-      ];
     }
 
     return [];
@@ -1026,8 +1150,14 @@ export default function AssessmentMasterPage() {
   // Keep selectedTopicId in sync with availableTopics
   useEffect(() => {
     if (availableTopics.length > 0) {
-      const exists = availableTopics.some(t => t.id === selectedTopicId || t.code === selectedTopicId);
-      if (!exists) {
+      const match = availableTopics.find(t => t.id === selectedTopicId || t.code === selectedTopicId);
+      if (match) {
+        const primaryId = match.id || match.code;
+        if (selectedTopicId !== primaryId) {
+          setSelectedTopicId(primaryId);
+          setSelectedTopicName(match.name || '');
+        }
+      } else {
         const firstT = availableTopics[0];
         setSelectedTopicId(firstT.id || firstT.code);
         setSelectedTopicName(firstT.name || '');
@@ -1038,7 +1168,7 @@ export default function AssessmentMasterPage() {
     }
   }, [availableTopics, selectedTopicId]);
 
-  // 3. Sub Topics (Competencies) strictly filtered by selected Topic & Unit
+  // 3. Sub Topics (Competencies) strictly filtered by selected Topic & Unit (from Admin Master /competencies)
   const availableSubTopics = useMemo(() => {
     const topicObj = availableTopics.find(t => t.id === selectedTopicId || t.code === selectedTopicId);
     const unitObj = availableUnits.find(u => u.id === selectedUnitId || u.code === selectedUnitId);
@@ -1061,7 +1191,11 @@ export default function AssessmentMasterPage() {
         return (
           s.unit_id === selectedUnitId ||
           s.unit_code === selectedUnitId ||
-          (unitObj && (s.unit_id === unitObj.id || s.unit_code === unitObj.code))
+          (unitObj && (
+            s.unit_id === unitObj.id ||
+            s.unit_code === unitObj.code ||
+            (s.unit_code && unitObj.code && s.unit_code.toLowerCase() === unitObj.code.toLowerCase())
+          ))
         );
       }
       return true;
@@ -1071,54 +1205,23 @@ export default function AssessmentMasterPage() {
       return dedupeBy(matched, s => s.id || s.code);
     }
 
-    // If dbSubTopics has records in the database but none match this topic specifically
-    if (dbSubTopics.length > 0) {
-      return [];
-    }
-
-    // Context-aware fallback if dbSubTopics is empty (first initialization / demo seed)
-    const tName = (topicObj?.name || selectedTopicName || '').toLowerCase();
-    const tCode = topicObj?.code || selectedTopicId || 'T1';
-
-    if (tName.includes('python')) {
-      return [
-        { id: `${tCode}-st1`, code: `${tCode}-ST1`, description: 'Python Syntax, Variables & Control Flow Statements' },
-        { id: `${tCode}-st2`, code: `${tCode}-ST2`, description: 'Functions, Scopes & Lambda Expressions' },
-        { id: `${tCode}-st3`, code: `${tCode}-ST3`, description: 'Data Structures: Lists, Tuples, Dictionaries & Sets' },
-        { id: `${tCode}-st4`, code: `${tCode}-ST4`, description: 'Object-Oriented Programming (Classes & Methods)' },
-      ];
-    } else if (tName.includes('dbms') || tName.includes('sql') || tName.includes('database')) {
-      return [
-        { id: `${tCode}-st1`, code: `${tCode}-ST1`, description: 'Relational Model, ER Diagrams & Schema Definition' },
-        { id: `${tCode}-st2`, code: `${tCode}-ST2`, description: 'SQL DDL, DML, Joins & Aggregation Queries' },
-        { id: `${tCode}-st3`, code: `${tCode}-ST3`, description: 'Normalization (1NF-BCNF) & Indexing Optimization' },
-      ];
-    } else if (tName.includes('web') || tName.includes('http') || tName.includes('rest') || tName.includes('next')) {
-      return [
-        { id: `${tCode}-st1`, code: 'WT1.1', description: 'Core Fundamentals & Client-Server Handshake' },
-        { id: `${tCode}-st2`, code: 'WT1.2', description: 'API Integration & State Management' },
-        { id: `${tCode}-st3`, code: 'WT1.3', description: 'Database Schema & Transactions' },
-      ];
-    }
-
-    if (topicObj?.name) {
-      return [
-        { id: `${tCode}-st1`, code: `${tCode}-ST1`, description: `${topicObj.name} — Core Concepts & Fundamentals` },
-        { id: `${tCode}-st2`, code: `${tCode}-ST2`, description: `${topicObj.name} — Advanced Implementation & Applications` },
-      ];
-    }
-
     return [];
-  }, [dbSubTopics, selectedTopicId, availableTopics, selectedUnitId, availableUnits, selectedTopicName]);
+  }, [dbSubTopics, selectedTopicId, availableTopics, selectedUnitId, availableUnits]);
 
   // Keep selectedSubTopicId in sync with availableSubTopics
   useEffect(() => {
     if (availableSubTopics.length > 0) {
-      const exists = availableSubTopics.some(s => s.id === selectedSubTopicId || s.code === selectedSubTopicCode);
-      if (!exists) {
+      const match = availableSubTopics.find(s => s.id === selectedSubTopicId || s.code === selectedSubTopicCode || s.code === selectedSubTopicId);
+      if (match) {
+        const primaryId = match.id || match.code;
+        if (selectedSubTopicId !== primaryId) {
+          setSelectedSubTopicId(primaryId);
+          setSelectedSubTopicCode(match.code || primaryId);
+        }
+      } else {
         const firstSub = availableSubTopics[0];
         setSelectedSubTopicId(firstSub.id || firstSub.code);
-        setSelectedSubTopicCode(firstSub.code);
+        setSelectedSubTopicCode(firstSub.code || firstSub.id);
       }
     } else {
       setSelectedSubTopicId('');
@@ -1920,7 +2023,7 @@ export default function AssessmentMasterPage() {
                     </label>
                     <select
                       value={selectedCourseCd}
-                      onChange={(e) => setSelectedCourseCd(e.target.value)}
+                      onChange={(e) => handleCourseChange(e.target.value)}
                       disabled={metaLoading}
                       className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] cursor-pointer truncate"
                     >
@@ -1962,11 +2065,15 @@ export default function AssessmentMasterPage() {
                       disabled={metaLoading}
                       className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] cursor-pointer truncate"
                     >
-                      {filteredBatches.map(b => (
-                        <option key={b.code || b.batch_cd || b.id} value={b.code || b.batch_cd || b.id}>
-                          [#{b.batch_cd || b.code}] Batch {b.name || b.year}
-                        </option>
-                      ))}
+                      {filteredBatches.map(b => {
+                        const rawLabel = String(b.name || b.year || '');
+                        const displayLabel = rawLabel.toLowerCase().startsWith('batch') ? rawLabel : `Batch ${rawLabel}`;
+                        return (
+                          <option key={b.code || b.batch_cd || b.id} value={b.code || b.batch_cd || b.id}>
+                            [#{b.batch_cd || b.code}] {displayLabel}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -2017,9 +2124,19 @@ export default function AssessmentMasterPage() {
                       disabled={metaLoading}
                       className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-orange-500/40 text-[#F36C21] font-bold focus:outline-none focus:border-[#F36C21] cursor-pointer"
                     >
-                      <option value="2026-2027">2026-2027 (Current)</option>
-                      <option value="2025-2026">2025-2026</option>
-                      <option value="2024-2025">2024-2025</option>
+                      {academicSessions.length > 0 ? (
+                        academicSessions.map(s => (
+                          <option key={s.id || s.code} value={s.name || s.code}>
+                            {s.name} {s.is_current ? '(Current)' : ''}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="2026-2027">2026-2027 (Current)</option>
+                          <option value="2025-2026">2025-2026</option>
+                          <option value="2024-2025">2024-2025</option>
+                        </>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -2090,16 +2207,15 @@ export default function AssessmentMasterPage() {
                         value={selectedUnitId}
                         onChange={(e) => handleUnitChange(e.target.value)}
                         disabled={!selectedSubject}
-                        className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] disabled:opacity-50"
+                        className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] disabled:opacity-50 cursor-pointer"
                       >
                         {!selectedSubject ? <option value="">Select Subject first</option>
-                          : availableUnits.length === 0 ? <option value="">No units found for this Subject</option>
-                          : <><option value="">— Select Unit —</option>
-                             {availableUnits.map(u => (
-                               <option key={u.id} value={u.id || u.code}>
-                                 {u.name} ({u.code})
-                               </option>
-                             ))}</>}
+                          : availableUnits.length === 0 ? <option value="">No units found in Unit Master</option>
+                          : availableUnits.map(u => (
+                              <option key={u.id || u.code} value={u.id || u.code}>
+                                {u.code}{u.name && u.name !== u.code ? ` — ${u.name}` : u.description ? ` — ${u.description}` : ''}
+                              </option>
+                            ))}
                       </select>
                     </div>
 
@@ -2112,16 +2228,15 @@ export default function AssessmentMasterPage() {
                         value={selectedTopicId}
                         onChange={(e) => handleTopicChange(e.target.value)}
                         disabled={!selectedUnitId}
-                        className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] disabled:opacity-50"
+                        className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] disabled:opacity-50 cursor-pointer"
                       >
                         {!selectedUnitId ? <option value="">Select Unit first</option>
-                          : availableTopics.length === 0 ? <option value="">No topics found in this Unit</option>
-                          : <><option value="">— Select Topic —</option>
-                             {availableTopics.map(t => (
-                               <option key={t.id} value={t.id || t.code}>
-                                 {t.name} ({t.code || ''})
-                               </option>
-                             ))}</>}
+                          : availableTopics.length === 0 ? <option value="">No topics found in Topic Master</option>
+                          : availableTopics.map(t => (
+                              <option key={t.id || t.code} value={t.id || t.code}>
+                                {t.name} {t.code ? `(${t.code})` : ''}
+                              </option>
+                            ))}
                       </select>
                     </div>
 
@@ -2131,19 +2246,18 @@ export default function AssessmentMasterPage() {
                         3. Sub Topics (Sub Topics Master) *
                       </label>
                       <select
-                        value={selectedSubTopicCode}
+                        value={selectedSubTopicId || selectedSubTopicCode}
                         onChange={(e) => handleSubTopicChange(e.target.value)}
                         disabled={!selectedTopicId}
-                        className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-950 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                        className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-950 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50 cursor-pointer"
                       >
                         {!selectedTopicId ? <option value="">Select Topic first</option>
-                          : availableSubTopics.length === 0 ? <option value="">No sub topics for this topic</option>
-                          : <><option value="">— Select Sub Topic —</option>
-                             {availableSubTopics.map(s => (
-                               <option key={s.id || s.code} value={s.code}>
-                                 {s.code}: {s.description || s.name}
-                               </option>
-                             ))}</>}
+                          : availableSubTopics.length === 0 ? <option value="">No sub topics in Sub Topics Master</option>
+                          : availableSubTopics.map(s => (
+                              <option key={s.id || s.code} value={s.id || s.code}>
+                                {s.code}: {s.description || s.name || 'Sub-Topic'}
+                              </option>
+                            ))}
                       </select>
                     </div>
                   </div>
@@ -2462,7 +2576,9 @@ export default function AssessmentMasterPage() {
                     >
                       <option value="all">All Units</option>
                       {allUnits.map(u => (
-                        <option key={u.id} value={u.code || u.name}>{u.name} ({u.code})</option>
+                        <option key={u.id} value={u.code || u.name}>
+                          {u.code}{u.name && u.name !== u.code ? ` — ${u.name}` : u.description ? ` — ${u.description}` : ''}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -2884,7 +3000,9 @@ export default function AssessmentMasterPage() {
                                   >
                                     <option value="all">All Units</option>
                                     {allUnits.map(u => (
-                                      <option key={u.id} value={u.code || u.name}>{u.name} ({u.code})</option>
+                                      <option key={u.id} value={u.code || u.name}>
+                                        {u.code}{u.name && u.name !== u.code ? ` — ${u.name}` : u.description ? ` — ${u.description}` : ''}
+                                      </option>
                                     ))}
                                   </select>
                                 </div>

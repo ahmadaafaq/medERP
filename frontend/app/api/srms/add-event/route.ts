@@ -120,6 +120,8 @@ export async function POST(req: NextRequest) {
       const targetEmpId = facRows[0]?.emp_id ? String(facRows[0].emp_id) : (empid || null);
       const targetFacName = facRows[0]?.name || title.match(/\(([^)]+)\)/)?.[1] || description.match(/\(([^)]+)\)/)?.[1] || empid || 'Faculty Member';
 
+      const excludeId = String(improperEvent.excludeId || improperEvent.editingSlotId || improperEvent.id || '').trim();
+
       // Check BOTH timetable_slots and srms_timetable_events for conflicts on this day of week and overlapping time
       const [slotClashes, eventClashes] = await Promise.all([
         queryDb(
@@ -135,7 +137,8 @@ export async function POST(req: NextRequest) {
            LEFT JOIN "${schema}".departments d ON d.id = ts.department_id
            LEFT JOIN "${schema}".batches b ON b.id = ts.batch_id
            WHERE ts.day_of_week = $1
-             AND (ts.start_time, ts.end_time) OVERLAPS ($2::TIME, $3::TIME)
+             AND (ts.start_time::TIME < $3::TIME AND ts.end_time::TIME > $2::TIME)
+             AND ($7::text = '' OR ts.id::text <> $7::text)
              AND (
                ts.faculty_id::text = $4
                OR f.emp_id = $5
@@ -143,7 +146,7 @@ export async function POST(req: NextRequest) {
                OR ts.description ILIKE $6
              )
            LIMIT 1`,
-          [startMeta.dayOfWeek, startMeta.timeStr, endMeta.timeStr, targetFacId || '00000000-0000-0000-0000-000000000000', targetEmpId || '', `%${targetFacName}%`]
+          [startMeta.dayOfWeek, startMeta.timeStr, endMeta.timeStr, targetFacId || '00000000-0000-0000-0000-000000000000', targetEmpId || '', `%${targetFacName}%`, excludeId]
         ).catch(() => []),
 
         queryDb(
@@ -162,9 +165,10 @@ export async function POST(req: NextRequest) {
                (
                  te.start_str LIKE '% ' || $2 || '%' 
                  OR te.start_str LIKE '% ' || $3 || '%'
-                 OR (te.start_time::time, te.end_time::time) OVERLAPS ($4::TIME, $5::TIME)
+                 OR (te.start_time::TIME < $5::TIME AND te.end_time::TIME > $4::TIME)
                )
              )
+             AND ($9::text = '' OR (te.id::text <> $9::text AND te.srms_id::text <> $9::text))
              AND (
                te.empid = $6
                OR f.emp_id = $6
@@ -181,7 +185,8 @@ export async function POST(req: NextRequest) {
             endMeta.timeStr,
             targetEmpId || '',
             targetFacId || '00000000-0000-0000-0000-000000000000',
-            `%${targetFacName}%`
+            `%${targetFacName}%`,
+            excludeId
           ]
         ).catch(() => [])
       ]);
@@ -362,6 +367,15 @@ export async function POST(req: NextRequest) {
     );
 
     const savedRow = insertRes[0];
+
+    // Ensure new event ID is removed from deleted blacklist if present
+    if (srmsId || savedRow?.id) {
+      await queryDb(
+        `DELETE FROM "${schema}".deleted_timetable_events 
+         WHERE event_id = $1 OR event_id = $2`,
+        [String(srmsId || ''), String(savedRow?.id || '')]
+      ).catch(() => {});
+    }
 
     // 6. Also sync to timetable_slots
     try {

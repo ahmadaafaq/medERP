@@ -236,6 +236,8 @@ interface Branch {
   course_cd?: string;
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+
 const SRMS_STUDENT_COLLEGE_OPTIONS = [
   { colg_cd: '1', label: '[Loc / Colg 1] SRMS CET, Bareilly (Engineering & Pharmacy)' },
   { colg_cd: '2', label: '[Loc / Colg 2] SRMS CETR, Bareilly (Engineering & Tech)' },
@@ -283,9 +285,6 @@ const SRMS_STUDENT_SESSION_OPTIONS = [
   { session_cd: '13', label: 'Session 2023-2024 (Code 13)' },
 ];
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
-
-
 export default function StudentMasterPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [colleges, setColleges] = useState<College[]>([]);
@@ -295,24 +294,18 @@ export default function StudentMasterPage() {
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
   const [allGroups, setAllGroups] = useState<Group[]>([]);
 
-  // Filter console tenant-specific data (pre-populated with standard SRMS defaults for zero-delay instant render)
-  const [filterCourses, setFilterCourses] = useState<Course[]>(
-    SRMS_STUDENT_COURSE_OPTIONS.map(c => ({ id: c.course_cd, code: c.course_cd, course_cd: c.course_cd, name: c.label }))
-  );
-  const [filterBatches, setFilterBatches] = useState<Batch[]>(
-    SRMS_STUDENT_BATCH_OPTIONS.map(b => ({ id: b.batch_cd, code: b.batch_cd, batch_cd: b.batch_cd, year: parseInt(b.label.match(/\d{4}/)?.[0] || '2025') }))
-  );
-  const [filterBranches, setFilterBranches] = useState<Branch[]>(
-    SRMS_STUDENT_BRANCH_OPTIONS.map(b => ({ id: b.branch_cd, code: b.branch_cd, branch_cd: b.branch_cd, name: b.label }))
-  );
+  // Filter console tenant-specific data (loaded dynamically from PostgreSQL)
+  const [filterCourses, setFilterCourses] = useState<Course[]>([]);
+  const [filterBatches, setFilterBatches] = useState<Batch[]>([]);
+  const [filterBranches, setFilterBranches] = useState<Branch[]>([]);
   const [filterSessions, setFilterSessions] = useState<AcademicSession[]>([]);
 
-  // Filtering states - initialized to BTech CS Batch 2025 by default
+  // Filtering states - defaults to all to show complete cohort on initial load
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCollege, setSelectedCollege] = useState('1');
-  const [selectedCourse, setSelectedCourse] = useState('2');
-  const [selectedBranch, setSelectedBranch] = useState("'1'");
-  const [selectedBatch, setSelectedBatch] = useState("'18'");
+  const [selectedCourse, setSelectedCourse] = useState('all');
+  const [selectedBranch, setSelectedBranch] = useState('all');
+  const [selectedBatch, setSelectedBatch] = useState('all');
   const [selectedSession, setSelectedSession] = useState('all');
   const [selectedResidency, setSelectedResidency] = useState('all');
   const [selectedGroup, setSelectedGroup] = useState('all');
@@ -556,7 +549,8 @@ export default function StudentMasterPage() {
   // Dynamically filter branches in filter console based on selectedCourse
   const displayedFilterBranches = useMemo(() => {
     if (selectedCourse === 'all') return [];
-    let list = filterBranches.filter(b => String(b.course_cd) === String(selectedCourse));
+    const sourceBranches = allBranches.length > 0 ? allBranches : filterBranches;
+    const list = sourceBranches.filter(b => String(b.course_cd) === String(selectedCourse));
     const seen = new Set<string>();
     const uniqueList: Branch[] = [];
     for (const b of list) {
@@ -567,12 +561,13 @@ export default function StudentMasterPage() {
       }
     }
     return uniqueList;
-  }, [filterBranches, selectedCourse]);
+  }, [allBranches, filterBranches, selectedCourse]);
 
   // Dynamically filter batches in filter console based on selectedCourse
   const displayedFilterBatches = useMemo(() => {
     if (selectedCourse === 'all') return [];
-    let list = filterBatches.filter(b => String(b.course_cd) === String(selectedCourse));
+    const sourceBatches = allBatches.length > 0 ? allBatches : filterBatches;
+    const list = sourceBatches.filter(b => !b.course_cd || String(b.course_cd) === String(selectedCourse));
     const seen = new Set<string>();
     const uniqueList: Batch[] = [];
     for (const b of list) {
@@ -583,7 +578,7 @@ export default function StudentMasterPage() {
       }
     }
     return uniqueList.sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
-  }, [filterBatches, selectedCourse]);
+  }, [allBatches, filterBatches, selectedCourse]);
 
   // Load all tenant master data for a given college slug
   const loadTenantData = async (slug: string) => {
@@ -761,64 +756,6 @@ export default function StudentMasterPage() {
     setSelectedBranch('all');
     setSelectedBatch('all');
 
-    const activeCol = colleges.find(c => c.code === selectedCollege || c.colg_cd === selectedCollege || c.slug === selectedCollege || c.id === selectedCollege);
-    const colCd = activeCol?.code || activeCol?.colg_cd || '1';
-    const tenantSlug = activeCol?.slug || 'srms-cet-bareilly';
-
-    if (crsVal !== 'all') {
-      try {
-        const selectedCrsObj = filterCourses.find(c => c.course_cd === crsVal || c.code === crsVal);
-        const courseName = selectedCrsObj?.name || 'Core';
-
-        // 1. Fetch course-specific branches
-        const resBr = await fetch(`/api/srms/branches?colgcd=${colCd}&coursecd=${crsVal}&tenant=${tenantSlug}`);
-        const brList = await resBr.json().catch(() => []);
-        if (Array.isArray(brList) && brList.length > 0) {
-          const mappedBr: Branch[] = brList.map((b: any) => {
-            let bName = String(b.branch_name || b.name || '').trim();
-            if (!bName || bName === '-' || bName === 'null' || bName === 'undefined') {
-              bName = `${courseName} (Core / Main)`;
-            }
-            return {
-              id: String(b.branch_cd || b.code || b.id),
-              code: String(b.branch_cd || b.code || b.id),
-              branch_cd: String(b.branch_cd || b.code || b.id),
-              name: bName,
-              college_id: String(b.colg_cd || colCd),
-              course_cd: String(b.course_cd || crsVal),
-            };
-          });
-          setFilterBranches(mappedBr);
-        } else {
-          // Fallback to filtering existing branches by course_cd
-          setFilterBranches(prev => prev.filter(b => String(b.course_cd) === String(crsVal)));
-        }
-
-        // 2. Fetch course-specific batches
-        const resBat = await fetch(`/api/srms/batches?colgcd=${colCd}&coursecd=${crsVal}&tenant=${tenantSlug}`);
-        const list = await resBat.json().catch(() => []);
-        if (Array.isArray(list) && list.length > 0) {
-          const mapped: Batch[] = list.map((b: any) => ({
-            id: String(b.batch_cd || b.code || b.batch_name || b.id),
-            code: String(b.batch_name || b.year || b.batch_cd || b.code),
-            batch_cd: String(b.batch_cd || b.code || b.year),
-            year: Number(b.batch_name) || Number(b.year) || 2025,
-            course_cd: String(b.course_cd || crsVal),
-            colg_cd: String(b.colg_cd || colCd),
-          }));
-          setFilterBatches(mapped);
-        }
-      } catch (err) {
-        console.warn('Live fetch error in filter:', err);
-      }
-    } else {
-      if (activeCol?.slug) {
-        const data = await loadTenantData(activeCol.slug);
-        setFilterBranches(data.branches || []);
-        setFilterBatches(data.batches || []);
-      }
-    }
-
     fetchStudents({ courseId: crsVal, branchId: 'all', batchId: 'all' });
   };
 
@@ -827,30 +764,6 @@ export default function StudentMasterPage() {
     setSelectedBranch(brVal);
     setSelectedBatch('all');
 
-    if (selectedCourse !== 'all') {
-      const activeCol = colleges.find(c => c.code === selectedCollege || c.colg_cd === selectedCollege || c.slug === selectedCollege || c.id === selectedCollege);
-      const colCd = activeCol?.code || activeCol?.colg_cd || '1';
-      const tenantSlug = activeCol?.slug || 'srms-cet-bareilly';
-
-      try {
-        const resBat = await fetch(`/api/srms/batches?colgcd=${colCd}&coursecd=${selectedCourse}&branchcd=${brVal}&tenant=${tenantSlug}`);
-        const list = await resBat.json().catch(() => []);
-        if (Array.isArray(list) && list.length > 0) {
-          const mapped: Batch[] = list.map((b: any) => ({
-            id: String(b.batch_cd || b.code || b.batch_name || b.id),
-            code: String(b.batch_name || b.year || b.batch_cd || b.code),
-            batch_cd: String(b.batch_cd || b.code || b.year),
-            year: Number(b.batch_name) || Number(b.year) || 2025,
-            course_cd: String(b.course_cd || selectedCourse),
-            colg_cd: String(b.colg_cd || colCd),
-          }));
-          setFilterBatches(mapped);
-        }
-      } catch (err) {
-        console.warn('Live fetch error in branch change:', err);
-      }
-    }
-
     fetchStudents({ branchId: brVal, batchId: 'all' });
   };
 
@@ -858,7 +771,9 @@ export default function StudentMasterPage() {
   const handleCourseChange = async (crsId: string) => {
     const crs = allCourses.find((c) => c.course_cd === crsId || c.code === crsId || c.id === crsId);
     const crsCode = crs ? (crs.course_cd || crs.code) : crsId;
-    const courseName = crs?.name || 'Core';
+
+    const matchingBranches = allBranches.filter(b => String(b.course_cd) === String(crsCode));
+    const autoBranchId = matchingBranches.length === 1 ? (matchingBranches[0].branch_cd || matchingBranches[0].code) : '';
 
     setFormData((prev) => ({
       ...prev,
@@ -866,66 +781,8 @@ export default function StudentMasterPage() {
       courseCode: crsCode,
       batchId: '',
       batchCode: '',
-      branchId: '',
+      branchId: autoBranchId,
     }));
-
-    if (crsCode) {
-      try {
-        const colCd = formData.collegeId || '1';
-        const formCollege = colleges.find((c) => c.code === colCd || c.colg_cd === colCd || c.id === colCd);
-        const tenantSlug = formCollege?.slug || 'srms-cet-bareilly';
-
-        // 1. Fetch batches for this course
-        const resBat = await fetch(`/api/srms/batches?colgcd=${colCd}&coursecd=${crsCode}&tenant=${tenantSlug}`);
-        const list = await resBat.json().catch(() => []);
-        if (Array.isArray(list) && list.length > 0) {
-          const mapped: Batch[] = list.map((b: any) => ({
-            id: String(b.batch_cd || b.code || b.batch_name || b.id),
-            code: String(b.batch_name || b.year || b.batch_cd || b.code),
-            batch_cd: String(b.batch_cd || b.code || b.year),
-            year: Number(b.batch_name) || Number(b.year) || 2025,
-            course_cd: String(b.course_cd || crsCode),
-            colg_cd: String(b.colg_cd || colCd),
-          }));
-          setAllBatches(prev => {
-            const other = prev.filter(b => b.course_cd !== crsCode);
-            return [...mapped, ...other];
-          });
-        }
-
-        // 2. Fetch branches for this course
-        const resBr = await fetch(`/api/srms/branches?colgcd=${colCd}&coursecd=${crsCode}&tenant=${tenantSlug}`);
-        const brList = await resBr.json().catch(() => []);
-        if (Array.isArray(brList) && brList.length > 0) {
-          const mappedBr: Branch[] = brList.map((b: any) => {
-            let bName = String(b.branch_name || b.name || '').trim();
-            if (!bName || bName === '-' || bName === 'null' || bName === 'undefined') {
-              bName = `${courseName} (Core / Main)`;
-            }
-            return {
-              id: String(b.branch_cd || b.code || b.id),
-              code: String(b.branch_cd || b.code || b.id),
-              branch_cd: String(b.branch_cd || b.code || b.id),
-              name: bName,
-              college_id: String(b.colg_cd || colCd),
-              course_cd: String(b.course_cd || crsCode),
-            };
-          });
-          setAllBranches(prev => {
-            const other = prev.filter(b => b.course_cd !== crsCode);
-            return [...mappedBr, ...other];
-          });
-          if (mappedBr.length === 1) {
-            setFormData(prev => ({
-              ...prev,
-              branchId: mappedBr[0].branch_cd || mappedBr[0].code,
-            }));
-          }
-        }
-      } catch (err) {
-        console.warn('Live GetBatch/GetBranch form fetch error:', err);
-      }
-    }
   };
 
   // When session selection changes, generate auto-reg number

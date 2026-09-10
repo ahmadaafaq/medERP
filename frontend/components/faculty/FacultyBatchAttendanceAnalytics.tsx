@@ -16,14 +16,10 @@ interface SubjectAttendance {
   trend: 'up' | 'down' | 'stable';
 }
 
-interface BatchOption {
-  key: string;
-  batchCd: string;
-  courseCd: string;
-  courseName: string;
-  batchName: string;
-  semester: string;
-  label: string;
+interface DropdownItem {
+  id: string;
+  code: string;
+  name: string;
 }
 
 interface StudentAttendanceRecord {
@@ -50,8 +46,18 @@ interface BatchAnalyticsData {
 }
 
 export default function FacultyBatchAttendanceAnalytics() {
-  const [batchOptions, setBatchOptions] = useState<BatchOption[]>([]);
-  const [selectedBatchKey, setSelectedBatchKey] = useState<string>('');
+  // Cascading Academic States
+  const [coursesList, setCoursesList] = useState<DropdownItem[]>([]);
+  const [branchesList, setBranchesList] = useState<DropdownItem[]>([]);
+  const [batchesList, setBatchesList] = useState<DropdownItem[]>([]);
+
+  const [selectedCollege, setSelectedCollege] = useState<string>('1');
+  const [selectedCourse, setSelectedCourse] = useState<string>('13'); // Default BCA
+  const [selectedBranch, setSelectedBranch] = useState<string>('1');
+  const [selectedBatch, setSelectedBatch] = useState<string>('2'); // Default 2025
+  const [selectedSem, setSelectedSem] = useState<string>('3'); // Default Sem 3
+  const [selectedTenantSlug, setSelectedTenantSlug] = useState<string>('srms-cet-bareilly');
+
   const [studentRecords, setStudentRecords] = useState<StudentAttendanceRecord[]>([]);
   const [activeTab, setActiveTab] = useState<'graph' | 'subjects'>('graph');
   const [activeBatch, setActiveBatch] = useState<BatchAnalyticsData>({
@@ -69,269 +75,248 @@ export default function FacultyBatchAttendanceAnalytics() {
   const [filterView, setFilterView] = useState<'all' | 'critical'>('all');
 
   useEffect(() => {
-    loadDynamicBatches();
+    initAcademicHierarchy();
   }, []);
 
-  const loadDynamicBatches = async () => {
-    const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '') : 'srms-cet-bareilly';
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+  const initAcademicHierarchy = async () => {
+    const slug = typeof window !== 'undefined'
+      ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '').trim()
+      : 'srms-cet-bareilly';
     const isMed = slug.includes('ims') || slug.includes('med');
-    const defaultColg = isMed ? '11' : '1';
+    const userColg = typeof window !== 'undefined'
+      ? localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || (isMed ? '11' : '1')
+      : (isMed ? '11' : '1');
 
-    const headers: Record<string, string> = {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(slug ? { 'x-tenant-slug': slug, 'x-tenant': slug } : {}),
-    };
+    setSelectedCollege(userColg);
+    setSelectedTenantSlug(slug);
 
     try {
-      // 1. Fetch live student attendance roster from hustle-board API
-      try {
-        const hbRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/student-master/hustle-board${slug ? `?tenant=${slug}` : ''}`, { headers }).catch(() => null);
-        if (hbRes && hbRes.ok) {
-          const hbJson = await hbRes.json();
-          const list = Array.isArray(hbJson.data) ? hbJson.data : Array.isArray(hbJson) ? hbJson : [];
-          const seen = new Set<string>();
-          const studs: StudentAttendanceRecord[] = [];
-          for (const st of list) {
-            const key = st.rollNo || st.regNo || st.id || st.name;
-            if (!seen.has(key)) {
-              seen.add(key);
-              studs.push({
-                id: st.id,
-                name: st.name,
-                rollNo: st.rollNo || st.regNo,
-                attendancePct: Number(st.attendancePct || 0),
-                course: st.course,
-                batch: st.batch,
-                photoUrl: st.photoUrl,
-                isCompliant: Number(st.attendancePct || 0) >= 75,
-              });
-            }
-          }
-          setStudentRecords(studs);
-        }
-      } catch (err) {
-        console.warn('Could not fetch student attendance list:', err);
-      }
-
-      // 2. Fetch Logged-in Faculty Profile to detect Department & Subjects
-      let deptName = '';
-      let deptCode = '';
-      let facultyEmpId = typeof window !== 'undefined' ? localStorage.getItem('empid') || localStorage.getItem('emp_id') || '' : '';
-
-      try {
-        const meRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/auth/me`, { headers });
-        if (meRes && meRes.ok) {
-          const meJson = await meRes.json();
-          const meData = meJson.data || meJson;
-          const profile = meData.profile || {};
-          deptName = (profile.department_name || meData.departmentName || meData.department || '').toLowerCase();
-          deptCode = (profile.department_code || '').toLowerCase();
-          facultyEmpId = profile.emp_id || meData.emp_id || facultyEmpId;
-        }
-      } catch {}
-
-      // 3. Fetch live courses for this campus
-      const crsRes = await fetch(`/api/srms/courses?colgcd=${defaultColg}&tenant=${slug}`).catch(() => null);
-      let courses: any[] = [];
+      const crsRes = await fetch(`/api/srms/courses?colgcd=${userColg}&tenant=${slug}`).catch(() => null);
+      let mappedCourses: DropdownItem[] = [];
       if (crsRes && crsRes.ok) {
-        const cJson = await crsRes.json();
-        courses = Array.isArray(cJson) ? cJson : cJson.data || [];
+        const j = await crsRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedCourses = list.map((c: any) => ({
+          id: String(c.course_cd || c.code || '13'),
+          code: String(c.course_cd || c.code || '13'),
+          name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+        }));
       }
 
-      if (courses.length === 0) {
-        courses = isMed
-          ? [{ course_cd: '1', course_name: 'MBBS' }]
+      if (mappedCourses.length === 0) {
+        mappedCourses = isMed
+          ? [{ id: '1', code: '1', name: 'MBBS' }]
           : [
-              { course_cd: '13', course_name: 'BCA' },
-              { course_cd: '3', course_name: 'MCA' },
-              { course_cd: '1', course_name: 'B.TECH.' },
-              { course_cd: '4', course_name: 'MBA' },
-              { course_cd: '2', course_name: 'B.PHARM.' },
+              { id: '13', code: '13', name: 'BCA' },
+              { id: '1', code: '1', name: 'B.TECH.' },
+              { id: '3', code: '3', name: 'MCA' },
+              { id: '4', code: '4', name: 'MBA' },
+              { id: '2', code: '2', name: 'B.PHARM.' },
             ];
       }
 
-      const isFacultyMca = deptName.includes('mca') || deptName.includes('master of computer') || deptCode.includes('mca');
-      const isFacultyBca = deptName.includes('bca') || deptName.includes('bachelor of computer') || deptCode.includes('bca') || deptName.includes('computer application');
-      const isFacultyCompApp = isFacultyMca || isFacultyBca || deptName.includes('computer application');
-      const isFacultyPharmacy = deptName.includes('pharm') || deptCode.includes('pharm');
-      const isFacultyMba = deptName.includes('management') || deptName.includes('mba') || deptName.includes('business');
-      const isFacultyEngineering = !isFacultyCompApp && (deptName.includes('engineering') || deptName.includes('cse') || deptName.includes('tech') || deptName.includes('mechanical') || deptName.includes('electrical'));
+      setCoursesList(mappedCourses);
+      const initialCourse = mappedCourses.find((c) => c.code === '13')?.code || mappedCourses[0].code;
+      setSelectedCourse(initialCourse);
 
-      const sortedCourses = [...courses].sort((a, b) => {
-        const aName = (a.course_name || a.name || '').toUpperCase();
-        const bName = (b.course_name || b.name || '').toUpperCase();
-
-        const getScore = (cName: string) => {
-          if (isFacultyMca) {
-            if (cName.includes('MCA')) return 100;
-            if (cName.includes('BCA')) return 90;
-          } else if (isFacultyBca || isFacultyCompApp) {
-            if (cName.includes('BCA')) return 100;
-            if (cName.includes('MCA')) return 90;
-          } else if (isFacultyPharmacy) {
-            if (cName.includes('PHARM')) return 100;
-          } else if (isFacultyMba) {
-            if (cName.includes('MBA') || cName.includes('BBA')) return 100;
-          } else if (isFacultyEngineering) {
-            if (cName.includes('B.TECH') || cName.includes('ENGINEERING')) return 100;
-            if (cName.includes('M.TECH')) return 90;
-          }
-          return 10;
-        };
-
-        return getScore(bName) - getScore(aName);
-      });
-
-      // 4. Fetch batches for the faculty's prioritized courses
-      const options: BatchOption[] = [];
-      const targetCourses = sortedCourses.slice(0, 4);
-
-      for (const crs of targetCourses) {
-        const cCd = String(crs.course_cd || crs.code || '13');
-        const cName = String(crs.course_name || crs.name || 'Course');
-
-        try {
-          const btRes = await fetch('/api/srms/batches', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ colgcd: defaultColg, coursecd: cCd, tenantSlug: slug }),
-          }).catch(() => null);
-
-          if (btRes && btRes.ok) {
-            const bJson = await btRes.json();
-            const bList = Array.isArray(bJson) ? bJson : bJson.data || [];
-            
-            const sortedBatches = [...bList].sort((x, y) => {
-              const numX = Number(x.batch_name || x.name || x.batch_cd || 0);
-              const numY = Number(y.batch_name || y.name || y.batch_cd || 0);
-              return numY - numX;
-            });
-
-            for (const b of sortedBatches) {
-              const bCd = String(b.batch_cd || b.code || b.year);
-              const bName = String(b.batch_name || b.name || b.year || `Batch ${bCd}`);
-              options.push({
-                key: `${cCd}-${bCd}`,
-                batchCd: bCd,
-                courseCd: cCd,
-                courseName: cName,
-                batchName: bName.startsWith('Batch') ? bName : `Batch ${bName}`,
-                semester: 'Semester 3',
-                label: `${bName.startsWith('Batch') ? bName : `Batch ${bName}`} • ${cName}`,
-              });
-            }
-          }
-        } catch {}
-      }
-
-      if (options.length > 0) {
-        // Sort options to put the faculty's active teaching cohort or active roster batch first
-        const sortedOptions = [...options].sort((a, b) => {
-          if ((isFacultyBca || isFacultyCompApp) && a.courseName.includes('BCA') && !b.courseName.includes('BCA')) return -1;
-          if ((isFacultyBca || isFacultyCompApp) && !a.courseName.includes('BCA') && b.courseName.includes('BCA')) return 1;
-          if (isFacultyMca && a.courseName.includes('MCA') && !b.courseName.includes('MCA')) return -1;
-          if (isFacultyMca && !a.courseName.includes('MCA') && b.courseName.includes('MCA')) return 1;
-          return 0;
-        });
-
-        setBatchOptions(sortedOptions);
-        const initial = sortedOptions[0];
-        setSelectedBatchKey(initial.key);
-        fetchBatchAnalytics(initial, slug);
-      } else {
-        const fallbackOption: BatchOption = {
-          key: isFacultyMca ? '3-16' : '13-2',
-          batchCd: isFacultyMca ? '16' : '2',
-          courseCd: isFacultyMca ? '3' : '13',
-          courseName: isFacultyMca ? 'MCA' : 'BCA',
-          batchName: 'Batch 2025',
-          semester: 'Semester 3',
-          label: isFacultyMca ? 'Batch 2025 • MCA' : 'Batch 2025 • BCA',
-        };
-        setBatchOptions([fallbackOption]);
-        setSelectedBatchKey(fallbackOption.key);
-        fetchBatchAnalytics(fallbackOption, slug);
-      }
+      await fetchBranchesAndBatches(userColg, initialCourse, mappedCourses, slug, '3');
     } catch (err) {
-      console.warn('Error loading dynamic batch options:', err);
+      console.warn('Error initializing academic hierarchy:', err);
     }
   };
 
-  const fetchBatchAnalytics = async (batch: BatchOption, slug: string) => {
-    setLoading(true);
+  const fetchBranchesAndBatches = async (
+    colg: string,
+    crs: string,
+    customCourses?: DropdownItem[],
+    customSlug?: string,
+    targetSem?: string
+  ) => {
+    const effectiveColg = colg || selectedCollege || '1';
+    const effectiveCrs = crs || selectedCourse || '13';
+    const slug = customSlug || selectedTenantSlug || 'srms-cet-bareilly';
+    const activeCourses = customCourses || coursesList;
+    const semToUse = targetSem || selectedSem || '3';
+
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-      const headers: Record<string, string> = {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(slug ? { 'x-tenant-slug': slug, 'x-tenant': slug } : {}),
+      const [brRes, btRes] = await Promise.all([
+        fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${slug}`).catch(() => null),
+        fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${slug}`).catch(() => null),
+      ]);
+
+      const courseObj = activeCourses.find(
+        (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
+      );
+      const courseName = (courseObj?.name || (effectiveCrs === '13' ? 'BCA' : 'Course'))
+        .replace(/^\[#\d+\]\s*/, '')
+        .trim();
+
+      let mappedBranches: DropdownItem[] = [];
+      if (brRes && brRes.ok) {
+        const j = await brRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBranches = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
+          const rawName = (b.branch_name || b.name || '').trim();
+          const validName =
+            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
+              ? rawName
+              : (effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
+          return {
+            id: String(b.branch_cd || b.code || '1'),
+            code: String(b.branch_cd || b.code || '1'),
+            name: validName,
+          };
+        });
+      }
+
+      if (mappedBranches.length === 0) {
+        mappedBranches = [{ id: '1', code: '1', name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department` }];
+      }
+      setBranchesList(mappedBranches);
+      const branchToUse = mappedBranches[0].code;
+      setSelectedBranch(branchToUse);
+
+      let mappedBatches: DropdownItem[] = [];
+      if (btRes && btRes.ok) {
+        const j = await btRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBatches = list.map((b: any) => {
+          const bCd = String(b.batch_cd || b.code || b.batch_id || '2');
+          const bName = String(b.batch_name || b.name || b.year || b.batch_cd || '2025');
+          return {
+            id: bCd,
+            code: bCd,
+            name: bName.startsWith('Batch') ? bName : `Batch ${bName}`,
+          };
+        });
+      }
+
+      if (mappedBatches.length === 0) {
+        mappedBatches = [
+          { id: '1', code: '1', name: 'Batch 2026' },
+          { id: '2', code: '2', name: 'Batch 2025' },
+          { id: '3', code: '3', name: 'Batch 2024' },
+        ];
+      }
+      setBatchesList(mappedBatches);
+      const batchToUse = mappedBatches[0].code;
+      setSelectedBatch(batchToUse);
+
+      await fetchAttendanceAnalyticsData(
+        effectiveColg,
+        effectiveCrs,
+        branchToUse,
+        batchToUse,
+        semToUse,
+        courseName,
+        mappedBatches[0].name,
+        slug
+      );
+    } catch (err) {
+      console.warn('Failed to fetch branches and batches:', err);
+    }
+  };
+
+  const fetchAttendanceAnalyticsData = async (
+    colg: string,
+    crs: string,
+    branch: string,
+    batch: string,
+    sem: string,
+    crsName?: string,
+    batchName?: string,
+    slugOverride?: string
+  ) => {
+    setLoading(true);
+    const slug = slugOverride || selectedTenantSlug || 'srms-cet-bareilly';
+    const effectiveCrsName = crsName || coursesList.find((c) => c.code === crs)?.name || 'Course';
+    const effectiveBatchName = batchName || batchesList.find((b) => b.code === batch)?.name || 'Batch';
+
+    try {
+      // 1. Fetch live attendance matrix from SRMS
+      const attPayload = {
+        colg_cd: Number(colg || 1),
+        course_cd: Number(crs || 13),
+        branch_cd: Number(branch || 1),
+        batch_cd: Number(batch || 2),
+        sem_cd: Number(sem || 3),
+        section_cd: 1,
+        fdt: '2026-07-02',
+        tdt: '2026-08-21',
       };
 
-      // 1. Fetch authentic subjects for this course from admin-master/subjects
-      let subjectsList: any[] = [];
-      try {
-        const subRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/admin-master/subjects?tenant=${slug}&course_cd=${batch.courseCd}&limit=50`,
-          { headers }
-        ).catch(() => null);
+      const res = await fetch('/api/srms/student-attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(attPayload),
+      }).catch(() => null);
 
-        if (subRes && subRes.ok) {
-          const sJson = await subRes.json();
-          subjectsList = Array.isArray(sJson.data) ? sJson.data : Array.isArray(sJson) ? sJson : [];
-        }
+      let studs: StudentAttendanceRecord[] = [];
+      let subjects: SubjectAttendance[] = [];
 
-        if (subjectsList.length === 0) {
-          const fallbackRes = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/admin-master/subjects?tenant=${slug}&limit=20`,
-            { headers }
-          ).catch(() => null);
-          if (fallbackRes && fallbackRes.ok) {
-            const fbJson = await fallbackRes.json();
-            subjectsList = Array.isArray(fbJson.data) ? fbJson.data : [];
+      if (res && res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          const subList: { sub_cd: string; sub_name: string }[] = json.subjectList || [];
+
+          studs = json.data.map((st: any, idx: number) => {
+            const rawPct = st.TotalPresentPercentage || '0%';
+            const pctVal = parseFloat(String(rawPct).replace('%', '')) || 0;
+            return {
+              id: String(st.stud_reg_no || st.stud_roll_no || `stud-${idx + 1}`),
+              name: st.stud_name || 'Student',
+              rollNo: st.stud_roll_no || st.stud_reg_no || `REG-${idx + 101}`,
+              attendancePct: pctVal,
+              course: st.course_name || effectiveCrsName,
+              batch: st.batch_name ? (st.batch_name.startsWith('Batch') ? st.batch_name : `Batch ${st.batch_name}`) : effectiveBatchName,
+              photoUrl: st.photo_url || st.photoUrl,
+              isCompliant: pctVal >= 75,
+            };
+          }).sort((a: StudentAttendanceRecord, b: StudentAttendanceRecord) => b.attendancePct - a.attendancePct);
+
+          if (subList.length > 0) {
+            subjects = subList.map((sub, idx) => {
+              let totalPct = 0;
+              let count = 0;
+              let conducted = 24 + (idx % 6);
+              json.data.forEach((st: any) => {
+                const val = st[sub.sub_name];
+                if (val && typeof val === 'string') {
+                  const match = val.match(/(\d+)\/(\d+)\s*\(([\d.]+)%\)/);
+                  if (match) {
+                    totalPct += parseFloat(match[3]);
+                    count++;
+                    conducted = parseInt(match[2], 10) || conducted;
+                  }
+                }
+              });
+              const avg = count > 0 ? parseFloat((totalPct / count).toFixed(1)) : 78.5;
+              return {
+                id: String(sub.sub_cd || idx + 1),
+                name: sub.sub_name,
+                code: sub.sub_cd || `BCS-${301 + idx}`,
+                lecturesConducted: conducted,
+                avgAttendance: avg,
+                facultyName: 'Prof. Faculty Member',
+                facultyDesignation: 'Assistant Professor',
+                facultyEmpId: 'CET-FAC',
+                trend: avg >= 80 ? 'up' : avg >= 75 ? 'stable' : 'down',
+              };
+            });
           }
         }
-      } catch (err) {
-        console.warn('Could not fetch subjects:', err);
       }
 
-      // Deduplicate subjects by unique code & name
-      const seenSubs = new Set<string>();
-      const uniqueSubjects: any[] = [];
-      for (const s of subjectsList) {
-        const key = `${s.code || s.id}_${(s.name || '').toLowerCase()}`;
-        if (!seenSubs.has(key) && s.name) {
-          seenSubs.add(key);
-          uniqueSubjects.push(s);
-        }
-      }
-
-      const mappedSubjects: SubjectAttendance[] = (uniqueSubjects.length > 0 ? uniqueSubjects.slice(0, 8) : [
-        { name: 'Operating Systems & Distributed Computing', code: 'BCS-301' },
-        { name: 'Object Oriented Programming with Java', code: 'BCS-302' },
-        { name: 'Theory of Automata & Formal Languages', code: 'BCS-303' },
-        { name: 'Computer Architecture & Microprocessors', code: 'BCS-304' },
-        { name: 'Data Engineering & Cloud Databases', code: 'BCS-305' },
-        { name: 'Universal Human Values & Professional Ethics', code: 'BCS-306' },
-      ]).map((sub: any, idx: number) => {
-        const baseAvg = idx === 0 ? 84.5 : idx === 1 ? 81.2 : idx === 2 ? 78.6 : idx === 3 ? 76.8 : idx === 4 ? 74.5 : 79.0;
-        return {
-          id: String(sub.id || idx + 1),
-          name: sub.name || 'Core Academic Subject',
-          code: sub.code || `SUB-${idx + 101}`,
-          lecturesConducted: 24 + (idx % 6),
-          avgAttendance: baseAvg,
-          facultyName: sub.faculty_name || 'Prof. Vinay Kumar',
-          facultyDesignation: 'Assistant Professor',
-          facultyEmpId: sub.faculty_emp_id || 'CET-FAC',
-          trend: baseAvg >= 80 ? 'up' : baseAvg >= 75 ? 'stable' : 'down',
+      // If SRMS attendance was empty, fallback gracefully to database students
+      if (studs.length === 0) {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+        const headers: Record<string, string> = {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(slug ? { 'x-tenant-slug': slug, 'x-tenant': slug } : {}),
         };
-      });
 
-      // 2. Fetch real students belonging to this batch & course
-      let batchStudents: StudentAttendanceRecord[] = [];
-      try {
         const studRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/users/students?tenant=${slug}&courseCd=${batch.courseCd}&limit=100`,
+          `${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/users/students?tenant=${slug}&courseCd=${crs}&limit=100`,
           { headers }
         ).catch(() => null);
 
@@ -346,81 +331,122 @@ export default function FacultyBatchAttendanceAnalytics() {
             : [];
 
           if (rawList.length > 0) {
-            batchStudents = rawList.map((st: any) => {
+            studs = rawList.map((st: any) => {
               const att = parseFloat(st.attendance_percentage || st.attendancePct || 0);
               return {
                 id: st.id,
                 name: st.name,
                 rollNo: st.rollno || st.rollNo || st.registration_no || st.regNo,
                 attendancePct: att,
-                course: batch.courseName,
-                batch: batch.batchName,
+                course: effectiveCrsName,
+                batch: effectiveBatchName,
                 photoUrl: st.photo_url || st.photoUrl,
                 isCompliant: att >= 75,
               };
             }).sort((a: StudentAttendanceRecord, b: StudentAttendanceRecord) => b.attendancePct - a.attendancePct);
           }
         }
-      } catch (err) {
-        console.warn('Could not fetch batch students:', err);
       }
 
-      // If batch-specific students found, update roster; otherwise maintain existing records
-      const effectiveList = batchStudents.length > 0 ? batchStudents : studentRecords;
-      if (batchStudents.length > 0) {
-        setStudentRecords(batchStudents);
+      if (subjects.length === 0) {
+        subjects = [
+          { id: '1', name: 'Operating Systems & Distributed Computing', code: 'BCS-301', lecturesConducted: 28, avgAttendance: 84.5, facultyName: 'Prof. Vinay Kumar', facultyDesignation: 'Assistant Professor', facultyEmpId: 'CET-FAC-101', trend: 'up' },
+          { id: '2', name: 'Object Oriented Programming with Java', code: 'BCS-302', lecturesConducted: 26, avgAttendance: 81.2, facultyName: 'Dr. R. K. Sharma', facultyDesignation: 'Associate Professor', facultyEmpId: 'CET-FAC-102', trend: 'up' },
+          { id: '3', name: 'Theory of Automata & Formal Languages', code: 'BCS-303', lecturesConducted: 24, avgAttendance: 78.6, facultyName: 'Er. Neha Gupta', facultyDesignation: 'Assistant Professor', facultyEmpId: 'CET-FAC-103', trend: 'stable' },
+          { id: '4', name: 'Computer Architecture & Microprocessors', code: 'BCS-304', lecturesConducted: 25, avgAttendance: 76.8, facultyName: 'Prof. Amit Singh', facultyDesignation: 'Assistant Professor', facultyEmpId: 'CET-FAC-104', trend: 'stable' },
+          { id: '5', name: 'Data Engineering & Cloud Databases', code: 'BCS-305', lecturesConducted: 27, avgAttendance: 74.5, facultyName: 'Dr. Priya Verma', facultyDesignation: 'Professor', facultyEmpId: 'CET-FAC-105', trend: 'down' },
+          { id: '6', name: 'Universal Human Values & Professional Ethics', code: 'BCS-306', lecturesConducted: 22, avgAttendance: 79.0, facultyName: 'Er. Alok Mishra', facultyDesignation: 'Assistant Professor', facultyEmpId: 'CET-FAC-106', trend: 'stable' },
+        ];
       }
 
-      // 3. Compute accurate KPI stats based on student records
-      const totalStudents = effectiveList.length;
+      setStudentRecords(studs);
+
+      const totalStudents = studs.length;
       let goodCount = 0;
       let modCount = 0;
       let defCount = 0;
       let classAvg = 78.4;
 
-      if (effectiveList.length > 0) {
-        goodCount = effectiveList.filter((s) => s.attendancePct >= 75).length;
-        modCount = effectiveList.filter((s) => s.attendancePct >= 60 && s.attendancePct < 75).length;
-        defCount = effectiveList.filter((s) => s.attendancePct < 60).length;
-        const totalAtt = effectiveList.reduce((sum, s) => sum + s.attendancePct, 0);
-        classAvg = parseFloat((totalAtt / effectiveList.length).toFixed(1));
-      } else {
-        goodCount = Math.round(totalStudents * 0.75);
-        modCount = Math.round(totalStudents * 0.18);
-        defCount = Math.max(1, totalStudents - goodCount - modCount);
+      if (studs.length > 0) {
+        goodCount = studs.filter((s) => s.attendancePct >= 75).length;
+        modCount = studs.filter((s) => s.attendancePct >= 60 && s.attendancePct < 75).length;
+        defCount = studs.filter((s) => s.attendancePct < 60).length;
+        const totalAtt = studs.reduce((sum, s) => sum + s.attendancePct, 0);
+        classAvg = parseFloat((totalAtt / studs.length).toFixed(1));
       }
 
       setActiveBatch({
-        batchName: batch.batchName,
-        courseName: batch.courseName,
-        semester: batch.semester,
+        batchName: effectiveBatchName,
+        courseName: effectiveCrsName,
+        semester: `Semester ${sem}`,
         totalStudents,
         classAverage: classAvg,
         goodAttendanceCount: goodCount,
         moderateCount: modCount,
         defaulterCount: defCount,
-        subjects: mappedSubjects,
+        subjects,
       });
+      setCurrentPage(1);
     } catch (err) {
-      console.warn('Error fetching batch analytics:', err);
+      console.warn('Error fetching attendance analytics data:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleCourseChange = (courseCode: string) => {
+    setSelectedCourse(courseCode);
+    fetchBranchesAndBatches(selectedCollege, courseCode);
+  };
+
+  const handleBranchChange = (branchCode: string) => {
+    setSelectedBranch(branchCode);
+    const crsObj = coursesList.find((c) => c.code === selectedCourse);
+    const btObj = batchesList.find((b) => b.code === selectedBatch);
+    fetchAttendanceAnalyticsData(
+      selectedCollege,
+      selectedCourse,
+      branchCode,
+      selectedBatch,
+      selectedSem,
+      crsObj?.name || 'BCA',
+      btObj?.name || 'Batch 2025'
+    );
+  };
+
+  const handleBatchChange = (batchCode: string) => {
+    setSelectedBatch(batchCode);
+    const crsObj = coursesList.find((c) => c.code === selectedCourse);
+    const btObj = batchesList.find((b) => b.code === batchCode);
+    fetchAttendanceAnalyticsData(
+      selectedCollege,
+      selectedCourse,
+      selectedBranch,
+      batchCode,
+      selectedSem,
+      crsObj?.name || 'BCA',
+      btObj?.name || 'Batch 2025'
+    );
+  };
+
+  const handleSemChange = (semVal: string) => {
+    setSelectedSem(semVal);
+    const crsObj = coursesList.find((c) => c.code === selectedCourse);
+    const btObj = batchesList.find((b) => b.code === selectedBatch);
+    fetchAttendanceAnalyticsData(
+      selectedCollege,
+      selectedCourse,
+      selectedBranch,
+      selectedBatch,
+      semVal,
+      crsObj?.name || 'BCA',
+      btObj?.name || 'Batch 2025'
+    );
+  };
+
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const PAGE_SIZE = 10;
-
-  const handleBatchChange = (key: string) => {
-    setSelectedBatchKey(key);
-    setCurrentPage(1);
-    const selected = batchOptions.find((b) => b.key === key);
-    if (selected) {
-      const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
-      fetchBatchAnalytics(selected, slug);
-    }
-  };
+  const PAGE_SIZE = 25;
 
   const handleFilterToggle = () => {
     setFilterView(filterView === 'all' ? 'critical' : 'all');
@@ -482,7 +508,7 @@ export default function FacultyBatchAttendanceAnalytics() {
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md transition-all">
-      {/* Header & Batch Dropdown */}
+      {/* Header & Cascading Dependant Dropdowns */}
       <div className="pb-4 border-b border-[#E7EAF3] dark:border-slate-800 shrink-0 space-y-3">
         {/* Title & Brand Row */}
         <div className="flex items-center justify-between gap-3 min-w-0">
@@ -506,9 +532,10 @@ export default function FacultyBatchAttendanceAnalytics() {
           </div>
         </div>
 
-        {/* Controls Row */}
-        <div className="flex items-center justify-between gap-2 shrink-0 flex-wrap w-full">
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+        {/* Controls Row: Tabs & Cascading Filter Row */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0 flex-wrap w-full">
+          {/* Tab Switcher */}
+          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0">
             <button
               onClick={() => setActiveTab('graph')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -531,20 +558,75 @@ export default function FacultyBatchAttendanceAnalytics() {
             </button>
           </div>
 
-          <div className="relative shrink-0 min-w-[180px]">
-            <select
-              value={selectedBatchKey}
-              onChange={(e) => handleBatchChange(e.target.value)}
-              aria-label="Select Batch and Course for Attendance Analytics"
-              className="w-full appearance-none bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-slate-800 dark:text-slate-100 font-extrabold text-xs py-1.5 pl-3 pr-8 rounded-xl cursor-pointer hover:border-[#5B4BFF] transition-all shadow-xs focus:outline-hidden focus:ring-2 focus:ring-[#5B4BFF]/20 truncate"
-            >
-              {batchOptions.map((opt) => (
-                <option key={opt.key} value={opt.key}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {/* Cascading Dependant Dropdowns: Course -> Branch -> Batch -> Semester */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 flex-1 min-w-[280px]">
+            {/* 1. Course */}
+            <div className="relative">
+              <select
+                value={selectedCourse}
+                onChange={(e) => handleCourseChange(e.target.value)}
+                aria-label="Select Course"
+                className="w-full appearance-none bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-slate-800 dark:text-slate-100 font-extrabold text-[11px] py-1.5 pl-2.5 pr-6 rounded-xl cursor-pointer hover:border-[#5B4BFF] transition-all shadow-xs focus:outline-hidden focus:ring-2 focus:ring-[#5B4BFF]/20 truncate"
+              >
+                {coursesList.map((c) => (
+                  <option key={c.id} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* 2. Branch */}
+            <div className="relative">
+              <select
+                value={selectedBranch}
+                onChange={(e) => handleBranchChange(e.target.value)}
+                aria-label="Select Branch"
+                className="w-full appearance-none bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-slate-800 dark:text-slate-100 font-extrabold text-[11px] py-1.5 pl-2.5 pr-6 rounded-xl cursor-pointer hover:border-[#5B4BFF] transition-all shadow-xs focus:outline-hidden focus:ring-2 focus:ring-[#5B4BFF]/20 truncate"
+              >
+                {branchesList.map((b) => (
+                  <option key={b.id} value={b.code}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* 3. Batch */}
+            <div className="relative">
+              <select
+                value={selectedBatch}
+                onChange={(e) => handleBatchChange(e.target.value)}
+                aria-label="Select Batch"
+                className="w-full appearance-none bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-slate-800 dark:text-slate-100 font-extrabold text-[11px] py-1.5 pl-2.5 pr-6 rounded-xl cursor-pointer hover:border-[#5B4BFF] transition-all shadow-xs focus:outline-hidden focus:ring-2 focus:ring-[#5B4BFF]/20 truncate"
+              >
+                {batchesList.map((bt) => (
+                  <option key={bt.id} value={bt.code}>
+                    {bt.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* 4. Semester */}
+            <div className="relative">
+              <select
+                value={selectedSem}
+                onChange={(e) => handleSemChange(e.target.value)}
+                aria-label="Select Semester"
+                className="w-full appearance-none bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#5B4BFF] dark:text-indigo-400 font-extrabold text-[11px] py-1.5 pl-2.5 pr-6 rounded-xl cursor-pointer hover:border-[#5B4BFF] transition-all shadow-xs focus:outline-hidden focus:ring-2 focus:ring-[#5B4BFF]/20 truncate"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                  <option key={s} value={String(s)}>
+                    Sem {s}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
         </div>
       </div>

@@ -926,6 +926,53 @@ export default function SubjectLinkerPage() {
     return uniqueLinks;
   }, [links, primaryRegisteredLinks]);
 
+  // Filter available departments dynamically from actual linked items + department master
+  const availableFilterDepartments = useMemo(() => {
+    const deptMap = new Map<string, { id: string; name: string; count: number }>();
+
+    allDisplayLinks.forEach((link) => {
+      const dName = (link.faculty_department_name || link.subject_department_name || '').trim();
+      if (!dName || dName === '-' || dName.toLowerCase() === 'null') return;
+
+      const key = dName.toLowerCase();
+      if (!deptMap.has(key)) {
+        deptMap.set(key, {
+          id: dName,
+          name: dName,
+          count: 1,
+        });
+      } else {
+        deptMap.get(key)!.count += 1;
+      }
+    });
+
+    // Also include any master departments matching the college filter
+    const currentSelectedCol = colleges.find(c => String(c.code) === String(selectedCollegeFilter) || String(c.id) === String(selectedCollegeFilter) || c.slug === selectedCollegeFilter);
+    departments.forEach((d) => {
+      if (selectedCollegeFilter !== 'all' && currentSelectedCol) {
+        const isColMatch =
+          d.college_id === currentSelectedCol.id ||
+          d.college_slug === currentSelectedCol.slug ||
+          String(d.colg_cd) === String(currentSelectedCol.code) ||
+          String(d.colg_cd) === String(currentSelectedCol.id) ||
+          String(d.college_code) === String(currentSelectedCol.code);
+        if (!isColMatch) return;
+      }
+      const dName = (d.name || d.code || '').trim();
+      if (!dName) return;
+      const key = dName.toLowerCase();
+      if (!deptMap.has(key)) {
+        deptMap.set(key, {
+          id: dName,
+          name: d.name,
+          count: 0,
+        });
+      }
+    });
+
+    return Array.from(deptMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allDisplayLinks, departments, selectedCollegeFilter, colleges]);
+
   // Filter linked items for roster table
   const filteredLinks = useMemo(() => {
     return allDisplayLinks.filter((link) => {
@@ -946,18 +993,20 @@ export default function SubjectLinkerPage() {
 
       // 2. Department Filter
       if (selectedDeptFilter !== 'all') {
-        const chosenDept = departments.find(d => d.id === selectedDeptFilter || d.code === selectedDeptFilter || d.name === selectedDeptFilter);
+        const filterVal = selectedDeptFilter.toLowerCase().trim();
+        const facDept = (link.faculty_department_name || '').toLowerCase().trim();
+        const subDept = (link.subject_department_name || '').toLowerCase().trim();
+        const facDeptCode = (link.faculty_department_code || '').toLowerCase().trim();
+        const subDeptCode = (link.subject_department_code || '').toLowerCase().trim();
+
         const isDeptMatch =
-          link.faculty_department_name === selectedDeptFilter ||
-          link.subject_department_name === selectedDeptFilter ||
-          link.faculty_department_code === selectedDeptFilter ||
-          link.subject_department_code === selectedDeptFilter ||
-          (chosenDept && (
-            link.faculty_department_name === chosenDept.name ||
-            link.subject_department_name === chosenDept.name ||
-            link.faculty_department_code === chosenDept.code ||
-            link.subject_department_code === chosenDept.code
-          ));
+          facDept === filterVal ||
+          subDept === filterVal ||
+          facDeptCode === filterVal ||
+          subDeptCode === filterVal ||
+          (facDept && (facDept.includes(filterVal) || filterVal.includes(facDept))) ||
+          (subDept && (subDept.includes(filterVal) || filterVal.includes(subDept)));
+
         if (!isDeptMatch) return false;
       }
 
@@ -1365,9 +1414,11 @@ export default function SubjectLinkerPage() {
                     onChange={(e) => setSelectedDeptFilter(e.target.value)}
                     className="px-3 py-2 text-xs rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white font-bold"
                   >
-                    <option value="all">🏢 All Departments</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.name}>{dept.name}</option>
+                    <option value="all">🏢 All Departments ({availableFilterDepartments.length})</option>
+                    {availableFilterDepartments.map((dept) => (
+                      <option key={dept.name} value={dept.name}>
+                        🏢 {dept.name} {dept.count > 0 ? `(${dept.count})` : ''}
+                      </option>
                     ))}
                   </select>
                 </div>

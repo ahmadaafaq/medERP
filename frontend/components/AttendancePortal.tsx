@@ -340,9 +340,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         const mapped: DropdownItem[] = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
           const rawName = (b.branch_name || b.name || '').trim();
           const validName =
-            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE'
+            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
               ? rawName
-              : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} General`;
+              : (effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
           return {
             id: String(b.branch_cd || b.code || '1'),
             code: String(b.branch_cd || b.code || '1'),
@@ -357,7 +357,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
             return exists ? prev : mapped[0].code;
           });
         } else {
-          const fallback = [{ id: '1', code: '1', name: `${courseName} General` }];
+          const fallback = [{ id: '1', code: '1', name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department` }];
           setBranchesList(fallback);
           setSelectedBranch('1');
         }
@@ -366,7 +366,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
           (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
         );
         const courseName = (courseObj?.name || 'BCA').replace(/^\[#\d+\]\s*/, '').trim();
-        const fallback = [{ id: '1', code: '1', name: `${courseName} General` }];
+        const fallback = [{ id: '1', code: '1', name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department` }];
         setBranchesList(fallback);
         setSelectedBranch('1');
       }

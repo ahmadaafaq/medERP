@@ -320,8 +320,100 @@ export default function TheoryResultReportPage() {
   };
 
   // ─── 2. Fetch Master Hierarchy Data (Strict Schema-per-Tenant) ─────────────
-  const fetchMetadata = async (slug: string) => {
+  const fetchBranchesAndBatchesForCourse = async (
+    colgCd: string,
+    courseCd: string,
+    customCourses?: CourseItem[],
+    slug?: string
+  ) => {
+    const tenant = slug || selectedCollegeSlug || getInitialTenantSlug();
+    const effectiveColg = colgCd || selectedColgCd || '1';
+    const effectiveCrs = courseCd || selectedCourseCd || '13';
+    const activeCourses = customCourses || courses;
+
+    try {
+      const [brRes, btRes] = await Promise.all([
+        fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+        fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+      ]);
+
+      const courseObj = activeCourses.find(
+        (c) => String(c.course_cd || c.code || c.id) === String(effectiveCrs)
+      );
+      const courseName = (courseObj?.name || (effectiveCrs === '13' ? 'BCA' : effectiveCrs === '1' ? 'B.Tech' : 'Course'))
+        .replace(/^\[#\d+\]\s*/, '')
+        .trim();
+
+      // 1. Branches Mapping
+      let mappedBranches: BranchItem[] = [];
+      if (brRes && brRes.ok) {
+        const j = await brRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBranches = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
+          const rawName = (b.branch_name || b.name || '').trim();
+          const validName =
+            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
+              ? rawName
+              : (effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
+          return {
+            id: String(b.branch_cd || b.code || '1'),
+            code: String(b.branch_cd || b.code || '1'),
+            branch_cd: String(b.branch_cd || b.code || '1'),
+            name: validName,
+            course_cd: String(b.course_cd || effectiveCrs),
+            colg_cd: String(b.colg_cd || effectiveColg),
+          };
+        });
+      }
+
+      if (mappedBranches.length === 0) {
+        mappedBranches = [{
+          id: '1',
+          code: '1',
+          branch_cd: '1',
+          name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department`,
+          course_cd: effectiveCrs,
+          colg_cd: effectiveColg,
+        }];
+      }
+
+      const dedupedBranches = dedupeBy(mappedBranches, b => String(b.branch_cd || b.code));
+      setBranches(dedupedBranches);
+      setSelectedBranchCd((prev) => {
+        const exists = dedupedBranches.some((b) => String(b.branch_cd || b.code) === String(prev));
+        return exists && prev ? prev : (dedupedBranches[0]?.branch_cd || dedupedBranches[0]?.code || '1');
+      });
+
+      // 2. Batches Mapping
+      let mappedBatches: BatchItem[] = [];
+      if (btRes && btRes.ok) {
+        const j = await btRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBatches = list.map((b: any) => ({
+          id: String(b.batch_cd || b.code || b.batch_id || '2'),
+          code: String(b.batch_cd || b.code || b.batch_id || '2'),
+          batch_cd: String(b.batch_cd || b.code || b.batch_id || '2'),
+          name: String(b.batch_name || b.name || b.year || b.batch_cd || '2025'),
+          year: Number(b.batch_name || b.year || 2025),
+          course_cd: String(b.course_cd || effectiveCrs),
+          colg_cd: String(b.colg_cd || effectiveColg),
+        }));
+      }
+
+      const dedupedBatches = dedupeBy(mappedBatches, b => String(b.batch_cd || b.code));
+      setBatches(dedupedBatches);
+      setSelectedBatchCd((prev) => {
+        const exists = dedupedBatches.some((b) => String(b.code || b.batch_cd) === String(prev));
+        return exists && prev ? prev : (dedupedBatches[0]?.code || dedupedBatches[0]?.batch_cd || '2');
+      });
+    } catch (err) {
+      console.warn('Failed to fetch branches and batches for course:', err);
+    }
+  };
+
+  const fetchMetadata = async (slug: string, customColgCd?: string) => {
     setLoading(true);
+    const activeColg = customColgCd || selectedColgCd || '1';
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: Record<string, string> = {
@@ -330,21 +422,42 @@ export default function TheoryResultReportPage() {
       };
       const parse = (j: any) => Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
 
-      const [cRes, brRes, bRes, dRes, sRes, pRes] = await Promise.all([
+      const [cRes, srmsCRes, dRes, sRes, pRes] = await Promise.all([
         fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/branches?tenant=${slug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`/api/srms/courses?colgcd=${activeColg}&tenant=${slug}`).catch(() => null),
         fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers }).catch(() => null),
       ]);
 
       // 1. Courses
-      if (cRes && cRes.ok) {
+      let mappedCourses: CourseItem[] = [];
+      if (srmsCRes && srmsCRes.ok) {
+        const j = await srmsCRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        if (list.length > 0) {
+          mappedCourses = list.map((c: any) => ({
+            id: String(c.course_cd || c.code || '13'),
+            code: String(c.course_cd || c.code || '13'),
+            course_cd: String(c.course_cd || c.code || '13'),
+            name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+            colg_cd: String(c.colg_cd || activeColg),
+          }));
+        }
+      }
+
+      if (mappedCourses.length === 0 && cRes && cRes.ok) {
         const cList: CourseItem[] = parse(await cRes.json());
-        setCourses(cList);
-      } else {
-        setCourses([
+        if (cList.length > 0) {
+          mappedCourses = cList.map((c: any) => ({
+            ...c,
+            course_cd: String(c.course_cd || c.code || c.id),
+          }));
+        }
+      }
+
+      if (mappedCourses.length === 0) {
+        mappedCourses = [
           { code: 'BCA', course_cd: '13', name: 'Bachelor of Computer Applications' },
           { code: 'B.TECH', course_cd: '1', name: 'Bachelor of Technology' },
           { code: 'B.PHARM', course_cd: '2', name: 'Bachelor of Pharmacy' },
@@ -353,20 +466,25 @@ export default function TheoryResultReportPage() {
           { code: 'M.TECH', course_cd: '5', name: 'Master of Technology' },
           { code: 'M. PHARM', course_cd: '6', name: 'Master of Pharmacy' },
           { code: 'BBA', course_cd: '12', name: 'Bachelor of Business Administration' },
-        ]);
+        ];
       }
 
-      // 2. Branches
-      if (brRes && brRes.ok) {
-        const brList: BranchItem[] = parse(await brRes.json());
-        setBranches(brList);
-      }
+      setCourses(mappedCourses);
 
-      // 3. Batches
-      if (bRes && bRes.ok) {
-        const bList: BatchItem[] = parse(await bRes.json());
-        setBatches(bList);
-      }
+      const isMed = activeColg === '2' || slug.includes('ims');
+      const filtered = mappedCourses.filter(c => {
+        const cName = (c.name || '').toLowerCase();
+        const cCode = (c.code || '').toLowerCase();
+        const isMedCourse = cName.includes('mbbs') || cCode === 'mbbs' || cName.includes('medicine');
+        return isMed ? (isMedCourse || c.colg_cd === '2') : !isMedCourse;
+      });
+
+      const initialCrs = (selectedCourseCd && filtered.some(c => String(c.course_cd || c.code) === selectedCourseCd))
+        ? selectedCourseCd
+        : (filtered[0]?.course_cd || filtered[0]?.code || '13');
+
+      setSelectedCourseCd(initialCrs);
+      await fetchBranchesAndBatchesForCourse(activeColg, initialCrs, mappedCourses, slug);
 
       // 4. Departments
       if (dRes && dRes.ok) {
@@ -425,7 +543,7 @@ export default function TheoryResultReportPage() {
 
   useEffect(() => {
     if (selectedCollegeSlug) {
-      fetchMetadata(selectedCollegeSlug);
+      fetchMetadata(selectedCollegeSlug, selectedColgCd);
     }
   }, [selectedCollegeSlug]);
 
@@ -478,35 +596,14 @@ export default function TheoryResultReportPage() {
     return dedupeBy(list, c => String(c.course_cd || c.code || c.id));
   }, [courses, isMedicalCollege]);
 
-  useEffect(() => {
-    if (filteredCourses.length > 0) {
-      const exists = filteredCourses.some(c => String(c.course_cd) === selectedCourseCd || c.code === selectedCourseCd);
-      if (!exists) {
-        setSelectedCourseCd(String(filteredCourses[0].course_cd || filteredCourses[0].code));
-      }
-    }
-  }, [filteredCourses, selectedCourseCd]);
+  const handleCourseChange = async (courseCode: string) => {
+    setSelectedCourseCd(courseCode);
+    await fetchBranchesAndBatchesForCourse(selectedColgCd, courseCode, filteredCourses, selectedCollegeSlug);
+  };
 
   const filteredBranches = useMemo(() => {
-    const list = branches.filter(b => {
-      if (isMedicalCollege) {
-        return (b.name && b.name.includes('Department of')) || b.code === 'ANA' || b.code === 'PHY';
-      }
-      const isMed = b.code === 'ANA' || b.code === 'PHY' || (b.name && (b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology')));
-      if (isMed) return false;
-
-      if (!selectedCourseCd) return true;
-      return String(b.course_cd) === String(selectedCourseCd);
-    });
-
-    const nonMed = branches.filter(b => {
-      const isMed = b.code === 'ANA' || b.code === 'PHY' || (b.name && (b.name.toLowerCase().includes('anatomy') || b.name.toLowerCase().includes('physiology')));
-      return !isMed;
-    });
-
-    const base = list.length > 0 ? list : (nonMed.length > 0 ? nonMed : [{ branch_cd: '1', code: '1', name: 'General Branch (1)' }]);
-    return dedupeBy(base, b => `${b.branch_cd || b.code || b.id}|${(b as any).course_cd || ''}`);
-  }, [branches, selectedCourseCd, isMedicalCollege]);
+    return dedupeBy(branches, b => String(b.branch_cd || b.code || b.id));
+  }, [branches]);
 
   useEffect(() => {
     if (filteredBranches.length > 0) {
@@ -519,12 +616,8 @@ export default function TheoryResultReportPage() {
 
   // ─── Filter Batches by Selected Course & Branch ────────────────────────────
   const filteredBatches = useMemo(() => {
-    const list = batches.filter(b => {
-      if (!selectedCourseCd) return true;
-      return String(b.course_cd) === String(selectedCourseCd) || (b.code && b.code.includes(`C${selectedCourseCd}`));
-    });
-    return dedupeBy(list, b => String(b.code || b.batch_cd || b.id));
-  }, [batches, selectedCourseCd]);
+    return dedupeBy(batches, b => String(b.code || b.batch_cd || b.id));
+  }, [batches]);
 
   useEffect(() => {
     if (filteredBatches.length > 0) {
@@ -941,8 +1034,11 @@ export default function TheoryResultReportPage() {
     setExpandedSubTopics(prev => ({ ...prev, [code]: !prev[code] }));
   };
 
-  const curCourseObj = courses.find(c => String(c.course_cd) === selectedCourseCd);
+  const curCourseObj = courses.find(c => String(c.course_cd || c.code) === selectedCourseCd);
+  const curBranchObj = branches.find(b => String(b.branch_cd || b.code) === selectedBranchCd);
+  const curBatchObj = batches.find(b => String(b.batch_cd || b.code) === selectedBatchCd);
   const curSubjObj = allSubjects.find(s => s.code === selectedSubjectCd || String(s.subject_cd) === selectedSubjectCd);
+  const curColgObj = colleges.find(c => String(c.colg_cd || c.code) === selectedColgCd);
 
   // ─── SVG Pie Slices Calculation with Radial Leader Lines & Labels ──────────
   const pieChartSlices = useMemo(() => {
@@ -1013,27 +1109,111 @@ export default function TheoryResultReportPage() {
 
   return (
     <>
+      <style>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 8mm 8mm 8mm 8mm;
+          }
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+          /* Hide non-printable elements across the entire page */
+          .no-print,
+          aside,
+          header,
+          nav,
+          [data-sidebar],
+          .sidebar,
+          .fixed {
+            display: none !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          #printable-theory-ledger,
+          #printable-theory-ledger * {
+            visibility: visible;
+          }
+          #printable-theory-ledger {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+          }
+          #printable-theory-ledger table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            font-size: 8.5pt !important;
+            color: #000000 !important;
+          }
+          #printable-theory-ledger thead {
+            display: table-header-group !important;
+          }
+          #printable-theory-ledger tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          #printable-theory-ledger th,
+          #printable-theory-ledger td {
+            border: 1px solid #cbd5e1 !important;
+            padding: 4px 6px !important;
+            color: #000000 !important;
+            background: transparent !important;
+          }
+          #printable-theory-ledger th {
+            background-color: #f1f5f9 !important;
+            font-weight: 800 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          #printable-theory-ledger .print-badge {
+            border: 1px solid #94a3b8 !important;
+            background-color: #f8fafc !important;
+            color: #000000 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+      `}</style>
       <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0B1120] text-[#1B1E28] dark:text-slate-100 font-sans transition-colors duration-200">
-      <Sidebar role={currentRole} />
+      <div className="no-print">
+        <Sidebar role={currentRole} />
+      </div>
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title={currentRole === 'admin' ? 'Admin MIS Reports — Theory Assessment Results' : 'Faculty MIS Reports — Theory Assessment Results'} />
+        <div className="no-print">
+          <Header title={currentRole === 'admin' ? 'Admin MIS Reports — Theory Assessment Results' : 'Faculty MIS Reports — Theory Assessment Results'} />
+        </div>
         
         <main className="p-6 space-y-6 flex-1 bg-[#F6F8FC] dark:bg-[#0B1120]">
           {/* Top Reports Suite Navigation Tabs */}
-          <FacultyReportsNav
-            activeReport="theory"
-            role={currentRole}
-            stats={{
-              attendanceCount: 'Sessions',
-              logbookCount: 'Ledger',
-              theoryCount: `${students.length} Evaluated`,
-            }}
-          />
+          <div className="no-print">
+            <FacultyReportsNav
+              activeReport="theory"
+              role={currentRole}
+              stats={{
+                attendanceCount: 'Sessions',
+                logbookCount: 'Ledger',
+                theoryCount: `${students.length} Evaluated`,
+              }}
+            />
+          </div>
 
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* MAIN TITLE BANNER CARD */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          <div className="bg-gradient-to-r from-[#2D2575] via-[#3B3299] to-[#2D2575] text-white p-6 rounded-[22px] shadow-[0_8px_30px_rgba(45,37,117,0.2)] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="bg-gradient-to-r from-[#2D2575] via-[#3B3299] to-[#2D2575] text-white p-6 rounded-[22px] shadow-[0_8px_30px_rgba(45,37,117,0.2)] flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-black uppercase tracking-wider bg-[#F36C21] text-white px-3 py-1 rounded-full shadow-sm">
@@ -1067,7 +1247,7 @@ export default function TheoryResultReportPage() {
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* STEP 1: 6-STEP HIERARCHICAL CASCADING BAR (Order: College->Course->Branch->Batch->Sem->Subj) */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
+          <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4 no-print">
             <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">1</span>
@@ -1123,7 +1303,7 @@ export default function TheoryResultReportPage() {
                 <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">2. Course *</label>
                 <select
                   value={selectedCourseCd}
-                  onChange={(e) => setSelectedCourseCd(e.target.value)}
+                  onChange={(e) => handleCourseChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {filteredCourses.map(c => (
@@ -1209,7 +1389,7 @@ export default function TheoryResultReportPage() {
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* STEP 2: ACTIVE EXAMINATION PAPERS */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
+          <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4 no-print">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">2</span>
@@ -1263,8 +1443,35 @@ export default function TheoryResultReportPage() {
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* STEP 3: DYNAMIC SUBTOPICS MATRIX & EVALUATED STUDENTS LEDGER */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
+          <div id="printable-theory-ledger" className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
+            
+            {/* ── PRINT-ONLY INSTITUTIONAL HEADER ───────────────────── */}
+            <div className="hidden print:block mb-4 pb-3 border-b-2 border-slate-900">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h1 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                    {curColgObj?.name || 'SRMS College of Engineering & Technology, Bareilly'}
+                  </h1>
+                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wide mt-0.5">
+                    Evaluated Students Performance &amp; Subtopics Analysis Ledger
+                  </h2>
+                </div>
+                <div className="text-right text-[10px] text-slate-700 font-mono">
+                  <p><strong>Total Candidates:</strong> {filteredStudents.length} Students</p>
+                  <p><strong>Printed On:</strong> {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                </div>
+              </div>
+              <div className="mt-2 text-[10px] text-slate-800 flex flex-wrap gap-x-4 gap-y-1 font-semibold border-t border-slate-300 pt-1.5">
+                <span><strong>Course:</strong> {curCourseObj?.name || 'BCA (13)'}</span>
+                <span><strong>Branch:</strong> {curBranchObj?.name || 'Department'}</span>
+                <span><strong>Batch:</strong> {curBatchObj?.name || `Batch ${selectedBatchCd}`}</span>
+                <span><strong>Semester:</strong> Semester {selectedSemCd}</span>
+                <span><strong>Subject:</strong> {curSubjObj ? `${curSubjObj.name} (${curSubjObj.code})` : 'Subject'}</span>
+                {activePaper && <span><strong>Paper:</strong> [{activePaper.code}] {activePaper.name} (Max: {activePaper.max_marks})</span>}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3 no-print">
               <div>
                 <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-bold">3</span>
@@ -1275,7 +1482,7 @@ export default function TheoryResultReportPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 no-print">
                 <input
                   type="text"
                   placeholder="🔍 Search Roll No, Reg No, Name..."
@@ -1286,7 +1493,7 @@ export default function TheoryResultReportPage() {
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="px-4 py-2 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+                  className="px-4 py-2 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   🖨️ Print Ledger
                 </button>
@@ -1309,7 +1516,7 @@ export default function TheoryResultReportPage() {
                       {/* Dynamic SubTopics Columns */}
                       {activePaperSubTopics.map((stCodeObj) => (
                         <th key={stCodeObj.code} className="py-3 px-3 text-center">
-                          <span className="inline-block px-2 py-0.5 rounded font-mono font-black text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] border border-indigo-200 dark:border-indigo-800/40">
+                          <span className="inline-block px-2 py-0.5 rounded font-mono font-black text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] border border-indigo-200 dark:border-indigo-800/40 print-badge">
                             🎯 {stCodeObj.code}
                           </span>
                         </th>
@@ -1321,7 +1528,7 @@ export default function TheoryResultReportPage() {
                       {/* Complete Percentage Column */}
                       <th className="py-3 px-3 text-center">Percentage (%)</th>
                       <th className="py-3 px-3 text-center">Status</th>
-                      <th className="py-3 px-3 text-right rounded-r-xl">Action</th>
+                      <th className="py-3 px-3 text-right rounded-r-xl no-print">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
@@ -1339,11 +1546,11 @@ export default function TheoryResultReportPage() {
                               <img
                                 src={st.photo_url}
                                 alt={st.name}
-                                className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                                className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700 no-print"
                                 onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
                               />
                             ) : (
-                              <div className="w-7 h-7 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center font-black text-[10px]">
+                              <div className="w-7 h-7 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center font-black text-[10px] no-print">
                                 {(st.name || '?').charAt(0)}
                               </div>
                             )}
@@ -1368,7 +1575,7 @@ export default function TheoryResultReportPage() {
 
                           return (
                             <td key={stCodeObj.code} className="py-3.5 px-3 text-center">
-                              <span className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-black bg-emerald-50 dark:bg-emerald-950/60 text-[#00C48C] border border-emerald-200 dark:border-emerald-800/40 shadow-xs">
+                              <span className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-black bg-emerald-50 dark:bg-emerald-950/60 text-[#00C48C] border border-emerald-200 dark:border-emerald-800/40 shadow-xs print-badge">
                                 {scored}/{totalMax}={pct}%
                               </span>
                             </td>
@@ -1388,7 +1595,7 @@ export default function TheoryResultReportPage() {
                         {/* Complete Percentage Column */}
                         <td className="py-3.5 px-3 text-center">
                           {st.evaluated ? (
-                            <span className={`px-2.5 py-1 rounded-lg font-mono font-black text-[11px] border ${
+                            <span className={`px-2.5 py-1 rounded-lg font-mono font-black text-[11px] border print-badge ${
                               (st.percentage || 0) >= 75
                                 ? 'bg-emerald-50 dark:bg-emerald-950/60 text-[#00C48C] border-emerald-200 dark:border-emerald-800/40'
                                 : (st.percentage || 0) >= 50
@@ -1403,7 +1610,7 @@ export default function TheoryResultReportPage() {
                         </td>
 
                         <td className="py-3.5 px-3 text-center">
-                          <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                          <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase print-badge ${
                             !st.evaluated
                               ? 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400'
                               : st.isPass
@@ -1413,7 +1620,7 @@ export default function TheoryResultReportPage() {
                             {!st.evaluated ? 'Pending' : st.isPass ? 'Pass' : 'Fail'}
                           </span>
                         </td>
-                        <td className="py-3.5 px-3 text-right">
+                        <td className="py-3.5 px-3 text-right no-print">
                           <button
                             type="button"
                             onClick={() => handleOpenStudentAnalysis(st)}
@@ -1434,7 +1641,7 @@ export default function TheoryResultReportPage() {
           {/* STUDENT ANALYSIS MODAL (4 TABS: SubTopics | Tracking | Practical | Chart) */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {modalOpen && activeStudent && (
-            <div className="fixed inset-0 z-[99999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 w-screen h-screen min-h-screen overflow-y-auto">
+            <div className="fixed inset-0 z-[99999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 w-screen h-screen min-h-screen overflow-y-auto no-print">
               <div className="bg-white dark:bg-[#1B1E28] rounded-[24px] max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700 animate-scaleUp">
                 
                 {/* 1. Modal Top Bar */}

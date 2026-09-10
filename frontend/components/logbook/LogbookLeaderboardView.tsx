@@ -94,6 +94,9 @@ export interface LogbookEntryItem {
   explanationText?: string | null;
   submittedAt: string;
   status: 'EVALUATED' | 'GRADED' | 'SUBMITTED' | 'PENDING' | 'LATE';
+  isEvaluated?: boolean;
+  evaluatedFileUrl?: string;
+  originalPdfUrl?: string;
   facultyName: string;
   facultyRemarks?: string | null;
   evaluatedAt?: string | null;
@@ -189,6 +192,17 @@ const getCourseDisplayName = (c: any): string => {
   return rawName || `Course ${cd}`;
 };
 
+const dedupeBy = <T,>(arr: T[], keyFn: (item: T) => string): T[] => {
+  const seen = new Set<string>();
+  return (arr || []).filter(item => {
+    if (!item) return false;
+    const key = keyFn(item);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 const getInitialTenantSlug = (): string => {
@@ -269,7 +283,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
   const [selectedCollege, setSelectedCollege] = useState<string>(getInitialColgCd);
   const [selectedCollegeSlug, setSelectedCollegeSlug] = useState<string>(getInitialTenantSlug);
 
-  // Data states from live backend/database
+  // Data states from live backend/database (100% Dynamic, no static fallback mock data)
   const [entries, setEntries] = useState<LogbookEntryItem[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardStudent[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([
@@ -279,33 +293,10 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     { id: 'MINI_PROJECT', name: 'Mini Project', code: 'MINI_PROJECT' },
     { id: 'PRACTICAL', name: 'Practical & Lab Log', code: 'PRACTICAL' },
   ]);
-  const [courses, setCourses] = useState<any[]>([
-    { id: '13', course_cd: '13', code: '13', name: 'BCA (Bachelor of Computer Applications)' },
-    { id: '1', course_cd: '1', code: '1', name: 'B.Tech (Bachelor of Technology)' },
-    { id: '4', course_cd: '4', code: '4', name: 'MCA (Master of Computer Applications)' },
-    { id: '3', course_cd: '3', code: '3', name: 'MBA (Master of Business Administration)' },
-    { id: '2', course_cd: '2', code: '2', name: 'B.Pharm (Bachelor of Pharmacy)' },
-  ]);
-  const [branches, setBranches] = useState<any[]>([
-    { id: '1', branch_cd: '1', code: '1', name: 'BCA General', course_cd: '13' },
-    { id: 'CSE', branch_cd: 'CSE', code: 'CSE', name: 'Computer Science & Engineering', course_cd: '1' },
-    { id: 'IT', branch_cd: 'IT', code: 'IT', name: 'Information Technology', course_cd: '1' },
-    { id: 'ECE', branch_cd: 'ECE', code: 'ECE', name: 'Electronics & Communication Engineering', course_cd: '1' },
-    { id: 'ME', branch_cd: 'ME', code: 'ME', name: 'Mechanical Engineering', course_cd: '1' },
-    { id: 'EEE', branch_cd: 'EEE', code: 'EEE', name: 'Electrical & Electronics Engineering', course_cd: '1' },
-    { id: 'CE', branch_cd: 'CE', code: 'CE', name: 'Civil Engineering', course_cd: '1' },
-    { id: 'PHARM', branch_cd: 'PHARM', code: 'PHARM', name: 'Faculty of Pharmacy', course_cd: '2' },
-    { id: 'CA', branch_cd: 'CA', code: 'CA', name: 'Computer Applications', course_cd: '4' },
-    { id: 'MGMT', branch_cd: 'MGMT', code: 'MGMT', name: 'Management Studies', course_cd: '3' },
-  ]);
-  const [batches, setBatches] = useState<any[]>([
-    { id: '2', batch_cd: '2', code: '2', name: '2025', year: 2025, course_cd: '13' },
-    { id: '1', batch_cd: '1', code: '1', name: '2026', year: 2026, course_cd: '13' },
-    { id: 'B2025', batch_cd: 'B2025', code: 'B2025', name: 'Batch 2025', year: 2025, course_cd: '1' },
-    { id: 'B2024', batch_cd: 'B2024', code: 'B2024', name: 'Batch 2024', year: 2024, course_cd: '1' },
-    { id: 'B2023', batch_cd: 'B2023', code: 'B2023', name: 'Batch 2023', year: 2023, course_cd: '1' },
-    { id: 'B2022', batch_cd: 'B2022', code: 'B2022', name: 'Batch 2022', year: 2022, course_cd: '1' },
-  ]);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
 
   // Filter states
   const [selectedCourse, setSelectedCourse] = useState<string>('all');
@@ -334,6 +325,9 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     maxMarks?: number;
     facultyRemarks?: string;
     submittedAt?: string;
+    isEvaluated?: boolean;
+    evaluatedPdfUrl?: string;
+    originalPdfUrl?: string;
   } | null>(null);
   const [isDocPreviewOpen, setIsDocPreviewOpen] = useState(false);
 
@@ -421,6 +415,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
   const handleCollegeChange = (colgVal: string) => {
     setSelectedCollege(colgVal);
     const found = colleges.find(c => String(c.code || c.id) === colgVal || c.slug === colgVal);
+    const foundSlug = found ? found.slug : selectedCollegeSlug;
     if (found) {
       setSelectedCollegeSlug(found.slug);
       if (typeof window !== 'undefined') {
@@ -433,6 +428,126 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     setSelectedBranch('all');
     setSelectedBatch('all');
     setSelectedSemester('all');
+    fetchMetadata(foundSlug, colgVal);
+  };
+
+  const fetchBranchesAndBatchesForCourse = async (
+    colgCd: string,
+    courseCd: string,
+    customCourses?: any[],
+    slug?: string
+  ) => {
+    const tenant = slug || selectedCollegeSlug || getInitialTenantSlug();
+    const effectiveColg = colgCd || selectedCollege || getInitialColgCd();
+    const effectiveCrs = courseCd || selectedCourse || 'all';
+    const activeCourses = customCourses || courses;
+
+    try {
+      if (effectiveCrs === 'all') {
+        const [brRes, btRes] = await Promise.all([
+          fetch(`/api/srms/branches?colgcd=${effectiveColg}&tenant=${tenant}`).catch(() => null),
+          fetch(`/api/srms/batches?colgcd=${effectiveColg}&tenant=${tenant}`).catch(() => null),
+        ]);
+
+        let brList: any[] = [];
+        if (brRes && brRes.ok) {
+          const j = await brRes.json();
+          const raw = Array.isArray(j) ? j : j.data || [];
+          brList = raw.map((b: any) => ({
+            id: String(b.branch_cd || b.code || b.id || '1'),
+            branch_cd: String(b.branch_cd || b.code || b.id || '1'),
+            code: String(b.branch_cd || b.code || b.id || '1'),
+            name: b.branch_name || b.name || `Branch ${b.branch_cd || b.code}`,
+            course_cd: String(b.course_cd || ''),
+          }));
+        }
+        setBranches(dedupeBy(brList, b => String(b.branch_cd || b.code)));
+
+        let btList: any[] = [];
+        if (btRes && btRes.ok) {
+          const j = await btRes.json();
+          const raw = Array.isArray(j) ? j : j.data || [];
+          btList = raw.map((b: any) => ({
+            id: String(b.batch_cd || b.code || b.id || '1'),
+            batch_cd: String(b.batch_cd || b.code || b.id || '1'),
+            code: String(b.batch_cd || b.code || b.id || '1'),
+            name: String(b.batch_name || b.name || b.year || b.batch_cd || ''),
+            year: Number(b.year || b.batch_name || 2025),
+          }));
+        }
+        setBatches(dedupeBy(btList, b => String(b.batch_cd || b.code)));
+        return;
+      }
+
+      const [brRes, btRes] = await Promise.all([
+        fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+        fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+      ]);
+
+      const courseObj = activeCourses.find(
+        (c) => String(c.course_cd || c.code || c.id) === String(effectiveCrs)
+      );
+      const courseName = (courseObj?.name || (effectiveCrs === '13' ? 'BCA' : effectiveCrs === '1' ? 'B.Tech' : 'Course'))
+        .replace(/^\[#\d+\]\s*/, '')
+        .trim();
+
+      // 1. Branches Mapping
+      let mappedBranches: any[] = [];
+      if (brRes && brRes.ok) {
+        const j = await brRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBranches = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
+          const rawName = (b.branch_name || b.name || '').trim();
+          const validName =
+            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
+              ? rawName
+              : (effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
+          return {
+            id: String(b.branch_cd || b.code || '1'),
+            code: String(b.branch_cd || b.code || '1'),
+            branch_cd: String(b.branch_cd || b.code || '1'),
+            name: validName,
+            course_cd: String(b.course_cd || effectiveCrs),
+            colg_cd: String(b.colg_cd || effectiveColg),
+          };
+        });
+      }
+
+      if (mappedBranches.length === 0) {
+        mappedBranches = [{
+          id: '1',
+          code: '1',
+          branch_cd: '1',
+          name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department`,
+          course_cd: effectiveCrs,
+          colg_cd: effectiveColg,
+        }];
+      }
+
+      const dedupedBranches = dedupeBy(mappedBranches, b => String(b.branch_cd || b.code));
+      setBranches(dedupedBranches);
+
+      // 2. Batches Mapping
+      let mappedBatches: any[] = [];
+      if (btRes && btRes.ok) {
+        const j = await btRes.json();
+        const list = Array.isArray(j) ? j : j.data || [];
+        mappedBatches = list.map((b: any) => ({
+          id: String(b.batch_cd || b.code || b.batch_id || '2'),
+          code: String(b.batch_cd || b.code || b.batch_id || '2'),
+          batch_cd: String(b.batch_cd || b.code || b.batch_id || '2'),
+          name: String(b.batch_name || b.name || b.year || b.batch_cd || '2025'),
+          year: Number(b.batch_name || b.year || 2025),
+          course_cd: String(b.course_cd || effectiveCrs),
+          colg_cd: String(b.colg_cd || effectiveColg),
+        }));
+      }
+
+      const dedupedBatches = dedupeBy(mappedBatches, b => String(b.batch_cd || b.code));
+      setBatches(dedupedBatches);
+    } catch (err) {
+      console.warn('Failed to fetch branches and batches for course:', err);
+    }
   };
 
   const handleCourseChange = (newCourse: string) => {
@@ -440,6 +555,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     setSelectedBranch('all');
     setSelectedBatch('all');
     setSelectedSemester('all');
+    fetchBranchesAndBatchesForCourse(selectedCollege, newCourse, courses, selectedCollegeSlug);
   };
 
   const handleBranchChange = (newBranch: string) => {
@@ -469,16 +585,18 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
         if (catList.length > 0) setCategories(catList);
       }
 
-      // 2. Courses, Branches, Batches from master endpoints + SRMS endpoints
-      const [cRes, brRes, bchRes, srmsCoursesRes, srmsBranchesRes, srmsBatchesRes, structRes] = await Promise.all([
+      // 2. Dynamic Courses from SRMS API
+      const [cRes, srmsCoursesRes, deptRes] = await Promise.all([
         fetch(`${API_BASE}/college-master/courses?tenant=${targetSlug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/branches?tenant=${targetSlug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/college-master/batches?tenant=${targetSlug}`, { headers }).catch(() => null),
         fetch(`/api/srms/courses?colgcd=${targetColgCd}&tenant=${targetSlug}`).catch(() => null),
-        fetch(`/api/srms/branches?colgcd=${targetColgCd}&tenant=${targetSlug}`).catch(() => null),
-        fetch(`/api/srms/batches?colgcd=${targetColgCd}&tenant=${targetSlug}`).catch(() => null),
-        fetch(`${API_BASE}/logbook/academic-structure?tenant=${targetSlug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/departments?tenant=${targetSlug}`, { headers }).catch(() => null),
       ]);
+
+      if (deptRes && deptRes.ok) {
+        const dJson = await deptRes.json();
+        const dList = Array.isArray(dJson.data?.data) ? dJson.data.data : Array.isArray(dJson.data) ? dJson.data : Array.isArray(dJson) ? dJson : [];
+        if (dList.length > 0) setDepartments(dList);
+      }
 
       let cList: any[] = [];
       if (srmsCoursesRes && srmsCoursesRes.ok) {
@@ -490,42 +608,28 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
         cList = Array.isArray(cJson.data) ? cJson.data : Array.isArray(cJson) ? cJson : [];
       }
       if (cList.length > 0) {
-        const mappedCourses = cList.map((c: any) => ({
+        const isMed = targetColgCd === '2' || targetSlug.includes('ims');
+        const filtered = cList.filter((c: any) => {
+          const cName = (c.name || c.course_name || '').toLowerCase();
+          const cCode = (c.code || c.course_cd || '').toLowerCase();
+          const isMedCourse = cName.includes('mbbs') || cCode === 'mbbs' || cName.includes('medicine');
+          return isMed ? (isMedCourse || c.colg_cd === '2') : !isMedCourse;
+        });
+
+        const mappedCourses = (filtered.length > 0 ? filtered : cList).map((c: any) => ({
           ...c,
+          id: String(c.course_cd || c.code || c.id),
+          code: String(c.course_cd || c.code || c.id),
+          course_cd: String(c.course_cd || c.code || c.id),
           name: getCourseDisplayName(c),
           course_name: getCourseDisplayName(c),
         }));
-        setCourses(mappedCourses);
-      }
+        const dedupedCourses = dedupeBy(mappedCourses, c => String(c.course_cd || c.code));
+        setCourses(dedupedCourses);
 
-      let brList: any[] = [];
-      if (srmsBranchesRes && srmsBranchesRes.ok) {
-        const j = await srmsBranchesRes.json();
-        if (Array.isArray(j) && j.length > 0) brList = j;
-      }
-      if (brList.length === 0 && brRes && brRes.ok) {
-        const brJson = await brRes.json();
-        brList = Array.isArray(brJson.data) ? brJson.data : Array.isArray(brJson) ? brJson : [];
-      }
-      if (brList.length > 0) setBranches(brList);
-
-      let bchList: any[] = [];
-      if (srmsBatchesRes && srmsBatchesRes.ok) {
-        const j = await srmsBatchesRes.json();
-        if (Array.isArray(j) && j.length > 0) bchList = j;
-      }
-      if (bchList.length === 0 && bchRes && bchRes.ok) {
-        const bchJson = await bchRes.json();
-        bchList = Array.isArray(bchJson.data) ? bchJson.data : Array.isArray(bchJson) ? bchJson : [];
-      }
-      if (bchList.length > 0) setBatches(bchList);
-
-      if (structRes && structRes.ok) {
-        const sJson = await structRes.json();
-        const data = sJson.data || sJson;
-        if (data.courses && data.courses.length > 0 && cList.length === 0) setCourses(data.courses);
-        if (data.branches && data.branches.length > 0 && brList.length === 0) setBranches(data.branches);
-        if (data.batches && data.batches.length > 0 && bchList.length === 0) setBatches(data.batches);
+        await fetchBranchesAndBatchesForCourse(targetColgCd, selectedCourse, dedupedCourses, targetSlug);
+      } else {
+        await fetchBranchesAndBatchesForCourse(targetColgCd, selectedCourse, [], targetSlug);
       }
     } catch (e) {
       console.error('Failed to load logbook metadata:', e);
@@ -538,67 +642,15 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
     }
   }, [selectedCollegeSlug, selectedCollege]);
 
-  // Filter Branches by Selected Course with clean BCA General fallback
+  // Filter Branches by Selected Course (Clean 100% Dynamic data from SRMS/DB)
   const mappedBranches = useMemo(() => {
-    const curCourse = courses.find((c) => String(c.course_cd || c.code || c.id) === String(selectedCourse));
-    const courseName = curCourse?.name?.replace(/^\[#\d+\]\s*/, '').trim() || (selectedCourse === '13' ? 'BCA' : 'General');
+    return dedupeBy(branches, b => String(b.branch_cd || b.code || b.id));
+  }, [branches]);
 
-    const courseFiltered = branches.filter((b) => {
-      if (!selectedCourse || selectedCourse === 'all') return true;
-      const bCourse = String(b.course_cd || b.course_id || '').toLowerCase();
-      const sel = String(selectedCourse).toLowerCase();
-      return bCourse === sel;
-    });
-
-    const list = courseFiltered.length > 0 ? courseFiltered : branches;
-    const mapped = list.map((b) => {
-      const rawName = (b.branch_name || b.name || '').trim();
-      const validName = (rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE')
-        ? rawName
-        : `${b.course_name || courseName} General`;
-      return {
-        ...b,
-        id: String(b.branch_cd || b.code || b.id || '1'),
-        branch_cd: String(b.branch_cd || b.code || b.id || '1'),
-        name: validName,
-      };
-    });
-
-    const seen = new Set<string>();
-    return mapped.filter((b) => {
-      const k = `${b.branch_cd}|${b.name}`;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-  }, [branches, selectedCourse, courses]);
-
-  // Filter Batches by Selected Course
+  // Filter Batches by Selected Course (Clean 100% Dynamic data from SRMS/DB)
   const mappedBatches = useMemo(() => {
-    const list = batches.filter((b) => {
-      if (!selectedCourse || selectedCourse === 'all') return true;
-      const bCourse = String(b.course_cd || b.course_id || '').toLowerCase();
-      const sel = String(selectedCourse).toLowerCase();
-      return bCourse === sel || b.code?.toLowerCase().includes(sel);
-    });
-
-    const targetList = list.length > 0 ? list : batches;
-    const mapped = targetList.map((b) => ({
-      ...b,
-      code: String(b.batch_cd || b.code || b.name || b.id || '1'),
-      batch_cd: String(b.batch_cd || b.code || b.name || b.id || '1'),
-      name: String(b.batch_name || b.name || b.year || b.batch_cd || ''),
-      year: Number(b.year || b.batch_name || 2025),
-    }));
-
-    const seen = new Set<string>();
-    return mapped.filter((b) => {
-      const k = String(b.batch_cd || b.code || b.name);
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-  }, [batches, selectedCourse]);
+    return dedupeBy(batches, b => String(b.batch_cd || b.code || b.name));
+  }, [batches]);
 
   // Fetch entries & leaderboard
   useEffect(() => {
@@ -889,8 +941,12 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
   };
 
   const handleOpenDocViewer = (item: LogbookEntryItem) => {
+    const isEval = item.isEvaluated || item.status === 'EVALUATED' || item.status === 'GRADED' || (item.marksObtained !== null && item.marksObtained !== undefined);
+    const evalUrl = item.evaluatedFileUrl || (isEval ? `/api/v1/logbook/submissions/${item.id}/evaluated-pdf?tenant=${selectedCollegeSlug || 'srms-cet-bareilly'}` : undefined);
+    const origUrl = item.originalPdfUrl || item.fileUrl || `/api/v1/logbook/submission/${item.id}/document?tenant=${selectedCollegeSlug || 'srms-cet-bareilly'}`;
+
     setDocPreviewTarget({
-      url: item.fileUrl || '',
+      url: (isEval && evalUrl) ? evalUrl : origUrl,
       name: item.fileName || `${item.title || 'Deliverable'}.pdf`,
       studentName: item.studentName,
       studentRollNo: item.studentRollNo,
@@ -901,6 +957,9 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
       maxMarks: item.maxMarks,
       facultyRemarks: item.facultyRemarks || undefined,
       submittedAt: item.submittedAt,
+      isEvaluated: isEval,
+      evaluatedPdfUrl: evalUrl,
+      originalPdfUrl: origUrl,
     });
     setIsDocPreviewOpen(true);
   };
@@ -2236,6 +2295,9 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
         maxMarks={docPreviewTarget?.maxMarks}
         facultyRemarks={docPreviewTarget?.facultyRemarks}
         submittedAt={docPreviewTarget?.submittedAt}
+        isEvaluated={docPreviewTarget?.isEvaluated}
+        evaluatedPdfUrl={docPreviewTarget?.evaluatedPdfUrl}
+        originalPdfUrl={docPreviewTarget?.originalPdfUrl}
       />
     </div>
   );

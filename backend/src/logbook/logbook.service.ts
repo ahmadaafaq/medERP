@@ -2452,6 +2452,42 @@ startxref
     };
   }
 
+  async convertImageToPdfBuffer(imageBuffer: Buffer, isPng: boolean = false): Promise<Buffer> {
+    try {
+      const { PDFDocument } = await import('pdf-lib');
+      const pdfDoc = await PDFDocument.create();
+      let embeddedImg;
+      try {
+        if (isPng) {
+          embeddedImg = await pdfDoc.embedPng(imageBuffer);
+        } else {
+          embeddedImg = await pdfDoc.embedJpg(imageBuffer);
+        }
+      } catch (firstErr) {
+        try {
+          embeddedImg = isPng ? await pdfDoc.embedJpg(imageBuffer) : await pdfDoc.embedPng(imageBuffer);
+        } catch (secondErr) {
+          throw firstErr;
+        }
+      }
+
+      const { width, height } = embeddedImg.scale(1);
+      const page = pdfDoc.addPage([width, height]);
+      page.drawImage(embeddedImg, {
+        x: 0,
+        y: 0,
+        width,
+        height,
+      });
+
+      const pdfBytes = await pdfDoc.save();
+      return Buffer.from(pdfBytes);
+    } catch (err: any) {
+      this.logger.warn(`Image to PDF conversion fallback: ${err?.message}`);
+      return this.generateFallbackPdf('Image Deliverable', 'Student submitted diagram/image deliverable.');
+    }
+  }
+
   async convertDocxToPdfBuffer(docxBuffer: Buffer, title: string = 'Converted Deliverable Document'): Promise<Buffer> {
     try {
       const mammoth = require('mammoth');
@@ -2809,6 +2845,9 @@ startxref
       path.join(process.cwd(), 'uploads', 'projects', subTenant),
       path.join(process.cwd(), 'uploads', 'projects', cleanSlug),
       path.join(process.cwd(), 'uploads', 'submissions'),
+      path.join(process.cwd(), 'uploads'),
+      path.join(process.cwd(), '..', 'frontend', 'public'),
+      path.join(process.cwd(), '..', 'frontend', 'public', 'uploads'),
     ];
 
     // 1. If converted PDF from DOCX exists on disk
@@ -2829,6 +2868,10 @@ startxref
         const rawDocx = fs.readFileSync(sub.original_file_path);
         return this.convertDocxToPdfBuffer(rawDocx, sub?.topic_title || sub?.file_name || 'Document Deliverable');
       }
+      if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'].includes(ext)) {
+        const rawImg = fs.readFileSync(sub.original_file_path);
+        return this.convertImageToPdfBuffer(rawImg, ext === '.png');
+      }
       return fs.readFileSync(sub.original_file_path);
     }
 
@@ -2838,17 +2881,21 @@ startxref
       try {
         const matches = candidateDataUrl.match(/^data:([^;]+);base64,(.+)$/);
         if (matches) {
-          const mime = matches[1];
+          const mime = matches[1].toLowerCase();
           const rawBuffer = Buffer.from(matches[2], 'base64');
           if (mime.includes('wordprocessingml') || mime.includes('msword')) {
             return this.convertDocxToPdfBuffer(rawBuffer, sub?.topic_title || sub?.file_name || 'Document Deliverable');
+          }
+          if (mime.includes('image/') || mime.includes('jpeg') || mime.includes('jpg') || mime.includes('png') || mime.includes('webp')) {
+            const isPng = mime.includes('png');
+            return this.convertImageToPdfBuffer(rawBuffer, isPng);
           }
           if (rawBuffer.length > 4 && rawBuffer.slice(0, 4).toString('utf-8') === '%PDF') {
             return rawBuffer;
           }
         }
       } catch (e: any) {
-        this.logger.warn(`Error resolving base64 PDF in resolveOriginalPdfBuffer: ${e?.message}`);
+        this.logger.warn(`Error resolving base64 in resolveOriginalPdfBuffer: ${e?.message}`);
       }
     }
 
@@ -2862,6 +2909,7 @@ startxref
         const candidates = [
           path.join(dir, filename),
           path.join(dir, filename.replace(/\s+/g, '_')),
+          path.join(dir, filename.replace(/[\(\)]/g, '')),
         ];
         for (const c of candidates) {
           if (fs.existsSync(c) && fs.statSync(c).isFile()) {
@@ -2888,6 +2936,10 @@ startxref
       if (ext === '.docx' || ext === '.doc') {
         const rawDocx = fs.readFileSync(filePath);
         return this.convertDocxToPdfBuffer(rawDocx, sub?.topic_title || filename || 'Deliverable');
+      }
+      if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'].includes(ext)) {
+        const rawImg = fs.readFileSync(filePath);
+        return this.convertImageToPdfBuffer(rawImg, ext === '.png');
       }
       return fs.readFileSync(filePath);
     }
@@ -3421,6 +3473,11 @@ startxref
         s.submission_text AS explanation_text,
         s.submitted_at,
         s.status AS submission_status,
+        s.evaluated_file_url,
+        s.evaluated_file_path,
+        s.original_file_url,
+        s.original_file_path,
+        s.marks_awarded,
         st.name AS student_name,
         st.rollno AS student_rollno,
         st.registration_no AS student_regno,
@@ -3722,6 +3779,11 @@ startxref
       }
 
       const isEvaluated = marksObtained !== null || item.submission_status === 'EVALUATED' || item.submission_status === 'GRADED';
+      const evaluatedFileUrl = item.evaluated_file_url 
+        || (isEvaluated ? `/api/v1/logbook/submissions/${item.id}/evaluated-pdf?tenant=${cleanSlug}` : undefined);
+      const originalDocUrl = (item.file_url && item.file_url.startsWith('/')) 
+        ? item.file_url 
+        : `/api/v1/logbook/submission/${item.id}/document?tenant=${cleanSlug}`;
 
       return {
         id: item.id,
@@ -3744,9 +3806,10 @@ startxref
         courseName: item.course_name,
         branchId: item.branch_id,
         branchName: item.branch_name,
-        fileUrl: (item.file_url && item.file_url.startsWith('/')) 
-          ? item.file_url 
-          : `/api/v1/logbook/submission/${item.id}/document?tenant=${cleanSlug}`,
+        fileUrl: (isEvaluated && evaluatedFileUrl) ? evaluatedFileUrl : originalDocUrl,
+        evaluatedFileUrl: evaluatedFileUrl || undefined,
+        originalPdfUrl: originalDocUrl,
+        isEvaluated,
         fileName: item.file_name || item.attachment_name || (item.activity_title === 'GEN AI' || item.title === 'GEN AI' ? 'Generative AI.pdf' : item.activity_title === 'Topology' || item.title === 'Topology' ? 'Topology_Report.pdf' : 'Submission_Document.pdf'),
         fileSize: item.file_size || '0.32 MB',
         explanationText: item.explanation_text || (item.activity_title === 'GEN AI' || item.title === 'GEN AI' ? 'Generative AI is transforming the way people create and work with digital content. It provides powerful assistance in education, business, software development, design, and many other fields.' : ''),

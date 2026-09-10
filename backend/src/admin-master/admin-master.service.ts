@@ -307,9 +307,17 @@ export class AdminMasterService {
       const collegeName = targetCollege?.name || 'SRMS Institution';
       const collegeCode = targetCollege?.code || '';
 
+      const linkersQuery = `
+        SELECT * FROM (
+          SELECT DISTINCT ON (id) *
+          FROM professional_linkers
+          ORDER BY id
+        ) l
+        ORDER BY created_at DESC, code ASC
+      `;
       const rows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT * FROM professional_linkers ORDER BY created_at DESC, code ASC`,
+        linkersQuery,
       ).catch(() => []);
 
       return rows.map(r => ({
@@ -325,9 +333,17 @@ export class AdminMasterService {
     const allLinkers: any[] = [];
     for (const col of colleges) {
       try {
+        const linkersQuery = `
+          SELECT * FROM (
+            SELECT DISTINCT ON (id) *
+            FROM professional_linkers
+            ORDER BY id
+          ) l
+          ORDER BY created_at DESC, code ASC
+        `;
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
-          `SELECT * FROM professional_linkers ORDER BY created_at DESC, code ASC`,
+          linkersQuery,
         ).catch(() => []);
 
         allLinkers.push(
@@ -454,17 +470,32 @@ export class AdminMasterService {
           ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
         `).catch(() => {});
 
+        const deptQuery = `
+          SELECT * FROM (
+            SELECT DISTINCT ON (d.id)
+              d.id,
+              d.name,
+              d.code,
+              d.type,
+              d.hod_user_id,
+              d.is_active,
+              d.created_at,
+              COALESCE(d.branch_cd, d.code) AS branch_cd,
+              d.course_cd,
+              d.course_cd AS course_code,
+              COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
+              d.colg_cd,
+              u.email AS hod_email
+            FROM departments d
+            LEFT JOIN courses c ON c.course_cd::text = d.course_cd::text OR c.code::text = d.course_cd::text
+            LEFT JOIN users u ON u.id::text = d.hod_user_id::text
+            ORDER BY d.id
+          ) sub
+          ORDER BY CAST(NULLIF(regexp_replace(COALESCE(sub.branch_cd, sub.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, sub.name ASC
+        `;
         const rows = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT d.*, 
-                  COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
-                  d.course_cd AS course_code,
-                  COALESCE(d.branch_cd, d.code) AS branch_cd,
-                  u.email as hod_email 
-           FROM departments d
-           LEFT JOIN courses c ON c.course_cd::text = d.course_cd::text OR c.code::text = d.course_cd::text
-           LEFT JOIN users u ON u.id::text = d.hod_user_id::text
-           ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
+          deptQuery,
         ).catch(() => []);
 
         return rows.map(r => ({
@@ -492,17 +523,32 @@ export class AdminMasterService {
           ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
         `).catch(() => {});
 
+        const deptQuery = `
+          SELECT * FROM (
+            SELECT DISTINCT ON (d.id)
+              d.id,
+              d.name,
+              d.code,
+              d.type,
+              d.hod_user_id,
+              d.is_active,
+              d.created_at,
+              COALESCE(d.branch_cd, d.code) AS branch_cd,
+              d.course_cd,
+              d.course_cd AS course_code,
+              COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
+              d.colg_cd,
+              u.email AS hod_email
+            FROM departments d
+            LEFT JOIN courses c ON c.course_cd::text = d.course_cd::text OR c.code::text = d.course_cd::text
+            LEFT JOIN users u ON u.id::text = d.hod_user_id::text
+            ORDER BY d.id
+          ) sub
+          ORDER BY CAST(NULLIF(regexp_replace(COALESCE(sub.branch_cd, sub.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, sub.name ASC
+        `;
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
-          `SELECT d.*, 
-                  COALESCE(c.name, d.course_name, 'Course ' || d.course_cd) AS course_name,
-                  d.course_cd AS course_code,
-                  COALESCE(d.branch_cd, d.code) AS branch_cd,
-                  u.email as hod_email 
-           FROM departments d
-           LEFT JOIN courses c ON c.course_cd::text = d.course_cd::text OR c.code::text = d.course_cd::text
-           LEFT JOIN users u ON u.id::text = d.hod_user_id::text
-           ORDER BY CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, d.name ASC`,
+          deptQuery,
         ).catch(() => []);
 
         allDepartments.push(
@@ -800,24 +846,31 @@ export class AdminMasterService {
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS mst_sub_name VARCHAR(200);
         `).catch(() => {});
 
+        const subjQuery = `
+          SELECT * FROM (
+            SELECT DISTINCT ON (s.id)
+              s.*, 
+              COALESCE(s.course_cd, d.course_cd) as course_cd,
+              COALESCE(s.course_name, d.course_name) as course_name,
+              COALESCE(s.branch_cd, d.branch_cd, d.code) as branch_cd,
+              COALESCE(s.batch_cd, b.code, b.year::text) as batch_code,
+              COALESCE(s.batch_cd, b.code, b.year::text) as batch_cd,
+              s.sem_cd,
+              s.semester,
+              s.sub_addinfo,
+              s.mst_sub_name,
+              d.name as department_name, 
+              d.code as department_code
+            FROM subjects s
+            LEFT JOIN departments d ON d.id::text = s.department_id::text
+            LEFT JOIN batches b ON b.id::text = s.batch_id::text
+            ORDER BY s.id
+          ) sub
+          ORDER BY sub.code ASC, sub.name ASC
+        `;
         const rows = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT s.*, 
-                  COALESCE(s.course_cd, d.course_cd) as course_cd,
-                  COALESCE(s.course_name, d.course_name) as course_name,
-                  COALESCE(s.branch_cd, d.branch_cd, d.code) as branch_cd,
-                  COALESCE(s.batch_cd, b.code, b.year::text) as batch_code,
-                  COALESCE(s.batch_cd, b.code, b.year::text) as batch_cd,
-                  s.sem_cd,
-                  s.semester,
-                  s.sub_addinfo,
-                  s.mst_sub_name,
-                  d.name as department_name, 
-                  d.code as department_code
-           FROM subjects s
-           LEFT JOIN departments d ON d.id::text = s.department_id::text
-           LEFT JOIN batches b ON b.id::text = s.batch_id::text
-           ORDER BY s.code ASC, s.name ASC`,
+          subjQuery,
         ).catch(() => []);
 
         return rows.map(r => ({
@@ -849,24 +902,31 @@ export class AdminMasterService {
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS mst_sub_name VARCHAR(200);
         `).catch(() => {});
 
+        const subjQuery = `
+          SELECT * FROM (
+            SELECT DISTINCT ON (s.id)
+              s.*, 
+              COALESCE(s.course_cd, d.course_cd) as course_cd,
+              COALESCE(s.course_name, d.course_name) as course_name,
+              COALESCE(s.branch_cd, d.branch_cd, d.code) as branch_cd,
+              COALESCE(s.batch_cd, b.code, b.year::text) as batch_code,
+              COALESCE(s.batch_cd, b.code, b.year::text) as batch_cd,
+              s.sem_cd,
+              s.semester,
+              s.sub_addinfo,
+              s.mst_sub_name,
+              d.name as department_name, 
+              d.code as department_code
+            FROM subjects s
+            LEFT JOIN departments d ON d.id::text = s.department_id::text
+            LEFT JOIN batches b ON b.id::text = s.batch_id::text
+            ORDER BY s.id
+          ) sub
+          ORDER BY sub.code ASC, sub.name ASC
+        `;
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
-          `SELECT s.*, 
-                  COALESCE(s.course_cd, d.course_cd) as course_cd,
-                  COALESCE(s.course_name, d.course_name) as course_name,
-                  COALESCE(s.branch_cd, d.branch_cd, d.code) as branch_cd,
-                  COALESCE(s.batch_cd, b.code, b.year::text) as batch_code,
-                  COALESCE(s.batch_cd, b.code, b.year::text) as batch_cd,
-                  s.sem_cd,
-                  s.semester,
-                  s.sub_addinfo,
-                  s.mst_sub_name,
-                  d.name as department_name, 
-                  d.code as department_code
-           FROM subjects s
-           LEFT JOIN departments d ON d.id::text = s.department_id::text
-           LEFT JOIN batches b ON b.id::text = s.batch_id::text
-           ORDER BY s.code ASC, s.name ASC`,
+          subjQuery,
         ).catch(() => []);
 
         allSubjects.push(
@@ -1097,24 +1157,31 @@ export class AdminMasterService {
       const allTopics: any[] = [];
       for (const col of activeTenants) {
         try {
+          const topicsQuery = `
+            SELECT * FROM (
+              SELECT DISTINCT ON (t.id)
+                t.*, 
+                s.name as subject_name,
+                COALESCE(t.subject_code::text, s.code::text) as subject_code,
+                COALESCE(t.subject_id::text, s.id::text) as subject_id,
+                u.name as unit_name,
+                COALESCE(t.unit_code::text, u.code::text) as unit_code,
+                COALESCE(t.unit_id::text, u.id::text) as unit_id,
+                u.bloom_level as unit_bloom_level,
+                l.code as cbme_code, l.name as cbme_name,
+                COALESCE(t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
+                COALESCE(t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
+              FROM topics t
+              LEFT JOIN subjects s ON (s.id::text = t.subject_id::text OR s.code::text = t.subject_code::text)
+              LEFT JOIN units u ON (u.id::text = t.unit_id::text OR u.code::text = t.unit_code::text)
+              LEFT JOIN professional_linkers l ON l.id::text = t.linker_id::text
+              ORDER BY t.id
+            ) sub
+            ORDER BY sub.created_at DESC, sub.code ASC
+          `;
           const rows = await this.tenantSchemaService.queryInTenant(
             col.slug,
-            `SELECT t.*, 
-                    s.name as subject_name,
-                    COALESCE(t.subject_code::text, s.code::text) as subject_code,
-                    COALESCE(t.subject_id::text, s.id::text) as subject_id,
-                    u.name as unit_name,
-                    COALESCE(t.unit_code::text, u.code::text) as unit_code,
-                    COALESCE(t.unit_id::text, u.id::text) as unit_id,
-                    u.bloom_level as unit_bloom_level,
-                    l.code as cbme_code, l.name as cbme_name,
-                    COALESCE(t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
-                    COALESCE(t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
-             FROM topics t
-             LEFT JOIN subjects s ON (s.id::text = t.subject_id::text OR s.code::text = t.subject_code::text)
-             LEFT JOIN units u ON (u.id::text = t.unit_id::text OR u.code::text = t.unit_code::text)
-             LEFT JOIN professional_linkers l ON l.id::text = t.linker_id::text
-             ORDER BY t.created_at DESC, t.code ASC`,
+            topicsQuery,
           );
           rows.forEach((r: any) => {
             allTopics.push({
@@ -1134,24 +1201,31 @@ export class AdminMasterService {
 
     const currentCollege = colleges.find((c: any) => c.slug === slug);
     await this.ensureAdminMasterTables(slug);
+    const topicsQuery = `
+      SELECT * FROM (
+        SELECT DISTINCT ON (t.id)
+          t.*, 
+          s.name as subject_name,
+          COALESCE(t.subject_code::text, s.code::text) as subject_code,
+          COALESCE(t.subject_id::text, s.id::text) as subject_id,
+          u.name as unit_name,
+          COALESCE(t.unit_code::text, u.code::text) as unit_code,
+          COALESCE(t.unit_id::text, u.id::text) as unit_id,
+          u.bloom_level as unit_bloom_level,
+          l.code as cbme_code, l.name as cbme_name,
+          COALESCE(t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
+          COALESCE(t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
+        FROM topics t
+        LEFT JOIN subjects s ON (s.id::text = t.subject_id::text OR s.code::text = t.subject_code::text)
+        LEFT JOIN units u ON (u.id::text = t.unit_id::text OR u.code::text = t.unit_code::text)
+        LEFT JOIN professional_linkers l ON l.id::text = t.linker_id::text
+        ORDER BY t.id
+      ) sub
+      ORDER BY sub.created_at DESC, sub.code ASC
+    `;
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT t.*, 
-              s.name as subject_name,
-              COALESCE(t.subject_code::text, s.code::text) as subject_code,
-              COALESCE(t.subject_id::text, s.id::text) as subject_id,
-              u.name as unit_name,
-              COALESCE(t.unit_code::text, u.code::text) as unit_code,
-              COALESCE(t.unit_id::text, u.id::text) as unit_id,
-              u.bloom_level as unit_bloom_level,
-              l.code as cbme_code, l.name as cbme_name,
-              COALESCE(t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
-              COALESCE(t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
-       FROM topics t
-       LEFT JOIN subjects s ON (s.id::text = t.subject_id::text OR s.code::text = t.subject_code::text)
-       LEFT JOIN units u ON (u.id::text = t.unit_id::text OR u.code::text = t.unit_code::text)
-       LEFT JOIN professional_linkers l ON l.id::text = t.linker_id::text
-       ORDER BY t.created_at DESC, t.code ASC`,
+      topicsQuery,
     );
 
     return rows.map((r: any) => ({
@@ -1404,29 +1478,36 @@ export class AdminMasterService {
       const allCompetencies: any[] = [];
       for (const col of activeTenants) {
         try {
+          const compQuery = `
+            SELECT * FROM (
+              SELECT DISTINCT ON (c.id)
+                c.*, 
+                s.name as subject_name,
+                COALESCE(c.subject_code::text, s.code::text, t.subject_code::text, u.subject_code::text) as subject_code,
+                COALESCE(c.subject_id::text, s.id::text, t.subject_id::text, u.subject_id::text) as subject_id,
+                u.name as unit_name,
+                COALESCE(c.unit_code::text, u.code::text, t.unit_code::text) as unit_code,
+                COALESCE(c.unit_id::text, u.id::text, t.unit_id::text) as unit_id,
+                u.description as unit_description,
+                t.name as topic_name,
+                COALESCE(c.topic_code::text, t.code::text) as topic_code,
+                COALESCE(c.topic_id::text, t.id::text) as topic_id,
+                t.description as topic_description,
+                l.code as cbme_code, l.name as cbme_name,
+                COALESCE(c.course_cd::text, t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
+                COALESCE(c.branch_cd::text, t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
+              FROM competencies c
+              LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_code::text)
+              LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
+              LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
+              LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
+              ORDER BY c.id
+            ) sub
+            ORDER BY sub.created_at DESC, sub.code ASC
+          `;
           const rows = await this.tenantSchemaService.queryInTenant(
             col.slug,
-            `SELECT c.*, 
-                    s.name as subject_name,
-                    COALESCE(c.subject_code::text, s.code::text, t.subject_code::text, u.subject_code::text) as subject_code,
-                    COALESCE(c.subject_id::text, s.id::text, t.subject_id::text, u.subject_id::text) as subject_id,
-                    u.name as unit_name,
-                    COALESCE(c.unit_code::text, u.code::text, t.unit_code::text) as unit_code,
-                    COALESCE(c.unit_id::text, u.id::text, t.unit_id::text) as unit_id,
-                    u.description as unit_description,
-                    t.name as topic_name,
-                    COALESCE(c.topic_code::text, t.code::text) as topic_code,
-                    COALESCE(c.topic_id::text, t.id::text) as topic_id,
-                    t.description as topic_description,
-                    l.code as cbme_code, l.name as cbme_name,
-                    COALESCE(c.course_cd::text, t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
-                    COALESCE(c.branch_cd::text, t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
-             FROM competencies c
-             LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_code::text)
-             LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
-             LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
-             LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
-             ORDER BY c.created_at DESC, c.code ASC`,
+            compQuery,
           );
           rows.forEach((r: any) => {
             allCompetencies.push({
@@ -1446,29 +1527,36 @@ export class AdminMasterService {
 
     const currentCollege = colleges.find((c: any) => c.slug === slug);
     await this.ensureAdminMasterTables(slug);
+    const compQuery = `
+      SELECT * FROM (
+        SELECT DISTINCT ON (c.id)
+          c.*, 
+          s.name as subject_name,
+          COALESCE(c.subject_code::text, s.code::text, t.subject_code::text, u.subject_code::text) as subject_code,
+          COALESCE(c.subject_id::text, s.id::text, t.subject_id::text, u.subject_id::text) as subject_id,
+          u.name as unit_name,
+          COALESCE(c.unit_code::text, u.code::text, t.unit_code::text) as unit_code,
+          COALESCE(c.unit_id::text, u.id::text, t.unit_id::text) as unit_id,
+          u.description as unit_description,
+          t.name as topic_name,
+          COALESCE(c.topic_code::text, t.code::text) as topic_code,
+          COALESCE(c.topic_id::text, t.id::text) as topic_id,
+          t.description as topic_description,
+          l.code as cbme_code, l.name as cbme_name,
+          COALESCE(c.course_cd::text, t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
+          COALESCE(c.branch_cd::text, t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
+        FROM competencies c
+        LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_code::text)
+        LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
+        LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
+        LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
+        ORDER BY c.id
+      ) sub
+      ORDER BY sub.created_at DESC, sub.code ASC
+    `;
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT c.*, 
-              s.name as subject_name,
-              COALESCE(c.subject_code::text, s.code::text, t.subject_code::text, u.subject_code::text) as subject_code,
-              COALESCE(c.subject_id::text, s.id::text, t.subject_id::text, u.subject_id::text) as subject_id,
-              u.name as unit_name,
-              COALESCE(c.unit_code::text, u.code::text, t.unit_code::text) as unit_code,
-              COALESCE(c.unit_id::text, u.id::text, t.unit_id::text) as unit_id,
-              u.description as unit_description,
-              t.name as topic_name,
-              COALESCE(c.topic_code::text, t.code::text) as topic_code,
-              COALESCE(c.topic_id::text, t.id::text) as topic_id,
-              t.description as topic_description,
-              l.code as cbme_code, l.name as cbme_name,
-              COALESCE(c.course_cd::text, t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
-              COALESCE(c.branch_cd::text, t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
-       FROM competencies c
-       LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_code::text)
-       LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
-       LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
-       LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
-       ORDER BY c.created_at DESC, c.code ASC`,
+      compQuery,
     );
 
     return rows.map((r: any) => ({
@@ -1946,18 +2034,25 @@ export class AdminMasterService {
       const collegeName = targetCollege?.name || 'SRMS Institution';
       const collegeCode = targetCollege?.code || '';
 
+      const offeringQuery = `
+        SELECT * FROM (
+          SELECT DISTINCT ON (so.id)
+            so.*, 
+            s.name AS subject_name, s.code AS subject_code,
+            p.name AS prof_name,
+            dt.name AS dtype_name,
+            (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
+          FROM subject_offerings so
+          LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+          LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
+          LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
+          ORDER BY so.id
+        ) sub
+        ORDER BY sub.subject_name ASC NULLS LAST, sub.phase_order ASC NULLS LAST, sub.id ASC
+      `;
       const rows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT so.*, 
-                s.name AS subject_name, s.code AS subject_code, s.course_cd, s.course_name, s.branch_cd,
-                p.name AS prof_name, p.phase_order, p.academic_year,
-                dt.name AS dtype_name, dt.code AS dtype_code,
-                (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
-         FROM subject_offerings so
-         LEFT JOIN subjects s ON s.id::text = so.subject_id::text
-         LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
-         LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
-         ORDER BY s.name ASC, p.phase_order ASC, dt.code ASC`,
+        offeringQuery,
       ).catch(() => []);
 
       return rows.map(r => ({
@@ -1974,18 +2069,25 @@ export class AdminMasterService {
     for (const col of colleges) {
       try {
         await this.ensureAdminMasterTables(col.slug);
+        const offeringQuery = `
+          SELECT * FROM (
+            SELECT DISTINCT ON (so.id)
+              so.*, 
+              s.name AS subject_name, s.code AS subject_code,
+              p.name AS prof_name,
+              dt.name AS dtype_name,
+              (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
+            FROM subject_offerings so
+            LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+            LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
+            LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
+            ORDER BY so.id
+          ) sub
+          ORDER BY sub.subject_name ASC NULLS LAST, sub.phase_order ASC NULLS LAST, sub.id ASC
+        `;
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
-          `SELECT so.*, 
-                  s.name AS subject_name, s.code AS subject_code, s.course_cd, s.course_name, s.branch_cd,
-                  p.name AS prof_name, p.phase_order, p.academic_year,
-                  dt.name AS dtype_name, dt.code AS dtype_code,
-                  (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
-           FROM subject_offerings so
-           LEFT JOIN subjects s ON s.id::text = so.subject_id::text
-           LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
-           LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
-           ORDER BY s.name ASC, p.phase_order ASC, dt.code ASC`,
+          offeringQuery,
         ).catch(() => []);
 
         allOfferings.push(
@@ -2768,16 +2870,23 @@ export class AdminMasterService {
       const collegeName = targetCollege?.name || 'SRMS Institution';
       const collegeCode = targetCollege?.code || '';
 
+      const unitsQuery = `
+        SELECT * FROM (
+          SELECT DISTINCT ON (u.id)
+            u.*, 
+            s.name AS subject_name, s.code AS subject_code,
+            COALESCE(u.course_cd, s.course_cd) AS course_cd,
+            COALESCE(u.course_name, s.course_name) AS course_name,
+            COALESCE(u.branch_cd, s.branch_cd) AS branch_cd
+          FROM units u
+          LEFT JOIN subjects s ON s.id::text = u.subject_id::text
+          ORDER BY u.id
+        ) sub
+        ORDER BY sub.unit_order ASC, sub.code ASC
+      `;
       const rows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT u.*, 
-                s.name AS subject_name, s.code AS subject_code,
-                COALESCE(u.course_cd, s.course_cd) AS course_cd,
-                COALESCE(u.course_name, s.course_name) AS course_name,
-                COALESCE(u.branch_cd, s.branch_cd) AS branch_cd
-         FROM units u
-         LEFT JOIN subjects s ON s.id::text = u.subject_id::text
-         ORDER BY u.unit_order ASC, u.code ASC`,
+        unitsQuery,
       ).catch(() => []);
 
       return rows.map((r: any) => ({
@@ -2793,16 +2902,23 @@ export class AdminMasterService {
     for (const col of colleges) {
       try {
         await this.ensureAdminMasterTables(col.slug);
+        const unitsQuery = `
+          SELECT * FROM (
+            SELECT DISTINCT ON (u.id)
+              u.*, 
+              s.name AS subject_name, s.code AS subject_code,
+              COALESCE(u.course_cd, s.course_cd) AS course_cd,
+              COALESCE(u.course_name, s.course_name) AS course_name,
+              COALESCE(u.branch_cd, s.branch_cd) AS branch_cd
+            FROM units u
+            LEFT JOIN subjects s ON s.id::text = u.subject_id::text
+            ORDER BY u.id
+          ) sub
+          ORDER BY sub.unit_order ASC, sub.code ASC
+        `;
         const rows = await this.tenantSchemaService.queryInTenant(
           col.slug,
-          `SELECT u.*, 
-                  s.name AS subject_name, s.code AS subject_code,
-                  COALESCE(u.course_cd, s.course_cd) AS course_cd,
-                  COALESCE(u.course_name, s.course_name) AS course_name,
-                  COALESCE(u.branch_cd, s.branch_cd) AS branch_cd
-           FROM units u
-           LEFT JOIN subjects s ON s.id::text = u.subject_id::text
-           ORDER BY u.unit_order ASC, u.code ASC`,
+          unitsQuery,
         ).catch(() => []);
 
         allUnits.push(

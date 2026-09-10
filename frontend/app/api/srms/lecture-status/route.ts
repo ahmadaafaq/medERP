@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { srmsPost } from '@/lib/srms-client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,18 +24,7 @@ export async function POST(request: NextRequest) {
       uid,
     };
 
-    const res = await fetch('https://myportal.srms.ac.in/srmserp/student/GetEngSemSubwiseStatus', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-    });
-
-    if (!res.ok) {
-      return NextResponse.json({ success: false, data: [], message: `SRMS server returned ${res.status}` }, { status: res.status });
-    }
-
-    const data = await res.json();
+    const data = await srmsPost('student/GetEngSemSubwiseStatus', payload);
     const list = Array.isArray(data) ? data : [];
 
     return NextResponse.json({

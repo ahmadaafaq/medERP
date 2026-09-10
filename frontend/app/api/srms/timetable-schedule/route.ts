@@ -112,11 +112,9 @@ export async function GET(request: NextRequest) {
     }
 
     const ts = Date.now();
-    const fetchRemote = searchParams.get('fetch_remote') === 'true' || searchParams.get('sync') === 'true';
-
-    // 1. Fetch remote SRMS JsonResponse.ashx only when explicitly requested (Sync action)
+    // 1. Always fetch live timetable from remote SRMS JsonResponse.ashx by default (unless explicitly fetch_remote=false)
     let remoteData: any[] = [];
-    if (fetchRemote) {
+    if (searchParams.get('fetch_remote') !== 'false') {
       const targetUrl = `https://myportal.srms.ac.in/timetable/master/JsonResponse.ashx?course=${course}&batch=${batch}&branch=${branch}&sem=${sem}&sec=${sec}&colgcd=${colgcd}&_=${ts}&start=${start}&end=${end}`;
       remoteData = await fetchSrmsJson(targetUrl);
       if (!Array.isArray(remoteData)) remoteData = [];
@@ -127,6 +125,23 @@ export async function GET(request: NextRequest) {
     let slug = tenantHeader.replace(/^tenant_/, '').replace(/^tenant-/, '') || (colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly');
     if (!slug) slug = 'srms-cet-bareilly';
     const schema = `tenant_${slug}`;
+
+    // Query deleted events blacklist
+    let deletedEventIds = new Set<string>();
+    try {
+      await queryDb(`
+        CREATE TABLE IF NOT EXISTS "${schema}".deleted_timetable_events (
+          event_id VARCHAR(100) PRIMARY KEY,
+          colg_cd VARCHAR(50) DEFAULT '1',
+          deleted_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {});
+
+      const deletedRows = await queryDb(
+        `SELECT event_id FROM "${schema}".deleted_timetable_events`
+      ).catch(() => []);
+      deletedEventIds = new Set<string>((deletedRows || []).map((r: any) => String(r.event_id)));
+    } catch { }
 
     let dbEvents: any[] = [];
     try {
@@ -240,6 +255,98 @@ export async function GET(request: NextRequest) {
           source: 'POSTGRESQL',
         };
       });
+
+      // Also query timetable_slots to include medERP scheduled slots
+      const slotWhereClauses: string[] = [`(ts.colg_cd = $1 OR ts.colg_cd IS NULL)`];
+      const slotQueryParams: any[] = [colgcd];
+      if (course && course !== 'all') {
+        slotQueryParams.push(String(course));
+        slotWhereClauses.push(`(ts.course_cd = $${slotQueryParams.length} OR ts.course_cd IS NULL)`);
+      }
+      if (branch && branch !== 'all') {
+        slotQueryParams.push(String(branch));
+        slotWhereClauses.push(`(ts.branch_cd = $${slotQueryParams.length} OR ts.branch_cd IS NULL)`);
+      }
+      if (batch && batch !== 'all') {
+        slotQueryParams.push(String(batch));
+        slotWhereClauses.push(`(ts.batch_cd = $${slotQueryParams.length} OR b.batch_cd::text = $${slotQueryParams.length} OR b.year::text = $${slotQueryParams.length} OR b.code = $${slotQueryParams.length} OR ts.batch_cd IS NULL)`);
+      }
+      if (sem && sem !== 'all') {
+        slotQueryParams.push(String(sem));
+        slotWhereClauses.push(`(ts.semester = $${slotQueryParams.length} OR ts.semester IS NULL)`);
+      }
+      if (sec && sec !== 'all') {
+        slotQueryParams.push(String(sec));
+        slotWhereClauses.push(`(ts.section = $${slotQueryParams.length} OR ts.section IS NULL OR ts.section = '1' OR ts.section = 'A')`);
+      }
+
+      const pgSlots = await queryDb(
+        `SELECT ts.id, ts.day_of_week, ts.start_time, ts.end_time, ts.room, ts.slot_type,
+                ts.topic, ts.unit_id, ts.unit_name, ts.sub_topics, ts.competency_codes,
+                ts.colg_cd, ts.course_cd, ts.branch_cd, ts.batch_cd, ts.semester, ts.section, ts.description,
+                f.name AS faculty_name, f.emp_id AS faculty_code,
+                sub.name AS subject_name, sub.code AS subject_code
+         FROM "${schema}".timetable_slots ts
+         LEFT JOIN "${schema}".faculty f ON f.id::text = ts.faculty_id::text
+         LEFT JOIN "${schema}".subjects sub ON sub.id::text = ts.subject_id::text
+         LEFT JOIN "${schema}".batches b ON b.id::text = ts.batch_id::text
+         WHERE ${slotWhereClauses.join(' AND ')}
+         ORDER BY ts.day_of_week ASC, ts.start_time ASC`,
+        slotQueryParams
+      ).catch(() => []);
+
+      for (const s of pgSlots) {
+        const sTime = String(s.start_time || '08:30:00').slice(0, 8);
+        const eTime = String(s.end_time || '09:30:00').slice(0, 8);
+        const dayVal = Number(s.day_of_week) || 1;
+
+        let startUnix = 0;
+        let endUnix = 0;
+        if (startTimestamp > 0) {
+          const slotWeekDate = new Date(startTimestamp * 1000);
+          slotWeekDate.setDate(slotWeekDate.getDate() + (dayVal === 7 ? 0 : dayVal));
+          const [sh, sm] = sTime.split(':').map(Number);
+          const [eh, em] = eTime.split(':').map(Number);
+          slotWeekDate.setHours(sh || 8, sm || 30, 0, 0);
+          startUnix = Math.floor(slotWeekDate.getTime() / 1000);
+          const endSlotDate = new Date(slotWeekDate);
+          endSlotDate.setHours(eh || 9, em || 30, 0, 0);
+          endUnix = Math.floor(endSlotDate.getTime() / 1000);
+        }
+
+        dbEvents.push({
+          id: String(s.id),
+          srms_id: null,
+          title: s.description || s.topic || s.subject_name || 'Subject Session',
+          description: s.description || s.topic || s.subject_name || 'Subject Session',
+          start: startUnix,
+          end: endUnix,
+          start_str: sTime,
+          end_str: eTime,
+          start_time: sTime,
+          end_time: eTime,
+          day_of_week: dayVal,
+          linkcd: s.subject_code || '',
+          electiveflg: 'N',
+          txtG: '0',
+          txtSec: s.section || sec,
+          empid: s.faculty_code || '',
+          colgcd: s.colg_cd || colgcd,
+          camera_link: '0',
+          room: s.room || 'Room 204',
+          unit_id: s.unit_id || null,
+          unit_name: s.unit_name || null,
+          topic: s.topic || s.subject_name || 'Subject Session',
+          sub_topics: s.sub_topics || null,
+          competency_codes: s.competency_codes || null,
+          subject_name: s.subject_name || s.topic || 'Subject Session',
+          faculty_name: s.faculty_name || '',
+          slot_type: s.slot_type || 'Lecture',
+          slotType: s.slot_type || 'Lecture',
+          allDay: false,
+          source: 'POSTGRESQL_SLOT',
+        });
+      }
     } catch (dbErr: any) {
       console.warn('[PostgreSQL timetable fetch warning]:', dbErr.message);
     }
@@ -247,10 +354,39 @@ export async function GET(request: NextRequest) {
     // 3. Merge both datasets and enrich SRMS items with PostgreSQL unit, topic, subtopic
     const normalizeTitle = (t: string) => String(t || '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
 
-    const enrichedRemote = remoteData.map((item: any) => {
+    // Filter out canceled or blacklisted remote items
+    const activeRemoteData = remoteData.filter((item: any) => {
+      if (item.Cancel_flg === '1') return false;
+      const sid = String(item.id || '');
+      if (sid && deletedEventIds.has(sid)) return false;
+      return true;
+    });
+
+    const enrichedRemote = activeRemoteData.map((item: any) => {
       const startUnix = parseDateToUnix(item.start);
-      const itemTitleNorm = normalizeTitle(item.title);
-      // Find matching PostgreSQL record
+      const endUnix = parseDateToUnix(item.end);
+
+      // Convert Unix timestamp to IST date for day_of_week and standard time string (UTC + 5:30)
+      const istStartDate = new Date((startUnix + 19800) * 1000);
+      const istEndDate = new Date((endUnix + 19800) * 1000);
+
+      const dayVal = item.day_of_week !== undefined && item.day_of_week !== null
+        ? Number(item.day_of_week)
+        : (istStartDate.getUTCDay() === 0 ? 7 : istStartDate.getUTCDay());
+
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const startTimeStr = item.start_time || `${pad(istStartDate.getUTCHours())}:${pad(istStartDate.getUTCMinutes())}:${pad(istStartDate.getUTCSeconds())}`;
+      const endTimeStr = item.end_time || `${pad(istEndDate.getUTCHours())}:${pad(istEndDate.getUTCMinutes())}:${pad(istEndDate.getUTCSeconds())}`;
+
+      const rawTitle = String(item.title || item.description || item.topic || '');
+      const facultyMatch = rawTitle.match(/\(([^)]+)\)/);
+      const teacher = (item.faculty_name || item.EmpName || item.emp_name || (facultyMatch ? facultyMatch[1] : '') || 'Faculty Member').trim();
+      const cleanName = rawTitle.replace(/\([^)]*\)/g, '').trim();
+      const isLab = rawTitle.toLowerCase().includes('lab') || rawTitle.toLowerCase().includes('practical');
+
+      const itemTitleNorm = normalizeTitle(rawTitle);
+
+      // Find matching PostgreSQL record for extra metadata (unit, topic, camera, etc.)
       const match = dbEvents.find((db) => {
         if (item.id && (String(db.srms_id) === String(item.id) || String(db.id) === String(item.id))) return true;
         const dbTitleNorm = normalizeTitle(db.title);
@@ -262,20 +398,44 @@ export async function GET(request: NextRequest) {
         return false;
       });
 
-      if (match) {
-        return {
-          ...item,
-          camera_link: match.camera_link || item.camera_link || null,
-          room: match.room || item.room || null,
-          unit_id: match.unit_id || item.unit_id || null,
-          unit_name: match.unit_name || item.unit_name || null,
-          topic: match.topic || item.topic || null,
-          sub_topics: match.sub_topics || item.sub_topics || null,
-          competency_codes: match.competency_codes || item.competency_codes || null,
-          postgres_id: match.id,
-        };
-      }
-      return item;
+      return {
+        id: String(item.id),
+        srms_id: Number(item.id) || null,
+        title: rawTitle,
+        description: item.description || rawTitle,
+        start: startUnix,
+        end: endUnix,
+        start_time: startTimeStr,
+        end_time: endTimeStr,
+        day_of_week: dayVal,
+        subject_name: match?.subject_name || cleanName || rawTitle,
+        faculty_name: match?.faculty_name || teacher,
+        faculty_id: String(item.empid || match?.faculty_id || match?.empid || ''),
+        room: match?.room || item.room || (item.camera_link ? `Room 204 (Cam #${item.camera_link})` : (isLab ? 'Comp Lab 2' : 'Room 204')),
+        slot_type: isLab ? 'Practical' : 'Lecture',
+        slotType: isLab ? 'Practical' : 'Lecture',
+        camera_link: match?.camera_link || item.camera_link || '0',
+        unit_id: match?.unit_id || item.unit_id || null,
+        unit_name: match?.unit_name || item.unit_name || null,
+        topic: match?.topic || item.topic || cleanName || rawTitle,
+        sub_topics: match?.sub_topics || item.sub_topics || null,
+        competency_codes: match?.competency_codes || item.competency_codes || null,
+        postgres_id: match?.id,
+        Cancel_flg: item.Cancel_flg || '0',
+        sec: item.sec || sec,
+        grp: item.grp || '0',
+        allDay: false,
+        source: 'SRMS_PORTAL',
+      };
+    });
+
+    // Filter active DB events
+    const activeDbEvents = dbEvents.filter((db: any) => {
+      const dbId = String(db.id || '');
+      const srmsId = String(db.srms_id || '');
+      if (dbId && deletedEventIds.has(dbId)) return false;
+      if (srmsId && deletedEventIds.has(srmsId)) return false;
+      return true;
     });
 
     const combined: any[] = [];
@@ -284,9 +444,9 @@ export async function GET(request: NextRequest) {
     // Helper key generator: day + start time + subject title
     const getSlotKey = (item: any): string => {
       const startSec = parseDateToUnix(item.start);
-      const d = new Date(startSec * 1000);
-      const dayVal = item.day_of_week ?? (d.getDay() === 0 ? 7 : d.getDay());
-      const timeStr = String(item.start_time || item.start_str || `${d.getHours()}:${d.getMinutes()}`).slice(0, 5);
+      const istStartDate = new Date((startSec + 19800) * 1000);
+      const dayVal = item.day_of_week ?? (istStartDate.getUTCDay() === 0 ? 7 : istStartDate.getUTCDay());
+      const timeStr = String(item.start_time || item.start_str || `${istStartDate.getUTCHours()}:${istStartDate.getUTCMinutes()}`).slice(0, 5);
       const subKey = normalizeTitle(item.title || item.subject_name || item.topic);
       return `${dayVal}_${timeStr}_${subKey}`;
     };
@@ -301,7 +461,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Add local PostgreSQL events only if slot does not already exist
-    for (const dbItem of dbEvents) {
+    for (const dbItem of activeDbEvents) {
       const key = getSlotKey(dbItem);
       if (!seenSlots.has(key)) {
         seenSlots.add(key);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { srmsPost } from '@/lib/srms-client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,23 +32,19 @@ export async function POST(request: NextRequest) {
       branch_cd,
     };
 
-    const [attRes, totRes] = await Promise.all([
-      fetch('https://myportal.srms.ac.in/srmserp/Student/Get_stud_att_with_subCd', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(attPayload),
-        cache: 'no-store',
+    const [attListRaw, totListRaw] = await Promise.all([
+      srmsPost('Student/Get_stud_att_with_subCd', attPayload).catch((err) => {
+        console.warn('[Get_stud_att_with_subCd error]', err?.message);
+        return [];
       }),
-      fetch('https://myportal.srms.ac.in/srmserp/Student/Get_stud_Tot_att', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(totPayload),
-        cache: 'no-store',
+      srmsPost('Student/Get_stud_Tot_att', totPayload).catch((err) => {
+        console.warn('[Get_stud_Tot_att error]', err?.message);
+        return [];
       }),
     ]);
 
-    const attList: any[] = attRes.ok ? await attRes.json() : [];
-    const totList: any[] = totRes.ok ? await totRes.json() : [];
+    const attList: any[] = Array.isArray(attListRaw) ? attListRaw : [];
+    const totList: any[] = Array.isArray(totListRaw) ? totListRaw : [];
 
     // Map total percentage by stud_reg_no
     const totMap = new Map<string, string>();

@@ -7,7 +7,7 @@ export class AnalyticsService {
   constructor(
     private readonly ds: DataSource,
     private readonly tenantSchemaService: TenantSchemaService,
-  ) {}
+  ) { }
 
   async resolveTenantSlug(tenantSlug?: string): Promise<string> {
     if (!tenantSlug) return '';
@@ -55,7 +55,7 @@ export class AnalyticsService {
     const todayDateStr = todayDate.toISOString().split('T')[0];
     const todayDisplayDate = todayDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-     const punchLogs = await this.tenantSchemaService.queryInTenant(
+    const punchLogs = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT fp.id, fp.punch_time, fp.punch_type, fp.device_id,
               f.name as faculty_name, f.emp_id as faculty_code

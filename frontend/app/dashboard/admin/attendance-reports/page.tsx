@@ -107,7 +107,7 @@ export default function MISAttendanceReportsPage() {
   const [selectedCourse, setSelectedCourse] = useState<string>('13'); // Default BCA
 
   const [branches, setBranches] = useState<BranchItem[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState<string>('1'); // Default BCA General
+  const [selectedBranch, setSelectedBranch] = useState<string>('1'); // Default BCA Department
 
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<string>('2'); // Default 2025
@@ -267,9 +267,9 @@ export default function MISAttendanceReportsPage() {
         const mappedBranches: BranchItem[] = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
           const rawName = (b.branch_name || b.name || '').trim();
           const validName =
-            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE'
+            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
               ? rawName
-              : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} General`;
+              : (effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
           return {
             id: String(b.branch_cd || b.code || '1'),
             code: String(b.branch_cd || b.code || '1'),
@@ -286,7 +286,7 @@ export default function MISAttendanceReportsPage() {
             return exists ? prev : mappedBranches[0].code;
           });
         } else {
-          const fallback = [{ id: '1', code: '1', name: `${courseName} General`, course_cd: effectiveCrs, colg_cd: effectiveColg }];
+          const fallback = [{ id: '1', code: '1', name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department`, course_cd: effectiveCrs, colg_cd: effectiveColg }];
           setBranches(fallback);
           setSelectedBranch('1');
         }
@@ -295,7 +295,7 @@ export default function MISAttendanceReportsPage() {
           (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
         );
         const courseName = (courseObj?.name || 'BCA').replace(/^\[#\d+\]\s*/, '').trim();
-        const fallback = [{ id: '1', code: '1', name: `${courseName} General`, course_cd: effectiveCrs, colg_cd: effectiveColg }];
+        const fallback = [{ id: '1', code: '1', name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department`, course_cd: effectiveCrs, colg_cd: effectiveColg }];
         setBranches(fallback);
         setSelectedBranch('1');
       }
@@ -648,7 +648,7 @@ export default function MISAttendanceReportsPage() {
 
   const selectedColgName = colleges.find((c) => c.code === selectedCollege)?.name || 'SRMS CET, BAREILLY';
   const selectedCourseName = courses.find((c) => c.code === selectedCourse)?.name || 'BCA';
-  const selectedBranchName = branches.find((b) => b.code === selectedBranch)?.name || 'BCA General';
+  const selectedBranchName = branches.find((b) => b.code === selectedBranch)?.name || (selectedCourse === '13' ? 'BCA Department' : 'Department 1');
   const selectedBatchName = batches.find((b) => b.code === selectedBatch)?.name || selectedBatch;
 
   return (

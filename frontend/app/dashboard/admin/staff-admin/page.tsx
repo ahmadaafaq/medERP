@@ -418,15 +418,17 @@ export default function StaffAdminPage() {
 
       // 3. Department filter
       if (selectedDeptFilter !== 'all') {
-        const chosenDept = departments.find(d => d.id === selectedDeptFilter || d.code === selectedDeptFilter || d.branch_cd === selectedDeptFilter);
+        const filterVal = selectedDeptFilter.toLowerCase().trim();
+        const facDeptName = (fac.department_name || '').toLowerCase().trim();
+        const facDeptCode = (fac.department_code || '').toLowerCase().trim();
+        const facDeptId = (fac.department_id || '').toLowerCase().trim();
+
         const deptMatch =
-          fac.department_id === selectedDeptFilter ||
-          fac.department_code === selectedDeptFilter ||
-          (chosenDept && (
-            fac.department_id === chosenDept.id ||
-            fac.department_code === chosenDept.code ||
-            (fac.department_name && chosenDept.name && fac.department_name.toLowerCase() === chosenDept.name.toLowerCase())
-          ));
+          facDeptName === filterVal ||
+          facDeptCode === filterVal ||
+          facDeptId === filterVal ||
+          (facDeptName && (facDeptName.includes(filterVal) || filterVal.includes(facDeptName)));
+
         if (!deptMatch) return false;
       }
 
@@ -464,21 +466,54 @@ export default function StaffAdminPage() {
     return found ? `[#${found.code || found.id}] ${found.name}` : '[#1] SRMS CET, Bareilly';
   }, [colleges, selectedCollegeFilter, userTenantSlug]);
 
-  // Filter available departments for the Filter Bar
+  // Filter available departments dynamically from actual staff records + department master
   const availableFilterDepartments = useMemo(() => {
-    if (selectedCollegeFilter === 'all') return departments;
-    const currentSelectedCol = colleges.find(c => String(c.code) === String(selectedCollegeFilter) || String(c.id) === String(selectedCollegeFilter) || c.slug === selectedCollegeFilter);
-    return departments.filter(d => {
-      if (!currentSelectedCol) return true;
-      return (
-        d.college_id === currentSelectedCol.id ||
-        d.college_slug === currentSelectedCol.slug ||
-        String(d.colg_cd) === String(currentSelectedCol.code) ||
-        String(d.colg_cd) === String(currentSelectedCol.id) ||
-        String(d.college_code) === String(currentSelectedCol.code)
-      );
+    const deptMap = new Map<string, { id: string; name: string; code?: string; count: number }>();
+
+    faculties.forEach((fac) => {
+      const dName = (fac.department_name || fac.department_code || '').trim();
+      if (!dName || dName === '-' || dName.toLowerCase() === 'null') return;
+
+      const key = dName.toLowerCase();
+      if (!deptMap.has(key)) {
+        deptMap.set(key, {
+          id: dName,
+          name: dName,
+          code: fac.department_code || undefined,
+          count: 1,
+        });
+      } else {
+        deptMap.get(key)!.count += 1;
+      }
     });
-  }, [departments, selectedCollegeFilter, colleges]);
+
+    // Also include any master departments that match the current college filter
+    const currentSelectedCol = colleges.find(c => String(c.code) === String(selectedCollegeFilter) || String(c.id) === String(selectedCollegeFilter) || c.slug === selectedCollegeFilter);
+    departments.forEach((d) => {
+      if (selectedCollegeFilter !== 'all' && currentSelectedCol) {
+        const isColMatch =
+          d.college_id === currentSelectedCol.id ||
+          d.college_slug === currentSelectedCol.slug ||
+          String(d.colg_cd) === String(currentSelectedCol.code) ||
+          String(d.colg_cd) === String(currentSelectedCol.id) ||
+          String(d.college_code) === String(currentSelectedCol.code);
+        if (!isColMatch) return;
+      }
+      const dName = (d.name || d.code || '').trim();
+      if (!dName) return;
+      const key = dName.toLowerCase();
+      if (!deptMap.has(key)) {
+        deptMap.set(key, {
+          id: dName,
+          name: d.name,
+          code: d.code || d.branch_cd,
+          count: 0,
+        });
+      }
+    });
+
+    return Array.from(deptMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [faculties, departments, selectedCollegeFilter, colleges]);
 
   return (
     <div className="flex h-screen bg-[#F6F8FC] dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 overflow-hidden">
@@ -677,8 +712,8 @@ export default function StaffAdminPage() {
                 >
                   <option value="all">🏢 All Departments ({availableFilterDepartments.length})</option>
                   {availableFilterDepartments.map((dept) => (
-                    <option key={dept.id} value={dept.id || dept.code}>
-                      {dept.name} ({dept.code || dept.branch_cd})
+                    <option key={dept.name} value={dept.name}>
+                      🏢 {dept.name} {dept.count > 0 ? `(${dept.count})` : ''}
                     </option>
                   ))}
                 </select>

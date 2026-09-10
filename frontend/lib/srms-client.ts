@@ -29,7 +29,7 @@ export const FALLBACK_COURSES_CET = [
 ];
 
 export const FALLBACK_BRANCHES_BCA = [
-  { branch_cd: '1', branch_name: 'BCA General' },
+  { branch_cd: '1', branch_name: 'BCA Department' },
 ];
 
 export const FALLBACK_BATCHES_BCA = [

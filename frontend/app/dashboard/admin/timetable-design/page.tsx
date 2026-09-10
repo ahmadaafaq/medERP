@@ -82,6 +82,7 @@ interface UnitMasterItem {
 
 interface TimetableSlot {
   id: string;
+  postgres_id?: string;
   faculty_id?: string;
   faculty_name?: string;
   faculty_code?: string;
@@ -113,6 +114,7 @@ interface TimetableSlot {
   competency_codes?: string;
   competency_ids?: string[];
   competencies_detail?: any[];
+  [key: string]: any;
 }
 
 interface CameraItem {
@@ -407,11 +409,11 @@ export default function TimetableDesignPage() {
   // Loading & Alerts
   const [loading, setLoading] = useState(false);
   const [metadataLoading, setMetadataLoading] = useState(false);
-  const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; message: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const modalScrollRef = useRef<HTMLDivElement>(null);
 
-  const showAlert = (type: 'success' | 'error' | 'info', message: string, duration = 6000) => {
+  const showAlert = (type: 'success' | 'error' | 'info' | 'warning', message: string, duration = 6000) => {
     setAlert({ type, message });
     if (duration > 0) {
       setTimeout(() => {
@@ -866,17 +868,32 @@ export default function TimetableDesignPage() {
     return [];
   };
 
-  const fetchBranchesForCourse = async (colgcd: string, coursecd: string) => {
+  const fetchBranchesForCourse = async (colgcd: string, coursecd: string, knownDepts?: DropdownItem[]) => {
     const cd = colgcd || '1';
     const crs = coursecd || '13';
+    const activeDepts = (knownDepts && knownDepts.length > 0) ? knownDepts : departmentsList;
     try {
-      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}`);
+      const activeTenant = getActiveTenantSlug();
+      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}&tenant=${activeTenant}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
           const mapped = list.map((b: any) => {
-            const rawName = b.branch_name || b.name;
-            const validName = (rawName && rawName !== '-' && rawName !== 'null') ? rawName : `${b.course_name || 'Course'} General`;
+            const rawName = (b.branch_name || b.name || '').trim();
+            let validName = (rawName && rawName !== '-' && rawName !== 'null' && !rawName.toLowerCase().includes('general')) ? rawName : '';
+            if (!validName) {
+              const matchingDept = (activeDepts || []).find((d: any) =>
+                (String(d.course_cd) === String(crs) && (String(d.branch_cd) === String(b.branch_cd || b.code) || String(d.code) === String(b.branch_cd || b.code))) ||
+                (String(d.course_cd) === String(crs))
+              );
+              if (matchingDept) {
+                validName = matchingDept.name;
+              } else if (crs === '13') {
+                validName = 'BCA Department';
+              } else {
+                validName = b.course_name ? `${b.course_name} Department` : `Branch ${b.branch_cd || '1'}`;
+              }
+            }
             return {
               id: String(b.branch_cd || b.code || '1'),
               code: String(b.branch_cd || b.code || '1'),
@@ -894,7 +911,35 @@ export default function TimetableDesignPage() {
     } catch (err) {
       console.warn('Failed to fetch branches:', err);
     }
-    return [];
+
+    // Direct fallback to PostgreSQL departments matching the course
+    const dbBranches = (activeDepts || [])
+      .filter((d: any) => String(d.course_cd) === String(crs))
+      .map((d: any) => ({
+        id: String(d.branch_cd || d.code || d.id || '1'),
+        code: String(d.branch_cd || d.code || d.id || '1'),
+        branch_cd: String(d.branch_cd || d.code || d.id || '1'),
+        name: d.name || `Department ${d.code}`,
+        course_cd: String(d.course_cd || crs),
+        course_name: d.course_name,
+        colg_cd: String(d.colg_cd || cd),
+      }));
+
+    if (dbBranches.length > 0) {
+      setBranchesList(dbBranches);
+      return dbBranches;
+    }
+
+    const fallbackBranch = [{
+      id: '1',
+      code: '1',
+      branch_cd: '1',
+      name: crs === '13' ? 'BCA Department' : 'Department 1',
+      course_cd: crs,
+      colg_cd: cd,
+    }];
+    setBranchesList(fallbackBranch);
+    return fallbackBranch;
   };
 
   const fetchBatchesForCourse = async (colgcd: string, coursecd: string) => {
@@ -992,26 +1037,7 @@ export default function TimetableDesignPage() {
       const curSess = sessions.find(s => s.code === '16') || sessions.find(s => s.is_current) || sessions[0];
       if (curSess) setSelectedSession(curSess.code);
 
-      // 3. Fetch Courses for active college
-      const courses = await fetchCoursesForCollege(activeColCode);
-      const bca = courses.find(c => c.code === '13' || c.name === 'BCA') || courses[0];
-      const initialCourseCd = bca ? bca.code : '13';
-      setSelectedCourse(initialCourseCd);
-
-      // 4. Fetch Branches for active college + course
-      const branches = await fetchBranchesForCourse(activeColCode, initialCourseCd);
-      if (branches.length > 0) {
-        setSelectedBranch(branches[0].code);
-      }
-
-      // 5. Fetch Batches for active college + course
-      const batches = await fetchBatchesForCourse(activeColCode, initialCourseCd);
-      const curBatch = batches.find(b => b.name === '2025' || b.year === 2025 || b.code === '2') || batches[0];
-      if (curBatch) {
-        setSelectedBatch(curBatch.code);
-      }
-
-      // 6. Fetch Departments, Subjects, Faculty for Timetable modal strictly scoped by tenant
+      // 3. Fetch Departments, Subjects, Faculty for Timetable modal strictly scoped by tenant
       const activeTenantSlug = role === 'SUPER_ADMIN' ? (filteredColleges[0]?.slug || 'srms-cet-bareilly') : userSlug;
       const token = localStorage.getItem('token') || '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
@@ -1025,13 +1051,13 @@ export default function TimetableDesignPage() {
         fetch(`${API_BASE}/users/faculty?tenant=${activeTenantSlug}&limit=500`, { headers }).catch(() => null),
       ]);
 
+      let loadedDepts: DropdownItem[] = [];
       if (deptRes && deptRes.ok) {
         const dJson = await deptRes.json();
         const dList = extractArray(dJson);
         if (dList.length > 0) {
+          loadedDepts = dList;
           setDepartmentsList(dList);
-          const bcaDept = dList.find((d: any) => String(d.course_cd) === String(initialCourseCd) || d.name?.includes('BCA')) || dList[0];
-          if (bcaDept) setSelectedDept(bcaDept.id || bcaDept.code);
         }
       }
       if (subRes && subRes.ok) {
@@ -1053,6 +1079,30 @@ export default function TimetableDesignPage() {
       if (facRes && facRes.ok) {
         const fJson = await facRes.json();
         setAllFaculties(extractArray(fJson));
+      }
+
+      // 4. Fetch Courses for active college
+      const courses = await fetchCoursesForCollege(activeColCode);
+      const bca = courses.find(c => c.code === '13' || c.name === 'BCA') || courses[0];
+      const initialCourseCd = bca ? bca.code : '13';
+      setSelectedCourse(initialCourseCd);
+
+      if (loadedDepts.length > 0) {
+        const bcaDept = loadedDepts.find((d: any) => String(d.course_cd) === String(initialCourseCd) || d.name?.includes('BCA')) || loadedDepts[0];
+        if (bcaDept) setSelectedDept(bcaDept.id || bcaDept.code);
+      }
+
+      // 5. Fetch Branches for active college + course with live departments matching
+      const branches = await fetchBranchesForCourse(activeColCode, initialCourseCd, loadedDepts);
+      if (branches.length > 0) {
+        setSelectedBranch(branches[0].code);
+      }
+
+      // 6. Fetch Batches for active college + course
+      const batches = await fetchBatchesForCourse(activeColCode, initialCourseCd);
+      const curBatch = batches.find(b => b.name === '2025' || b.year === 2025 || b.code === '2') || batches[0];
+      if (curBatch) {
+        setSelectedBatch(curBatch.code);
       }
     } catch (err) {
       console.error('Failed to load master metadata:', err);
@@ -1243,8 +1293,8 @@ export default function TimetableDesignPage() {
                 ? Number(item.day_of_week)
                 : (dStart.getDay() === 0 ? 7 : dStart.getDay());
 
-              const startTime = extractTimeStr(item.start_time || item.start_str, dStart);
-              const endTime = extractTimeStr(item.end_time || item.end_str, dEnd);
+              const startTime = item.start_time || extractTimeStr(item.start_str, dStart);
+              const endTime = item.end_time || extractTimeStr(item.end_str, dEnd);
 
               const rawTitle = String(item.title || item.description || item.topic || '');
               const cleanName = rawTitle.replace(/\([^)]*\)/g, '').trim();
@@ -1363,7 +1413,7 @@ export default function TimetableDesignPage() {
     const newCourseCd = firstCourse ? firstCourse.code : '1';
     setSelectedCourse(newCourseCd);
 
-    const branches = await fetchBranchesForCourse(colgCd, newCourseCd);
+    const branches = await fetchBranchesForCourse(colgCd, newCourseCd, departmentsList);
     const newBranchCd = branches[0]?.code || '1';
     if (branches.length > 0) {
       setSelectedBranch(newBranchCd);
@@ -1383,7 +1433,7 @@ export default function TimetableDesignPage() {
   const handleFilterCourseChange = async (courseCd: string) => {
     setSelectedCourse(courseCd);
 
-    const branches = await fetchBranchesForCourse(selectedCollege, courseCd);
+    const branches = await fetchBranchesForCourse(selectedCollege, courseCd, departmentsList);
     const newBranchCd = branches[0]?.code || '1';
     if (branches.length > 0) {
       setSelectedBranch(newBranchCd);
@@ -1630,20 +1680,43 @@ export default function TimetableDesignPage() {
         branch: String(selectedBranch || '1'),
         batch: String(selectedBatch || '2'),
         sem: String(selectedSemester || '3'),
+        excludeId: String(editingSlot?.id || editingSlot?.postgres_id || ''),
+        editingSlotId: String(editingSlot?.id || editingSlot?.postgres_id || ''),
       },
     };
 
     try {
-      const url = isEdit ? `${API_BASE}/timetable/${editingSlot.id}?tenant=${tenantSlug}` : `${API_BASE}/timetable?tenant=${tenantSlug}`;
-      const method = isEdit ? 'PUT' : 'POST';
+      const targetPgId = editingSlot?.postgres_id && isUUID(editingSlot.postgres_id)
+        ? editingSlot.postgres_id
+        : (editingSlot?.id && isUUID(editingSlot.id) ? editingSlot.id : null);
+      const isSlotUuid = isEdit && !!targetPgId;
+      const url = isSlotUuid ? `${API_BASE}/timetable/${targetPgId}?tenant=${tenantSlug}` : `${API_BASE}/timetable?tenant=${tenantSlug}`;
+      const method = isSlotUuid ? 'PUT' : 'POST';
       const token = localStorage.getItem('token') || '';
 
-      // 1. Call SRMS add-event API
+      // 1. Call SRMS add-event API (if edit, remove old event first to update subject/faculty accurately)
       let srmsSaved = false;
       let srmsEventId: string | null = null;
       let srmsErrorMsg = '';
 
       try {
+        if (isEdit && editingSlot?.id) {
+          // Delete old slot from SRMS portal & DB first so new subject/faculty is cleanly scheduled
+          await fetch('/api/srms/delete-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: String(editingSlot.id), colgcd: selectedCollege || '1' }),
+          }).catch(() => null);
+
+          if (editingSlot.postgres_id && editingSlot.postgres_id !== editingSlot.id) {
+            await fetch('/api/srms/delete-event', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: String(editingSlot.postgres_id), colgcd: selectedCollege || '1' }),
+            }).catch(() => null);
+          }
+        }
+
         const sRes = await fetch('/api/srms/add-event', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1657,7 +1730,7 @@ export default function TimetableDesignPage() {
           srmsErrorMsg = sJson?.error || sJson?.message || 'SRMS portal event scheduling failed.';
         }
       } catch (sErr: any) {
-        srmsErrorMsg = sErr?.message || 'Network error communicating with SRMS addEvent API.';
+        srmsErrorMsg = sErr?.message || 'Network error communicating with SRMS API.';
       }
 
       // 2. Call NestJS backend PostgreSQL timetable API
@@ -1736,35 +1809,28 @@ export default function TimetableDesignPage() {
       const tenantSlug = getActiveTenantSlug();
       const cleanId = String(slotId);
 
-      // 1. Direct browser call to official SRMS deleteEvent with authenticated cookie session
-      try {
-        await fetch('https://myportal.srms.ac.in/timetable/master/designtimetable.aspx/deleteEvent', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ id: cleanId }),
-        }).catch(() => null);
-      } catch { }
-
-      // 2. Server-side proxy call to official SRMS deleteEvent + PostgreSQL cleanup
-      await fetch('/api/srms/delete-event', {
+      // 1. Server-side proxy call to official SRMS deleteEvent + PostgreSQL cleanup
+      const srmsDelRes = await fetch('/api/srms/delete-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: cleanId }),
-      }).catch(() => { });
+        body: JSON.stringify({ id: cleanId, colgcd: selectedCollege || '1' }),
+      });
+      const srmsDelJson = await srmsDelRes.json().catch(() => null);
 
-      // 3. Delete from PostgreSQL timetable_slots
+      // 2. Delete from PostgreSQL timetable_slots
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
       await fetch(`${API_BASE}/timetable/${cleanId}?tenant=${tenantSlug}`, {
         method: 'DELETE',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       }).catch(() => { });
 
-      showAlert('success', 'Timetable session deleted successfully across SRMS Portal & Database!');
+      if (srmsDelJson?.srms_deleted) {
+        showAlert('success', 'Timetable session deleted successfully across SRMS Portal & Database!');
+      } else if (srmsDelJson?.success) {
+        showAlert('success', srmsDelJson?.message || 'Timetable session deleted from Database!');
+      } else {
+        showAlert('warning', srmsDelJson?.d || 'Session removed from database.');
+      }
       setHoveredSlotInfo(null);
       setIsModalOpen(false);
       fetchTimetableSlots();
@@ -2163,9 +2229,11 @@ export default function TimetableDesignPage() {
                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                 : alert.type === 'info'
                   ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
-                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                  : alert.type === 'warning'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                    : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
               }`}>
-              <span>{alert.type === 'success' ? '✅' : alert.type === 'info' ? 'ℹ️' : '⚠️'}</span>
+              <span>{alert.type === 'success' ? '✅' : alert.type === 'info' ? 'ℹ️' : alert.type === 'warning' ? '⚠️' : '❌'}</span>
               <span>{alert.message}</span>
             </div>
           )}
@@ -2481,16 +2549,9 @@ export default function TimetableDesignPage() {
                       <div className="flex items-center gap-2">
                         <span className="text-base shrink-0">ℹ️</span>
                         <span>
-                          <strong>No scheduled timetable found for this week ({weekRangeLabel}).</strong> Click any slot cell below to create/assign classes, or click <strong>&quot;View Aug 9 — 15 ◀&quot;</strong> to see the scheduled timetable.
+                          <strong>No scheduled timetable found for this week ({weekRangeLabel}).</strong> Click any slot cell below to create/assign classes, or use the week navigation above.
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handlePrevWeek}
-                        className="px-3 py-1.5 bg-amber-200/80 hover:bg-amber-300 dark:bg-amber-900 dark:hover:bg-amber-800 rounded-xl font-black text-xs transition-all shrink-0 shadow-sm"
-                      >
-                        View Aug 9 — 15 ◀
-                      </button>
                     </div>
                   )}
 
@@ -2539,12 +2600,11 @@ export default function TimetableDesignPage() {
                                 const safeSlots = Array.isArray(slots) ? slots : [];
                                 const cellSlotsRaw = safeSlots.filter(s => {
                                   if (!s || s.day_of_week !== day.value) return false;
-                                  const sStart = String(s.start_time || '');
-                                  const sEnd = String(s.end_time || '');
-                                  const slotStart = sStart.slice(0, 5);
+                                  const slotStart = String(s.start_time || '').slice(0, 5);
                                   const colStart = ts.start.slice(0, 5);
                                   const colEnd = ts.end.slice(0, 5);
-                                  return (slotStart >= colStart && slotStart < colEnd) || (sStart < ts.end && sEnd > ts.start);
+                                  if (!slotStart) return false;
+                                  return (slotStart >= colStart && slotStart < colEnd) || slotStart === colStart;
                                 });
 
                                 const seenCellKeys = new Set<string>();
@@ -2553,7 +2613,7 @@ export default function TimetableDesignPage() {
                                     .replace(/\([^)]*\)/g, '')
                                     .trim()
                                     .toLowerCase();
-                                  const key = `${s.day_of_week}_${s.start_time?.slice(0, 5)}_${normSub}`;
+                                  const key = `${s.id || ''}_${s.day_of_week}_${s.start_time?.slice(0, 5)}_${normSub}`;
                                   if (seenCellKeys.has(key)) return false;
                                   seenCellKeys.add(key);
                                   return true;
@@ -2611,28 +2671,8 @@ export default function TimetableDesignPage() {
                                               onMouseEnter={(e) => handleSlotMouseEnter(slot, e)}
                                               onMouseLeave={handleSlotMouseLeave}
                                             >
-                                              {/* Quick Actions on Hover */}
-                                              <div className="absolute top-1 right-1 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center gap-1 z-10 bg-white/95 dark:bg-slate-900/95 rounded-lg p-0.5 shadow-md border border-slate-200 dark:border-slate-700 no-print print:hidden">
-                                                <button
-                                                  type="button"
-                                                  onClick={(e) => { e.stopPropagation(); handleSlotClick(slot, e); }}
-                                                  className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950 rounded-md text-[10px] text-indigo-600 dark:text-indigo-400 font-bold"
-                                                  title="Edit Session"
-                                                >
-                                                  ✏️
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={(e) => { e.stopPropagation(); handleDeleteSlot(slot.id, e); }}
-                                                  className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-md text-[10px] text-rose-600 dark:text-rose-400 font-bold"
-                                                  title="Delete Session"
-                                                >
-                                                  🗑️
-                                                </button>
-                                              </div>
-
                                               {/* Subject Name Header */}
-                                              <div className="slot-subject font-black text-slate-900 dark:text-white leading-snug text-[11px] truncate pr-8" title={cleanSubName}>
+                                              <div className="slot-subject font-black text-slate-900 dark:text-white leading-snug text-[11px] truncate" title={cleanSubName}>
                                                 {cleanSubName}
                                               </div>
 

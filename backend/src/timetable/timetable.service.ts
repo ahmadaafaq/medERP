@@ -418,12 +418,48 @@ export class TimetableService implements OnModuleInit {
 
   async getSlotById(tenantSlug: string, id: string) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    if (!this.isUUID(id)) {
+      const srmsRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT * FROM srms_timetable_events WHERE id::text = $1 OR srms_id::text = $1 LIMIT 1`,
+        [id],
+      ).catch(() => []);
+      if (srmsRows.length > 0) {
+        const r = srmsRows[0];
+        return {
+          id: r.id,
+          faculty_id: r.empid,
+          subject_id: r.linkcd,
+          department_id: r.branch_cd,
+          batch_id: r.batch_cd,
+          day_of_week: r.day_of_week,
+          start_time: r.start_str?.split(' ')[1] || (r.start_time ? String(r.start_time).slice(11, 19) : '08:30:00'),
+          end_time: r.end_str?.split(' ')[1] || (r.end_time ? String(r.end_time).slice(11, 19) : '09:30:00'),
+          room: r.camera_link ? `Room 204 (Cam #${r.camera_link})` : 'Room 204',
+          slot_type: 'Lecture',
+          group_name: r.txt_g || '0',
+          topic: r.topic || r.title,
+          competency_codes: r.competency_codes,
+          unit_name: r.unit_name,
+          unit_id: r.unit_id,
+          sub_topics: r.sub_topics,
+          colg_cd: r.colg_cd,
+          course_cd: r.course_cd,
+          branch_cd: r.branch_cd,
+          batch_cd: r.batch_cd,
+          semester: r.sem_cd,
+          section: r.txt_sec,
+          description: r.description,
+        };
+      }
+      return null;
+    }
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT * FROM timetable_slots WHERE id = $1`,
       [id],
     );
-    if (rows.length === 0) throw new NotFoundException('Timetable slot not found');
+    if (rows.length === 0) return null;
     return rows[0];
   }
 
@@ -445,7 +481,10 @@ export class TimetableService implements OnModuleInit {
     } else if (table === 'departments') {
       query = `SELECT id FROM departments WHERE branch_cd = $1 OR code = $1 OR id::text = $1 OR name ILIKE '%' || $1 || '%' LIMIT 1`;
     } else if (table === 'batches') {
-      query = `SELECT id FROM batches WHERE year::text = $1 OR code = $1 OR name = $1 OR name ILIKE '%' || $1 || '%' OR id::text = $1 LIMIT 1`;
+      query = `SELECT id FROM batches 
+               WHERE batch_cd::text = $1 OR code = $1 OR year::text = $1 OR name = $1 OR id::text = $1
+               ORDER BY (CASE WHEN batch_cd::text = $1 THEN 1 WHEN code = $1 THEN 2 WHEN year::text = $1 THEN 3 WHEN name = $1 THEN 4 ELSE 5 END)
+               LIMIT 1`;
     } else {
       return null;
     }
@@ -532,6 +571,11 @@ export class TimetableService implements OnModuleInit {
   async updateSlot(tenantSlug: string, id: string, dto: UpdateTimetableSlotDto) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const current = await this.getSlotById(tenantSlug, id);
+
+    if (!current || !this.isUUID(id)) {
+      // Non-UUID or missing slot: route cleanly to createSlot
+      return this.createSlot(tenantSlug, { ...dto, ...current } as CreateTimetableSlotDto);
+    }
 
     // Resolve any incoming code/ID values in dto
     const resolvedFacultyId = dto.facultyId !== undefined ? await this.resolveToUUID(slug, 'faculty', 'facultyId', dto.facultyId) : current.faculty_id;
@@ -723,13 +767,13 @@ export class TimetableService implements OnModuleInit {
       LEFT JOIN departments d ON d.id::text = ts.department_id::text
       LEFT JOIN batches b ON b.id::text = ts.batch_id::text
       WHERE ts.day_of_week = $1
-        AND (ts.start_time, ts.end_time) OVERLAPS ($2::TIME, $3::TIME)
+        AND (ts.start_time::TIME < $3::TIME AND ts.end_time::TIME > $2::TIME)
         AND (${clauses.join(' OR ')})
     `;
 
-    if (excludeId && this.isUUID(excludeId)) {
+    if (excludeId) {
       sql += ` AND ts.id::text <> $${queryIndex}::text`;
-      params.push(excludeId);
+      params.push(String(excludeId));
     }
 
     const conflicts = await this.tenantSchemaService.queryInTenant(slug, sql, params);
@@ -744,17 +788,39 @@ export class TimetableService implements OnModuleInit {
       const semesterName = conflict.semester ? `Semester ${conflict.semester}` : 'Semester';
       const sectionName = conflict.section === '1' ? 'Section A' : conflict.section === '2' ? 'Section B' : conflict.section === '3' ? 'Section C' : conflict.section === '4' ? 'Section D' : (conflict.section ? `Section ${conflict.section}` : 'Section');
 
-      if (dto.facultyId && conflict.faculty_name) {
+      const isFacultyConflict = dto.facultyId && (
+        String(conflict.faculty_id) === String(dto.facultyId) || 
+        String(conflict.faculty_code) === String(dto.facultyId)
+      );
+
+      const isSameClassSlot = (
+        (dto.batchCd && conflict.batch_cd && String(dto.batchCd) === String(conflict.batch_cd)) ||
+        (dto.batchId && conflict.batch_id && String(dto.batchId) === String(conflict.batch_id))
+      ) && (
+        !dto.section || !conflict.section || String(dto.section) === String(conflict.section)
+      );
+
+      const isBatchConflict = !isSameClassSlot && dto.batchId && String(conflict.batch_id) === String(dto.batchId) && (
+        !dto.section || !conflict.section || conflict.section === dto.section || conflict.section === 'All'
+      );
+
+      const isGenericRoom = (r?: string) => {
+        if (!r) return true;
+        const norm = r.toLowerCase();
+        return norm === '0' || norm === '' || norm.includes('room 204') || norm.includes('cam #') || norm.includes('web cam') || norm.includes('default');
+      };
+
+      const isRoomConflict = !isSameClassSlot && dto.room && conflict.room && conflict.room === dto.room && !isGenericRoom(conflict.room);
+
+      if (isFacultyConflict && conflict.faculty_name) {
         const msg = `${conflict.faculty_name} is already assigned to ${courseName}, ${batchName}, ${semesterName}, ${sectionName} on ${dayName} (${timeRange}). Please select a different time slot or choose another faculty member, or contact the Academic Administrator or Department Clerk to resolve the schedule overlap.`;
         throw new BadRequestException(msg);
-      } else if (dto.batchId && (conflict.batch_code || conflict.batch_name)) {
+      } else if (isBatchConflict) {
         const msg = `${batchName} (${courseName}, ${semesterName}, ${sectionName}) already has a scheduled session (${conflict.subject_name || conflict.topic || 'Subject'}) on ${dayName} (${timeRange}).`;
         throw new BadRequestException(msg);
-      } else if (dto.room && conflict.room) {
+      } else if (isRoomConflict) {
         const msg = `Room (${conflict.room}) is already occupied on ${dayName} (${timeRange}).`;
         throw new BadRequestException(msg);
-      } else {
-        throw new BadRequestException(`An overlapping timetable session already exists on ${dayName} (${timeRange}).`);
       }
     }
   }

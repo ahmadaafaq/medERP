@@ -22,9 +22,13 @@ async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: 
       // Deduplicate by unique branch_name + branch_cd
       const seen = new Set<string>();
       const deduplicated: any[] = [];
+      let hasValidNames = false;
       for (const item of targetList) {
         const bCode = String(item.branch_cd || item.code || item.id || '1').trim();
         const bName = String(item.branch_name || item.name || '').trim();
+        if (bName && bName !== '-' && bName !== 'null') {
+          hasValidNames = true;
+        }
         const key = `${bCode}:::${bName.toLowerCase()}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -37,7 +41,7 @@ async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: 
         }
       }
 
-      if (deduplicated.length > 0) {
+      if (deduplicated.length > 0 && hasValidNames) {
         return NextResponse.json(deduplicated);
       }
     }
@@ -47,12 +51,36 @@ async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: 
 
   // 2. Dynamic Fallback to PostgreSQL via NestJS backend
   try {
-    const res = await fetch(`${BACKEND_API}/college-master/branches?tenant=${tenant}&course_cd=${crs}`, {
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (res.ok) {
-      const json = await res.json();
+    const [deptRes, branchRes] = await Promise.all([
+      fetch(`${BACKEND_API}/admin-master/departments?tenant=${tenant}`, {
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => null),
+      fetch(`${BACKEND_API}/college-master/branches?tenant=${tenant}&course_cd=${crs}`, {
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => null),
+    ]);
+
+    if (deptRes && deptRes.ok) {
+      const json = await deptRes.json();
+      const list = json.data || json;
+      if (Array.isArray(list) && list.length > 0) {
+        const matchingDepts = list.filter((d: any) => String(d.course_cd) === String(crs));
+        if (matchingDepts.length > 0) {
+          const mapped = matchingDepts.map((b: any) => ({
+            colg_cd: b.colg_cd || cd,
+            course_cd: String(b.course_cd || crs),
+            branch_cd: String(b.branch_cd || b.code || '1'),
+            branch_name: b.name || b.branch_name,
+          }));
+          return NextResponse.json(mapped);
+        }
+      }
+    }
+
+    if (branchRes && branchRes.ok) {
+      const json = await branchRes.json();
       const list = json.data || json;
       if (Array.isArray(list) && list.length > 0) {
         const mapped = list.map((b: any) => ({
@@ -66,6 +94,15 @@ async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: 
     }
   } catch (backendErr: any) {
     console.warn('[API /api/srms/branches] PostgreSQL backend fallback error:', backendErr?.message);
+  }
+
+  if (crs === '13') {
+    return NextResponse.json([{
+      colg_cd: cd,
+      course_cd: '13',
+      branch_cd: '1',
+      branch_name: 'BCA Department',
+    }]);
   }
 
   return NextResponse.json([]);
