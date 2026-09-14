@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Briefcase,
   Plus,
+  RotateCcw,
   X
 } from 'lucide-react';
 
@@ -65,6 +66,7 @@ export default function AdminPlacementPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState(false);
   const [deletingDriveId, setDeletingDriveId] = useState<number | null>(null);
+  const [updatingAppId, setUpdatingAppId] = useState<number | string | null>(null);
 
   // Modal Looping Section Dropdown States
   const [queuedCohorts, setQueuedCohorts] = useState<TargetCohort[]>([]);
@@ -335,18 +337,23 @@ export default function AdminPlacementPage() {
     }
   };
 
-  const handleUpdateStatus = async (appId: string, newStatus: string) => {
+  const handleUpdateStatus = async (appId: string | number, newStatus: string) => {
     try {
+      setUpdatingAppId(appId);
       const tenant = getTenantSlug();
       const headers = getAuthHeaders();
       await axios.patch(`/api/placement-drive/applicant/${appId}/status?tenant=${tenant}`, { status: newStatus }, { headers }).catch(async () => {
         return axios.patch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/applicant/${appId}/status?tenant=${tenant}`, { status: newStatus }, { headers });
       });
       setApplicantsList((prev) =>
-        prev.map((a) => (a.application_id === appId ? { ...a, status: newStatus } : a))
+        prev.map((a) => (String(a.application_id) === String(appId) ? { ...a, status: newStatus } : a))
       );
-    } catch (err) {
+      fetchDrives();
+    } catch (err: any) {
       console.error('Failed to update status:', err);
+      alert(err?.response?.data?.message || err?.message || 'Failed to update applicant status');
+    } finally {
+      setUpdatingAppId(null);
     }
   };
 
@@ -792,9 +799,9 @@ export default function AdminPlacementPage() {
 
         <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
           {/* Top Bar Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-bold text-[#5B4BFF] uppercase tracking-wider mb-1">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#F36C21] uppercase tracking-wider mb-1">
                 <span>Placement Board</span>
                 <span>•</span>
                 <span>Institutional Authority</span>
@@ -802,64 +809,71 @@ export default function AdminPlacementPage() {
               <h1 className="text-2xl sm:text-3xl font-black text-[#1B1E28] dark:text-white tracking-tight">
                 Corporate Recruitment Drives
               </h1>
-              <p className="text-xs sm:text-sm text-[#4E5969] dark:text-slate-400 mt-1">
+              <p className="text-xs sm:text-sm text-[#4E5969] dark:text-slate-400 mt-1 max-w-xl">
                 Import Excel company rosters, track applicants, review interviews, and export placed cohorts.
               </p>
             </div>
 
-            {/* Quick Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2.5">
+            {/* Quick Action Buttons - Single Row with comfortable professional padding */}
+            <div className="flex items-center gap-2.5 shrink-0 flex-nowrap overflow-x-auto pb-0.5">
               <a
                 href={`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/placement-drive/template`}
                 target="_blank"
                 rel="noreferrer"
                 download="placement-drive-import-template.xlsx"
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-sm"
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 hover:border-slate-300 dark:hover:bg-slate-700/60 shadow-xs transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 cursor-pointer"
+                title="Download Excel Import Template"
               >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                Download Format
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>Download Format</span>
               </a>
 
               <button
+                type="button"
                 onClick={handleExportAll}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 hover:border-slate-300 dark:hover:bg-slate-700/60 shadow-xs transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 cursor-pointer"
+                title="Export all placement drives to Excel"
               >
-                <Download className="w-4 h-4 text-emerald-600" />
-                Export All Placements
+                <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>Export All Placements</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setIsImportModalOpen(true)}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-[#5B4BFF]/30 text-[#5B4BFF] hover:bg-[#5B4BFF]/10 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-[#F36C21]/40 text-[#F36C21] hover:bg-[#F36C21]/10 dark:hover:bg-[#F36C21]/20 shadow-xs transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 cursor-pointer"
+                title="Import company drives from Excel"
               >
-                <UploadCloud className="w-4 h-4" />
-                Import Excel Drives
+                <UploadCloud className="w-3.5 h-3.5 text-[#F36C21] shrink-0" />
+                <span>Import Excel Drives</span>
               </button>
 
               <button
+                type="button"
                 onClick={handleOpenCreateModal}
-                className="px-5 py-2.5 rounded-xl text-xs font-black bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-md transition-all flex items-center gap-2 active:scale-95"
+                className="px-4 py-2 rounded-xl text-xs font-black bg-[#F36C21] hover:bg-[#e05e16] text-white shadow-sm hover:shadow shadow-[#F36C21]/25 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 cursor-pointer"
+                title="Post new recruitment drive"
               >
-                <Plus className="w-4 h-4" />
-                Post Placement Drive
+                <Plus className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+                <span>Post Placement Drive</span>
               </button>
             </div>
           </div>
 
-          {/* Academic Hierarchy Cascading Filter Bar (Matching Timetable Design Photo 1) */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-4 shadow-sm space-y-3">
-            <div className="flex flex-wrap items-center gap-2.5">
-              
+          {/* Academic Hierarchy Cascading Filter Bar */}
+          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-3.5 sm:p-4 shadow-sm space-y-2.5">
+            {/* Row 1: Academic Cohort Hierarchy */}
+            <div className="flex flex-wrap items-center gap-2">
               {/* 1. College Selector — Locked for Non-SuperAdmins */}
-              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300/80 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-xs hover:border-[#5B4BFF]/40 transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1 text-xs shrink-0">
                   <span>🏛️</span> College:
                 </span>
                 <select
                   value={selectedCollege}
                   disabled={userRole !== 'SUPER_ADMIN'}
                   onChange={(e) => handleFilterCollegeChange(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer disabled:cursor-not-allowed text-xs max-w-[220px] truncate"
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer disabled:cursor-not-allowed text-xs max-w-[170px] truncate"
                 >
                   {collegesList.map((colg, idx) => (
                     <option key={colg.code || idx} value={colg.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
@@ -875,14 +889,14 @@ export default function AdminPlacementPage() {
               </div>
 
               {/* 2. Course Selector */}
-              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300/80 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-xs hover:border-[#5B4BFF]/40 transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1 text-xs shrink-0">
                   <span>🎓</span> Course <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({coursesList.length})</span>:
                 </span>
                 <select
                   value={selectedCourse}
                   onChange={(e) => handleFilterCourseChange(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
                 >
                   <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Courses</option>
                   {coursesList.map((crs, idx) => (
@@ -894,14 +908,14 @@ export default function AdminPlacementPage() {
               </div>
 
               {/* 3. Branch Selector */}
-              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300/80 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-xs hover:border-[#5B4BFF]/40 transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1 text-xs shrink-0">
                   <span>🏢</span> Branch <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({branchesList.length})</span>:
                 </span>
                 <select
                   value={selectedBranch}
                   onChange={(e) => handleFilterBranchChange(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
                 >
                   <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Branches</option>
                   {branchesList.map((br: any, idx: number) => (
@@ -913,14 +927,14 @@ export default function AdminPlacementPage() {
               </div>
 
               {/* 4. Batch Selector */}
-              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-indigo-400/60 dark:border-indigo-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF] transition-all">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-indigo-400/60 dark:border-indigo-700 rounded-xl px-3 py-2 text-xs shadow-xs hover:border-[#5B4BFF] transition-all">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1 text-xs shrink-0">
                   <span>👥</span> Batch <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({batchesList.length})</span> *:
                 </span>
                 <select
                   value={selectedBatch}
                   onChange={(e) => handleFilterBatchChange(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-black focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
+                  className="bg-transparent text-slate-900 dark:text-white font-black focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
                 >
                   <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Batches</option>
                   {batchesList.map((batch, idx) => (
@@ -930,16 +944,19 @@ export default function AdminPlacementPage() {
                   ))}
                 </select>
               </div>
+            </div>
 
+            {/* Row 2: Refinement & Search */}
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
               {/* 5. Semester Selector */}
-              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300/80 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-xs hover:border-[#5B4BFF]/40 transition-all shrink-0">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1 text-xs shrink-0">
                   <span>📖</span> Semester:
                 </span>
                 <select
                   value={selectedSemester}
                   onChange={(e) => handleFilterSemesterChange(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[120px] truncate"
                 >
                   <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Semesters</option>
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
@@ -951,14 +968,14 @@ export default function AdminPlacementPage() {
               </div>
 
               {/* 6. Status Selector */}
-              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
+              <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300/80 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-xs hover:border-[#5B4BFF]/40 transition-all shrink-0">
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1 text-xs shrink-0">
                   <span>📊</span> Status:
                 </span>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[110px] truncate"
                 >
                   <option value="ALL" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Statuses</option>
                   <option value="OPEN" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Open / Active</option>
@@ -966,18 +983,37 @@ export default function AdminPlacementPage() {
                 </select>
               </div>
 
-              {/* Search Bar Inline */}
+              {/* Search Bar Inline with proper py-2 padding */}
               <div className="relative flex-1 min-w-[200px]">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search company, role, package..."
-                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                  className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300/80 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] transition-all"
                 />
               </div>
 
+              {/* Reset Filter Button (if filtered) */}
+              {(selectedCourse !== 'ALL' || selectedBranch !== 'ALL' || selectedBatch !== 'ALL' || selectedSemester !== 'ALL' || statusFilter !== 'ALL' || search) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCourse('ALL');
+                    setSelectedBranch('ALL');
+                    setSelectedBatch('ALL');
+                    setSelectedSemester('ALL');
+                    setStatusFilter('ALL');
+                    setSearch('');
+                  }}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 shadow-xs"
+                  title="Reset all filters"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1055,6 +1091,8 @@ export default function AdminPlacementPage() {
         <ImportDrivesModal
           onClose={() => setIsImportModalOpen(false)}
           onSuccess={() => fetchDrives()}
+          selectedCollege={selectedCollege}
+          coursesList={coursesList}
         />
       )}
 
@@ -1183,23 +1221,38 @@ export default function AdminPlacementPage() {
                         <td className="p-3.5 text-right space-x-1.5">
                           <button
                             onClick={() => handleUpdateStatus(app.application_id, 'Shortlisted')}
-                            className="px-2.5 py-1 rounded-lg font-bold text-[11px] bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:text-indigo-300 transition-all"
+                            disabled={String(updatingAppId) === String(app.application_id)}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                              app.status === 'Shortlisted'
+                                ? 'bg-[#5B4BFF] text-white shadow-xs font-black'
+                                : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:text-indigo-300'
+                            }`}
                           >
-                            Shortlist
+                            {String(updatingAppId) === String(app.application_id) ? '...' : 'Shortlist'}
                           </button>
 
                           <button
                             onClick={() => handleUpdateStatus(app.application_id, 'Selected')}
-                            className="px-2.5 py-1 rounded-lg font-bold text-[11px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-300 transition-all"
+                            disabled={String(updatingAppId) === String(app.application_id)}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                              app.status === 'Selected'
+                                ? 'bg-emerald-600 text-white shadow-xs font-black'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-300'
+                            }`}
                           >
-                            Select (Place)
+                            {String(updatingAppId) === String(app.application_id) ? '...' : 'Select (Place)'}
                           </button>
 
                           <button
                             onClick={() => handleUpdateStatus(app.application_id, 'Rejected')}
-                            className="px-2.5 py-1 rounded-lg font-bold text-[11px] bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-300 transition-all"
+                            disabled={String(updatingAppId) === String(app.application_id)}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                              app.status === 'Rejected'
+                                ? 'bg-rose-600 text-white shadow-xs font-black'
+                                : 'bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-300'
+                            }`}
                           >
-                            Reject
+                            {String(updatingAppId) === String(app.application_id) ? '...' : 'Reject'}
                           </button>
                         </td>
                       </tr>

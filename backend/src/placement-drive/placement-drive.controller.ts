@@ -12,7 +12,8 @@ import {
   UploadedFile,
   Request, 
   ParseIntPipe,
-  BadRequestException
+  BadRequestException,
+  Headers
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PlacementDriveService } from './placement-drive.service';
@@ -51,15 +52,20 @@ export class PlacementDriveController {
       tokenUser = req.user;
     }
 
+    const email = tokenUser?.email || req.headers?.['x-user-email'] || '';
+    const emailPrefix = email.includes('@') ? email.split('@')[0] : '';
+    const isPrefixDigits = /^\d{5,}$/.test(emailPrefix);
+
     const regNo =
       dto?.student_reg_no ||
       req.headers?.['x-user-reg-no'] ||
-      req.headers?.['x-user-id'] ||
+      (req.headers?.['x-user-id'] && !req.headers?.['x-user-id'].includes('-') ? req.headers?.['x-user-id'] : '') ||
       req.query?.student_reg_no ||
       req.query?.regNo ||
       tokenUser?.registration_no ||
       tokenUser?.username ||
       tokenUser?.rollno ||
+      (isPrefixDigits ? emailPrefix : '') ||
       tokenUser?.sub ||
       '';
 
@@ -68,12 +74,13 @@ export class PlacementDriveController {
 
     return {
       id: tokenUser?.id || tokenUser?.sub || regNo,
+      sub: tokenUser?.sub || tokenUser?.id,
       registration_no: regNo,
       username: regNo,
       rollno: regNo,
       role,
       name,
-      email: tokenUser?.email || req.headers?.['x-user-email'] || '',
+      email,
     };
   }
 
@@ -230,12 +237,32 @@ export class PlacementDriveController {
   }
 
   @Public()
+  @Patch('applicant/:appId/status')
+  async updateApplicantStatusByParam(
+    @TenantSlug() tenantSlug: string,
+    @Param('appId', ParseIntPipe) appId: number,
+    @Query('tenant') queryTenant: string,
+    @Headers('x-tenant-slug') headerTenant: string,
+    @Body() dto: Partial<UpdateApplicantStatusDto>,
+  ) {
+    const slug = queryTenant || headerTenant || tenantSlug;
+    return this.placementDriveService.updateApplicantStatus(slug, {
+      ...dto,
+      application_id: appId,
+      status: dto.status || 'Applied',
+    } as UpdateApplicantStatusDto);
+  }
+
+  @Public()
   @Patch('shortlist')
   async updateApplicantStatus(
     @TenantSlug() tenantSlug: string,
+    @Query('tenant') queryTenant: string,
+    @Headers('x-tenant-slug') headerTenant: string,
     @Body() dto: UpdateApplicantStatusDto,
   ) {
-    return this.placementDriveService.updateApplicantStatus(tenantSlug, dto);
+    const slug = queryTenant || headerTenant || tenantSlug;
+    return this.placementDriveService.updateApplicantStatus(slug, dto);
   }
 
   @Public()

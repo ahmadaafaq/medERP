@@ -52,6 +52,10 @@ export default function StudentOffersCard({
     }
   };
 
+  const shortlistedDrives = offers.filter(
+    (o) => /shortlist/i.test(o.status)
+  );
+
   const receivedOffers = offers.filter(
     (o) => o.status === 'Selected' || o.offer_status === 'accepted' || o.offer_status === 'declined'
   );
@@ -80,6 +84,44 @@ export default function StudentOffersCard({
             : 'Explore visiting companies below and submit your drive applications.'}
         </div>
       </div>
+
+      {/* Shortlisted for Next Round Roster */}
+      {shortlistedDrives.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#5B4BFF] dark:text-[#7867FF]" />
+            <h4 className="text-xs font-black text-[#5B4BFF] dark:text-[#7867FF] uppercase tracking-wider">
+              Shortlisted for Interview / Next Round ({shortlistedDrives.length})
+            </h4>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {shortlistedDrives.map((drive) => (
+              <div
+                key={drive.application_id}
+                className="p-3.5 rounded-2xl bg-[#5B4BFF]/5 dark:bg-[#5B4BFF]/10 border border-[#5B4BFF]/20 flex items-center justify-between gap-3 shadow-xs"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#5B4BFF] text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                    {drive.company_name?.charAt(0) || 'C'}
+                  </div>
+                  <div>
+                    <h5 className="font-extrabold text-xs text-slate-900 dark:text-white">
+                      {drive.company_name}
+                    </h5>
+                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400">
+                      {drive.role} • {drive.package_ctc}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg text-[11px] font-black bg-[#5B4BFF]/15 text-[#5B4BFF] dark:text-[#7867FF] border border-[#5B4BFF]/30 shrink-0 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#5B4BFF] animate-ping" />
+                  Shortlisted
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Offers Roster */}
       {receivedOffers.length > 0 ? (

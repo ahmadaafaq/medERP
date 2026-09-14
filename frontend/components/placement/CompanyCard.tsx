@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, Calendar, MapPin, DollarSign, Award, ChevronRight, CheckCircle2, AlertCircle, Trash2, Loader2, Pencil } from 'lucide-react';
+import { Building2, Calendar, MapPin, DollarSign, Award, ChevronRight, CheckCircle2, AlertCircle, Trash2, Loader2, Pencil, Zap, XCircle, Sparkles } from 'lucide-react';
 
 export interface PlacementCompany {
   drive_id: number;
@@ -375,12 +375,48 @@ export default function CompanyCard({
 
         {role === 'student' && (
           <div>
-            {(company.has_applied || (company as any).my_application || company.application_status) ? (
-              <span className="px-3.5 py-2 rounded-xl text-xs font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 shadow-sm">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Applied ({company.application_status || (company as any).my_application?.status || 'Under Review'})</span>
-              </span>
-            ) : (
+            {(company.has_applied || (company as any).my_application || company.application_status) ? (() => {
+              const currentStatus = String(
+                company.application_status || (company as any).my_application?.status || 'Applied'
+              ).trim();
+              const isSelected = /select|place/i.test(currentStatus);
+              const isShortlisted = /shortlist/i.test(currentStatus);
+              const isRejected = /reject/i.test(currentStatus);
+
+              if (isSelected) {
+                return (
+                  <span className="px-3.5 py-2 rounded-xl text-xs font-black bg-emerald-500/15 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-xs">
+                    <span className="text-sm">🎉</span>
+                    <span>Selected (Placed)</span>
+                  </span>
+                );
+              }
+
+              if (isShortlisted) {
+                return (
+                  <span className="px-3.5 py-2 rounded-xl text-xs font-black bg-[#5B4BFF]/15 text-[#5B4BFF] dark:text-[#7867FF] border border-[#5B4BFF]/30 flex items-center gap-1.5 shadow-xs animate-pulse">
+                    <Zap className="w-3.5 h-3.5 text-[#5B4BFF] fill-[#5B4BFF] dark:text-[#7867FF] dark:fill-[#7867FF]" />
+                    <span>Shortlisted for Next Round</span>
+                  </span>
+                );
+              }
+
+              if (isRejected) {
+                return (
+                  <span className="px-3.5 py-2 rounded-xl text-xs font-black bg-rose-500/15 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1.5 shadow-xs">
+                    <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                    <span>Not Selected (Rejected)</span>
+                  </span>
+                );
+              }
+
+              return (
+                <span className="px-3.5 py-2 rounded-xl text-xs font-black bg-amber-500/15 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1.5 shadow-xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span>Applied (Under Review)</span>
+                </span>
+              );
+            })() : (
               <button
                 onClick={() => onApply?.(company)}
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-[#5B4BFF] hover:bg-[#4a3ae0] text-white shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"

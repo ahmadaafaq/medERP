@@ -1282,8 +1282,18 @@ export default function TimetableDesignPage() {
           const mappedSlots: TimetableSlot[] = json.data
             .filter((item: any) => {
               if (item.Cancel_flg === '1') return false;
-              const dStart = parseItemDate(item.start);
               if (['679267', '679268', '679303'].includes(String(item.id))) return false;
+
+              // Ensure item falls strictly within the currently selected week date bounds
+              if (item.start) {
+                const dStart = parseItemDate(item.start);
+                const startTimeMs = dStart.getTime();
+                if (!isNaN(startTimeMs)) {
+                  if (startTimeMs < sundayStart.getTime() || startTimeMs >= sundayEnd.getTime()) {
+                    return false;
+                  }
+                }
+              }
               return true;
             })
             .map((item: any) => {
@@ -1605,7 +1615,23 @@ export default function TimetableDesignPage() {
 
     const subTopicsStr = formData.subTopics || selectedCompetencies.join(', ') || '';
 
-    // 1. PostgreSQL Save Payload with all academic hierarchy & unit/topic/subtopic parameters
+    // Compute exact week range and date for the active week view
+    const targetBase = new Date(currentDate);
+    const currDay = targetBase.getDay();
+    const mondayDiff = targetBase.getDate() - currDay + (currDay === 0 ? -6 : 1);
+    const mondayDate = new Date(targetBase.getFullYear(), targetBase.getMonth(), mondayDiff);
+    const sundayDate = new Date(mondayDate);
+    sundayDate.setDate(mondayDate.getDate() + 6);
+
+    const slotDate = new Date(mondayDate);
+    slotDate.setDate(mondayDate.getDate() + (formData.dayOfWeek - 1));
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const ymdDateStr = `${slotDate.getFullYear()}-${pad(slotDate.getMonth() + 1)}-${pad(slotDate.getDate())}`;
+    const effFromStr = `${mondayDate.getFullYear()}-${pad(mondayDate.getMonth() + 1)}-${pad(mondayDate.getDate())}`;
+    const effUntilStr = `${sundayDate.getFullYear()}-${pad(sundayDate.getMonth() + 1)}-${pad(sundayDate.getDate())}`;
+
+    // 1. PostgreSQL Save Payload with all academic hierarchy, effective duration & unit/topic/subtopic parameters
     const pgPayload = {
       dayOfWeek: formData.dayOfWeek,
       startTime: formData.startTime,
@@ -1633,19 +1659,9 @@ export default function TimetableDesignPage() {
       semester: selectedSemester || '3',
       section: formData.sectionValue || selectedSection || '1',
       description: formData.subjectDescription || `${subTitle}${facName ? ' ' + facName : ''}`,
+      effectiveFrom: effFromStr,
+      effectiveUntil: effUntilStr,
     };
-
-    // 2. Compute exact date for the active week view
-    const targetBase = new Date(currentDate);
-    const currDay = targetBase.getDay();
-    const mondayDiff = targetBase.getDate() - currDay + (currDay === 0 ? -6 : 1);
-    const mondayDate = new Date(targetBase.getFullYear(), targetBase.getMonth(), mondayDiff);
-
-    const slotDate = new Date(mondayDate);
-    slotDate.setDate(mondayDate.getDate() + (formData.dayOfWeek - 1));
-
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const ymdDateStr = `${slotDate.getFullYear()}-${pad(slotDate.getMonth() + 1)}-${pad(slotDate.getDate())}`;
 
     const formatTimeTo24h = (timeStr: string) => {
       const [h, m] = timeStr.split(':').map(Number);

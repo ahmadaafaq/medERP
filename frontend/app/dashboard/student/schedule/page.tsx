@@ -85,13 +85,25 @@ export default function StudentSchedulePage() {
           const meJson = await meRes.json();
           const meData = meJson.data || meJson;
           const p = meData.profile || meData;
-          courseCd = p.course_cd || meData.course_cd || meData.courseCd || (p.course_name?.includes('BCA') ? '13' : '');
+          courseCd = p.course_cd || meData.course_cd || meData.courseCd || '';
           branchCd = p.branch_cd || meData.branch_cd || meData.branchCd || '1';
           batchCd = p.batch_cd || meData.batch_cd || meData.batchCd || '2';
           batchId = p.batch_id || meData.batch_id || meData.batchId || '';
           semester = p.semester || p.current_semester || meData.semester || '3';
           section = p.section || meData.section || '1';
           colgCd = p.colg_cd || meData.colg_cd || meData.colgcd || '1';
+        }
+
+        if (!courseCd) {
+          try {
+            const cachedUserStr = getStorageItem('user');
+            if (cachedUserStr) {
+              const cached = JSON.parse(cachedUserStr);
+              const cp = cached?.profile || cached || {};
+              courseCd = cp.course_cd || cached?.courseCd || cached?.course_cd || '';
+              if (!batchCd) batchCd = cp.batch_cd || cached?.batchCd || cached?.batch_cd || '2';
+            }
+          } catch {}
         }
       } catch {
         // Continue with query
@@ -254,13 +266,13 @@ export default function StudentSchedulePage() {
                             {item.start_time?.slice(0, 5)} - {item.end_time?.slice(0, 5)}
                           </span>
                           <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs">
-                            {item.subject_code || 'BCA'} • {item.slot_type || 'LECTURE'}
+                            {item.subject_code || (isMedical ? 'MBBS' : 'CLASS')} • {item.slot_type || 'LECTURE'}
                           </span>
                         </div>
 
                         <div>
                           <span className="text-xs font-mono font-black text-[#5B4BFF] dark:text-indigo-300 uppercase">
-                            {item.subject_code || 'BCA'}
+                            {item.subject_code || (isMedical ? 'MBBS' : 'CLASS')}
                           </span>
                           <h4 className="font-black text-base text-[#1B1E28] dark:text-white group-hover:text-[#5B4BFF] transition-colors">
                             {item.subject_name || 'Engineering Subject'}
@@ -290,7 +302,7 @@ export default function StudentSchedulePage() {
                               {/* Top Header Ribbon */}
                               <div className="flex items-center justify-between text-xs pb-2 border-b border-[#E5E8ED] dark:border-slate-800">
                                 <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#F36C21] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/40 shadow-xs uppercase">
-                                  {item.subject_code || 'BCA'} • {item.slot_type || 'LECTURE'}
+                                  {item.subject_code || (isMedical ? 'MBBS' : 'CLASS')} • {item.slot_type || 'LECTURE'}
                                 </span>
                                 <span className="font-mono text-[#475467] dark:text-indigo-200 text-xs font-bold">
                                   🕒 {item.start_time?.slice(0, 5)} - {item.end_time?.slice(0, 5)}

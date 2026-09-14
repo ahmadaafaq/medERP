@@ -344,11 +344,39 @@ export class NoticesController {
   // ──────────────────────────────────────────────────────────────────────────
   // RECIPIENT NOTICES (Role-Scoped for Current Logged-In User)
   // ──────────────────────────────────────────────────────────────────────────
-  private extractRecipientUser(req: any): { userId?: string; userRole: string } {
+  private extractRecipientUser(req: any): {
+    userId?: string;
+    userRole: string;
+    courseCd?: string;
+    branchCd?: string;
+    deptId?: string;
+    batchCd?: string;
+  } {
+    let courseCd =
+      req.headers?.['x-user-course-cd'] ||
+      req.headers?.['x-course-cd'] ||
+      req.query?.courseCd;
+    let branchCd =
+      req.headers?.['x-user-branch-cd'] ||
+      req.headers?.['x-branch-cd'] ||
+      req.query?.branchCd;
+    let deptId =
+      req.headers?.['x-user-dept-id'] ||
+      req.headers?.['x-dept-id'] ||
+      req.query?.deptId;
+    let batchCd =
+      req.headers?.['x-user-batch-cd'] ||
+      req.headers?.['x-batch-cd'] ||
+      req.query?.batchCd;
+
     if (req.user && req.user.role) {
       return {
         userId: req.user.sub || req.user.id || req.user.userId,
         userRole: (req.user.role || '').toUpperCase(),
+        courseCd: courseCd || req.user.course_cd || req.user.courseCd,
+        branchCd: branchCd || req.user.branch_cd || req.user.branchCd,
+        deptId: deptId || req.user.department_id || req.user.deptId,
+        batchCd: batchCd || req.user.batch_cd || req.user.batchCd,
       };
     }
 
@@ -378,7 +406,12 @@ export class NoticesController {
       'STUDENT'
     ).toUpperCase();
 
-    return { userId, userRole };
+    courseCd = courseCd || tokenUser?.course_cd || tokenUser?.courseCd;
+    branchCd = branchCd || tokenUser?.branch_cd || tokenUser?.branchCd;
+    deptId = deptId || tokenUser?.department_id || tokenUser?.deptId;
+    batchCd = batchCd || tokenUser?.batch_cd || tokenUser?.batchCd;
+
+    return { userId, userRole, courseCd, branchCd, deptId, batchCd };
   }
 
   @Public()
@@ -391,8 +424,13 @@ export class NoticesController {
     @Query('tenant') queryTenant?: string,
   ) {
     const slug = queryTenant || tenantSlug;
-    const { userId, userRole } = this.extractRecipientUser(req);
-    const data = await this.noticesService.getRoleScopedNotices(userId, userRole, filter, slug);
+    const { userId, userRole, courseCd, branchCd, deptId, batchCd } = this.extractRecipientUser(req);
+    const data = await this.noticesService.getRoleScopedNotices(userId, userRole, filter, slug, {
+      courseCd,
+      branchCd,
+      deptId,
+      batchCd,
+    });
     return { success: true, data };
   }
 
@@ -405,8 +443,13 @@ export class NoticesController {
     @Query('tenant') queryTenant?: string,
   ) {
     const slug = queryTenant || tenantSlug;
-    const { userId, userRole } = this.extractRecipientUser(req);
-    const data = await this.noticesService.getUnreadCount(userId, userRole, slug);
+    const { userId, userRole, courseCd, branchCd, deptId, batchCd } = this.extractRecipientUser(req);
+    const data = await this.noticesService.getUnreadCount(userId, userRole, slug, {
+      courseCd,
+      branchCd,
+      deptId,
+      batchCd,
+    });
     return { success: true, data };
   }
 

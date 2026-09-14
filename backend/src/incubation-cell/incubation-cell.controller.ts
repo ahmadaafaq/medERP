@@ -66,9 +66,11 @@ export class IncubationCellController {
   async getIncubationProjects(
     @TenantSlug() tenantSlug: string,
     @Query() query: QueryIncubationProjectsDto,
+    @Request() req: any,
   ) {
     const slug = query.tenant || tenantSlug;
-    return this.incubationService.getIncubationProjects(slug, query);
+    const user = this.extractUser(req);
+    return this.incubationService.getIncubationProjects(slug, query, user);
   }
 
   @Public()

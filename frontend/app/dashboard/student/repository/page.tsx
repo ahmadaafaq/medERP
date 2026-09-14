@@ -68,8 +68,8 @@ export default function StudentRepositoryPage() {
   }, []);
 
   const getStudentIdentity = () => {
-    let regNo = '2025107990';
-    let name = 'AAFREEN KHAN';
+    let regNo = '';
+    let name = '';
     if (typeof window !== 'undefined') {
       try {
         const cachedUserStr = localStorage.getItem('user');
@@ -83,8 +83,8 @@ export default function StudentRepositoryPage() {
             p.reg_no ||
             p.rollno ||
             cached?.rollno ||
-            regNo;
-          name = cached?.name || p.name || cached?.student_name || name;
+            '';
+          name = cached?.name || p.name || cached?.student_name || '';
         }
       } catch {}
     }
@@ -96,6 +96,12 @@ export default function StudentRepositoryPage() {
     const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const { regNo, name } = getStudentIdentity();
+
+    if (!regNo) {
+      setRepositories([]);
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/list?student_reg_no=${regNo}&tenant=${slug}`, {

@@ -629,16 +629,27 @@ export class UsersService {
     let userId: string;
     if (emailCheck.length > 0) {
       userId = emailCheck[0].id;
-      // Update role and status if needed
-      await this.ds.query(
-        `UPDATE "${schema}".users SET role = $1, is_active = COALESCE($2, true) WHERE id = $3`,
-        [role, dto.isActive ?? true, userId],
-      ).catch(() => { });
+      // Update role, password (if provided), emp_id and status
+      if (dto.password) {
+        await this.ds.query(
+          `UPDATE "${schema}".users 
+           SET role = $1, is_active = COALESCE($2, true), password_hash = $3, emp_id = COALESCE($4, emp_id), updated_at = NOW() 
+           WHERE id = $5`,
+          [role, dto.isActive ?? true, hash, dto.empId || null, userId],
+        ).catch(() => { });
+      } else {
+        await this.ds.query(
+          `UPDATE "${schema}".users 
+           SET role = $1, is_active = COALESCE($2, true), emp_id = COALESCE($3, emp_id), updated_at = NOW() 
+           WHERE id = $4`,
+          [role, dto.isActive ?? true, dto.empId || null, userId],
+        ).catch(() => { });
+      }
     } else {
       const userRows = await this.ds.query(
-        `INSERT INTO "${schema}".users (email, password_hash, role, must_change_password, is_active)
-         VALUES ($1,$2,$3,true,COALESCE($4, true)) RETURNING id`,
-        [emailStr, hash, role, dto.isActive ?? true],
+        `INSERT INTO "${schema}".users (email, password_hash, role, emp_id, must_change_password, is_active)
+         VALUES ($1,$2,$3,$4,true,COALESCE($5, true)) RETURNING id`,
+        [emailStr, hash, role, dto.empId || null, dto.isActive ?? true],
       );
       userId = userRows[0].id;
     }

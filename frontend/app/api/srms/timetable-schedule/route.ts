@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import https from 'https';
 
+export const dynamic = 'force-dynamic';
+
 function fetchSrmsJson(urlStr: string): Promise<any[]> {
   return new Promise((resolve) => {
     try {
@@ -179,7 +181,11 @@ export async function GET(request: NextRequest) {
       const whereClauses: string[] = [`(colg_cd = $1 OR colg_cd IS NULL)`];
       const queryParams: any[] = [colgcd];
 
+      let weekStartIso = '';
+      let weekEndIso = '';
       if (!isNaN(startTimestamp) && !isNaN(endTimestamp) && startTimestamp > 0 && endTimestamp > 0) {
+        weekStartIso = new Date(startTimestamp * 1000).toISOString().slice(0, 10);
+        weekEndIso = new Date(endTimestamp * 1000).toISOString().slice(0, 10);
         queryParams.push(new Date(startTimestamp * 1000).toISOString());
         queryParams.push(new Date(endTimestamp * 1000).toISOString());
         whereClauses.push(`(start_time >= $${queryParams.length - 1} AND start_time <= $${queryParams.length})`);
@@ -189,6 +195,8 @@ export async function GET(request: NextRequest) {
         const startOfWeek = new Date(targetBase.getFullYear(), targetBase.getMonth(), targetBase.getDate() - day, 0, 0, 0);
         const endOfWeek = new Date(startOfWeek);
         endOfWeek.setDate(startOfWeek.getDate() + 7);
+        weekStartIso = startOfWeek.toISOString().slice(0, 10);
+        weekEndIso = endOfWeek.toISOString().slice(0, 10);
         queryParams.push(startOfWeek.toISOString());
         queryParams.push(endOfWeek.toISOString());
         whereClauses.push(`(start_time >= $${queryParams.length - 1} AND start_time <= $${queryParams.length})`);
@@ -256,7 +264,7 @@ export async function GET(request: NextRequest) {
         };
       });
 
-      // Also query timetable_slots to include medERP scheduled slots
+      // Also query timetable_slots strictly for the active duration where user designed/assigned timetable
       const slotWhereClauses: string[] = [`(ts.colg_cd = $1 OR ts.colg_cd IS NULL)`];
       const slotQueryParams: any[] = [colgcd];
       if (course && course !== 'all') {
@@ -278,6 +286,19 @@ export async function GET(request: NextRequest) {
       if (sec && sec !== 'all') {
         slotQueryParams.push(String(sec));
         slotWhereClauses.push(`(ts.section = $${slotQueryParams.length} OR ts.section IS NULL OR ts.section = '1' OR ts.section = 'A')`);
+      }
+
+      // STRICT DURATION ISOLATION:
+      // Only include timetable_slots if the slot's effective duration overlaps with the queried week.
+      // Unscheduled future weeks must remain completely blank.
+      if (weekStartIso && weekEndIso) {
+        slotQueryParams.push(weekEndIso);
+        slotWhereClauses.push(`(ts.effective_from IS NOT NULL AND ts.effective_from::date <= $${slotQueryParams.length}::date)`);
+        slotQueryParams.push(weekStartIso);
+        slotWhereClauses.push(`(ts.effective_until IS NOT NULL AND ts.effective_until::date >= $${slotQueryParams.length}::date)`);
+      } else {
+        // Without explicit week boundaries, never project slots indefinitely
+        slotWhereClauses.push(`1=0`);
       }
 
       const pgSlots = await queryDb(

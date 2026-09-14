@@ -172,27 +172,56 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
         const json = await res.json();
         let list: ChatGroup[] = json.data || [];
 
-        // When role is STUDENT, filter by student's batch if known, preserving active groups with messages
+        // When role is STUDENT, strictly scope to student's program and batch (never leak other courses)
         if (role === 'STUDENT') {
           let studentBatch = '';
+          let studentCourse = '';
+          let studentDept = '';
           if (typeof window !== 'undefined') {
             try {
               const cachedStr = localStorage.getItem('user');
               if (cachedStr) {
                 const parsed = JSON.parse(cachedStr);
                 const p = parsed?.profile || parsed || {};
-                studentBatch = String(p.batch_year || p.batch_cd || parsed?.batchCd || '').trim();
+                studentBatch = String(p.batch_year || p.batch_cd || parsed?.batchCd || parsed?.batch_cd || '').trim();
+                studentCourse = String(p.course_name || p.course_cd || parsed?.courseName || parsed?.courseCd || '').toUpperCase().trim();
+                studentDept = String(p.department_name || parsed?.departmentName || parsed?.department || '').toUpperCase().trim();
               }
             } catch {}
           }
 
-          if (studentBatch) {
-            list = list.filter((g) => {
-              const groupBatch = String(g.batch_year || g.batch_code || '').trim();
-              const groupName = String(g.name || '').trim();
-              return groupBatch.includes(studentBatch) || groupName.includes(studentBatch) || !!g.last_message?.body;
-            });
-          }
+          const isMba = studentCourse.includes('MBA') || studentCourse === '4' || studentDept.includes('MBA');
+          const isBca = studentCourse.includes('BCA') || studentCourse === '13' || studentDept.includes('BCA');
+          const isMca = studentCourse.includes('MCA') || studentCourse === '3' || studentDept.includes('MCA');
+          const isBtech = studentCourse.includes('B.TECH') || studentCourse === '1' || studentDept.includes('B.TECH');
+
+          list = list.filter((g) => {
+            const groupName = String(g.name || '').toUpperCase();
+            const groupDept = String(g.department_name || '').toUpperCase();
+            const groupBatch = String(g.batch_year || g.batch_code || '').trim();
+
+            // Strict cross-course isolation:
+            if (isMba && (groupName.includes('BCA') || groupDept.includes('BCA') || groupName.includes('B.TECH') || groupName.includes('MCA') || groupName.includes('PHARM'))) {
+              return false;
+            }
+            if (isBca && (groupName.includes('MBA') || groupDept.includes('MBA') || groupName.includes('B.TECH') || groupName.includes('MCA') || groupName.includes('PHARM'))) {
+              return false;
+            }
+            if (isMca && (groupName.includes('MBA') || groupDept.includes('MBA') || groupName.includes('BCA') || groupName.includes('B.TECH'))) {
+              return false;
+            }
+            if (isBtech && (groupName.includes('MBA') || groupDept.includes('MBA') || groupName.includes('BCA') || groupName.includes('MCA'))) {
+              return false;
+            }
+
+            // Batch year scoping: if student batch is known, group must belong to this batch or general
+            if (studentBatch) {
+              const matchesBatch = groupBatch.includes(studentBatch) || groupName.includes(studentBatch) || groupBatch === '' || groupName.includes('GENERAL');
+              if (!matchesBatch) return false;
+            }
+
+            return true;
+          });
         }
 
         // ── Deduplication logic ─────────────────────────────────────────

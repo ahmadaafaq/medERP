@@ -136,6 +136,11 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       let cachedReg = '';
       let cachedName = '';
       let cachedRoll = '';
+      let cachedCourseCd = '';
+      let cachedBatchCd = '';
+      let cachedBranchCd = '';
+      let cachedSemCd = '';
+      let cachedColgCd = '';
 
       if (typeof window !== 'undefined') {
         const cachedUserStr = localStorage.getItem('user');
@@ -152,6 +157,11 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
             '';
           cachedName = cached?.name || p.name || cached?.student_name || '';
           cachedRoll = p.rollno || cached?.rollno || '';
+          cachedCourseCd = p.course_cd || cached?.courseCd || cached?.course_cd || '';
+          cachedBatchCd = p.batch_cd || cached?.batchCd || cached?.batch_cd || '';
+          cachedBranchCd = p.branch_cd || cached?.branchCd || cached?.branch_cd || '';
+          cachedSemCd = p.semester || p.current_semester || cached?.semester || '';
+          cachedColgCd = p.colg_cd || cached?.colgcd || '';
         }
       }
 
@@ -186,6 +196,19 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
           if (reg) setSelectedStudentUid(reg);
           if (name) setSelectedStudentName(name);
           if (roll) setSelectedStudentRoll(roll);
+
+          // Dynamically scope student's department, course, and batch
+          const courseCode = p.course_cd || meData.course_cd || meData.courseCd || cachedCourseCd;
+          const batchCode = p.batch_cd || meData.batch_cd || meData.batchCd || cachedBatchCd;
+          const branchCode = p.branch_cd || meData.branch_cd || meData.branchCd || cachedBranchCd;
+          const semCode = p.semester || p.current_semester || meData.semester || cachedSemCd;
+          const colgCode = p.colg_cd || meData.colg_cd || meData.colgcd || cachedColgCd;
+
+          if (courseCode) setSelectedCourse(String(courseCode));
+          if (batchCode) setSelectedBatch(String(batchCode));
+          if (branchCode) setSelectedBranch(String(branchCode));
+          if (semCode) setSelectedSem(String(semCode));
+          if (colgCode) setSelectedCollege(String(colgCode));
           return;
         }
       }
@@ -193,6 +216,11 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       if (cachedReg) setSelectedStudentUid(cachedReg);
       if (cachedName) setSelectedStudentName(cachedName);
       if (cachedRoll) setSelectedStudentRoll(cachedRoll);
+      if (cachedCourseCd) setSelectedCourse(String(cachedCourseCd));
+      if (cachedBatchCd) setSelectedBatch(String(cachedBatchCd));
+      if (cachedBranchCd) setSelectedBranch(String(cachedBranchCd));
+      if (cachedSemCd) setSelectedSem(String(cachedSemCd));
+      if (cachedColgCd) setSelectedCollege(String(cachedColgCd));
     } catch (err) {
       console.warn('Failed to resolve logged in student profile:', err);
     }

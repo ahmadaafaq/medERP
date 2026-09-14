@@ -123,19 +123,19 @@ export class ExaminationService {
     try {
       // 1. Resolve student UUID from database (by UUID, Roll No, Registration No, or Name)
       let realStudentId: string | null = null;
-      const roll = dto.rollno || dto.studentId || '';
-      const reg = dto.registrationNo || dto.rollno || dto.studentId || '';
-      const name = dto.studentName || '';
+      const roll = (dto.rollno || dto.studentId || '').trim();
+      const reg = (dto.registrationNo || dto.rollno || dto.studentId || '').trim();
+      const name = (dto.studentName || '').trim();
 
       const checkSt = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id FROM students 
+        `SELECT id, name, rollno, registration_no FROM students 
          WHERE (id::text = $1 AND $1 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-            OR rollno = $2 
-            OR registration_no = $2 
-            OR rollno = $3 
-            OR registration_no = $3 
-            OR ($4 <> '' AND LOWER(name) = LOWER($4))
+            OR (rollno IS NOT NULL AND LOWER(TRIM(rollno)) = LOWER(TRIM($2)))
+            OR (registration_no IS NOT NULL AND LOWER(TRIM(registration_no)) = LOWER(TRIM($2)))
+            OR (rollno IS NOT NULL AND LOWER(TRIM(rollno)) = LOWER(TRIM($3)))
+            OR (registration_no IS NOT NULL AND LOWER(TRIM(registration_no)) = LOWER(TRIM($3)))
+            OR ($4 <> '' AND LOWER(TRIM(COALESCE(name, ''))) = LOWER(TRIM($4)))
          LIMIT 1`,
         [dto.studentId || '', roll, reg, name],
       );
@@ -152,16 +152,24 @@ export class ExaminationService {
         const studentRoll = roll || reg;
         const studentReg = reg || studentRoll;
         const studentName = name || 'Student';
-        const insertSt = await this.tenantSchemaService.queryInTenant(
+
+        const existingSt = await this.tenantSchemaService.queryInTenant(
           slug,
-          `INSERT INTO students (registration_no, rollno, name, gender)
-           VALUES ($1, $2, $3, 'Male')
-           ON CONFLICT (registration_no) 
-           DO UPDATE SET name = EXCLUDED.name, rollno = EXCLUDED.rollno
-           RETURNING id`,
-          [studentReg, studentRoll, studentName],
+          `SELECT id FROM students WHERE registration_no = $1 OR rollno = $2 LIMIT 1`,
+          [studentReg, studentRoll],
         );
-        realStudentId = insertSt[0]?.id;
+        if (existingSt && existingSt.length > 0) {
+          realStudentId = existingSt[0].id;
+        } else {
+          const insertSt = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `INSERT INTO students (registration_no, rollno, name, gender)
+             VALUES ($1, $2, $3, 'Male')
+             RETURNING id`,
+            [studentReg, studentRoll, studentName],
+          );
+          realStudentId = insertSt[0]?.id;
+        }
       }
 
       // 2. Resolve paper UUID from database (by UUID, Code, or Name)
@@ -269,18 +277,33 @@ export class ExaminationService {
 
   async getStudentMarks(tenantSlug: string, identifier: string) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    const cleanId = (identifier || '').trim();
+    if (!cleanId) return [];
+
     return this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT r.*, p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks, p.type as paper_type, p.sections, sub.name as subject_name
+      `SELECT r.*, 
+              COALESCE(p.name, 'Internal Assessment') as paper_name, 
+              COALESCE(p.code, 'ASSESS') as paper_code, 
+              COALESCE(p.max_marks, 100) as max_marks, 
+              COALESCE(p.passing_marks, 40) as passing_marks, 
+              COALESCE(p.type, 'THEORY') as paper_type, 
+              p.sections, 
+              COALESCE(sub.name, p.name, 'Academic Subject') as subject_name,
+              s.name as student_name,
+              s.rollno,
+              s.registration_no
        FROM student_results r
-       JOIN students s ON r.student_id::text = s.id::text
-       JOIN examination_papers p ON r.paper_id::text = p.id::text
+       LEFT JOIN students s ON r.student_id::text = s.id::text
+       LEFT JOIN examination_papers p ON r.paper_id::text = p.id::text
        LEFT JOIN subjects sub ON p.subject_id::text = sub.id::text
-       WHERE LOWER(COALESCE(s.rollno, '')) = LOWER($1)
-          OR LOWER(COALESCE(s.registration_no, '')) = LOWER($1)
+       WHERE (s.rollno IS NOT NULL AND LOWER(TRIM(s.rollno)) = LOWER(TRIM($1)))
+          OR (s.registration_no IS NOT NULL AND LOWER(TRIM(s.registration_no)) = LOWER(TRIM($1)))
           OR s.id::text = $1
+          OR r.student_id::text = $1
+          OR ($1 <> '' AND LOWER(TRIM(COALESCE(s.name, ''))) = LOWER(TRIM($1)))
        ORDER BY r.created_at DESC`,
-      [identifier],
+      [cleanId],
     );
   }
 

@@ -86,12 +86,16 @@ export class StudentMasterService {
           SELECT DISTINCT ON (s.id) s.id, s.name, s.rollno, s.registration_no, s.is_active, s.created_at, s.photo_url,
                  sa.college_name,
                  COALESCE(sa.course_code, s.course_cd) AS course_code,
+                 s.course_cd,
                  sa.academic_session,
                  COALESCE(sa.batch_code, s.batch_cd) AS batch_code,
-                 COALESCE(sa.batch_id::text, s.batch_id::text) AS batch_id,
+                 COALESCE(sa.batch_id::text, s.batch_id::text, s.batch_cd) AS batch_id,
+                 s.batch_cd,
                  sa.residency_type, sa.admission_type, sa.professional_id, sa.professional_phase,
                  COALESCE(sa.group_id::text, s.group_id::text) AS group_id, sa.group_code, sa.group_name,
-                 sa.branch_id::text AS branch_id, sa.branch_code
+                 COALESCE(sa.branch_id::text, s.branch_id::text) AS branch_id,
+                 COALESCE(sa.branch_code, s.branch_id::text) AS branch_code,
+                 COALESCE(sa.branch_name, sa.branch_code) AS branch_name
           FROM students s
           LEFT JOIN student_admissions sa ON sa.student_id::text = s.id::text
           WHERE 1=1
@@ -109,18 +113,34 @@ export class StudentMasterService {
           sql += ` AND (sa.course_id::text = $${p1}::text OR sa.course_code::text = $${p1}::text OR sa.course_code ILIKE $${p2} OR s.course_cd::text = $${p1}::text)`;
         }
         if (query.batchId && query.batchId !== 'all') {
-          params.push(query.batchId);
+          const bParam = query.batchId;
+          params.push(bParam);
           const p1 = params.length;
-          params.push(`%${query.batchId}%`);
+          params.push(`%${bParam}%`);
           const p2 = params.length;
-          sql += ` AND (sa.batch_id::text = $${p1}::text OR sa.batch_code::text = $${p1}::text OR sa.batch_code ILIKE $${p2} OR s.batch_cd::text = $${p1}::text OR s.admission_year::text = $${p1}::text)`;
+          const batchMatch = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT batch_cd, year, name FROM batches WHERE batch_cd = $1 OR code = $1 OR year = $1 LIMIT 1`,
+            [bParam],
+          ).catch(() => []);
+          const bAlt = batchMatch[0]?.year === bParam ? batchMatch[0]?.batch_cd : batchMatch[0]?.year;
+          if (bAlt && bAlt !== bParam) {
+            params.push(bAlt);
+            const p3 = params.length;
+            params.push(`%${bAlt}%`);
+            const p4 = params.length;
+            sql += ` AND (sa.batch_id::text = $${p1}::text OR sa.batch_code::text = $${p1}::text OR sa.batch_code ILIKE $${p2} OR s.batch_cd::text = $${p1}::text OR s.admission_year::text = $${p1}::text OR sa.batch_id::text = $${p3}::text OR sa.batch_code ILIKE $${p4} OR s.batch_cd::text = $${p3}::text)`;
+          } else {
+            sql += ` AND (sa.batch_id::text = $${p1}::text OR sa.batch_code::text = $${p1}::text OR sa.batch_code ILIKE $${p2} OR s.batch_cd::text = $${p1}::text OR s.admission_year::text = $${p1}::text)`;
+          }
         }
         if (query.branchId && query.branchId !== 'all') {
-          params.push(query.branchId);
+          const brParam = query.branchId;
+          params.push(brParam);
           const p1 = params.length;
-          params.push(`%${query.branchId}%`);
+          params.push(`%${brParam}%`);
           const p2 = params.length;
-          sql += ` AND (sa.branch_id::text = $${p1} OR sa.branch_code = $${p1} OR sa.branch_name ILIKE $${p2} OR s.branch_id::text = $${p1} OR s.department_id::text = $${p1})`;
+          sql += ` AND (sa.branch_id::text = $${p1} OR sa.branch_code = $${p1} OR sa.branch_code ILIKE $${p2} OR sa.branch_name ILIKE $${p2} OR s.branch_id::text = $${p1} OR s.department_id::text = $${p1})`;
         }
         if (query.sessionId && query.sessionId !== 'all') {
           params.push(query.sessionId);
@@ -410,10 +430,41 @@ export class StudentMasterService {
         regNo = await this.generateNextRegistrationNo(slug, yearStr);
       }
 
-      // Check if registration number already exists
-      const existingReg = await runner.query(`SELECT id FROM students WHERE registration_no = $1`, [regNo]);
-      if (existingReg.length) {
-        throw new BadRequestException(`Registration number ${regNo} already exists.`);
+      // Check if student already exists by registration_no or rollno
+      let existingStudentId: string | null = null;
+      if (regNo) {
+        const existingReg = await runner.query(`SELECT id FROM students WHERE registration_no = $1 LIMIT 1`, [regNo]);
+        if (existingReg.length) {
+          existingStudentId = existingReg[0].id;
+        }
+      }
+      if (!existingStudentId && dto.rollNo) {
+        const existingRoll = await runner.query(`SELECT id FROM students WHERE rollno = $1 LIMIT 1`, [dto.rollNo]);
+        if (existingRoll.length) {
+          existingStudentId = existingRoll[0].id;
+        }
+      }
+
+      // If student already exists in DB, update instead of inserting duplicate entry
+      if (existingStudentId) {
+        await runner.rollbackTransaction();
+        await runner.release();
+        this.logger.log(`[StudentMaster] Student ${regNo || dto.rollNo} already exists (${existingStudentId}). Updating existing record instead of inserting new entry.`);
+        await this.updateStudent(slug, existingStudentId, {
+          ...dto,
+          registrationNo: regNo,
+        } as any);
+
+        const name = `${dto.firstName} ${dto.middleName ? dto.middleName + ' ' : ''}${dto.lastName}`.trim();
+        return {
+          id: existingStudentId,
+          registrationNo: regNo,
+          name,
+          rollNo: dto.rollNo,
+          collegeName: dto.collegeName,
+          courseCode: dto.courseCode,
+          updated: true,
+        };
       }
 
       // 2. Create matching user record in users table for student login
@@ -428,7 +479,14 @@ export class StudentMasterService {
       );
       const userId = userRows[0]?.id;
 
-      // 3. Insert into students table with linked user_id
+      // 3. Clean batch code (e.g. normalize B2024-C4-1 or 2024 to "2024 Batch")
+      let cleanBatchCode = dto.batchCode || null;
+      if (cleanBatchCode) {
+        const matchYear = cleanBatchCode.match(/20\d\d/);
+        if (matchYear) cleanBatchCode = `${matchYear[0]} Batch`;
+      }
+
+      // 4. Insert into students table with linked user_id
       const name = `${dto.firstName} ${dto.middleName ? dto.middleName + ' ' : ''}${dto.lastName}`.trim();
       const studentRows = await runner.query(
         `INSERT INTO students (
@@ -446,7 +504,7 @@ export class StudentMasterService {
       );
       const studentId = studentRows[0].id;
 
-      // 3. Insert into student_admissions
+      // 5. Insert into student_admissions
       await runner.query(
         `INSERT INTO student_admissions (
            student_id, college_id, college_name, course_id, course_code, professional_id, professional_phase,
@@ -463,7 +521,7 @@ export class StudentMasterService {
           dto.sessionId || null,
           dto.academicSession || null,
           dto.batchId || null,
-          dto.batchCode || null,
+          cleanBatchCode,
           dto.branchId || null,
           dto.residencyType || null,
           dto.admissionType || null,
@@ -700,6 +758,12 @@ export class StudentMasterService {
 
       // 1. Update core students table
       const name = `${dto.firstName} ${dto.middleName ? dto.middleName + ' ' : ''}${dto.lastName}`.trim();
+      let cleanBatchCode = dto.batchCode || null;
+      if (cleanBatchCode) {
+        const matchYear = cleanBatchCode.match(/20\d\d/);
+        if (matchYear) cleanBatchCode = `${matchYear[0]} Batch`;
+      }
+      const cleanBatchCd = (dto.batchCode || dto.batchId || '').match(/20\d\d/)?.[0] || dto.batchCode || dto.batchId || null;
       await runner.query(
         `UPDATE students
          SET name = $1, rollno = $2, phone = $3, blood_group = $4,
@@ -717,7 +781,7 @@ export class StudentMasterService {
           dto.photoUrl || null,
           dto.emailAddress || null,
           dto.courseCode || dto.courseId || null,
-          dto.batchCode || dto.batchId || null,
+          cleanBatchCd,
           id,
         ],
       );
@@ -765,7 +829,7 @@ export class StudentMasterService {
           dto.sessionId || null,
           dto.academicSession || null,
           dto.batchId || null,
-          dto.batchCode || null,
+          cleanBatchCode,
           dto.branchId || null,
           dto.residencyType || null,
           dto.admissionType || null,
@@ -1226,164 +1290,152 @@ export class StudentMasterService {
     const schema = `tenant_${slug}`;
     let syncedCount = 0;
 
-    for (const s of students) {
-      try {
-        const regNo = String(s.registration_no || '').trim();
-        const rollNo = String(s.rollno || '').trim();
-        const name = String(s.name || '').trim();
-        const photoUrl = s.photo_url || null;
-        const gender = String(s.gender || 'Male').toUpperCase();
-        const mobile = String(s.mobile_number || s.mobile || '').trim();
-        if (!regNo && !rollNo && !name) continue;
+    const chunkSize = 15;
+    for (let i = 0; i < students.length; i += chunkSize) {
+      const chunk = students.slice(i, i + chunkSize);
+      await Promise.all(
+        chunk.map(async (s) => {
+          try {
+            const regNo = String(s.registration_no || '').trim();
+            const rollNo = String(s.rollno || '').trim();
+            const name = String(s.name || '').trim();
+            const photoUrl = s.photo_url || null;
+            const gender = String(s.gender || 'Male').toUpperCase();
+            const mobile = String(s.mobile_number || s.mobile || '').trim();
+            if (!regNo && !rollNo && !name) return;
 
-        const check = await this.tenantSchemaService.queryInTenant(
-          slug,
-          `SELECT id FROM "${schema}".students WHERE registration_no = $1 OR rollno = $2 LIMIT 1`,
-          [regNo, rollNo],
-        ).catch(() => []);
-
-        let studentId: string;
-        if (check.length > 0) {
-          studentId = check[0].id;
-          await this.tenantSchemaService.queryInTenant(
-            slug,
-            `UPDATE "${schema}".students 
-             SET name = $1, photo_url = COALESCE($2, photo_url), rollno = $3, registration_no = $4, 
-                 gender = COALESCE($5, gender), mobile_number = COALESCE($6, mobile_number),
-                 course_cd = $7, batch_cd = $8, is_active = true, updated_at = NOW() 
-             WHERE id = $9`,
-            [name, photoUrl, rollNo, regNo, gender, mobile || null, s.course_cd || '2', s.batch_name || s.batch_id || '2025', studentId],
-          ).catch(() => null);
-        } else {
-          const ins = await this.tenantSchemaService.queryInTenant(
-            slug,
-            `INSERT INTO "${schema}".students (name, registration_no, rollno, photo_url, gender, mobile_number, course_cd, batch_cd, branch_id, is_active) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true) RETURNING id`,
-            [name, regNo, rollNo, photoUrl, gender, mobile || null, s.course_cd || '2', s.batch_name || s.batch_id || '2025', s.branch_id || '1'],
-          ).catch(() => []);
-          studentId = ins[0]?.id;
-        }
-
-        if (studentId) {
-          // 1. Admissions Table
-          const admCheck = await this.tenantSchemaService.queryInTenant(
-            slug,
-            `SELECT student_id FROM "${schema}".student_admissions WHERE student_id = $1 LIMIT 1`,
-            [studentId],
-          ).catch(() => []);
-
-          if (admCheck.length > 0) {
-            await this.tenantSchemaService.queryInTenant(
+            // Safe lookup: check if student exists by registration_no or rollno (ignoring empty strings)
+            const check = await this.tenantSchemaService.queryInTenant(
               slug,
-              `UPDATE "${schema}".student_admissions 
-               SET college_name = $1, course_code = $2, academic_session = $3, batch_code = $4, batch_id = $5,
-                   branch_id = $6, branch_code = $7, residency_type = COALESCE($8, residency_type), admission_type = COALESCE($9, admission_type)
-               WHERE student_id = $10`,
-              [
-                s.college_name || 'SRMS CET, BAREILLY',
-                s.course_code || 'B.Tech',
-                s.academic_session || '2025-2026',
-                s.batch_code || '2025 Batch',
-                s.batch_id || '18',
-                s.branch_id || '1',
-                s.branch_code || '1',
-                s.residency_type || 'Hosteller',
-                s.admission_type || 'Regular Admission',
-                studentId,
-              ],
-            ).catch(() => null);
-          } else {
-            await this.tenantSchemaService.queryInTenant(
-              slug,
-              `INSERT INTO "${schema}".student_admissions (
-                student_id, college_name, course_code, academic_session, batch_code, batch_id, residency_type, admission_type, branch_id, branch_code
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-              [
-                studentId,
-                s.college_name || 'SRMS CET, BAREILLY',
-                s.course_code || 'B.Tech',
-                s.academic_session || '2025-2026',
-                s.batch_code || '2025 Batch',
-                s.batch_id || '18',
-                s.residency_type || 'Hosteller',
-                s.admission_type || 'Regular Admission',
-                s.branch_id || '1',
-                s.branch_code || '1',
-              ],
-            ).catch(() => null);
-          }
-
-          // 2. Parents Table
-          if (s.father_name || s.mother_name) {
-            const pCheck = await this.tenantSchemaService.queryInTenant(
-              slug,
-              `SELECT student_id FROM "${schema}".student_parents WHERE student_id = $1 LIMIT 1`,
-              [studentId],
+              `SELECT id FROM "${schema}".students 
+               WHERE (NULLIF($1, '') IS NOT NULL AND registration_no = $1) 
+                  OR (NULLIF($2, '') IS NOT NULL AND rollno = $2) 
+               LIMIT 1`,
+              [regNo, rollNo],
             ).catch(() => []);
-            if (pCheck.length > 0) {
+
+            const studentCourseCd = String(s.course_cd || s.course_id || '1');
+
+            // Clean batch code: remove synthetic B2024-C4-1, normalize to standard "${year} Batch"
+            const rawBatch = String(s.batch_code || s.batch_name || '');
+            const matchYear = rawBatch.match(/20\d\d/);
+            const studentBatchYear = matchYear ? matchYear[0] : (String(s.batch_name || '2025').match(/20\d\d/)?.[0] || '2025');
+            const studentBatchCode = `${studentBatchYear} Batch`;
+            const studentBatchId = String(s.batch_cd || s.batch_id || studentBatchYear);
+            const studentBranchId = String(s.branch_id || '1');
+            const studentBranchCode = String(s.branch_code || s.branch_id || '1');
+            const studentBranchName = String(s.branch_name || (studentBranchCode !== studentBranchId ? `(${studentBranchCode})` : 'Core Branch'));
+
+            let studentId: string;
+            if (check.length > 0) {
+              studentId = check[0].id;
               await this.tenantSchemaService.queryInTenant(
                 slug,
-                `UPDATE "${schema}".student_parents SET father_name = COALESCE($1, father_name), mother_name = COALESCE($2, mother_name) WHERE student_id = $3`,
-                [s.father_name || null, s.mother_name || null, studentId],
+                `UPDATE "${schema}".students 
+                 SET name = $1, photo_url = COALESCE($2, photo_url), rollno = COALESCE(NULLIF($3, ''), rollno), 
+                     registration_no = COALESCE(NULLIF($4, ''), registration_no), 
+                     gender = COALESCE($5, gender), mobile_number = COALESCE(NULLIF($6, ''), mobile_number),
+                     course_cd = $7, batch_cd = $8, branch_id = $9, is_active = true, updated_at = NOW() 
+                 WHERE id = $10`,
+                [name, photoUrl, rollNo, regNo, gender, mobile || null, studentCourseCd, studentBatchYear, studentBranchId, studentId],
               ).catch(() => null);
             } else {
-              await this.tenantSchemaService.queryInTenant(
+              const ins = await this.tenantSchemaService.queryInTenant(
                 slug,
-                `INSERT INTO "${schema}".student_parents (student_id, father_name, mother_name) VALUES ($1, $2, $3)`,
-                [studentId, s.father_name || null, s.mother_name || null],
-              ).catch(() => null);
+                `INSERT INTO "${schema}".students (name, registration_no, rollno, photo_url, gender, mobile_number, course_cd, batch_cd, branch_id, is_active) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true) RETURNING id`,
+                [name, regNo, rollNo, photoUrl, gender, mobile || null, studentCourseCd, studentBatchYear, studentBranchId],
+              ).catch(() => []);
+              studentId = ins[0]?.id;
             }
-          }
 
-          // 3. Addresses Table
-          if (s.city || s.state || s.address) {
-            const aCheck = await this.tenantSchemaService.queryInTenant(
-              slug,
-              `SELECT student_id FROM "${schema}".student_addresses WHERE student_id = $1 LIMIT 1`,
-              [studentId],
-            ).catch(() => []);
-            if (aCheck.length > 0) {
+            if (studentId) {
+              // 1. Admissions Table - Atomic Upsert via ON CONFLICT (student_id)
               await this.tenantSchemaService.queryInTenant(
                 slug,
-                `UPDATE "${schema}".student_addresses SET permanent_city = COALESCE($1, permanent_city), permanent_state = COALESCE($2, permanent_state), permanent_address_1 = COALESCE($3, permanent_address_1) WHERE student_id = $4`,
-                [s.city || 'Bareilly', s.state || 'Uttar Pradesh', s.address || null, studentId],
-              ).catch(() => null);
-            } else {
-              await this.tenantSchemaService.queryInTenant(
-                slug,
-                `INSERT INTO "${schema}".student_addresses (student_id, permanent_city, permanent_state, permanent_address_1) VALUES ($1, $2, $3, $4)`,
-                [studentId, s.city || 'Bareilly', s.state || 'Uttar Pradesh', s.address || null],
-              ).catch(() => null);
+                `INSERT INTO "${schema}".student_admissions (
+                  student_id, college_name, course_code, academic_session, batch_code, batch_id, residency_type, admission_type, branch_id, branch_code, branch_name, course_id, college_id, session_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                ON CONFLICT (student_id) DO UPDATE SET
+                  college_name = EXCLUDED.college_name,
+                  course_code = EXCLUDED.course_code,
+                  academic_session = EXCLUDED.academic_session,
+                  batch_code = EXCLUDED.batch_code,
+                  batch_id = EXCLUDED.batch_id,
+                  residency_type = COALESCE(EXCLUDED.residency_type, student_admissions.residency_type),
+                  admission_type = COALESCE(EXCLUDED.admission_type, student_admissions.admission_type),
+                  branch_id = EXCLUDED.branch_id,
+                  branch_code = EXCLUDED.branch_code,
+                  branch_name = EXCLUDED.branch_name,
+                  course_id = EXCLUDED.course_id,
+                  college_id = EXCLUDED.college_id,
+                  session_id = EXCLUDED.session_id`,
+                [
+                  studentId,
+                  s.college_name || 'SRMS CET, BAREILLY',
+                  s.course_code || 'B.Tech',
+                  s.academic_session || '2025-2026',
+                  studentBatchCode,
+                  studentBatchId,
+                  s.residency_type || 'Hosteller',
+                  s.admission_type || 'Regular Admission',
+                  studentBranchId,
+                  studentBranchCode,
+                  studentBranchName,
+                  studentCourseCd,
+                  s.college_id || '1',
+                  s.session_id || '16',
+                ],
+              ).catch((e) => {
+                this.logger.error(`Failed upsert student_admissions for ${studentId}: ${e?.message}`);
+              });
+
+              // 2. Parents Table - Atomic Upsert via ON CONFLICT (student_id)
+              if (s.father_name || s.mother_name) {
+                await this.tenantSchemaService.queryInTenant(
+                  slug,
+                  `INSERT INTO "${schema}".student_parents (student_id, father_name, mother_name) 
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (student_id) DO UPDATE SET
+                     father_name = COALESCE(EXCLUDED.father_name, student_parents.father_name),
+                     mother_name = COALESCE(EXCLUDED.mother_name, student_parents.mother_name)`,
+                  [studentId, s.father_name || null, s.mother_name || null],
+                ).catch(() => null);
+              }
+
+              // 3. Addresses Table - Atomic Upsert via ON CONFLICT (student_id)
+              if (s.city || s.state || s.address) {
+                await this.tenantSchemaService.queryInTenant(
+                  slug,
+                  `INSERT INTO "${schema}".student_addresses (student_id, permanent_city, permanent_state, permanent_address_1) 
+                   VALUES ($1, $2, $3, $4)
+                   ON CONFLICT (student_id) DO UPDATE SET
+                     permanent_city = COALESCE(EXCLUDED.permanent_city, student_addresses.permanent_city),
+                     permanent_state = COALESCE(EXCLUDED.permanent_state, student_addresses.permanent_state),
+                     permanent_address_1 = COALESCE(EXCLUDED.permanent_address_1, student_addresses.permanent_address_1)`,
+                  [studentId, s.city || 'Bareilly', s.state || 'Uttar Pradesh', s.address || null],
+                ).catch(() => null);
+              }
+
+              // 4. Documents Table - Atomic Upsert via ON CONFLICT (student_id)
+              if (photoUrl) {
+                await this.tenantSchemaService.queryInTenant(
+                  slug,
+                  `INSERT INTO "${schema}".student_documents (student_id, passport_photo_url) 
+                   VALUES ($1, $2)
+                   ON CONFLICT (student_id) DO UPDATE SET
+                     passport_photo_url = EXCLUDED.passport_photo_url`,
+                  [studentId, photoUrl],
+                ).catch(() => null);
+              }
+
+              syncedCount++;
             }
+          } catch (err: any) {
+            this.logger.warn(`Error syncing live student ${s?.name}: ${err?.message}`);
           }
-
-          // 4. Documents Table (Photo URL)
-          if (photoUrl) {
-            const dCheck = await this.tenantSchemaService.queryInTenant(
-              slug,
-              `SELECT student_id FROM "${schema}".student_documents WHERE student_id = $1 LIMIT 1`,
-              [studentId],
-            ).catch(() => []);
-            if (dCheck.length > 0) {
-              await this.tenantSchemaService.queryInTenant(
-                slug,
-                `UPDATE "${schema}".student_documents SET passport_photo_url = $1 WHERE student_id = $2`,
-                [photoUrl, studentId],
-              ).catch(() => null);
-            } else {
-              await this.tenantSchemaService.queryInTenant(
-                slug,
-                `INSERT INTO "${schema}".student_documents (student_id, passport_photo_url) VALUES ($1, $2)`,
-                [studentId, photoUrl],
-              ).catch(() => null);
-            }
-          }
-
-          syncedCount++;
-        }
-      } catch (err) {
-        this.logger.warn(`Error syncing live student ${s.name}: ${err?.message}`);
-      }
+        }),
+      );
     }
 
     return { syncedCount };
@@ -1699,7 +1751,11 @@ export class StudentMasterService {
         const dob = row.dob || row.dateOfBirth || row.date_of_birth || null;
         const courseCd = String(row.courseCode || row.course_code || row.courseId || row.course_cd || '2').trim();
         const branchId = row.branchId || row.branch_id || row.branchCode || row.branch_cd || null;
-        const batchCd = String(row.batchCode || row.batch_code || row.batchId || row.batch_cd || row.batch_year || "'18'").trim();
+        const rawBatchStr = String(row.batchCode || row.batch_code || row.batchId || row.batch_cd || row.batch_year || '2025').trim();
+        const matchBatchYear = rawBatchStr.match(/20\d\d/);
+        const cleanBatchYear = matchBatchYear ? matchBatchYear[0] : rawBatchStr;
+        const cleanBatchCode = `${cleanBatchYear} Batch`;
+        const batchCd = cleanBatchYear;
         const residencyType = String(row.residencyType || row.residency_type || 'Day Scholar').trim();
         const collegeName = String(row.collegeName || row.college_name || 'SRMS CET Bareilly').trim();
         const photoUrl = row.photoUrl || row.photo_url || null;
@@ -1776,7 +1832,7 @@ export class StudentMasterService {
             courseCd,
             courseCd,
             batchCd,
-            batchCd,
+            cleanBatchCode,
             branchId ? String(branchId) : null,
             residencyType,
             dob ? new Date(dob) : new Date(),

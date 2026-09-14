@@ -1,34 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { srmsPost } from '@/lib/srms-client';
 
-const BACKEND_API = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+const BACKEND_API = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1').replace(/\/$/, '');
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
 
     const endpointUrl = body.endpointUrl || body.url || 'https://myportal.srms.ac.in/SRMSERP/FeeAdmin/GetColgWiseStudDt2';
-    const colg_cd = String(body.colgcd || body.colg_cd || '1').trim();
-    const course_cd = String(body.coursecd || body.course_cd || '2').trim();
-    const batch_cd = String(body.batchcd || body.batch_cd || "'18'").trim();
-    const branch_cd = String(body.branchcd || body.branch_cd || "'1'").trim();
-    const session_cd = String(body.sessioncd || body.session_cd || '16').trim();
-    const type = String(body.type ?? '').trim();
-    const arrstdsts = String(body.arrstdsts || '0').trim();
+    const colg_cd = String(body.colgcd || body.colg_cd || body.customPayload?.colgcd || '1').trim();
+    const course_cd = String(body.coursecd || body.course_cd || body.customPayload?.coursecd || '1').trim();
+    const batch_cd = String(body.batchcd || body.batch_cd || body.customPayload?.batchcd || '18').trim();
+    const branch_cd = String(body.branchcd || body.branch_cd || body.customPayload?.branchcd || '1').trim();
+    const session_cd = String(body.sessioncd || body.session_cd || body.customPayload?.sessioncd || '16').trim();
+    const type = String(body.type ?? body.customPayload?.type ?? '').trim();
+    const arrstdsts = String(body.arrstdsts || body.customPayload?.arrstdsts || '0').trim();
     const tenant = String(body.tenant || body.tenantSlug || 'srms-cet-bareilly').trim();
 
     // Use custom payload if provided, otherwise standard GetColgWiseStudDt2 payload
-    const payload = body.customPayload && typeof body.customPayload === 'object'
-      ? body.customPayload
+    let payload = body.customPayload && typeof body.customPayload === 'object'
+      ? { ...body.customPayload }
       : {
           colgcd: colg_cd,
           coursecd: course_cd,
-          batchcd: batch_cd.startsWith("'") ? batch_cd : `'${batch_cd}'`,
-          branchcd: branch_cd.startsWith("'") ? branch_cd : `'${branch_cd}'`,
+          batchcd: batch_cd,
+          branchcd: branch_cd,
           type: type,
           sessioncd: session_cd,
           arrstdsts: arrstdsts,
         };
+
+    // Ensure batchcd and branchcd have single quotes for SRMS GetColgWiseStudDt2
+    if (payload.batchcd !== undefined && payload.batchcd !== null) {
+      const cleanBat = String(payload.batchcd).replace(/^'+|'+$/g, '').trim();
+      payload.batchcd = `'${cleanBat || '18'}'`;
+    }
+    if (payload.branchcd !== undefined && payload.branchcd !== null) {
+      const cleanBr = String(payload.branchcd).replace(/^'+|'+$/g, '').trim();
+      payload.branchcd = `'${cleanBr || '1'}'`;
+    }
 
     let rawList: any[] = [];
     try {
@@ -114,15 +124,19 @@ export async function POST(req: NextRequest) {
       const rawName = String(item.stud_name || item.student_name || item.name || item.STUD_NAME || '').trim();
       const name = toTitleCase(rawName);
 
-      const rawBatch = String(item.batch_name || item.batch_cd || item.BATCH_NAME || item.BATCH_CD || batch_cd || '2025').replace(/'/g, '').trim();
+      const rawBatch = String(item.batch_name || item.batch_cd || item.BATCH_NAME || item.BATCH_CD || payload.batchcd || batch_cd || '2025').replace(/'/g, '').trim();
       const batchYear = Number(rawBatch) || 2025;
       const batchLabel = `${batchYear} Batch`;
 
-      const studentColgCd = String(item.colg_cd || item.COLG_CD || colg_cd).replace(/'/g, '');
-      const studentCourseCd = String(item.course_cd || item.COURSE_CD || course_cd).replace(/'/g, '');
-      const studentBranchCd = String(item.branch_cd || item.BRANCH_CD || branch_cd).replace(/'/g, '');
+      const studentColgCd = String(item.colg_cd || item.COLG_CD || payload.colgcd || colg_cd).replace(/'/g, '');
+      const studentCourseCd = String(item.course_cd || item.COURSE_CD || payload.coursecd || course_cd).replace(/'/g, '');
+      const studentBranchCd = String(item.branch_cd || item.BRANCH_CD || payload.branchcd || branch_cd).replace(/'/g, '');
 
       const photoUrl = buildPhotoUrl(studentColgCd, regNo, item.IMGPATH || item.photo_url || item.IMAGEPATH);
+
+      const rawBatchCd = String(item.batch_cd || item.BATCH_CD || payload.batchcd || batch_cd || '18').replace(/'/g, '').trim();
+      const rawBranchName = (item.branch_name || item.BRANCH_NAME || '').trim();
+      const cleanBranchCode = rawBranchName.replace(/[\(\)\s]/g, '') || studentBranchCd;
 
       return {
         id: regNo || `srms-${studentColgCd}-${studentCourseCd}-${batchYear}-${idx + 1}`,
@@ -141,14 +155,17 @@ export async function POST(req: NextRequest) {
         photo_url: photoUrl,
         college_id: studentColgCd,
         college_name: item.colg_name || item.COLG_NAME || 'SRMS CET, BAREILLY',
+        course_id: studentCourseCd,
         course_code: item.course_name || item.COURSE_NAME || (studentCourseCd === '2' ? 'B.Pharm' : studentCourseCd === '13' ? 'BCA' : 'B.Tech'),
         course_cd: studentCourseCd,
         batch_code: batchLabel,
         batch_id: String(batchYear),
+        batch_cd: rawBatchCd,
         batch_name: String(batchYear),
         branch_id: studentBranchCd,
-        branch_code: studentBranchCd,
-        branch_name: item.branch_name || item.BRANCH_NAME || `Branch ${studentBranchCd}`,
+        branch_code: cleanBranchCode,
+        branch_name: rawBranchName || `Branch ${studentBranchCd}`,
+        session_id: String(payload.sessioncd || session_cd || '16'),
         academic_session: `${batchYear}-${batchYear + 1}`,
         is_active: true,
         created_at: new Date().toISOString(),

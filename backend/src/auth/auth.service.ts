@@ -269,6 +269,7 @@ export class AuthService {
         `SELECT u.id, u.email, u.password_hash, u.role, u.is_active, u.must_change_password,
                 u.failed_login_count, u.locked_until, u.last_login_at, u.usr_id, u.devicecd, u.loc_cd, u.department,
                 s.name AS student_name, s.registration_no, s.rollno,
+                s.course_cd, s.batch_cd, s.department_id AS student_department_id,
                 COALESCE(s.photo_url, CASE WHEN s.registration_no IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/', s.registration_no, '/', s.registration_no, '.JPG') ELSE NULL END, f.photo_url) AS photo_url,
                 f.id AS faculty_id, f.name AS faculty_name, f.emp_id, f.designation, f.specialization,
                 f.qualification, f.phone, f.gender, f.experience, f.joining_date, f.staff_type,
@@ -286,6 +287,7 @@ export class AuthService {
             OR LOWER(REGEXP_REPLACE(COALESCE(u.emp_id, ''), '[^a-zA-Z0-9]', '', 'g')) = LOWER(REGEXP_REPLACE($1, '[^a-zA-Z0-9]', '', 'g'))
          ORDER BY 
            CASE 
+             WHEN LOWER(COALESCE(s.registration_no, '')) = $1 OR LOWER(COALESCE(s.rollno, '')) = $1 THEN 0
              WHEN LOWER(COALESCE(u.emp_id, '')) = $1 OR LOWER(COALESCE(f.emp_id, '')) = $1 OR LOWER(u.email) = $1 THEN 0
              WHEN LOWER(REGEXP_REPLACE(COALESCE(f.emp_id, ''), '[^a-zA-Z0-9]', '', 'g')) = LOWER(REGEXP_REPLACE($1, '[^a-zA-Z0-9]', '', 'g')) THEN 1
              ELSE 2
@@ -661,6 +663,7 @@ export class AuthService {
         email: user.email,
         name: user.student_name || user.faculty_name || meProfile?.profile?.name || user.email.split('@')[0],
         registrationNo: user.registration_no || meProfile?.profile?.registration_no || null,
+        registration_no: user.registration_no || meProfile?.profile?.registration_no || null,
         rollno: user.rollno || meProfile?.profile?.rollno || null,
         empId: user.role === 'STUDENT' ? null : (user.emp_id || meProfile?.profile?.emp_id || null),
         emp_id: user.role === 'STUDENT' ? null : (user.emp_id || meProfile?.profile?.emp_id || null),
@@ -671,10 +674,12 @@ export class AuthService {
         designation: user.role === 'STUDENT' ? 'Student' : (user.designation || meProfile?.profile?.designation || null),
         specialization: user.role === 'STUDENT' ? null : (user.specialization || meProfile?.profile?.specialization || null),
         departmentId: user.department_id || meProfile?.profile?.department_id || null,
-        departmentName: user.department || meProfile?.profile?.department_name || null,
-        department: user.department || meProfile?.profile?.department_name || null,
-        courseCd: meProfile?.profile?.course_cd || null,
-        courseName: meProfile?.profile?.course_name || null,
+        departmentName: meProfile?.profile?.department_name || (user.course_cd === '4' ? 'MBA Department' : user.department) || null,
+        department: user.department || meProfile?.profile?.department_name || (user.course_cd === '4' ? 'MBA Department' : null),
+        courseCd: meProfile?.profile?.course_cd || user.course_cd || null,
+        courseName: meProfile?.profile?.course_name || (user.course_cd === '4' ? 'MBA' : user.course_cd === '1' ? 'B.Tech' : user.course_cd === '13' ? 'BCA' : user.course_cd) || null,
+        batchCd: meProfile?.profile?.batch_cd || user.batch_cd || null,
+        batchName: meProfile?.profile?.batch_name || (user.batch_cd ? `Batch ${user.batch_cd}` : null),
         subjectId: user.subject_id || meProfile?.profile?.subject_id || null,
         subjectName: meProfile?.profile?.primary_subject_name || null,
         subjects: meProfile?.profile?.subjects || [],
@@ -1029,6 +1034,32 @@ export class AuthService {
     if (!payload || !payload.sub) {
       throw new UnauthorizedException('Authentication token missing or invalid');
     }
+
+    if (payload.role === UserRole.SUPER_ADMIN || payload.role === ('SUPER_ADMIN' as any) || payload.sub === '00000000-0000-0000-0000-000000000001') {
+      let saUser: any = null;
+      if (payload.sub && payload.sub !== '00000000-0000-0000-0000-000000000001') {
+        const saRows = await this.ds.query(
+          `SELECT id, email, name, role, is_active, onboarding_completed, must_change_password, last_login_at, created_at
+           FROM public.super_admins WHERE id=$1`,
+          [payload.sub],
+        ).catch(() => []);
+        saUser = saRows[0];
+      }
+      return {
+        id: saUser?.id || payload.sub || '00000000-0000-0000-0000-000000000001',
+        email: saUser?.email || payload.email || 'nornx@mederp.app',
+        name: saUser?.name || 'Platform Owner',
+        role: UserRole.SUPER_ADMIN,
+        isOwner: true,
+        isActive: true,
+        onboardingCompleted: true,
+        mustChangePassword: false,
+        tenantId: null,
+        tenantSlug: null,
+        collegeName: 'MedERP Multi-Tenant SaaS Platform',
+      };
+    }
+
     const slugRaw = payload.tenantSlug || headerTenantSlug || 'srms';
     const tenantSlug = this.tenantSchemaService.resolveTenantSlug(slugRaw);
     const schema = tenantSlug ? `tenant_${tenantSlug}` : 'public';
@@ -1068,29 +1099,35 @@ export class AuthService {
           `SELECT s.id, s.rollno, s.registration_no, s.name, 
                   COALESCE(s.photo_url, CASE WHEN s.registration_no IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/', s.registration_no, '/', s.registration_no, '.JPG') ELSE NULL END) AS photo_url,
                   s.course_cd,
-                  COALESCE(b.code, s.batch_cd) AS batch_cd,
-                  COALESCE(b.name, 'Batch ' || COALESCE(s.admission_year::text, '2025')) AS batch_name,
-                  b.code AS batch_code,
-                  b.year AS batch_year,
+                  COALESCE(sa.batch_code, b.code, s.batch_cd) AS batch_cd,
+                  COALESCE(sa.batch_code, b.name, 'Batch ' || COALESCE(s.admission_year::text, '2025')) AS batch_name,
+                  COALESCE(sa.batch_code, b.code) AS batch_code,
+                  COALESCE(b.year, s.admission_year::text, '2025') AS batch_year,
                   s.bio, s.github_url, s.github_followers, s.linkedin_url, s.linkedin_connections,
                   s.department_id, s.batch_id, s.admission_year, s.phone, s.address, s.blood_group,
                   s.emergency_contact, s.is_active,
-                  d.name AS department_name, d.code AS department_code,
-                  c.name AS course_name, c.code AS course_code,
+                  COALESCE(d.name, sa.branch_name, CASE WHEN s.course_cd = '4' THEN 'MBA Department' WHEN s.course_cd = '13' THEN 'BCA General' ELSE 'Academic Department' END) AS department_name,
+                  d.code AS department_code,
+                  COALESCE(c.name, sa.course_code, CASE WHEN s.course_cd = '4' THEN 'MBA' WHEN s.course_cd = '1' THEN 'B.Tech' WHEN s.course_cd = '2' THEN 'B.Pharm' WHEN s.course_cd = '3' THEN 'MCA' WHEN s.course_cd = '13' THEN 'BCA' ELSE s.course_cd END) AS course_name,
+                  COALESCE(c.code, sa.course_id, s.course_cd) AS course_code,
                   sa.academic_session, sa.residency_type, sa.status AS admission_status,
                   sp.father_name, sp.mother_name, sp.father_mobile, sp.mother_mobile
            FROM "${schema}".students s
-           LEFT JOIN "${schema}".departments d ON (d.id = s.department_id OR d.id::text = s.department_id::text)
-           LEFT JOIN "${schema}".courses c ON c.code = s.course_cd OR c.id::text = s.course_cd
-           LEFT JOIN "${schema}".batches b ON (b.id = s.batch_id OR b.id::text = s.batch_id::text)
-           LEFT JOIN "${schema}".student_admissions sa ON (sa.student_id = s.id OR sa.student_id::text = s.id::text)
-           LEFT JOIN "${schema}".student_parents sp ON (sp.student_id = s.id OR sp.student_id::text = s.id::text)
-           WHERE (s.user_id = $1::uuid OR s.id::text = $1::text OR s.user_id::text = $1::text)
+           LEFT JOIN "${schema}".departments d ON (d.id::text = s.department_id::text)
+           LEFT JOIN "${schema}".courses c ON (c.code::text = s.course_cd::text OR c.id::text = s.course_cd::text OR c.course_cd::text = s.course_cd::text)
+           LEFT JOIN "${schema}".batches b ON (b.id::text = s.batch_id::text OR b.code::text = s.batch_cd::text)
+           LEFT JOIN "${schema}".student_admissions sa ON (sa.student_id::text = s.id::text)
+           LEFT JOIN "${schema}".student_parents sp ON (sp.student_id::text = s.id::text)
+           WHERE (s.user_id::text = $1::text OR s.id::text = $1::text)
               OR (s.registration_no IS NOT NULL AND s.registration_no = $2)
               OR (s.rollno IS NOT NULL AND s.rollno = $2)
-              OR (s.user_id::text = $2::text)`,
+           ORDER BY s.updated_at DESC NULLS LAST
+           LIMIT 1`,
           [studentUserSub, payload.sub],
-        );
+        ).catch((err: any) => {
+          this.logger.error(`Error loading student profile in getMe for ${payload.sub}: ${err.message}`);
+          return [];
+        });
         profile = pRows[0] ?? null;
       } else if ([UserRole.FACULTY, UserRole.HOD, UserRole.CLERK, UserRole.STAFF, UserRole.COLLEGE_ADMIN, UserRole.WARDEN, UserRole.SUPER_ADMIN].includes(payload.role)) {
         const emailPrefix = (rows[0]?.email || payload.email || '').split('@')[0];

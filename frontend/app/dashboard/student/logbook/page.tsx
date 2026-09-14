@@ -2410,7 +2410,7 @@ export default function StudentLogbookPage() {
                                 <div className="space-y-1 sm:space-y-1.5 text-xs text-slate-500 pt-1">
                                   <div className="flex items-center justify-between text-[10px] sm:text-[11px]">
                                     <span className="text-slate-400">Course / Batch:</span>
-                                    <span className="font-bold text-slate-700 dark:text-slate-300">{top.course_name || 'BCA'} • {top.batch_name || '2025'}</span>
+                                    <span className="font-bold text-slate-700 dark:text-slate-300">{top.course_name || 'Course'} • {top.batch_name || '2025'}</span>
                                   </div>
                                   <div className="flex items-center justify-between text-[10px] sm:text-[11px]">
                                     <span className="text-slate-400">Supervisor:</span>
@@ -2964,8 +2964,8 @@ export default function StudentLogbookPage() {
                       Academic Candidate Dossier
                     </span>
                     <span className="text-xs text-slate-300 font-mono">
-                      Roll: <strong className="text-white">{student.rollno || '2500141790001'}</strong>
-                      {student.registration_no ? ` • Reg: ${student.registration_no}` : ' • Reg: 2025107990'}
+                      Roll: <strong className="text-white">{student.rollno || 'N/A'}</strong>
+                      {student.registration_no ? ` • Reg: ${student.registration_no}` : ''}
                     </span>
                   </div>
                   <h3 className="text-lg md:text-xl font-black text-white truncate mt-0.5">

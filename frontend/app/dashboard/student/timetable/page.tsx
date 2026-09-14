@@ -103,13 +103,25 @@ export default function StudentTimetablePage() {
           const meJson = await meRes.json();
           const meData = meJson.data || meJson;
           const p = meData.profile || meData;
-          courseCd = p.course_cd || meData.course_cd || meData.courseCd || (p.course_name?.includes('BCA') ? '13' : '');
+          courseCd = p.course_cd || meData.course_cd || meData.courseCd || '';
           branchCd = p.branch_cd || meData.branch_cd || meData.branchCd || '1';
           batchCd = p.batch_cd || meData.batch_cd || meData.batchCd || '2';
           batchId = p.batch_id || meData.batch_id || meData.batchId || '';
           semester = p.semester || p.current_semester || meData.semester || '3';
           section = p.section || meData.section || '1';
           colgCd = p.colg_cd || meData.colg_cd || meData.colgcd || '1';
+        }
+
+        if (!courseCd) {
+          try {
+            const cachedUserStr = getStorageItem('user');
+            if (cachedUserStr) {
+              const cached = JSON.parse(cachedUserStr);
+              const cp = cached?.profile || cached || {};
+              courseCd = cp.course_cd || cached?.courseCd || cached?.course_cd || '';
+              if (!batchCd) batchCd = cp.batch_cd || cached?.batchCd || cached?.batch_cd || '2';
+            }
+          } catch {}
         }
       } catch {
         // Continue with query
@@ -232,7 +244,7 @@ export default function StudentTimetablePage() {
                 <div className="md:col-span-2 space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="px-2.5 py-0.5 rounded-md text-[10px] font-mono font-extrabold uppercase bg-white/20 text-white border border-white/30">
-                      {currentLecture.subject_code || 'BCA-301'}
+                      {currentLecture.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'CLASS')}
                     </span>
                     <span className="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-[#F36C21] text-white shadow-sm">
                       {currentLecture.slot_type || 'LECTURE'}
@@ -341,14 +353,14 @@ export default function StudentTimetablePage() {
                           {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
                         </span>
                         <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs uppercase">
-                          {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'BCA')} • {slot.slot_type || 'LECTURE'}
+                          {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'CLASS')} • {slot.slot_type || 'LECTURE'}
                         </span>
                       </div>
 
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-mono font-black text-[#5B4BFF] dark:text-indigo-300 uppercase">
-                            {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'BCA')}
+                            {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'CLASS')}
                           </span>
                           {slot.group_name && (
                             <span className="text-[10px] px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold border border-purple-500/20">
@@ -391,7 +403,7 @@ export default function StudentTimetablePage() {
                           {/* Top Header Ribbon */}
                           <div className="flex items-center justify-between gap-1.5 border-b border-[#E5E8ED] dark:border-slate-800 pb-1.5">
                             <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#FFF4EC] text-[#F36C21] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/40 shadow-xs uppercase">
-                              {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'BCA')} • {slot.slot_type || 'LECTURE'}
+                              {slot.subject_code || (tenantSlug.includes('ims') ? 'MBBS' : 'CLASS')} • {slot.slot_type || 'LECTURE'}
                             </span>
                             <span className="font-mono text-[#475467] dark:text-indigo-200 text-[10px] font-bold">
                               ⏰ {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}

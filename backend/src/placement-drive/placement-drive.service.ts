@@ -42,13 +42,31 @@ export class PlacementDriveService {
 
     const isUuid = userId && typeof userId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
 
+    const baseSelect = `
+      SELECT s.id, s.registration_no, s.rollno, s.name, s.course_cd, s.batch_cd,
+             COALESCE(s.admission_year, b.year, s.batch_cd, '2025') AS admission_year,
+             COALESCE(s.branch_id, sa.branch_id, d.branch_cd, d.code, '1') AS branch_cd,
+             COALESCE(d.name, sa.branch_name, CASE WHEN s.course_cd = '4' THEN 'MBA Department' WHEN s.course_cd = '12' THEN 'BBA Department' ELSE 'Academic Department' END) AS branch_name,
+             COALESCE(sa.batch_id, s.batch_id, b.code, '16') AS batch_id,
+             COALESCE(sa.batch_code, b.name, 'Batch ' || COALESCE(s.batch_cd, s.admission_year, '2025')) AS batch_name,
+             COALESCE(b.code, sa.batch_id, s.batch_cd, '2025') AS batch_code,
+             COALESCE(c.name, sa.course_code, CASE WHEN s.course_cd = '4' THEN 'MBA' WHEN s.course_cd = '12' THEN 'BBA' WHEN s.course_cd = '13' THEN 'BCA' ELSE s.course_cd END) AS course_name,
+             COALESCE(c.code, sa.course_id, s.course_cd) AS course_code,
+             '3' AS semester
+      FROM "${schema}".students s
+      LEFT JOIN "${schema}".student_admissions sa ON sa.student_id::text = s.id::text
+      LEFT JOIN "${schema}".departments d ON d.id::text = s.department_id::text
+      LEFT JOIN "${schema}".courses c ON (c.code::text = s.course_cd::text OR c.id::text = s.course_cd::text OR c.course_cd::text = s.course_cd::text)
+      LEFT JOIN "${schema}".batches b ON (b.id::text = s.batch_id::text OR (b.code::text = s.batch_cd::text AND (b.course_cd::text = s.course_cd::text OR b.course_cd IS NULL)))
+    `;
+
     let studentRows: any[] = [];
     if (isUuid) {
       studentRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT s.id, s.registration_no, s.rollno, s.name, s.course_cd, s.batch_cd
-         FROM "${schema}".students s
-         WHERE s.user_id = $1 LIMIT 1`,
+        `${baseSelect}
+         WHERE s.user_id::text = $1::text
+         LIMIT 1`,
         [userId],
       ).catch(() => []);
     }
@@ -56,9 +74,9 @@ export class PlacementDriveService {
     if ((!studentRows || studentRows.length === 0) && identifier) {
       studentRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT s.id, s.registration_no, s.rollno, s.name, s.course_cd, s.batch_cd
-         FROM "${schema}".students s
-         WHERE s.registration_no = $1 OR s.rollno = $1 LIMIT 1`,
+        `${baseSelect}
+         WHERE s.registration_no = $1 OR s.rollno = $1
+         LIMIT 1`,
         [identifier],
       ).catch(() => []);
     }
@@ -66,10 +84,10 @@ export class PlacementDriveService {
     if ((!studentRows || studentRows.length === 0) && email) {
       studentRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT s.id, s.registration_no, s.rollno, s.name, s.course_cd, s.batch_cd
-         FROM "${schema}".students s
-         JOIN "${schema}".users u ON s.user_id = u.id
-         WHERE u.email = $1 LIMIT 1`,
+        `${baseSelect}
+         JOIN "${schema}".users u ON s.user_id::text = u.id::text
+         WHERE LOWER(u.email) = LOWER($1)
+         LIMIT 1`,
         [email],
       ).catch(() => []);
     }
@@ -81,8 +99,15 @@ export class PlacementDriveService {
     return {
       registration_no: identifier || (email ? email.split('@')[0] : 'REG_UNKNOWN'),
       name: user?.name || (email ? email.split('@')[0] : 'Student Applicant'),
-      course_cd: null,
-      batch_cd: null,
+      course_cd: user?.courseCd || user?.course_cd || '4',
+      course_name: user?.courseName || user?.course_name || 'MBA',
+      branch_cd: user?.branchCd || user?.branch_cd || '1',
+      branch_name: user?.departmentName || user?.department_name || 'MBA Department',
+      batch_cd: user?.batchCd || user?.batch_cd || '2025',
+      batch_id: '16',
+      batch_name: user?.batchName || user?.batch_name || '2025 Batch',
+      admission_year: '2025',
+      semester: '3',
     };
   }
 
@@ -269,14 +294,17 @@ export class PlacementDriveService {
       ORDER BY pd.drive_date ASC, pd.created_at DESC
     `;
 
-    const drives = await this.tenantSchemaService.queryInTenant(slug, sql, params);
+    let drives = await this.tenantSchemaService.queryInTenant(slug, sql, params);
 
     // Attach student's own application status for each drive
     let regNo = user?.registration_no || user?.rollno || user?.username || '';
-    if (!regNo && user) {
+    let studentObj: any = null;
+    if (user) {
       try {
-        const student = await this.resolveStudent(slug, user);
-        regNo = student?.registration_no || '';
+        studentObj = await this.resolveStudent(slug, user);
+        if (studentObj?.registration_no) {
+          regNo = studentObj.registration_no;
+        }
       } catch {}
     }
 
@@ -308,6 +336,117 @@ export class PlacementDriveService {
         d.has_applied = false;
         d.application_status = null;
         d.offer_status = null;
+      });
+    }
+
+    // STUDENT AUDIENCE FILTERING:
+    // If the requesting user is a student, filter drives strictly to those eligible for this student's cohort
+    const userRole = (user?.role || '').toUpperCase();
+    if (userRole === 'STUDENT' && studentObj) {
+      const studentCourseCd = String(studentObj.course_cd || '').trim();
+      const studentCourseName = String(studentObj.course_name || '').trim().toLowerCase();
+      const studentBranchCd = String(studentObj.branch_cd || '').trim().toUpperCase();
+      const studentBranchName = String(studentObj.branch_name || '').trim().toUpperCase();
+      const studentBatchCd = String(studentObj.batch_cd || '').trim();
+      const studentBatchId = String(studentObj.batch_id || '').trim();
+      const studentBatchName = String(studentObj.batch_name || '').trim();
+      const studentAdmissionYear = String(studentObj.admission_year || studentObj.batch_cd || '').trim();
+      const studentSemester = String(studentObj.semester || '').trim().toLowerCase();
+      const studentSemDigit = studentSemester.replace(/[^0-9]/g, '');
+
+      drives = drives.filter((d: any) => {
+        // If student has already applied, keep it visible so they can monitor their status & offers
+        if (d.has_applied) return true;
+
+        const targetCohorts: any[] = (d.extra_fields?.target_cohorts && Array.isArray(d.extra_fields.target_cohorts))
+          ? d.extra_fields.target_cohorts
+          : [];
+
+        if (targetCohorts.length > 0) {
+          const cohortMatched = targetCohorts.some((tc: any) => {
+            // Course match
+            const tcCourseCd = String(tc.course_cd || '').trim();
+            const tcCourseName = String(tc.course_name || '').trim().toLowerCase();
+            const matchCourse = !tcCourseCd || tcCourseCd === 'ALL' ||
+              tcCourseCd === studentCourseCd ||
+              (tcCourseName && studentCourseName && (tcCourseName.includes(studentCourseName) || studentCourseName.includes(tcCourseName))) ||
+              (studentCourseCd === '4' && (tcCourseCd === '4' || tcCourseName.includes('mba') || tcCourseCd.toLowerCase().includes('mba')));
+            if (!matchCourse) return false;
+
+            // Branch match
+            const tcBranchCd = String(tc.branch_cd || '').trim().toUpperCase();
+            const tcBranchName = String(tc.branch_name || '').trim().toUpperCase();
+            const matchBranch = !tcBranchCd || tcBranchCd === 'ALL' || tcBranchCd === '-' ||
+              tcBranchCd === studentBranchCd ||
+              (studentBranchName && tcBranchName && (tcBranchName.includes(studentBranchName) || studentBranchName.includes(tcBranchName))) ||
+              (studentBranchName && (studentBranchName.includes(tcBranchCd) || tcBranchCd.includes(studentBranchName))) ||
+              (studentCourseCd === '4' && (tcBranchName.includes('MBA') || tcBranchCd === '1'));
+            if (!matchBranch) return false;
+
+            // Batch match
+            const tcBatchCd = String(tc.batch_cd || '').trim();
+            const tcBatchName = String(tc.batch_name || '').trim();
+            const matchBatch = !tcBatchCd || tcBatchCd === 'ALL' ||
+              tcBatchCd === studentBatchCd ||
+              tcBatchCd === studentBatchId ||
+              tcBatchCd === studentAdmissionYear ||
+              tcBatchName === studentBatchCd ||
+              tcBatchName === studentAdmissionYear ||
+              (studentBatchName && tcBatchName && (studentBatchName.includes(tcBatchName) || tcBatchName.includes(studentBatchName))) ||
+              (studentAdmissionYear && tcBatchName && tcBatchName.includes(studentAdmissionYear));
+            if (!matchBatch) return false;
+
+            // Semester match
+            const tcSem = String(tc.semester || '').trim().toLowerCase();
+            const tcSemDigit = tcSem.replace(/[^0-9]/g, '');
+            const matchSem = !tcSem || tcSem === 'all' || tcSem === 'all semesters' ||
+              tcSem === studentSemester ||
+              (tcSemDigit && studentSemDigit && tcSemDigit === studentSemDigit) ||
+              tcSem.includes(studentSemester) ||
+              (studentSemDigit && tcSem.includes(studentSemDigit));
+            return matchSem;
+          });
+
+          if (cohortMatched) return true;
+        }
+
+        // Top-level or Fallback Check: Check standard columns & extra_fields
+        const driveCourseCodes = [
+          ...(d.eligibility_course_cd ? String(d.eligibility_course_cd).split(',').map((s: string) => s.trim()) : []),
+          ...(Array.isArray(d.extra_fields?.eligible_courses) ? d.extra_fields.eligible_courses.map((s: any) => String(s).trim()) : []),
+        ];
+        const matchCourse = driveCourseCodes.length === 0 || 
+          driveCourseCodes.includes('ALL') || 
+          driveCourseCodes.includes(studentCourseCd) ||
+          (studentCourseName && driveCourseCodes.some((c: string) => c.toLowerCase() === studentCourseName || c.toLowerCase().includes(studentCourseName) || studentCourseName.includes(c.toLowerCase()))) ||
+          (studentCourseCd === '4' && driveCourseCodes.some((c: string) => c.toLowerCase().includes('mba')));
+        if (!matchCourse) return false;
+
+        const driveBranches = [
+          ...(Array.isArray(d.eligible_branches) ? d.eligible_branches : typeof d.eligible_branches === 'string' ? d.eligible_branches.split(',') : []),
+          ...(d.eligibility_branch_cd ? String(d.eligibility_branch_cd).split(',') : []),
+          ...(Array.isArray(d.extra_fields?.eligible_branches) ? d.extra_fields.eligible_branches : [])
+        ].map(s => String(s).trim().toUpperCase()).filter(Boolean);
+
+        const matchBranch = driveBranches.length === 0 || driveBranches.includes('ALL') || driveBranches.includes('-') ||
+          driveBranches.includes(studentBranchCd) ||
+          (studentBranchName && driveBranches.some(b => b.includes(studentBranchName) || studentBranchName.includes(b))) ||
+          (studentCourseCd === '4' && (driveBranches.some(b => b.includes('MBA')) || driveBranches.includes('1')));
+        if (!matchBranch) return false;
+
+        const driveBatches = [
+          ...(Array.isArray(d.eligible_batches) ? d.eligible_batches : typeof d.eligible_batches === 'string' ? d.eligible_batches.split(',') : []),
+          ...(d.eligibility_batch_cd ? String(d.eligibility_batch_cd).split(',') : []),
+          ...(Array.isArray(d.extra_fields?.eligible_batches) ? d.extra_fields.eligible_batches : [])
+        ].map(s => String(s).trim()).filter(Boolean);
+
+        const matchBatch = driveBatches.length === 0 || driveBatches.includes('ALL') ||
+          driveBatches.includes(studentBatchCd) ||
+          driveBatches.includes(studentBatchId) ||
+          driveBatches.includes(studentAdmissionYear) ||
+          (studentBatchName && driveBatches.some(b => b.includes(studentBatchName) || studentBatchName.includes(b))) ||
+          (studentAdmissionYear && driveBatches.some(b => b.includes(studentAdmissionYear)));
+        return matchBatch;
       });
     }
 
@@ -464,9 +603,23 @@ export class PlacementDriveService {
     const slug = this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${slug}`;
 
+    const rawStatus = (dto.status || '').trim();
+    let normalizedStatus = 'Applied';
+    if (/shortlist/i.test(rawStatus)) {
+      normalizedStatus = 'Shortlisted';
+    } else if (/select|place/i.test(rawStatus)) {
+      normalizedStatus = 'Selected';
+    } else if (/reject/i.test(rawStatus)) {
+      normalizedStatus = 'Rejected';
+    } else if (/appl/i.test(rawStatus)) {
+      normalizedStatus = 'Applied';
+    } else if (rawStatus) {
+      normalizedStatus = rawStatus;
+    }
+
     const apps = await this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT pa.*, pd.company_name, pd.role
+      `SELECT pa.*, pd.company_name, pd.role, pd.package_ctc
        FROM "${schema}".placement_applications pa
        JOIN "${schema}".placement_drives pd ON pa.drive_id::text = pd.drive_id::text
        WHERE pa.application_id = $1`,
@@ -478,8 +631,22 @@ export class PlacementDriveService {
     }
 
     const app = apps[0];
-    const selectedCompany = dto.status === 'Selected' ? (dto.selected_company || app.company_name) : null;
-    const selectedRole = dto.status === 'Selected' ? (dto.selected_role || app.role) : null;
+    const selectedCompany = normalizedStatus === 'Selected' ? (dto.selected_company || app.company_name) : null;
+    const selectedRole = normalizedStatus === 'Selected' ? (dto.selected_role || app.role) : null;
+
+    let offerStatus: string | null = null;
+    let offerPackage: string | null = null;
+
+    if (normalizedStatus === 'Selected') {
+      offerStatus = 'pending';
+      offerPackage = dto.offer_package || app.offer_package || app.package_ctc || '';
+    } else if (normalizedStatus === 'Rejected') {
+      offerStatus = 'declined';
+      offerPackage = null;
+    } else {
+      offerStatus = null;
+      offerPackage = null;
+    }
 
     const updated = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -487,24 +654,43 @@ export class PlacementDriveService {
        SET status = $1,
            selected_company = $2,
            selected_role = $3,
-           remarks = $4,
+           offer_package = $4,
+           offer_status = $5,
+           remarks = $6,
            updated_at = NOW()
-       WHERE application_id = $5
+       WHERE application_id = $7
        RETURNING *`,
-      [dto.status, selectedCompany, selectedRole, dto.remarks || null, dto.application_id],
+      [
+        normalizedStatus,
+        selectedCompany,
+        selectedRole,
+        offerPackage,
+        offerStatus,
+        dto.remarks || null,
+        dto.application_id,
+      ],
     );
 
     // Insert Notification for Student
     try {
+      const notifType = normalizedStatus === 'Selected' ? 'success' : normalizedStatus === 'Shortlisted' ? 'info' : 'warning';
+      const notifMsg = normalizedStatus === 'Selected'
+        ? `Congratulations! You have been Selected for ${app.company_name} (${app.role}). View your placement offer in the student portal.`
+        : normalizedStatus === 'Shortlisted'
+        ? `Great news! You have been Shortlisted for ${app.company_name} (${app.role}) for the next selection round.`
+        : normalizedStatus === 'Rejected'
+        ? `Your placement application for ${app.company_name} (${app.role}) was not selected in this round.`
+        : `Your placement application for ${app.company_name} (${app.role}) has been updated to: ${normalizedStatus}.`;
+
       await this.tenantSchemaService.queryInTenant(
         slug,
         `INSERT INTO "${schema}".notifications (recipient_id, title, message, type, is_read, created_at)
          VALUES ($1, $2, $3, $4, false, NOW())`,
         [
           app.student_reg_no,
-          `Placement Application Update: ${app.company_name}`,
-          `Your placement application for ${app.company_name} (${app.role}) has been updated to: ${dto.status}.`,
-          dto.status === 'Selected' ? 'success' : dto.status === 'Shortlisted' ? 'info' : 'warning',
+          `Placement Update: ${app.company_name}`,
+          notifMsg,
+          notifType,
         ],
       );
     } catch (e) {
@@ -512,7 +698,7 @@ export class PlacementDriveService {
     }
 
     return {
-      message: `Applicant status updated to ${dto.status} and student notified successfully`,
+      message: `Applicant status updated to ${normalizedStatus} and student notified successfully`,
       application: updated[0],
       notified: true,
       student_reg_no: app.student_reg_no,
@@ -760,6 +946,35 @@ export class PlacementDriveService {
       return str;
     };
 
+    // Extract cohorts if provided
+    const targetCohorts = Array.isArray(dto.target_cohorts) ? dto.target_cohorts : [];
+    
+    // Extract unique course codes
+    const cohortCourseCds = targetCohorts
+      .map((c: any) => c.course_cd ? String(c.course_cd) : '')
+      .filter(Boolean);
+    const eligibleCourseCds = Array.from(
+      new Set(
+        [
+          ...(Array.isArray(dto.eligible_courses) ? dto.eligible_courses.map(String) : []),
+          ...cohortCourseCds,
+          ...(dto.eligibility_course_cd ? [String(dto.eligibility_course_cd)] : []),
+        ].filter(Boolean)
+      )
+    );
+
+    // Extract unique branches from cohorts
+    const cohortBranches = targetCohorts
+      .map((c: any) => c.branch_name || c.branch_cd ? String(c.branch_name || c.branch_cd) : '')
+      .filter(Boolean);
+
+    // Extract unique batches from cohorts
+    const cohortBatches = targetCohorts
+      .map((c: any) => c.batch_name || c.batch_cd ? String(c.batch_name || c.batch_cd) : '')
+      .filter(Boolean);
+
+    const primaryCourseCd = eligibleCourseCds.length > 0 ? eligibleCourseCds[0] : (dto.eligibility_course_cd || '13');
+
     const insertedCompanies: any[] = [];
 
     for (const comp of dto.companies) {
@@ -773,9 +988,19 @@ export class PlacementDriveService {
       const driveDate = parseExcelDateValue(rawDriveDate) || new Date().toISOString().split('T')[0];
       const deadlineDate = parseExcelDateValue(rawDeadlineDate) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
-      const branches = Array.isArray(comp.eligible_branches) ? comp.eligible_branches : ['CSE', 'IT', 'ECE'];
-      const batches = Array.isArray(comp.eligible_batches) ? comp.eligible_batches : ['2025', '2026'];
-      const extraFields = comp.extra_fields || {};
+      let branches = Array.isArray(comp.eligible_branches) && comp.eligible_branches.length > 0
+        ? comp.eligible_branches
+        : (cohortBranches.length > 0 ? Array.from(new Set(cohortBranches)) : ['CSE', 'IT', 'ECE']);
+
+      let batches = Array.isArray(comp.eligible_batches) && comp.eligible_batches.length > 0
+        ? comp.eligible_batches
+        : (cohortBatches.length > 0 ? Array.from(new Set(cohortBatches)) : ['2025', '2026']);
+
+      const extraFields = {
+        ...(comp.extra_fields || {}),
+        ...(targetCohorts.length > 0 ? { target_cohorts: targetCohorts } : {}),
+        ...(eligibleCourseCds.length > 0 ? { eligible_courses: eligibleCourseCds } : {}),
+      };
       const logoUrl = comp.logo_url || null;
 
       try {
@@ -810,7 +1035,7 @@ export class PlacementDriveService {
           role,
           packageCtc,
           description,
-          '13',
+          primaryCourseCd,
           branches.join(', '),
           batches.join(', '),
           JSON.stringify(branches),
@@ -864,7 +1089,8 @@ export class PlacementDriveService {
   async getStudentOffers(tenantSlug: string, user: any) {
     const slug = this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${slug}`;
-    const regNo = user?.registration_no || user?.rollno || user?.username;
+    const student = await this.resolveStudent(slug, user).catch(() => null);
+    const regNo = student?.registration_no || user?.registration_no || user?.rollno || user?.username;
 
     const applications = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -874,13 +1100,13 @@ export class PlacementDriveService {
               pd.company_name, pd.role, pd.package_ctc, pd.drive_date, pd.logo_url, pd.extra_fields
        FROM "${schema}".placement_applications pa
        JOIN "${schema}".placement_drives pd ON pa.drive_id::text = pd.drive_id::text
-       WHERE pa.student_reg_no = $1
+       WHERE pa.student_reg_no = $1 OR pa.student_reg_no = $2
        ORDER BY pa.applied_at DESC`,
-      [regNo],
+      [regNo, user?.id || regNo],
     );
 
     const placedCount = applications.filter(
-      (a: any) => a.status === 'Selected' || a.offer_status === 'accepted',
+      (a: any) => (a.status === 'Selected' && a.offer_status !== 'declined') || a.offer_status === 'accepted',
     ).length;
 
     const offers = applications.map((a: any) => ({

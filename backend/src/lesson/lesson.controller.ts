@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Res,
+  Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Res, Req,
   UploadedFile, UseInterceptors, ParseIntPipe, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -17,6 +17,58 @@ import { Public } from '../common/decorators/public.decorator';
 export class LessonController {
   constructor(private readonly lessonService: LessonService) {}
 
+  private extractUser(req: any, dto?: any): any {
+    if (req.user && req.user.role) {
+      return req.user;
+    }
+
+    const authHeader = req.headers?.authorization || req.headers?.Authorization;
+    let tokenUser: any = null;
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const payloadBase64 = token.split('.')[1];
+        if (payloadBase64) {
+          tokenUser = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf8'));
+        }
+      } catch {}
+    }
+
+    const headerId =
+      dto?.sender_id ||
+      req.headers?.['x-user-id'] ||
+      req.headers?.['x-user-reg-no'] ||
+      tokenUser?.sub ||
+      tokenUser?.id ||
+      tokenUser?.emp_id ||
+      tokenUser?.registration_no ||
+      '';
+    const headerName =
+      dto?.sender_name ||
+      req.headers?.['x-user-name'] ||
+      tokenUser?.name ||
+      tokenUser?.faculty_name ||
+      tokenUser?.student_name ||
+      tokenUser?.username ||
+      '';
+    const headerRole = (
+      dto?.sender_role ||
+      req.headers?.['x-user-role'] ||
+      tokenUser?.role ||
+      'FACULTY'
+    ).toUpperCase();
+    const headerColg = req.headers?.['x-colg-cd'] || tokenUser?.colgCd || tokenUser?.colg_cd || '1';
+
+    return {
+      id: String(headerId),
+      name: headerName ? String(headerName) : '',
+      role: String(headerRole),
+      colgCd: String(headerColg),
+      registration_no: tokenUser?.registration_no || req.headers?.['x-user-reg-no'] || String(headerId),
+      emp_id: tokenUser?.emp_id || String(headerId),
+    };
+  }
+
   @Public()
   @Post()
   @ApiOperation({ summary: 'Upload a new lesson material (max 25MB)' })
@@ -24,10 +76,17 @@ export class LessonController {
   @UseInterceptors(FileInterceptor('file'))
   async createLesson(
     @TenantSlug() tenantSlug: string,
+    @Req() req: any,
     @Body() dto: CreateLessonDto,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const mockUser = { role: 'FACULTY', colgCd: dto.colgCd || '1', emp_id: 'FAC001', name: 'Faculty Member' };
+    const user = this.extractUser(req, dto);
+    const mockUser = {
+      role: user.role || 'FACULTY',
+      colgCd: dto.colgCd || user.colgCd || '1',
+      emp_id: user.emp_id || 'FAC001',
+      name: user.name || 'Faculty Member',
+    };
     const data = await this.lessonService.createLesson(tenantSlug, mockUser, dto, file);
     return { success: true, message: 'Lesson uploaded successfully', data };
   }
@@ -44,6 +103,7 @@ export class LessonController {
   @ApiQuery({ name: 'empid', required: false })
   async listLessons(
     @TenantSlug() tenantSlug: string,
+    @Req() req: any,
     @Query('colgCd') colgCd?: string,
     @Query('courseCd') courseCd?: string,
     @Query('branchCd') branchCd?: string,
@@ -52,9 +112,15 @@ export class LessonController {
     @Query('subjectId') subjectId?: string,
     @Query('empid') empid?: string,
   ) {
-    const mockUser = { role: 'FACULTY', colgCd: colgCd || '1' };
-    const data = await this.lessonService.listLessons(tenantSlug, mockUser, {
-      colgCd, courseCd, branchCd, batchCd, semCd, subjectId, empid,
+    const user = this.extractUser(req);
+    const data = await this.lessonService.listLessons(tenantSlug, user, {
+      colgCd: colgCd || user.colgCd,
+      courseCd,
+      branchCd,
+      batchCd,
+      semCd,
+      subjectId,
+      empid,
     });
     return { success: true, data };
   }
@@ -63,13 +129,31 @@ export class LessonController {
   @Get('recent')
   @ApiOperation({ summary: 'Get recent lessons for dashboard widget' })
   @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'courseCd', required: false })
+  @ApiQuery({ name: 'branchCd', required: false })
+  @ApiQuery({ name: 'batchCd', required: false })
+  @ApiQuery({ name: 'semCd', required: false })
+  @ApiQuery({ name: 'colgCd', required: false })
   async getRecentLessons(
     @TenantSlug() tenantSlug: string,
+    @Req() req: any,
     @Query('limit') limit?: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+    @Query('batchCd') batchCd?: string,
+    @Query('semCd') semCd?: string,
+    @Query('colgCd') colgCd?: string,
   ) {
-    const mockUser = { role: 'FACULTY', colgCd: '1' };
+    const user = this.extractUser(req);
     const limitNum = limit ? parseInt(limit, 10) : 6;
-    const data = await this.lessonService.getRecentLessons(tenantSlug, mockUser, limitNum);
+    const data = await this.lessonService.getRecentLessons(tenantSlug, user, {
+      limit: limitNum,
+      courseCd,
+      branchCd,
+      batchCd,
+      semCd,
+      colgCd: colgCd || user.colgCd,
+    });
     return { success: true, data };
   }
 

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, IsArray, IsBoolean } from 'class-validator';
 
 export class CreateExamPaperDto {
   @IsString()
@@ -49,8 +49,8 @@ export class CreateExamPaperDto {
 
 export class SubmitResultDto {
   @IsString()
-  @IsNotEmpty()
-  studentId: string;
+  @IsOptional()
+  studentId?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -89,6 +89,7 @@ export class SubmitResultDto {
   studentName?: string;
 
   @IsOptional()
+  @IsBoolean()
   isPass?: boolean;
 }
 

@@ -112,7 +112,7 @@ export class IncubationCellService {
   /**
    * Fetch Incubation Projects (Threshold: Faculty Score >= 70% or nominated)
    */
-  async getIncubationProjects(tenantSlug: string, query: QueryIncubationProjectsDto) {
+  async getIncubationProjects(tenantSlug: string, query: QueryIncubationProjectsDto, user?: any) {
     const slug = this.resolveTenantSlug(tenantSlug || query.tenant);
     const schema = `tenant_${slug}`;
 
@@ -128,6 +128,30 @@ export class IncubationCellService {
          ADD COLUMN IF NOT EXISTS incubated_at TIMESTAMP;`
       );
     } catch {}
+
+    let courseId = query.courseId;
+    let branchId = query.branchId;
+    let batchId = query.batchId;
+
+    // Student role auto-scoping: if student, auto-resolve course, branch, and batch
+    if (user?.role === 'STUDENT') {
+      try {
+        const studentId = String(user.registration_no || user.id || '').trim();
+        const studentRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT course_cd, branch_id, batch_cd, department_id FROM "${schema}".students 
+           WHERE registration_no = $1 OR rollno = $1 OR user_id::text = $1 OR id::text = $1 LIMIT 1`,
+          [studentId],
+        );
+        if (studentRows && studentRows.length > 0) {
+          courseId = courseId || studentRows[0].course_cd;
+          branchId = branchId || studentRows[0].branch_id || studentRows[0].department_id;
+          batchId = batchId || studentRows[0].batch_cd;
+        }
+      } catch (err: any) {
+        console.warn('Could not auto-resolve student course for incubation projects:', err.message);
+      }
+    }
 
     const conditions: string[] = [];
     const params: any[] = [];
@@ -147,24 +171,34 @@ export class IncubationCellService {
     }
 
     // Course filter
-    if (query.courseId && query.courseId !== 'all') {
+    if (courseId && courseId !== 'all') {
       conditions.push(`(r.course_cd = $${paramIndex} OR crs.code = $${paramIndex} OR crs.id::text = $${paramIndex} OR crs.name ILIKE '%' || $${paramIndex} || '%')`);
-      params.push(query.courseId);
+      params.push(courseId);
       paramIndex++;
     }
 
     // Branch filter
-    if (query.branchId && query.branchId !== 'all') {
+    if (branchId && branchId !== 'all') {
       conditions.push(`(r.branch_cd = $${paramIndex} OR dep.code = $${paramIndex} OR dep.id::text = $${paramIndex} OR dep.name ILIKE '%' || $${paramIndex} || '%')`);
-      params.push(query.branchId);
+      params.push(branchId);
       paramIndex++;
     }
 
     // Batch filter
-    if (query.batchId && query.batchId !== 'all') {
+    if (batchId && batchId !== 'all') {
       conditions.push(`(r.batch_cd = $${paramIndex} OR bth.code = $${paramIndex} OR bth.name ILIKE '%' || $${paramIndex} || '%' OR bth.id::text = $${paramIndex})`);
-      params.push(query.batchId);
+      params.push(batchId);
       paramIndex++;
+    }
+
+    // Strict Cross-Course Exclusion for Student Role
+    if (user?.role === 'STUDENT' && courseId) {
+      const sCourse = String(courseId).toUpperCase();
+      if (sCourse === '4' || sCourse.includes('MBA')) {
+        conditions.push(`(COALESCE(crs.name, r.course_cd, '') NOT ILIKE '%BCA%' AND COALESCE(crs.name, r.course_cd, '') NOT ILIKE '%B.TECH%' AND COALESCE(crs.name, r.course_cd, '') NOT ILIKE '%MCA%' AND COALESCE(crs.name, r.course_cd, '') NOT ILIKE '%PHARM%')`);
+      } else if (sCourse === '13' || sCourse.includes('BCA')) {
+        conditions.push(`(COALESCE(crs.name, r.course_cd, '') NOT ILIKE '%MBA%' AND COALESCE(crs.name, r.course_cd, '') NOT ILIKE '%B.TECH%')`);
+      }
     }
 
     // Status filter
@@ -316,22 +350,32 @@ export class IncubationCellService {
       miniParams.push(minScore);
       miniParamIndex++;
 
-      if (query.courseId && query.courseId !== 'all') {
+      if (courseId && courseId !== 'all') {
         miniConditions.push(`(p.course_id = $${miniParamIndex} OR crs.code = $${miniParamIndex} OR crs.id::text = $${miniParamIndex} OR crs.name ILIKE '%' || $${miniParamIndex} || '%')`);
-        miniParams.push(query.courseId);
+        miniParams.push(courseId);
         miniParamIndex++;
       }
 
-      if (query.branchId && query.branchId !== 'all') {
+      if (branchId && branchId !== 'all') {
         miniConditions.push(`(p.branch_id = $${miniParamIndex} OR dep.code = $${miniParamIndex} OR dep.id::text = $${miniParamIndex} OR dep.name ILIKE '%' || $${miniParamIndex} || '%')`);
-        miniParams.push(query.branchId);
+        miniParams.push(branchId);
         miniParamIndex++;
       }
 
-      if (query.batchId && query.batchId !== 'all') {
+      if (batchId && batchId !== 'all') {
         miniConditions.push(`(p.batch_id = $${miniParamIndex} OR bth.code = $${miniParamIndex} OR bth.name ILIKE '%' || $${miniParamIndex} || '%' OR bth.id::text = $${miniParamIndex})`);
-        miniParams.push(query.batchId);
+        miniParams.push(batchId);
         miniParamIndex++;
+      }
+
+      // Strict Cross-Course Exclusion for Student Role on Mini Projects
+      if (user?.role === 'STUDENT' && courseId) {
+        const sCourse = String(courseId).toUpperCase();
+        if (sCourse === '4' || sCourse.includes('MBA')) {
+          miniConditions.push(`(COALESCE(crs.name, p.course_id, '') NOT ILIKE '%BCA%' AND COALESCE(crs.name, p.course_id, '') NOT ILIKE '%B.TECH%' AND COALESCE(crs.name, p.course_id, '') NOT ILIKE '%MCA%')`);
+        } else if (sCourse === '13' || sCourse.includes('BCA')) {
+          miniConditions.push(`(COALESCE(crs.name, p.course_id, '') NOT ILIKE '%MBA%' AND COALESCE(crs.name, p.course_id, '') NOT ILIKE '%B.TECH%')`);
+        }
       }
 
       if (query.search && query.search.trim()) {

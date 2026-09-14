@@ -18,6 +18,7 @@ import {
   X,
   Sparkles
 } from 'lucide-react';
+import { resolveCourseTitle, resolveDepartmentTitle } from '../../../utils/courseResolver';
 
 export default function StudentPlacementPage() {
   const [companies, setCompanies] = useState<PlacementCompany[]>([]);
@@ -29,10 +30,18 @@ export default function StudentPlacementPage() {
   const [search, setSearch] = useState('');
   const [branchFilter, setBranchFilter] = useState('ALL');
   const [selectedCompany, setSelectedCompany] = useState<PlacementCompany | null>(null);
+  const [studentCohort, setStudentCohort] = useState<{
+    name?: string;
+    regNo?: string;
+    course?: string;
+    branch?: string;
+    batch?: string;
+    semester?: string;
+  } | null>(null);
 
   // Apply Modal
   const [applyingCompany, setApplyingCompany] = useState<PlacementCompany | null>(null);
-  const [resumeLink, setResumeLink] = useState('https://github.com/aafreen-khan/resume');
+  const [resumeLink, setResumeLink] = useState('');
   const [coverNote, setCoverNote] = useState('');
   const [submittingApply, setSubmittingApply] = useState(false);
   const [applySuccess, setApplySuccess] = useState(false);
@@ -78,6 +87,27 @@ export default function StudentPlacementPage() {
   const loadData = async () => {
     setLoading(true);
     try {
+      try {
+        const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          const courseCd = u?.course_cd || u?.courseCd || u?.profile?.course_cd;
+          const courseTitle = resolveCourseTitle(courseCd, u?.course_name || u?.profile?.course_name || u?.course);
+          const deptTitle = resolveDepartmentTitle(courseCd, u?.department_name || u?.branch_name || u?.profile?.department_name || u?.profile?.branch_name);
+          setStudentCohort({
+            name: u?.name || u?.profile?.name || '',
+            regNo: u?.registration_no || u?.profile?.registration_no || u?.rollno || u?.username || '',
+            course: courseTitle,
+            branch: deptTitle,
+            batch: u?.batch_name || u?.batch || u?.batch_cd || u?.profile?.batch_name || '2025',
+            semester: u?.semester || u?.profile?.semester || 'Semester 3',
+          });
+          if (u?.profile?.github_url || u?.profile?.linkedin_url) {
+            setResumeLink(u.profile.github_url || u.profile.linkedin_url);
+          }
+        }
+      } catch {}
+
       const tenant = getTenantSlug();
       const headers = getAuthHeaders();
       const [drivesRes, offersRes] = await Promise.all([
@@ -151,6 +181,24 @@ export default function StudentPlacementPage() {
   };
 
   const filteredCompanies = companies.filter((c) => {
+    // Department / Program scoping: if student is MBA, exclude non-MBA specific drives
+    const sCourse = (studentCohort?.course || '').toUpperCase();
+    if (sCourse.includes('MBA') && !c.has_applied) {
+      const driveCourses = [
+        c.eligibility_course_cd,
+        ...(Array.isArray(c.extra_fields?.eligible_courses) ? c.extra_fields.eligible_courses : []),
+        c.extra_fields?.['Eligible Courses'],
+      ].map((x) => String(x || '').toUpperCase()).join(' ');
+
+      if (
+        (driveCourses.includes('B.TECH') || driveCourses.includes('BCA') || driveCourses.includes('13')) &&
+        !driveCourses.includes('MBA') &&
+        !driveCourses.includes('4')
+      ) {
+        return false;
+      }
+    }
+
     const matchSearch =
       c.company_name?.toLowerCase().includes(search.toLowerCase()) ||
       c.role?.toLowerCase().includes(search.toLowerCase()) ||
@@ -188,6 +236,41 @@ export default function StudentPlacementPage() {
               <p className="text-xs sm:text-sm text-[#4E5969] dark:text-slate-400 mt-1">
                 Explore eligible campus drives, review technical job specs, and submit applications.
               </p>
+            </div>
+          </div>
+
+          {/* Target Academic Cohort Eligibility Banner */}
+          <div className="p-4 rounded-[22px] bg-gradient-to-r from-[#5B4BFF]/10 via-[#7867FF]/10 to-[#F36C21]/10 border border-[#5B4BFF]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 text-[#5B4BFF] shadow-xs shrink-0">
+                <Sparkles className="w-5 h-5 text-[#5B4BFF] dark:text-[#7867FF]" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Targeted Academic Opportunities</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                    Cohort Filtered
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium mt-0.5">
+                  Showing opportunities specifically targeted to your academic program:
+                  {studentCohort?.course ? (
+                    <span className="font-bold text-slate-900 dark:text-white ml-1">
+                      {studentCohort.course} {studentCohort.branch ? `• ${studentCohort.branch}` : ''} {studentCohort.batch ? `• Batch ${studentCohort.batch}` : ''} {studentCohort.semester ? `• ${studentCohort.semester}` : ''}
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 ml-1">
+                      Matching your course, branch, and graduating batch criteria.
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right shrink-0">
+              <span className="text-xs font-black text-[#5B4BFF] bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-[#5B4BFF]/20 shadow-xs inline-block">
+                {companies.length} Eligible Drive{companies.length !== 1 ? 's' : ''}
+              </span>
             </div>
           </div>
 

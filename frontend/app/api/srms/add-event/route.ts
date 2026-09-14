@@ -377,9 +377,11 @@ export async function POST(req: NextRequest) {
       ).catch(() => {});
     }
 
-    // 6. Also sync to timetable_slots
+    // 6. Also sync to timetable_slots with exact academic hierarchy and effective week duration
     try {
       await queryDb(`
+        ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS effective_from DATE;
+        ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS effective_until DATE;
         ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS unit_id VARCHAR(100);
         ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS unit_name VARCHAR(255);
         ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS topic VARCHAR(255);
@@ -387,13 +389,32 @@ export async function POST(req: NextRequest) {
         ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS competency_codes VARCHAR(255);
       `).catch(() => {});
 
-      // Check if slot already exists at this day and start time
+      // Calculate effective week duration (Monday to Sunday) from the event date
+      const evDate = startMeta.date || new Date();
+      const evDay = evDate.getDay();
+      const diffToMon = evDate.getDate() - evDay + (evDay === 0 ? -6 : 1);
+      const weekMonday = new Date(evDate.getFullYear(), evDate.getMonth(), diffToMon, 0, 0, 0);
+      const weekSunday = new Date(weekMonday);
+      weekSunday.setDate(weekMonday.getDate() + 6);
+
+      const effFrom = weekMonday.toISOString().slice(0, 10);
+      const effUntil = weekSunday.toISOString().slice(0, 10);
+
+      // Check if slot already exists at this day, start time, and academic hierarchy for this week
       const existingSlots = await queryDb(
         `SELECT id FROM "${schema}".timetable_slots 
-         WHERE day_of_week = $1 AND start_time::text LIKE $2 || '%'
+         WHERE day_of_week = $1 
+           AND start_time::text LIKE $2 || '%'
+           AND (colg_cd = $3 OR colg_cd IS NULL)
+           AND (course_cd = $4 OR course_cd IS NULL)
+           AND (branch_cd = $5 OR branch_cd IS NULL)
+           AND (batch_cd = $6 OR batch_cd IS NULL)
+           AND (semester = $7 OR semester IS NULL)
+           AND (section = $8 OR section IS NULL)
+           AND effective_from = $9::date
          LIMIT 1`,
-        [startMeta.dayOfWeek, startMeta.timeStr.slice(0, 5)]
-      );
+        [startMeta.dayOfWeek, startMeta.timeStr.slice(0, 5), colgcd, courseCd, branchCd, batchCd, semCd, txtSec, effFrom]
+      ).catch(() => []);
 
       if (existingSlots && existingSlots.length > 0) {
         await queryDb(
@@ -403,8 +424,10 @@ export async function POST(req: NextRequest) {
             unit_name = COALESCE($3, unit_name),
             sub_topics = COALESCE($4, sub_topics),
             competency_codes = COALESCE($5, competency_codes),
-            description = COALESCE($6, description)
-          WHERE id = $7`,
+            description = COALESCE($6, description),
+            effective_from = $7::date,
+            effective_until = $8::date
+          WHERE id = $9`,
           [
             topic || title,
             unitId || null,
@@ -412,6 +435,8 @@ export async function POST(req: NextRequest) {
             subTopics || null,
             competencyCodes || null,
             description,
+            effFrom,
+            effUntil,
             existingSlots[0].id,
           ]
         );
@@ -420,9 +445,10 @@ export async function POST(req: NextRequest) {
           `INSERT INTO "${schema}".timetable_slots (
             day_of_week, start_time, end_time, room, slot_type, topic,
             unit_id, unit_name, sub_topics, competency_codes,
-            colg_cd, course_cd, branch_cd, batch_cd, semester, section, description
+            colg_cd, course_cd, branch_cd, batch_cd, semester, section, description,
+            effective_from, effective_until
           ) VALUES (
-            $1, $2, $3, $4, 'Lecture', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+            $1, $2, $3, $4, 'Lecture', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::date, $18::date
           )`,
           [
             startMeta.dayOfWeek,
@@ -441,6 +467,8 @@ export async function POST(req: NextRequest) {
             semCd,
             txtSec,
             description,
+            effFrom,
+            effUntil,
           ]
         );
       }

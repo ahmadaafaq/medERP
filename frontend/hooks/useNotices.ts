@@ -80,13 +80,22 @@ export function useNotices() {
     const tenantSlug = getTenantSlug();
     let userId = '';
     let userRole = '';
+    let courseCd = '';
+    let deptId = '';
+    let batchCd = '';
+    let branchCd = '';
     if (typeof window !== 'undefined') {
       try {
         const userStr = localStorage.getItem('user');
         if (userStr) {
           const u = JSON.parse(userStr);
-          userId = u.id || u.sub || u.userId || u.registration_no || u.username || '';
-          userRole = u.role || '';
+          const p = u.profile || u || {};
+          userId = p.registration_no || u.id || u.sub || u.userId || u.registration_no || u.username || '';
+          userRole = u.role || p.role || '';
+          courseCd = p.course_cd || u.course_cd || u.courseCd || '';
+          deptId = p.department_id || u.department_id || p.department || '';
+          batchCd = p.batch_cd || u.batch_cd || p.batch_year || u.batchCd || '';
+          branchCd = p.branch_id || p.branch_cd || u.branchCd || '';
         }
       } catch {}
     }
@@ -96,6 +105,10 @@ export function useNotices() {
       'x-tenant-slug': tenantSlug,
       'x-user-id': userId,
       'x-user-role': userRole,
+      'x-user-course-cd': courseCd,
+      'x-user-dept-id': deptId,
+      'x-user-batch-cd': batchCd,
+      'x-user-branch-cd': branchCd,
     };
   }, [getTenantSlug]);
 
@@ -170,7 +183,52 @@ export function useNotices() {
           const json = await res.json();
           const list: NoticeItem[] = json.data || json || [];
           const readCache = getReadCache();
-          const mergedList = (Array.isArray(list) ? list : []).map((n) => {
+
+          // Resolve logged-in student program to ensure strict department / program isolation
+          let studentCourse = '';
+          let studentDept = '';
+          if (typeof window !== 'undefined') {
+            try {
+              const cachedStr = localStorage.getItem('user');
+              if (cachedStr) {
+                const parsed = JSON.parse(cachedStr);
+                const p = parsed?.profile || parsed || {};
+                studentCourse = String(p.course_name || p.course_cd || parsed?.courseName || parsed?.courseCd || '').toUpperCase().trim();
+                studentDept = String(p.department_name || parsed?.departmentName || parsed?.department || '').toUpperCase().trim();
+              }
+            } catch {}
+          }
+
+          const isMba = studentCourse.includes('MBA') || studentCourse === '4' || studentDept.includes('MBA');
+          const isBca = studentCourse.includes('BCA') || studentCourse === '13' || studentDept.includes('BCA');
+
+          const scopedList = (Array.isArray(list) ? list : []).filter((n) => {
+            const targets = Array.isArray(n.targets) ? n.targets : [];
+            const hasRestrictedTargets = targets.some((t) =>
+              ['course', 'department', 'branch'].includes(String(t.target_type).toLowerCase()),
+            );
+
+            // If notice is tagged specifically for a different course, reject it
+            if (isMba) {
+              const targetsOther = targets.some((t) => {
+                const val = String(t.target_value || '').toUpperCase();
+                return val.includes('BCA') || val.includes('B.TECH') || val.includes('MCA') || val === '13';
+              });
+              if (targetsOther) return false;
+              if (n.title && (n.title.toUpperCase().includes('[BCA]') || n.title.toUpperCase().includes('BCA BATCH'))) return false;
+            } else if (isBca) {
+              const targetsOther = targets.some((t) => {
+                const val = String(t.target_value || '').toUpperCase();
+                return val.includes('MBA') || val.includes('B.TECH') || val === '4';
+              });
+              if (targetsOther) return false;
+              if (n.title && (n.title.toUpperCase().includes('[MBA]') || n.title.toUpperCase().includes('MBA BATCH'))) return false;
+            }
+
+            return true;
+          });
+
+          const mergedList = scopedList.map((n) => {
             if (readCache.has(n.id)) {
               return { ...n, is_read: true };
             }

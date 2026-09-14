@@ -17,23 +17,70 @@ interface SubjectSummary {
   AttendancePercentage: number;
 }
 
-export default function AttendanceWidget({ role = 'STUDENT' }: { role?: string }) {
+export interface AttendanceWidgetProps {
+  role?: string;
+  studentInfo?: {
+    name?: string;
+    rollno?: string;
+    registration_no?: string;
+    batch?: string;
+    course?: string;
+    department?: string;
+    course_cd?: string;
+    branch_cd?: string;
+    batch_cd?: string;
+    semester?: string;
+    section?: string;
+  } | null;
+  courseCd?: string;
+  courseName?: string;
+  branchCd?: string;
+  batchCd?: string;
+  batchName?: string;
+  semester?: string;
+  section?: string;
+  regNo?: string;
+}
+
+export default function AttendanceWidget({
+  role = 'STUDENT',
+  studentInfo = null,
+  courseCd: propCourseCd,
+  courseName: propCourseName,
+  branchCd: propBranchCd,
+  batchCd: propBatchCd,
+  batchName: propBatchName,
+  semester: propSemester,
+  section: propSection,
+  regNo: propRegNo,
+}: AttendanceWidgetProps) {
   const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [overallAvg, setOverallAvg] = useState<string>('24.84');
+  const [overallAvg, setOverallAvg] = useState<string>('0.00');
   const [totalLectures, setTotalLectures] = useState<number>(0);
   const [totalPresent, setTotalPresent] = useState<number>(0);
+  const [resolvedMeta, setResolvedMeta] = useState({
+    courseTitle: '',
+    batchTitle: '',
+    semCd: '3',
+  });
 
-  useEffect(() => {
-    fetchWidgetAttendance();
-  }, []);
+  const getOrdinal = (n: string | number) => {
+    const s = String(n || '3');
+    if (s === '1') return '1st';
+    if (s === '2') return '2nd';
+    if (s === '3') return '3rd';
+    return `${s}th`;
+  };
 
   const getStudentIdentity = () => {
-    let regNo = '2025107990';
-    let batchCd = '2'; // Batch 2025
-    let courseCd = '13'; // BCA
-    let branchCd = '1';
-    let semCd = '3'; // Current 3rd Semester
+    let regNo = propRegNo || studentInfo?.registration_no || studentInfo?.rollno || '';
+    let batchCd = propBatchCd || studentInfo?.batch_cd || '';
+    let courseCd = propCourseCd || studentInfo?.course_cd || '';
+    let branchCd = propBranchCd || studentInfo?.branch_cd || '1';
+    let semCd = propSemester || studentInfo?.semester || '3';
+    let courseTitle = propCourseName || studentInfo?.course || '';
+    let batchTitle = propBatchName || studentInfo?.batch || '';
 
     if (typeof window !== 'undefined') {
       try {
@@ -41,24 +88,53 @@ export default function AttendanceWidget({ role = 'STUDENT' }: { role?: string }
         if (cachedUserStr) {
           const cached = JSON.parse(cachedUserStr);
           const p = cached?.profile || cached || {};
-          regNo =
-            p.registration_no ||
-            cached?.registrationNo ||
-            cached?.registration_no ||
-            p.reg_no ||
-            p.rollno ||
-            cached?.rollno ||
-            regNo;
-          
-          if (p.course_cd) courseCd = String(p.course_cd);
-          if (p.batch_cd === '2025' || p.batch_cd === '2') batchCd = '2';
-          else if (p.batch_cd === '2024' || p.batch_cd === '18') batchCd = '18';
-          
-          if (p.sem_cd) semCd = String(p.sem_cd);
+          if (!regNo) {
+            regNo =
+              p.registration_no ||
+              cached?.registrationNo ||
+              cached?.registration_no ||
+              p.reg_no ||
+              p.rollno ||
+              cached?.rollno ||
+              '';
+          }
+          if (!courseCd && (p.course_cd || cached?.courseCd || cached?.course_cd)) {
+            courseCd = String(p.course_cd || cached?.courseCd || cached?.course_cd);
+          }
+          if (!batchCd && (p.batch_cd || cached?.batchCd || cached?.batch_cd)) {
+            batchCd = String(p.batch_cd || cached?.batchCd || cached?.batch_cd);
+          }
+          if (!semCd && (p.sem_cd || cached?.semester || p.semester)) {
+            semCd = String(p.sem_cd || cached?.semester || p.semester);
+          }
+          if (!courseTitle) {
+            courseTitle = p.course_name || cached?.courseName || '';
+          }
+          if (!batchTitle) {
+            batchTitle = p.batch_name || cached?.batchName || '';
+          }
         }
       } catch {}
     }
-    return { regNo, batchCd, courseCd, branchCd, semCd };
+
+    if (!courseTitle) {
+      if (courseCd === '4') courseTitle = 'MBA';
+      else if (courseCd === '13') courseTitle = 'BCA';
+      else if (courseCd === '1') courseTitle = 'B.Tech';
+      else if (courseCd === '2') courseTitle = 'B.Pharm';
+      else if (courseCd === '3') courseTitle = 'MCA';
+      else if (courseCd) courseTitle = `Course ${courseCd}`;
+      else courseTitle = 'General';
+    }
+
+    if (!batchTitle && batchCd) {
+      if (batchCd === '15') batchTitle = 'Batch 2024';
+      else if (batchCd === '2' || batchCd === '2025') batchTitle = 'Batch 2025';
+      else if (batchCd === '18') batchTitle = 'Batch 2024';
+      else batchTitle = `Batch ${batchCd}`;
+    }
+
+    return { regNo, batchCd, courseCd, branchCd, semCd, courseTitle, batchTitle };
   };
 
   const fetchWidgetAttendance = async () => {
@@ -66,19 +142,32 @@ export default function AttendanceWidget({ role = 'STUDENT' }: { role?: string }
       setLoading(true);
       const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
       const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
-      const { regNo, batchCd, courseCd, branchCd, semCd } = getStudentIdentity();
+      const { regNo, batchCd, courseCd, branchCd, semCd, courseTitle, batchTitle } = getStudentIdentity();
 
-      // 1. Fetch live 3rd semester subject-wise attendance breakdown
-      const res = await fetch(
-        `${API_BASE}/attendance/portal/subject-summary?tenant=${tenant}&colgcd=1&coursecd=${courseCd}&ddl_branch=${branchCd}&ddl_batch=${batchCd}&sem_cd=${semCd}&section_cd=1&uid=${regNo}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'x-tenant-slug': tenant,
-            'x-user-reg-no': regNo,
-          },
-        }
-      );
+      setResolvedMeta({
+        courseTitle: courseTitle || (courseCd === '13' ? 'BCA' : courseCd === '4' ? 'MBA' : 'Department'),
+        batchTitle: batchTitle || (batchCd === '2' || batchCd === '2025' ? 'Batch 2025' : 'Batch 2024'),
+        semCd: semCd || '3',
+      });
+
+      const params = new URLSearchParams({
+        tenant,
+        colgcd: '1',
+        section_cd: '1',
+      });
+      if (regNo) params.set('uid', regNo);
+      if (courseCd) params.set('coursecd', courseCd);
+      if (batchCd) params.set('ddl_batch', batchCd);
+      if (branchCd) params.set('ddl_branch', branchCd);
+      if (semCd) params.set('sem_cd', semCd);
+
+      const res = await fetch(`${API_BASE}/attendance/portal/subject-summary?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-slug': tenant,
+          'x-user-reg-no': regNo,
+        },
+      });
 
       if (res.ok) {
         const json = await res.json();
@@ -91,7 +180,6 @@ export default function AttendanceWidget({ role = 'STUDENT' }: { role?: string }
 
         setSubjects(list);
 
-        // Compute aggregate present / total lectures
         let presents = 0;
         let lectures = 0;
         list.forEach((s) => {
@@ -106,15 +194,33 @@ export default function AttendanceWidget({ role = 'STUDENT' }: { role?: string }
           const calculatedPct = ((presents / lectures) * 100).toFixed(2);
           setOverallAvg(calculatedPct);
         } else {
-          setOverallAvg('24.84');
+          setOverallAvg('0.00');
         }
+      } else {
+        setSubjects([]);
+        setOverallAvg('0.00');
       }
     } catch (err) {
       console.warn('Failed to fetch attendance summary for widget:', err);
+      setSubjects([]);
+      setOverallAvg('0.00');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchWidgetAttendance();
+  }, [
+    studentInfo?.registration_no,
+    studentInfo?.course_cd,
+    studentInfo?.batch_cd,
+    studentInfo?.semester,
+    propCourseCd,
+    propBatchCd,
+    propSemester,
+    propRegNo,
+  ]);
 
   const avgNum = parseFloat(overallAvg);
 
@@ -128,7 +234,7 @@ export default function AttendanceWidget({ role = 'STUDENT' }: { role?: string }
             <span>Attendance Overview (SRMS Portal)</span>
           </h3>
           <p className="text-[10px] font-bold text-slate-400">
-            Current 3rd Semester • BCA (Batch 2025)
+            Current {getOrdinal(resolvedMeta.semCd)} Semester • {resolvedMeta.courseTitle || 'Dynamic'} ({resolvedMeta.batchTitle || 'Batch'})
           </p>
         </div>
 
@@ -138,26 +244,39 @@ export default function AttendanceWidget({ role = 'STUDENT' }: { role?: string }
               {totalPresent}/{totalLectures} Lectures
             </span>
           )}
-          <span
-            className={`text-xs font-mono font-black px-3 py-1 rounded-full border shadow-sm ${
-              avgNum < 75
-                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-            }`}
-          >
-            Avg: {overallAvg}%
-          </span>
+          {totalLectures > 0 ? (
+            <span
+              className={`text-xs font-mono font-black px-3 py-1 rounded-full border shadow-sm ${
+                avgNum < 75
+                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+              }`}
+            >
+              Avg: {overallAvg}%
+            </span>
+          ) : (
+            <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700">
+              0.00%
+            </span>
+          )}
         </div>
       </div>
 
       {loading ? (
         <div className="py-8 text-center text-xs text-[#7B8794] font-medium animate-pulse">
-          Loading 3rd Semester live attendance records...
+          Loading {resolvedMeta.courseTitle || 'live'} attendance records...
         </div>
       ) : subjects.length === 0 ? (
-        <div className="py-8 text-center text-xs text-[#7B8794] border border-dashed border-[#E7EAF3] dark:border-slate-800 rounded-xl space-y-1">
-          <p className="font-semibold text-slate-700 dark:text-slate-300">No attendance data available</p>
-          <p className="text-[11px]">Synced portal attendance records will appear here.</p>
+        <div className="py-8 px-4 text-center border border-dashed border-[#E7EAF3] dark:border-slate-800 rounded-[18px] bg-[#F6F8FC]/60 dark:bg-slate-800/30 space-y-2">
+          <div className="w-10 h-10 mx-auto rounded-full bg-[#5B4BFF]/10 text-[#5B4BFF] flex items-center justify-center font-bold text-base">
+            📊
+          </div>
+          <p className="font-bold text-sm text-[#1B1E28] dark:text-white">
+            No Attendance Records Published for {resolvedMeta.courseTitle || 'Current Course'}
+          </p>
+          <p className="text-xs text-[#7B8794] max-w-md mx-auto">
+            Lecture attendance records and biometric logs for {resolvedMeta.courseTitle || 'your department'} ({resolvedMeta.batchTitle || 'Batch'}) will appear here in real-time once recorded by faculty in the ERP.
+          </p>
         </div>
       ) : (
         <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">

@@ -114,13 +114,80 @@ export class LessonService {
     let params: any[] = [];
     let paramIdx = 1;
 
+    // Helper function to resolve batch code variants (e.g. 2 <=> 2025)
+    const resolveBatchVariants = (b: string | undefined): string[] => {
+      if (!b) return [];
+      const s = String(b).trim();
+      if (s === '2' || s === '2025' || s === 'B2025') return ['2', '2025', 'B2025'];
+      if (s === '18' || s === '2024' || s === 'B2024' || s === '15') return ['18', '2024', 'B2024', '15'];
+      if (s === '17' || s === '2023' || s === 'B2023') return ['17', '2023', 'B2023'];
+      return [s];
+    };
+
+    const resolveCourseVariants = (c: string | undefined): string[] => {
+      if (!c) return [];
+      const s = String(c).trim();
+      if (s === '13' || s.toUpperCase() === 'BCA') return ['13', 'BCA'];
+      if (s === '4' || s.toUpperCase() === 'MBA') return ['4', 'MBA'];
+      if (s === '1' || s.toUpperCase().includes('TECH')) return ['1', 'B.Tech', 'B.TECH.', 'Course 1'];
+      if (s === '2' || s.toUpperCase().includes('PHARM')) return ['2', 'B.Pharm', 'B.PHARM.'];
+      if (s === '3' || s.toUpperCase() === 'MCA') return ['3', 'MCA'];
+      return [s];
+    };
+
     // Security & Role-based Scoping
     if (user?.role === 'STUDENT') {
-      // Student: auto-filtered by course, branch, batch, sem if passed or enrolled
-      if (filters.courseCd) { whereConditions.push(`course_cd = $${paramIdx++}`); params.push(filters.courseCd); }
-      if (filters.branchCd) { whereConditions.push(`branch_cd = $${paramIdx++}`); params.push(filters.branchCd); }
-      if (filters.batchCd) { whereConditions.push(`batch_cd = $${paramIdx++}`); params.push(filters.batchCd); }
-      if (filters.semCd) { whereConditions.push(`sem_cd = $${paramIdx++}`); params.push(filters.semCd); }
+      let courseCd = filters.courseCd;
+      let branchCd = filters.branchCd;
+      let batchCd = filters.batchCd;
+      let semCd = filters.semCd;
+
+      // If student course not passed in filters, look up from students table
+      if (!courseCd && (user.id || user.registration_no || user.reg_no || user.sub)) {
+        try {
+          const studentId = String(user.id || user.registration_no || user.reg_no || user.sub).trim();
+          const studentRows = await this.dataSource.query(`
+            SELECT course_cd, branch_id as branch_cd, batch_cd, sem_cd
+            FROM "${schema}".students
+            WHERE user_id::text = $1 OR registration_no = $1 OR rollno = $1 OR id::text = $1
+            LIMIT 1
+          `, [studentId]);
+
+          if (studentRows && studentRows.length > 0) {
+            courseCd = courseCd || studentRows[0].course_cd;
+            branchCd = branchCd || studentRows[0].branch_cd;
+            batchCd = batchCd || studentRows[0].batch_cd;
+            semCd = semCd || studentRows[0].sem_cd;
+          }
+        } catch (err) {
+          this.logger.warn(`Could not resolve student profile for scoping lessons: ${err.message}`);
+        }
+      }
+
+      if (courseCd) {
+        const cVars = resolveCourseVariants(courseCd);
+        whereConditions.push(`(course_cd = ANY($${paramIdx++}))`);
+        params.push(cVars);
+      } else {
+        // Strict safety: if course cannot be determined for student, do not leak other courses' lessons
+        whereConditions.push(`1 = 0`);
+      }
+
+      if (branchCd) {
+        whereConditions.push(`(branch_cd = $${paramIdx++} OR branch_cd IS NULL OR branch_cd = '')`);
+        params.push(String(branchCd));
+      }
+      if (batchCd) {
+        const bVars = resolveBatchVariants(batchCd);
+        whereConditions.push(`(batch_cd = ANY($${paramIdx++}) OR batch_cd IS NULL OR batch_cd = '')`);
+        params.push(bVars);
+      }
+      if (semCd) {
+        const cleanSem = String(semCd).replace(/\D/g, '');
+        const semVars = cleanSem ? [String(semCd), cleanSem, `Semester ${cleanSem}`, `Sem ${cleanSem}`] : [String(semCd)];
+        whereConditions.push(`(sem_cd = ANY($${paramIdx++}) OR sem_cd IS NULL OR sem_cd = '')`);
+        params.push(semVars);
+      }
     } else if (user?.role === 'FACULTY') {
       // Faculty: scoped to their own college or optionally filters
       const userColg = user?.colgCd || '1';
@@ -146,10 +213,23 @@ export class LessonService {
       }
     }
 
-    if (filters.courseCd && user?.role !== 'STUDENT') { whereConditions.push(`course_cd = $${paramIdx++}`); params.push(filters.courseCd); }
+    if (filters.courseCd && user?.role !== 'STUDENT') {
+      const cVars = resolveCourseVariants(filters.courseCd);
+      whereConditions.push(`(course_cd = ANY($${paramIdx++}))`);
+      params.push(cVars);
+    }
     if (filters.branchCd && user?.role !== 'STUDENT') { whereConditions.push(`branch_cd = $${paramIdx++}`); params.push(filters.branchCd); }
-    if (filters.batchCd && user?.role !== 'STUDENT') { whereConditions.push(`batch_cd = $${paramIdx++}`); params.push(filters.batchCd); }
-    if (filters.semCd && user?.role !== 'STUDENT') { whereConditions.push(`sem_cd = $${paramIdx++}`); params.push(filters.semCd); }
+    if (filters.batchCd && user?.role !== 'STUDENT') {
+      const bVars = resolveBatchVariants(filters.batchCd);
+      whereConditions.push(`(batch_cd = ANY($${paramIdx++}) OR batch_cd IS NULL OR batch_cd = '')`);
+      params.push(bVars);
+    }
+    if (filters.semCd && user?.role !== 'STUDENT') {
+      const cleanSem = String(filters.semCd).replace(/\D/g, '');
+      const semVars = cleanSem ? [String(filters.semCd), cleanSem, `Semester ${cleanSem}`, `Sem ${cleanSem}`] : [String(filters.semCd)];
+      whereConditions.push(`(sem_cd = ANY($${paramIdx++}) OR sem_cd IS NULL OR sem_cd = '')`);
+      params.push(semVars);
+    }
     if (filters.subjectId) { whereConditions.push(`subject_id = $${paramIdx++}`); params.push(filters.subjectId); }
 
     const limit = filters.limit || 100;
@@ -164,8 +244,11 @@ export class LessonService {
     return this.dataSource.query(query, params);
   }
 
-  async getRecentLessons(tenantSlug: string, user: any, limit: number = 6) {
-    return this.listLessons(tenantSlug, user, { limit });
+  async getRecentLessons(tenantSlug: string, user: any, filtersOrLimit: LessonFilterQuery | number = 6) {
+    const filters: LessonFilterQuery = typeof filtersOrLimit === 'number'
+      ? { limit: filtersOrLimit }
+      : filtersOrLimit;
+    return this.listLessons(tenantSlug, user, filters);
   }
 
   async getLessonFileDetails(tenantSlug: string, id: number) {

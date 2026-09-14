@@ -94,15 +94,104 @@ interface Subject {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 const SRMS_FIRM_OPTIONS = [
-  { locid: '7', label: '[Loc 7] SRMS CET, Bareilly (Engineering & Pharmacy)', slug: 'srms-cet-bareilly' },
-  { locid: '8', label: '[Loc 8] SRMS CETR, Bareilly (Engineering & Research)', slug: 'srms-cetr-bareilly' },
-  { locid: '1', label: '[Loc 1] SRMS IMS, Bareilly (Medical College & Hospital)', slug: 'srms-ims' },
-  { locid: '3', label: '[Loc 3] SRMS CET, Unnao Campus', slug: 'srms-cet-unnao' },
-  { locid: '4', label: '[Loc 4] SRMS IBS, Lucknow (Business School)', slug: 'srms-ibs-lucknow' },
-  { locid: '12', label: '[Loc 12] SRMS College of Pharmacy', slug: 'srms-pharmacy' },
-  { locid: '15', label: '[Loc 15] SRMS College of Law', slug: 'srms-college-of-law' },
-  { locid: '18', label: '[Loc 18] SRMS Nursing College, Bareilly', slug: 'srms-nursing-college' },
-  { locid: 'all', label: '🌐 All SRMS Firm Locations & Institutions', slug: 'all' },
+  {
+    locid: 'cet-all',
+    label: '🎓 [Complete Campus] SRMS CET Bareilly — Engineering, MBA, MCA, B.Pharma, M.Pharma & BBA',
+    description: 'Syncs full faculty roster across all CET departments and allied schools (Loc 7, Loc 12 & Loc 4)',
+    slug: 'srms-cet-bareilly',
+    tag: 'Full Campus',
+  },
+  {
+    locid: 'mba',
+    label: '📊 [MBA Stream] Faculty of Management Studies — MBA Department (Loc 7 & 4)',
+    description: 'Syncs all 18+ live MBA Professors, Associate Professors and Management Faculty',
+    slug: 'srms-cet-bareilly',
+    tag: 'MBA',
+  },
+  {
+    locid: 'mca',
+    label: '💻 [MCA Stream] Faculty of Computer Applications — MCA Department (Loc 7 & 8)',
+    description: 'Syncs all 15+ live MCA Faculty and technical programming educators',
+    slug: 'srms-cet-bareilly',
+    tag: 'MCA',
+  },
+  {
+    locid: 'pharmacy',
+    label: '💊 [Pharmacy Stream] Faculty of Pharmacy — B.Pharma & M.Pharma (Loc 12)',
+    description: 'Syncs all 31+ live Pharmacy Professors, Associate/Assistant Professors & Lab Staff',
+    slug: 'srms-cet-bareilly',
+    tag: 'B.Pharma / M.Pharma',
+  },
+  {
+    locid: 'bba',
+    label: '📈 [BBA Stream] Management Studies (UG) — BBA Department (Loc 4 & 7)',
+    description: 'Syncs live BBA and undergraduate business management faculty',
+    slug: 'srms-cet-bareilly',
+    tag: 'BBA',
+  },
+  {
+    locid: '7',
+    label: '🏛️ [Loc 7] SRMS CET, Bareilly — Engineering (CSE, IT, ME, ECE, EE), MBA & MCA',
+    description: '358 employees including Faculty of Technology, MBA & MCA',
+    slug: 'srms-cet-bareilly',
+    tag: 'Loc 7',
+  },
+  {
+    locid: '12',
+    label: '🌿 [Loc 12] SRMS College of Pharmacy — B.Pharma & M.Pharma (40 Employees)',
+    description: 'College of Pharmacy live roster with automated department linkage',
+    slug: 'srms-pharmacy',
+    tag: 'Loc 12',
+  },
+  {
+    locid: '4',
+    label: '🏢 [Loc 4] SRMS IBS, Lucknow — Business School (BBA, MBA & PGDM)',
+    description: '104 employees across BBA, MBA, PGDM and management programs',
+    slug: 'srms-ibs-lucknow',
+    tag: 'Loc 4',
+  },
+  {
+    locid: '8',
+    label: '🔬 [Loc 8] SRMS CETR, Bareilly — Engineering, Law College & MCA',
+    description: '139 employees across CSE, Law College, MCA, and basic sciences',
+    slug: 'srms-cetr-bareilly',
+    tag: 'Loc 8',
+  },
+  {
+    locid: '1',
+    label: '🏥 [Loc 1] SRMS IMS, Bareilly — Medical College & Hospital',
+    description: 'Medical professors, clinicians, residents, nursing, and hospital staff',
+    slug: 'srms-ims',
+    tag: 'Loc 1',
+  },
+  {
+    locid: '3',
+    label: '🏫 [Loc 3] SRMS CET, Unnao Campus',
+    description: 'SRMS CET Unnao campus faculty and administration',
+    slug: 'srms-cet-unnao',
+    tag: 'Loc 3',
+  },
+  {
+    locid: '15',
+    label: '⚖️ [Loc 15] SRMS College of Law (Bareilly)',
+    description: 'Law professors, legal educators, and supporting legal faculty',
+    slug: 'srms-college-of-law',
+    tag: 'Loc 15',
+  },
+  {
+    locid: '18',
+    label: '🩺 [Loc 18] SRMS Nursing College, Bareilly',
+    description: 'Nursing educators, clinical instructors, and healthcare staff',
+    slug: 'srms-nursing-college',
+    tag: 'Loc 18',
+  },
+  {
+    locid: 'all',
+    label: '🌐 [Global Sync] All SRMS Institutions & Firm Locations',
+    description: 'Synchronizes all 3,500+ employees across all locations and campuses',
+    slug: 'all',
+    tag: 'Global',
+  },
 ];
 
 const STANDARD_DESIGNATIONS = [
@@ -153,7 +242,7 @@ export default function StaffMasterPage() {
 
   // Sync Modal State
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
-  const [syncLocId, setSyncLocId] = useState('7');
+  const [syncLocId, setSyncLocId] = useState('cet-all');
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{
     success: boolean;
@@ -395,9 +484,11 @@ export default function StaffMasterPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-tenant-slug': userTenantSlug,
+          'x-tenant': userTenantSlug,
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ locid: syncLocId }),
+        body: JSON.stringify({ locid: syncLocId, tenant: userTenantSlug }),
       });
 
       const json = await res.json();
@@ -1979,23 +2070,86 @@ export default function StaffMasterPage() {
                 </div>
               </div>
 
-              {/* Choose Location */}
-              <div className="space-y-2">
-                <label className="text-xs font-extrabold uppercase text-slate-700 dark:text-slate-300 tracking-wider">
-                  Target Institution / Firm Location (locid):
-                </label>
-                <select
-                  value={syncLocId}
-                  onChange={(e) => setSyncLocId(e.target.value)}
-                  disabled={syncing}
-                  className="w-full h-11 px-4 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white"
-                >
-                  {SRMS_FIRM_OPTIONS.map((opt) => (
-                    <option key={opt.locid} value={opt.locid}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+              {/* Choose Location & Academic Stream */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center gap-1.5">
+                    <span>🎯</span> Select Program / Stream to Sync:
+                  </label>
+                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">
+                    Live SRMS HR API
+                  </span>
+                </div>
+
+                {/* Quick Selection Pills */}
+                <div className="flex flex-wrap gap-1.5">
+                  {SRMS_FIRM_OPTIONS.map((opt) => {
+                    const isSelected = syncLocId === opt.locid;
+                    return (
+                      <button
+                        key={opt.locid}
+                        type="button"
+                        onClick={() => setSyncLocId(opt.locid)}
+                        disabled={syncing}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/30 ring-2 ring-[#5B4BFF]/50 scale-[1.02]'
+                            : 'bg-[#F6F8FC] dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        <span>{opt.tag}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Full Dropdown Selector */}
+                <div className="space-y-1">
+                  <select
+                    value={syncLocId}
+                    onChange={(e) => setSyncLocId(e.target.value)}
+                    disabled={syncing}
+                    className="w-full h-11 px-4 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white"
+                  >
+                    {SRMS_FIRM_OPTIONS.map((opt) => (
+                      <option key={opt.locid} value={opt.locid}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Selected Stream Details */}
+                {(() => {
+                  const currentOpt = SRMS_FIRM_OPTIONS.find((o) => o.locid === syncLocId);
+                  return (
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Target Program: <span className="text-[#5B4BFF]">{currentOpt?.tag || syncLocId}</span>
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                          tenant_{userTenantSlug || 'srms-cet-bareilly'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                        {currentOpt?.description}
+                      </p>
+                    </div>
+                  );
+                })()}
+
+                {/* Explanatory Note on SRMS API architecture */}
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-200 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-[11px] text-amber-800 dark:text-amber-300">
+                    <span>💡</span>
+                    <span>Why are programs tied to Location IDs in SRMS HR API?</span>
+                  </div>
+                  <p className="text-[10.5px] leading-relaxed text-amber-800/90 dark:text-amber-300/80">
+                    In the central SRMS HR database, faculty are stored by physical campus IDs: <b>Loc 7</b> (SRMS CET Bareilly - Engineering, MBA & MCA), <b>Loc 12</b> (SRMS College of Pharmacy - B.Pharma & M.Pharma), and <b>Loc 4</b> (SRMS IBS - BBA). The buttons above automatically route and filter the right staff directly into this campus.
+                  </p>
+                </div>
               </div>
 
               {/* Sync Result Box if completed */}

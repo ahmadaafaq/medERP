@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req,
+  Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req, Headers,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CollegeMasterService, SRMS_FIRM_LOCATIONS } from './college-master.service';
@@ -162,9 +162,11 @@ export class CollegeMasterController {
     @Body('tenant') bodyTenant?: string,
     @Query('locid') queryLocid?: string,
     @Query('tenant') queryTenant?: string,
+    @Headers('x-tenant-slug') headerTenant?: string,
   ) {
-    const target = bodyLocid || queryLocid || bodyTenant || queryTenant || '7';
-    const data = await this.collegeMasterService.syncExternalEmployees(target);
+    const target = bodyLocid || queryLocid || '7';
+    const targetTenant = bodyTenant || queryTenant || headerTenant || undefined;
+    const data = await this.collegeMasterService.syncExternalEmployees(target, targetTenant);
     return {
       success: true,
       message: `Synced ${data.length} staff members successfully from SRMS HR API into PostgreSQL (Default password: '12345678')`,
@@ -178,9 +180,11 @@ export class CollegeMasterController {
   async syncExternalEmployeesGet(
     @Query('locid') locid?: string,
     @Query('tenant') tenant?: string,
+    @Headers('x-tenant-slug') headerTenant?: string,
   ) {
-    const target = locid || tenant || '7';
-    const data = await this.collegeMasterService.syncExternalEmployees(target);
+    const target = locid || '7';
+    const targetTenant = tenant || headerTenant || undefined;
+    const data = await this.collegeMasterService.syncExternalEmployees(target, targetTenant);
     return {
       success: true,
       message: `Synced ${data.length} staff members successfully from SRMS HR API into PostgreSQL (Default password: '12345678')`,

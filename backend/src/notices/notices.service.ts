@@ -765,7 +765,13 @@ export class NoticesService implements OnModuleInit {
   // ──────────────────────────────────────────────────────────────────────────
   // 6. ROLE-SCOPED NOTICES FOR LOGGED-IN RECIPIENT
   // ──────────────────────────────────────────────────────────────────────────
-  async getRoleScopedNotices(userId?: string, userRole?: string, filter?: NoticeFilterDto, tenantSlug?: string) {
+  async getRoleScopedNotices(
+    userId?: string,
+    userRole?: string,
+    filter?: NoticeFilterDto,
+    tenantSlug?: string,
+    studentContext?: { courseCd?: string; branchCd?: string; deptId?: string; batchCd?: string },
+  ) {
     const slug = this.resolveTenantSlug(tenantSlug);
     await this.ensureTables(slug);
 
@@ -786,6 +792,99 @@ export class NoticesService implements OnModuleInit {
         OR EXISTS (SELECT 1 FROM notice_targets nt2 WHERE nt2.notice_id::text = n.id::text AND (LOWER(nt2.target_type) = 'all' OR (LOWER(nt2.target_type) = 'role' AND UPPER(nt2.target_value) = $${roleIdx})))
         OR n.created_by::text = $${uidIdx}::text
       )`;
+
+      // Strict Student Department / Program Dynamic Scoping
+      if (roleNormalized === 'STUDENT') {
+        let sCourse = studentContext?.courseCd;
+        let sBranch = studentContext?.branchCd;
+        let sDept = studentContext?.deptId;
+        let sBatch = studentContext?.batchCd;
+
+        if (!sCourse) {
+          try {
+            const sRows = await this.tenantSchemaService.queryInTenant(
+              slug,
+              `SELECT s.course_cd, s.branch_id AS branch_cd, s.department_id, s.batch_cd
+               FROM students s
+               WHERE s.user_id::text = $1 OR s.registration_no = $1 OR s.rollno = $1 OR s.id::text = $1
+               LIMIT 1`,
+              [userId],
+            );
+            if (sRows && sRows.length > 0) {
+              sCourse = sCourse || sRows[0].course_cd;
+              sBranch = sBranch || sRows[0].branch_cd;
+              sDept = sDept || sRows[0].department_id;
+              sBatch = sBatch || sRows[0].batch_cd;
+            }
+          } catch (err) {
+            this.logger.warn(`Could not resolve student context for notices: ${err.message}`);
+          }
+        }
+
+        if (sCourse || sDept) {
+          params.push(String(sCourse || ''));
+          const pCourse = params.length;
+          params.push(String(sDept || ''));
+          const pDept = params.length;
+          params.push(String(sBranch || ''));
+          const pBranch = params.length;
+          params.push(String(sBatch || ''));
+          const pBatch = params.length;
+
+          const isMba = String(sCourse).includes('4') || String(sCourse).toUpperCase().includes('MBA');
+          const isBca = String(sCourse).includes('13') || String(sCourse).toUpperCase().includes('BCA');
+
+          whereClause += ` AND (
+            -- Open to all institution members / no specific program target
+            NOT EXISTS (
+              SELECT 1 FROM notice_targets nt_rest
+              WHERE nt_rest.notice_id::text = n.id::text
+                AND LOWER(nt_rest.target_type) IN ('course', 'department', 'branch', 'batch_year')
+            )
+            -- OR specifically targeting this student's course, department, or batch
+            OR EXISTS (
+              SELECT 1 FROM notice_targets nt_match
+              WHERE nt_match.notice_id::text = n.id::text
+                AND (
+                  (LOWER(nt_match.target_type) = 'course' AND (
+                    nt_match.target_value::text = $${pCourse}::text
+                    ${isMba ? "OR nt_match.target_value ILIKE '%MBA%'" : ''}
+                    ${isBca ? "OR nt_match.target_value ILIKE '%BCA%'" : ''}
+                  ))
+                  OR (LOWER(nt_match.target_type) IN ('department', 'branch') AND (
+                    nt_match.target_value::text = $${pDept}::text
+                    OR nt_match.target_value::text = $${pBranch}::text
+                    ${isMba ? "OR nt_match.target_value ILIKE '%MBA%'" : ''}
+                    ${isBca ? "OR nt_match.target_value ILIKE '%BCA%'" : ''}
+                  ))
+                  OR (LOWER(nt_match.target_type) = 'batch_year' AND (
+                    $${pBatch}::text = '' OR nt_match.target_value::text = $${pBatch}::text
+                  ))
+                )
+            )
+          )`;
+
+          if (isMba) {
+            whereClause += ` AND (
+              n.title NOT ILIKE '%[BCA]%' AND n.title NOT ILIKE '%BCA Batch%'
+              AND NOT EXISTS (
+                SELECT 1 FROM notice_targets nt_bca
+                WHERE nt_bca.notice_id::text = n.id::text
+                  AND (nt_bca.target_value ILIKE '%BCA%' OR nt_bca.target_value ILIKE '%B.TECH%' OR nt_bca.target_value = '13')
+              )
+            )`;
+          } else if (isBca) {
+            whereClause += ` AND (
+              n.title NOT ILIKE '%[MBA]%' AND n.title NOT ILIKE '%MBA Batch%'
+              AND NOT EXISTS (
+                SELECT 1 FROM notice_targets nt_mba
+                WHERE nt_mba.notice_id::text = n.id::text
+                  AND (nt_mba.target_value ILIKE '%MBA%' OR nt_mba.target_value = '4')
+              )
+            )`;
+          }
+        }
+      }
     }
 
     if (filter?.filter === 'unread' && userId) {
@@ -874,11 +973,16 @@ export class NoticesService implements OnModuleInit {
   // ──────────────────────────────────────────────────────────────────────────
   // 7. UNREAD COUNT FOR BADGES & BELL ICON
   // ──────────────────────────────────────────────────────────────────────────
-  async getUnreadCount(userId?: string, userRole?: string, tenantSlug?: string) {
+  async getUnreadCount(
+    userId?: string,
+    userRole?: string,
+    tenantSlug?: string,
+    studentContext?: { courseCd?: string; branchCd?: string; deptId?: string; batchCd?: string },
+  ) {
     const slug = this.resolveTenantSlug(tenantSlug);
     await this.ensureTables(slug);
 
-    const notices = await this.getRoleScopedNotices(userId, userRole || 'STUDENT', undefined, slug);
+    const notices = await this.getRoleScopedNotices(userId, userRole || 'STUDENT', undefined, slug, studentContext);
     const unread = notices.filter((n) => !n.is_read);
 
     return {

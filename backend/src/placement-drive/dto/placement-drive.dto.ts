@@ -154,12 +154,12 @@ export class ApplyPlacementDriveDto {
 }
 
 export class UpdateApplicantStatusDto {
+  @IsOptional()
   @IsNumber()
-  @IsNotEmpty()
-  application_id: number;
+  application_id?: number;
 
   @IsString()
-  @IsIn(['Applied', 'Shortlisted', 'Selected', 'Rejected'])
+  @IsNotEmpty()
   status: string;
 
   @IsOptional()
@@ -173,6 +173,14 @@ export class UpdateApplicantStatusDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  @IsOptional()
+  @IsString()
+  offer_package?: string;
+
+  @IsOptional()
+  @IsString()
+  offer_status?: string;
 }
 
 export class PlacementReportQueryDto {
@@ -204,6 +212,22 @@ export class ConfirmImportDriveDto {
 
   @IsNotEmpty()
   companies: any[];
+
+  @IsOptional()
+  target_cohorts?: any[];
+
+  @IsOptional()
+  @IsString()
+  eligibility_course_cd?: string;
+
+  @IsOptional()
+  eligible_courses?: any;
+
+  @IsOptional()
+  eligible_branches?: any;
+
+  @IsOptional()
+  eligible_batches?: any;
 }
 
 export class RespondOfferDto {

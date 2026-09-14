@@ -161,11 +161,11 @@ interface Student {
 function formatBatchLabel(batchVal: any): string {
   if (!batchVal) return '—';
   const str = String(batchVal).trim();
-  if (str.toLowerCase().includes('batch')) return str;
-  const match = str.match(/\b(20\d\d)\b/);
+  const match = str.match(/(20\d\d)/);
   if (match) {
     return `${match[1]} Batch`;
   }
+  if (str.toLowerCase().includes('batch')) return str;
   return `${str} Batch`;
 }
 
@@ -329,9 +329,13 @@ export default function StudentMasterPage() {
   // SRMS Live Student Sync Modal States
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [syncColgCd, setSyncColgCd] = useState('1');
-  const [syncCourseCd, setSyncCourseCd] = useState('2');
+  const [syncCoursesList, setSyncCoursesList] = useState<any[]>([]);
+  const [syncCourseCd, setSyncCourseCd] = useState('1');
+  const [syncBatchesList, setSyncBatchesList] = useState<any[]>([]);
   const [syncBatchCd, setSyncBatchCd] = useState("'18'");
+  const [syncBranchesList, setSyncBranchesList] = useState<any[]>([]);
   const [syncBranchCd, setSyncBranchCd] = useState("'1'");
+  const [syncSessionsList, setSyncSessionsList] = useState<any[]>(SRMS_STUDENT_SESSION_OPTIONS);
   const [syncSessionCd, setSyncSessionCd] = useState('16');
   const [syncType, setSyncType] = useState('');
   const [syncArrstdsts, setSyncArrstdsts] = useState('0');
@@ -339,6 +343,7 @@ export default function StudentMasterPage() {
   const [isEditingEndpoint, setIsEditingEndpoint] = useState(false);
   const [customPayloadText, setCustomPayloadText] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const [loadingSyncMetadata, setLoadingSyncMetadata] = useState(false);
   const [syncResult, setSyncResult] = useState<{
     success: boolean;
     count: number;
@@ -1250,91 +1255,289 @@ export default function StudentMasterPage() {
     typ = syncType,
     arr = syncArrstdsts
   ) => {
+    const cleanBat = bat && bat.startsWith("'") ? bat : `'${bat || '18'}'`;
+    const cleanBr = br && br.startsWith("'") ? br : `'${br || '1'}'`;
     return {
-      colgcd: colg,
-      coursecd: crs,
-      batchcd: bat.startsWith("'") ? bat : `'${bat}'`,
-      branchcd: br.startsWith("'") ? br : `'${br}'`,
+      colgcd: String(colg || '1'),
+      coursecd: String(crs || '1'),
+      batchcd: cleanBat,
+      branchcd: cleanBr,
       type: typ,
-      sessioncd: sess,
-      arrstdsts: arr,
+      sessioncd: String(sess || '16'),
+      arrstdsts: arr || '0',
     };
   };
 
-  const handleOpenSyncModal = () => {
-    setIsSyncModalOpen(true);
-    setSyncResult(null);
-    const payloadObj = buildCurrentPayload(syncColgCd, syncCourseCd, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
-    const formatted = JSON.stringify(payloadObj, null, 2);
-    setCustomPayloadText(formatted);
-
-    // Sync data from SRMS on popup load
-    setTimeout(() => {
-      handleExecuteStudentSync(syncColgCd, syncCourseCd, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts, syncEndpointUrl, formatted);
-    }, 120);
+  const fetchSyncCourses = async (colgCd: string) => {
+    const slug = getActiveTenantSlug() || 'srms-cet-bareilly';
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${colgCd}&tenant=${slug}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((c: any) => ({
+            code: String(c.course_cd || c.code || c.id),
+            name: c.course_name || c.name || `Course ${c.course_cd}`,
+            colg_cd: String(c.colg_cd || colgCd),
+          }));
+          setSyncCoursesList(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
+    const fallback = SRMS_STUDENT_COURSE_OPTIONS.map(c => ({ code: c.course_cd, name: c.label.replace(/^\[.*?\]\s*/, ''), colg_cd: colgCd }));
+    setSyncCoursesList(fallback);
+    return fallback;
   };
 
-  const handleExecuteStudentSync = async (
-    colg = syncColgCd,
-    crs = syncCourseCd,
-    bat = syncBatchCd,
-    br = syncBranchCd,
-    sess = syncSessionCd,
-    typ = syncType,
-    arr = syncArrstdsts,
-    endpoint = syncEndpointUrl,
-    customPayloadStr = customPayloadText
-  ) => {
+  const fetchSyncBatches = async (colgCd: string, courseCd: string) => {
+    const slug = getActiveTenantSlug() || 'srms-cet-bareilly';
+    try {
+      const res = await fetch(`/api/srms/batches?colgcd=${colgCd}&coursecd=${courseCd}&tenant=${slug}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((b: any) => {
+            const rawCd = String(b.batch_cd ?? b.code ?? b.curr_bat_Cd ?? '18');
+            const cleanCd = rawCd.replace(/'/g, '');
+            const year = b.batch_name || b.year || b.name || cleanCd;
+            return {
+              batch_cd: `'${cleanCd}'`,
+              raw_cd: cleanCd,
+              year: String(year),
+              label: `Batch ${year} (Code '${cleanCd}')`,
+            };
+          }).sort((a: any, b: any) => (Number(b.year) || 0) - (Number(a.year) || 0));
+          setSyncBatchesList(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
+
+    let fallback: any[] = [];
+    if (courseCd === '13') {
+      fallback = [
+        { batch_cd: "'2'", raw_cd: '2', year: '2025', label: "Batch 2025 (Code '2')" },
+        { batch_cd: "'1'", raw_cd: '1', year: '2024', label: "Batch 2024 (Code '1')" },
+        { batch_cd: "'3'", raw_cd: '3', year: '2026', label: "Batch 2026 (Code '3')" },
+      ];
+    } else {
+      fallback = SRMS_STUDENT_BATCH_OPTIONS.map(b => ({
+        batch_cd: b.batch_cd.startsWith("'") ? b.batch_cd : `'${b.batch_cd}'`,
+        raw_cd: b.batch_cd.replace(/'/g, ''),
+        year: b.label.match(/\d{4}/)?.[0] || '2025',
+        label: b.label,
+      }));
+    }
+    setSyncBatchesList(fallback);
+    return fallback;
+  };
+
+  const fetchSyncBranches = async (colgCd: string, courseCd: string) => {
+    const slug = getActiveTenantSlug() || 'srms-cet-bareilly';
+    try {
+      const res = await fetch(`/api/srms/branches?colgcd=${colgCd}&coursecd=${courseCd}&tenant=${slug}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((b: any) => {
+            const rawCd = String(b.branch_cd ?? b.code ?? '1');
+            const cleanCd = rawCd.replace(/'/g, '');
+            const name = (b.branch_name || b.name || '').trim();
+            const validName = (name && name !== '-' && name !== 'null') ? name : `Branch ${cleanCd}`;
+            return {
+              branch_cd: `'${cleanCd}'`,
+              raw_cd: cleanCd,
+              name: validName,
+              label: `${validName} (Code '${cleanCd}')`,
+            };
+          });
+          setSyncBranchesList(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
+
+    const fallback = SRMS_STUDENT_BRANCH_OPTIONS.map(b => ({
+      branch_cd: b.branch_cd.startsWith("'") ? b.branch_cd : `'${b.branch_cd}'`,
+      raw_cd: b.branch_cd.replace(/'/g, ''),
+      name: b.label,
+      label: b.label,
+    }));
+    setSyncBranchesList(fallback);
+    return fallback;
+  };
+
+  const handleOpenSyncModal = async () => {
+    setIsSyncModalOpen(true);
+    setSyncResult(null);
+    setLoadingSyncMetadata(true);
+
+    try {
+      const currentColg = syncColgCd || '1';
+      const courses = await fetchSyncCourses(currentColg);
+      const currentCrs = courses.find(c => c.code === syncCourseCd)?.code || courses[0]?.code || '1';
+      setSyncCourseCd(currentCrs);
+
+      const [batches, branches] = await Promise.all([
+        fetchSyncBatches(currentColg, currentCrs),
+        fetchSyncBranches(currentColg, currentCrs),
+      ]);
+
+      const currentBat = batches.find(b => b.year === '2025' || b.raw_cd === '18' || b.raw_cd === '2')?.batch_cd || batches[0]?.batch_cd || "'18'";
+      const currentBr = branches[0]?.branch_cd || "'1'";
+      setSyncBatchCd(currentBat);
+      setSyncBranchCd(currentBr);
+
+      const payloadObj = buildCurrentPayload(currentColg, currentCrs, currentBat, currentBr, syncSessionCd, syncType, syncArrstdsts);
+      setCustomPayloadText(JSON.stringify(payloadObj, null, 2));
+    } finally {
+      setLoadingSyncMetadata(false);
+    }
+  };
+
+  const handleSyncCollegeChange = async (newColg: string) => {
+    setSyncColgCd(newColg);
+    setLoadingSyncMetadata(true);
+    try {
+      const courses = await fetchSyncCourses(newColg);
+      const firstCrs = courses[0]?.code || '1';
+      setSyncCourseCd(firstCrs);
+
+      const [batches, branches] = await Promise.all([
+        fetchSyncBatches(newColg, firstCrs),
+        fetchSyncBranches(newColg, firstCrs),
+      ]);
+
+      const defaultBat = batches.find(b => b.year === '2025' || b.raw_cd === '18' || b.raw_cd === '2')?.batch_cd || batches[0]?.batch_cd || "'18'";
+      const defaultBr = branches[0]?.branch_cd || "'1'";
+      setSyncBatchCd(defaultBat);
+      setSyncBranchCd(defaultBr);
+
+      const payload = buildCurrentPayload(newColg, firstCrs, defaultBat, defaultBr, syncSessionCd, syncType, syncArrstdsts);
+      setCustomPayloadText(JSON.stringify(payload, null, 2));
+    } finally {
+      setLoadingSyncMetadata(false);
+    }
+  };
+
+  const handleSyncCourseChange = async (newCrs: string) => {
+    setSyncCourseCd(newCrs);
+    setLoadingSyncMetadata(true);
+    try {
+      const [batches, branches] = await Promise.all([
+        fetchSyncBatches(syncColgCd, newCrs),
+        fetchSyncBranches(syncColgCd, newCrs),
+      ]);
+
+      const defaultBat = batches.find(b => b.year === '2025' || b.raw_cd === '18' || b.raw_cd === '2')?.batch_cd || batches[0]?.batch_cd || "'18'";
+      const defaultBr = branches[0]?.branch_cd || "'1'";
+      setSyncBatchCd(defaultBat);
+      setSyncBranchCd(defaultBr);
+
+      const payload = buildCurrentPayload(syncColgCd, newCrs, defaultBat, defaultBr, syncSessionCd, syncType, syncArrstdsts);
+      setCustomPayloadText(JSON.stringify(payload, null, 2));
+    } finally {
+      setLoadingSyncMetadata(false);
+    }
+  };
+
+  const handleSyncBatchChange = (newBat: string) => {
+    setSyncBatchCd(newBat);
+    const payload = buildCurrentPayload(syncColgCd, syncCourseCd, newBat, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
+    setCustomPayloadText(JSON.stringify(payload, null, 2));
+  };
+
+  const handleSyncBranchChange = (newBr: string) => {
+    setSyncBranchCd(newBr);
+    const payload = buildCurrentPayload(syncColgCd, syncCourseCd, syncBatchCd, newBr, syncSessionCd, syncType, syncArrstdsts);
+    setCustomPayloadText(JSON.stringify(payload, null, 2));
+  };
+
+  const handleSyncSessionChange = (newSess: string) => {
+    setSyncSessionCd(newSess);
+    const payload = buildCurrentPayload(syncColgCd, syncCourseCd, syncBatchCd, syncBranchCd, newSess, syncType, syncArrstdsts);
+    setCustomPayloadText(JSON.stringify(payload, null, 2));
+  };
+
+  const handleExecuteStudentSync = async () => {
     setSyncing(true);
     setSyncResult(null);
     try {
-      const activeCollege = colleges.find(c => c.code === colg || c.colg_cd === colg || c.id === colg);
+      const activeCollege = colleges.find(c => c.code === syncColgCd || c.colg_cd === syncColgCd || c.id === syncColgCd);
       const tenantSlug = activeCollege?.slug || getActiveTenantSlug() || 'srms-cet-bareilly';
 
       let parsedPayload: any = null;
-      if (isEditingEndpoint && customPayloadStr.trim()) {
+      if (isEditingEndpoint && customPayloadText.trim()) {
         try {
-          parsedPayload = JSON.parse(customPayloadStr);
+          parsedPayload = JSON.parse(customPayloadText);
         } catch (e: any) {
           alert('Invalid JSON syntax in custom payload. Please check your JSON format.');
           setSyncing(false);
           return;
         }
       } else {
-        parsedPayload = buildCurrentPayload(colg, crs, bat, br, sess, typ, arr);
+        parsedPayload = buildCurrentPayload(syncColgCd, syncCourseCd, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
       }
 
       const res = await fetch('/api/srms/students/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          endpointUrl: endpoint,
+          endpointUrl: syncEndpointUrl,
           customPayload: parsedPayload,
-          colgcd: colg,
-          coursecd: crs,
-          batchcd: bat,
-          branchcd: br,
-          sessioncd: sess,
-          type: typ,
-          arrstdsts: arr,
+          colgcd: parsedPayload.colgcd || syncColgCd,
+          coursecd: parsedPayload.coursecd || syncCourseCd,
+          batchcd: parsedPayload.batchcd || syncBatchCd,
+          branchcd: parsedPayload.branchcd || syncBranchCd,
+          sessioncd: parsedPayload.sessioncd || syncSessionCd,
+          type: parsedPayload.type || syncType,
+          arrstdsts: parsedPayload.arrstdsts || syncArrstdsts,
           tenant: tenantSlug,
         }),
       });
 
       const json = await res.json();
-      if (json.success) {
+      if (json.success && json.count > 0) {
         setSyncResult({
           success: true,
           count: json.count || 0,
-          message: json.message || `Successfully synchronized ${json.count || 0} student records from SRMS ERP portal.`,
+          message: json.message || `Successfully synchronized ${json.count || 0} student records into PostgreSQL.`,
           data: json.data || [],
         });
-        await fetchStudents();
+
+        // Automatically align main table filters to the synced cohort
+        const targetColg = syncColgCd || '1';
+        setSelectedCollege(targetColg);
+        setSelectedCourse(syncCourseCd || 'all');
+        setSelectedBatch('all');
+        setSelectedBranch('all');
+        setSelectedSession('all');
+        setSelectedResidency('all');
+        setSelectedGroup('all');
+        setSelectedProfessionalFilter('all');
+        setSearchQuery('');
+        setCurrentPage(1);
+
+        await fetchStudents({
+          collegeId: targetColg,
+          courseId: syncCourseCd || 'all',
+          batchId: 'all',
+          branchId: 'all',
+          sessionId: 'all',
+          search: '',
+        });
+      } else if (json.success && json.count === 0) {
+        setSyncResult({
+          success: false,
+          count: 0,
+          message: json.message || 'No student records returned from SRMS ERP portal for this academic program.',
+        });
       } else {
         setSyncResult({
           success: false,
           count: 0,
-          message: json.error || json.message || 'No records returned from SRMS portal for the selected criteria.',
+          message: json.error || json.message || 'Error occurred while syncing students from SRMS portal.',
         });
       }
     } catch (err: any) {
@@ -1871,50 +2074,58 @@ export default function StudentMasterPage() {
 
       // 2. Course Filter
       if (selectedCourse !== 'all') {
-        const crsObj = filterCourses.find((c) => c.id === selectedCourse);
-        const matchCode = (crsObj?.code || '').toLowerCase();
+        const crsObj = filterCourses.find((c) => c.id === selectedCourse || c.course_cd === selectedCourse || c.code === selectedCourse);
+        const matchCode = (crsObj?.code || crsObj?.course_cd || selectedCourse || '').toLowerCase();
         const matchName = (crsObj?.name || '').toLowerCase();
         const stCourse = (st.course_code || '').toLowerCase();
-        if (
-          matchCode &&
-          !stCourse.includes(matchCode) &&
-          !matchName.includes(stCourse) &&
-          st.course_code !== selectedCourse &&
-          st.course_code !== crsObj?.code
-        ) {
+        const stCourseCd = String((st as any).course_cd || '').toLowerCase();
+        const isMatch = (
+          (matchCode && (stCourse.includes(matchCode) || stCourseCd === matchCode)) ||
+          (matchName && (matchName.includes(stCourse) || stCourse.includes(matchName))) ||
+          st.course_code === selectedCourse ||
+          st.course_code === crsObj?.code ||
+          stCourseCd === selectedCourse
+        );
+        if (!isMatch) {
           return false;
         }
       }
 
       // 3. Batch Filter
       if (selectedBatch !== 'all') {
-        const batObj = filterBatches.find((b) => b.id === selectedBatch);
-        const matchBatCode = (batObj?.code || '').toLowerCase();
+        const batObj = filterBatches.find((b) => b.id === selectedBatch || b.batch_cd === selectedBatch || b.code === selectedBatch || String(b.year) === selectedBatch);
+        const matchBatCode = (batObj?.code || batObj?.batch_cd || selectedBatch || '').toLowerCase();
         const matchBatYear = String(batObj?.year || '');
         const stBatch = (st.batch_code || '').toLowerCase();
-        if (
-          matchBatCode &&
-          !stBatch.includes(matchBatCode) &&
-          !stBatch.includes(matchBatYear) &&
-          st.batch_code !== selectedBatch &&
-          st.batch_id !== selectedBatch &&
-          st.batch_code !== batObj?.code
-        ) {
+        const stBatchCd = String((st as any).batch_cd || '').toLowerCase();
+        const stBatchId = String(st.batch_id || '').toLowerCase();
+        const isBatchMatch = (
+          (matchBatCode && (stBatch.includes(matchBatCode) || stBatchCd === matchBatCode || stBatchId === matchBatCode)) ||
+          (matchBatYear && (stBatch.includes(matchBatYear) || stBatchCd === matchBatYear || stBatchId === matchBatYear)) ||
+          st.batch_code === selectedBatch ||
+          st.batch_id === selectedBatch ||
+          stBatchCd === selectedBatch
+        );
+        if (!isBatchMatch) {
           return false;
         }
       }
 
       // 4. Branch Filter
       if (selectedBranch !== 'all') {
-        const brObj = filterBranches.find((b) => b.id === selectedBranch);
-        const matchBrCode = (brObj?.code || '').toLowerCase();
+        const brObj = filterBranches.find((b) => b.id === selectedBranch || b.branch_cd === selectedBranch || b.code === selectedBranch);
+        const matchBrCode = (brObj?.code || brObj?.branch_cd || selectedBranch || '').toLowerCase();
+        const matchBrName = (brObj?.name || '').toLowerCase();
         const stBranch = (st.branch_code || '').toLowerCase();
-        if (
-          matchBrCode &&
-          !stBranch.includes(matchBrCode) &&
-          st.branch_code !== selectedBranch &&
-          st.branch_code !== brObj?.code
-        ) {
+        const stBranchName = String((st as any).branch_name || '').toLowerCase();
+        const stBranchId = String(st.branch_id || '').toLowerCase();
+        const isBranchMatch = (
+          (matchBrCode && (stBranch.includes(matchBrCode) || matchBrCode.includes(stBranch) || stBranchId === matchBrCode)) ||
+          (matchBrName && (matchBrName.includes(stBranch) || matchBrName.includes(stBranchName) || stBranchName.includes(matchBrCode))) ||
+          st.branch_code === selectedBranch ||
+          stBranchId === selectedBranch
+        );
+        if (!isBranchMatch) {
           return false;
         }
       }
@@ -2505,7 +2716,7 @@ export default function StudentMasterPage() {
           )}
 
           {/* Directory DataTable */}
-          <div className="premium-table-wrapper">
+          <div id="student-cohort-table-section" className="premium-table-wrapper">
             <div className="overflow-x-auto">
               <table className="premium-table">
                 <thead>
@@ -3669,7 +3880,7 @@ export default function StudentMasterPage() {
     <div class="college-name">${s?.collegeName || s?.college_name || 'SRMS COLLEGE OF ENGINEERING & TECHNOLOGY'}</div>
     <div class="student-name">${s?.name || ''}</div>
     <div class="reg-no">Reg No: ${s?.registrationNo || s?.registration_no || ''} &nbsp;|&nbsp; Roll No: ${s?.rollNo || s?.rollno || '—'}</div>
-    <div class="badge">${s?.courseCode || s?.course_code || ''} &bull; ${s?.batchCode || s?.batch_code || ''} &bull; ${s?.academicSession || s?.academic_session || ''}</div>
+    <div class="badge">${s?.courseCode || s?.course_code || ''} &bull; ${formatBatchLabel(s?.batchCode || s?.batch_code || '')} &bull; ${s?.academicSession || s?.academic_session || ''}</div>
   </div>
 </div>
 
@@ -3694,7 +3905,7 @@ export default function StudentMasterPage() {
   <div class="field"><label>College</label><span>${s?.collegeName || s?.college_name || '—'}</span></div>
   <div class="field"><label>Course</label><span>${s?.courseCode || s?.course_code || '—'}</span></div>
   <div class="field"><label>Branch</label><span>${s?.branchName || '—'}</span></div>
-  <div class="field"><label>Batch</label><span>${s?.batchCode || s?.batch_code || '—'}</span></div>
+  <div class="field"><label>Batch</label><span>${formatBatchLabel(s?.batchCode || s?.batch_code || '-')}</span></div>
   <div class="field"><label>Session</label><span>${s?.academicSession || s?.academic_session || '—'}</span></div>
   <div class="field"><label>Residency</label><span>${s?.residencyType || s?.residency_type || '—'}</span></div>
   <div class="field"><label>Admission Type</label><span>${s?.admissionType || s?.admission_type || '—'}</span></div>
@@ -3819,7 +4030,7 @@ export default function StudentMasterPage() {
                         ['College', viewStudent?.collegeName || viewStudent?.college_name],
                         ['Course', viewStudent?.courseCode || viewStudent?.course_code],
                         ['Branch', viewStudent?.branchName],
-                        ['Batch', viewStudent?.batchCode || viewStudent?.batch_code],
+                        ['Batch', formatBatchLabel(viewStudent?.batchCode || viewStudent?.batch_code)],
                         ['Session', viewStudent?.academicSession || viewStudent?.academic_session],
                         ['Residency', viewStudent?.residencyType || viewStudent?.residency_type],
                         ['Admission Type', viewStudent?.admissionType || viewStudent?.admission_type],
@@ -3985,15 +4196,166 @@ export default function StudentMasterPage() {
 
             <div className="p-6 space-y-5 overflow-y-auto">
 
-              {/* Endpoint Information & Editable Box */}
+              {/* ══════════════════════════════════════════════════════════ */}
+              {/* SECTION 1: ACADEMIC PROGRAM & COHORT DROPDOWNS             */}
+              {/* ══════════════════════════════════════════════════════════ */}
+              <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-indigo-950 dark:text-indigo-200 uppercase text-xs tracking-wider flex items-center gap-1.5">
+                      <span>🎯</span> 1. Select Academic Program &amp; Cohort
+                    </span>
+                  </div>
+                  {loadingSyncMetadata && (
+                    <span className="text-[10px] font-bold text-[#5B4BFF] animate-pulse flex items-center gap-1">
+                      <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                      </svg>
+                      Loading catalog...
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Select your Course, Batch, and Branch from the dropdowns. The JSON payload below is automatically generated with the exact system codes.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* 1. Target College */}
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center justify-between">
+                      <span>1. Target Institution / College (colgcd) *</span>
+                      <span className="text-[9px] text-[#F36C21] font-bold">Live DB Schema Switch</span>
+                    </label>
+                    <select
+                      value={syncColgCd}
+                      onChange={(e) => handleSyncCollegeChange(e.target.value)}
+                      disabled={syncing}
+                      className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer shadow-xs"
+                    >
+                      {SRMS_STUDENT_COLLEGE_OPTIONS.map((opt) => (
+                        <option key={opt.colg_cd} value={opt.colg_cd}>
+                          🏛️ {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 2. Course Program */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                      2. Course Program (coursecd) *
+                    </label>
+                    <select
+                      value={syncCourseCd}
+                      onChange={(e) => handleSyncCourseChange(e.target.value)}
+                      disabled={syncing}
+                      className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer shadow-xs"
+                    >
+                      {syncCoursesList.length > 0 ? (
+                        syncCoursesList.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            🎓 [#{c.code}] {c.name}
+                          </option>
+                        ))
+                      ) : (
+                        SRMS_STUDENT_COURSE_OPTIONS.map((opt) => (
+                          <option key={opt.course_cd} value={opt.course_cd}>
+                            🎓 {opt.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  {/* 3. Academic Batch */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center justify-between">
+                      <span>3. Academic Batch (batchcd) *</span>
+                      <span className="text-[9px] text-[#5B4BFF] font-bold">Auto-Coded</span>
+                    </label>
+                    <select
+                      value={syncBatchCd}
+                      onChange={(e) => handleSyncBatchChange(e.target.value)}
+                      disabled={syncing}
+                      className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer shadow-xs"
+                    >
+                      {syncBatchesList.length > 0 ? (
+                        syncBatchesList.map((b, idx) => (
+                          <option key={b.batch_cd || idx} value={b.batch_cd}>
+                            📅 {b.label}
+                          </option>
+                        ))
+                      ) : (
+                        SRMS_STUDENT_BATCH_OPTIONS.map((opt) => (
+                          <option key={opt.batch_cd} value={opt.batch_cd}>
+                            📅 {opt.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  {/* 4. Branch */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                      4. Department Branch (branchcd) *
+                    </label>
+                    <select
+                      value={syncBranchCd}
+                      onChange={(e) => handleSyncBranchChange(e.target.value)}
+                      disabled={syncing}
+                      className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer shadow-xs"
+                    >
+                      {syncBranchesList.length > 0 ? (
+                        syncBranchesList.map((br, idx) => (
+                          <option key={br.branch_cd || idx} value={br.branch_cd}>
+                            🏢 {br.label}
+                          </option>
+                        ))
+                      ) : (
+                        SRMS_STUDENT_BRANCH_OPTIONS.map((opt) => (
+                          <option key={opt.branch_cd} value={opt.branch_cd}>
+                            🏢 {opt.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  {/* 5. Session */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                      5. Academic Session (sessioncd) *
+                    </label>
+                    <select
+                      value={syncSessionCd}
+                      onChange={(e) => handleSyncSessionChange(e.target.value)}
+                      disabled={syncing}
+                      className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer shadow-xs"
+                    >
+                      {syncSessionsList.map((opt) => (
+                        <option key={opt.session_cd} value={opt.session_cd}>
+                          ⏳ {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* ══════════════════════════════════════════════════════════ */}
+              {/* SECTION 2: LIVE GENERATED JSON PAYLOAD & SPECIFICATIONS    */}
+              {/* ══════════════════════════════════════════════════════════ */}
               <div className="p-4 rounded-2xl bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200/80 dark:border-orange-900/50 space-y-2.5 text-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-extrabold text-orange-950 dark:text-orange-300 uppercase text-[10px] tracking-wider">
-                      API Endpoint Specifications
+                      2. Generated JSON Payload (Live Preview)
                     </span>
                     <span className="px-2 py-0.5 rounded font-mono text-[9px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold">
-                      POST Live Proxy
+                      Ready for Sync
                     </span>
                   </div>
 
@@ -4009,13 +4371,13 @@ export default function StudentMasterPage() {
                     }}
                     className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
                       isEditingEndpoint
-                        ? 'bg-[#F36C21] text-white shadow-sm'
+                        ? 'bg-[#F36C21] text-white shadow-xs'
                         : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:border-[#F36C21] hover:text-[#F36C21]'
                     }`}
                     title="Edit URL & Payload directly"
                   >
                     <span>✏️</span>
-                    <span>{isEditingEndpoint ? 'Lock / Done' : 'Edit URL & Payload'}</span>
+                    <span>{isEditingEndpoint ? 'Lock / Done' : 'Edit Raw JSON'}</span>
                   </button>
                 </div>
 
@@ -4044,13 +4406,13 @@ export default function StudentMasterPage() {
                             const standard = JSON.stringify(buildCurrentPayload(), null, 2);
                             setCustomPayloadText(standard);
                           }}
-                          className="text-[9px] text-[#F36C21] font-bold underline hover:text-[#E05C12]"
+                          className="text-[9px] text-[#F36C21] font-bold underline hover:text-[#E05C12] cursor-pointer"
                         >
-                          Reset to Standard Payload
+                          Reset from Dropdowns
                         </button>
                       </div>
                       <textarea
-                        rows={5}
+                        rows={6}
                         value={customPayloadText}
                         onChange={(e) => setCustomPayloadText(e.target.value)}
                         className="w-full p-2.5 text-[11px] font-mono rounded-xl bg-white dark:bg-slate-900 border border-[#F36C21]/60 text-slate-900 dark:text-white focus:outline-none focus:border-[#F36C21]"
@@ -4058,16 +4420,14 @@ export default function StudentMasterPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="font-mono text-[11px] text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
-                    <p className="text-orange-600 dark:text-orange-400 font-bold truncate">
-                      URL: <span className="text-slate-700 dark:text-slate-300 font-medium">{syncEndpointUrl}</span>
-                    </p>
-                    <p className="text-orange-600 dark:text-orange-400 font-bold break-all">
-                      Payload:{' '}
-                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                        &#123; colgcd:&quot;{syncColgCd}&quot;, coursecd:&quot;{syncCourseCd}&quot;, batchcd:&quot;{syncBatchCd}&quot;, branchcd:&quot;{syncBranchCd}&quot;, type:&quot;{syncType}&quot;, sessioncd:&quot;{syncSessionCd}&quot;, arrstdsts:&quot;{syncArrstdsts}&quot; &#125;
-                      </span>
-                    </p>
+                  <div className="font-mono text-[11px] text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5 shadow-xs">
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 pb-1 border-b border-slate-100 dark:border-slate-800">
+                      <span>Endpoint: <strong className="text-slate-700 dark:text-slate-300 font-mono">FeeAdmin/GetColgWiseStudDt2</strong></span>
+                      <span className="text-emerald-600 font-bold">Auto-Generated</span>
+                    </div>
+                    <pre className="text-emerald-700 dark:text-emerald-400 font-bold text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap">
+                      {customPayloadText || JSON.stringify(buildCurrentPayload(), null, 2)}
+                    </pre>
                   </div>
                 )}
 
@@ -4092,134 +4452,6 @@ export default function StudentMasterPage() {
                 </div>
               </div>
 
-              {/* Parameters Selection Controls */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                {/* 1. Target College */}
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center justify-between">
-                    <span>1. Target Institution / College (colgcd) *</span>
-                    <span className="text-[9px] text-[#F36C21] font-bold">Live DB Schema Switch</span>
-                  </label>
-                  <select
-                    value={syncColgCd}
-                    onChange={(e) => {
-                      const nextColg = e.target.value;
-                      setSyncColgCd(nextColg);
-                      const updated = buildCurrentPayload(nextColg, syncCourseCd, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
-                      setCustomPayloadText(JSON.stringify(updated, null, 2));
-                      // Re-run sync on change
-                      handleExecuteStudentSync(nextColg, syncCourseCd, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts, syncEndpointUrl);
-                    }}
-                    disabled={syncing}
-                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
-                  >
-                    {SRMS_STUDENT_COLLEGE_OPTIONS.map((opt) => (
-                      <option key={opt.colg_cd} value={opt.colg_cd}>
-                        🏛️ {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 2. Course */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
-                    2. Course Program (coursecd) *
-                  </label>
-                  <select
-                    value={syncCourseCd}
-                    onChange={(e) => {
-                      const nextCrs = e.target.value;
-                      setSyncCourseCd(nextCrs);
-                      const updated = buildCurrentPayload(syncColgCd, nextCrs, syncBatchCd, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
-                      setCustomPayloadText(JSON.stringify(updated, null, 2));
-                    }}
-                    disabled={syncing}
-                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
-                  >
-                    {SRMS_STUDENT_COURSE_OPTIONS.map((opt) => (
-                      <option key={opt.course_cd} value={opt.course_cd}>
-                        🎓 {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 3. Batch */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
-                    3. Academic Batch (batchcd) *
-                  </label>
-                  <select
-                    value={syncBatchCd}
-                    onChange={(e) => {
-                      const nextBat = e.target.value;
-                      setSyncBatchCd(nextBat);
-                      const updated = buildCurrentPayload(syncColgCd, syncCourseCd, nextBat, syncBranchCd, syncSessionCd, syncType, syncArrstdsts);
-                      setCustomPayloadText(JSON.stringify(updated, null, 2));
-                    }}
-                    disabled={syncing}
-                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
-                  >
-                    {SRMS_STUDENT_BATCH_OPTIONS.map((opt) => (
-                      <option key={opt.batch_cd} value={opt.batch_cd}>
-                        📅 {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 4. Branch */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
-                    4. Department Branch (branchcd) *
-                  </label>
-                  <select
-                    value={syncBranchCd}
-                    onChange={(e) => {
-                      const nextBr = e.target.value;
-                      setSyncBranchCd(nextBr);
-                      const updated = buildCurrentPayload(syncColgCd, syncCourseCd, syncBatchCd, nextBr, syncSessionCd, syncType, syncArrstdsts);
-                      setCustomPayloadText(JSON.stringify(updated, null, 2));
-                    }}
-                    disabled={syncing}
-                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
-                  >
-                    {SRMS_STUDENT_BRANCH_OPTIONS.map((opt) => (
-                      <option key={opt.branch_cd} value={opt.branch_cd}>
-                        🏢 {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 5. Session */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider">
-                    5. Academic Session (sessioncd) *
-                  </label>
-                  <select
-                    value={syncSessionCd}
-                    onChange={(e) => {
-                      const nextSess = e.target.value;
-                      setSyncSessionCd(nextSess);
-                      const updated = buildCurrentPayload(syncColgCd, syncCourseCd, syncBatchCd, syncBranchCd, nextSess, syncType, syncArrstdsts);
-                      setCustomPayloadText(JSON.stringify(updated, null, 2));
-                    }}
-                    disabled={syncing}
-                    className="w-full h-10 px-3 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white cursor-pointer"
-                  >
-                    {SRMS_STUDENT_SESSION_OPTIONS.map((opt) => (
-                      <option key={opt.session_cd} value={opt.session_cd}>
-                        ⏳ {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-              </div>
-
               {/* Sync Result Summary Banner if completed */}
               {syncResult && (
                 <div
@@ -4238,19 +4470,36 @@ export default function StudentMasterPage() {
                     </h4>
                   </div>
                   {syncResult.success && (
-                    <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
-                      <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
-                        <span className="block text-[9px] text-slate-400 uppercase font-black">Students Synced</span>
-                        <span className="font-black text-slate-900 dark:text-white text-sm">{syncResult.count}</span>
+                    <div className="space-y-2 pt-1">
+                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                        <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-xs border border-slate-200 dark:border-slate-800">
+                          <span className="block text-[9px] text-slate-400 uppercase font-black">Students Synced</span>
+                          <span className="font-black text-slate-900 dark:text-white text-sm">{syncResult.count}</span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-xs border border-slate-200 dark:border-slate-800">
+                          <span className="block text-[9px] text-slate-400 uppercase font-black">Photo URLs Linked</span>
+                          <span className="font-black text-emerald-600 text-sm">{syncResult.count}</span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-xs border border-slate-200 dark:border-slate-800">
+                          <span className="block text-[9px] text-slate-400 uppercase font-black">Database Target</span>
+                          <span className="font-black text-[#F36C21] text-sm">PostgreSQL</span>
+                        </div>
                       </div>
-                      <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
-                        <span className="block text-[9px] text-slate-400 uppercase font-black">Photo URLs Linked</span>
-                        <span className="font-black text-emerald-600 text-sm">{syncResult.count}</span>
-                      </div>
-                      <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
-                        <span className="block text-[9px] text-slate-400 uppercase font-black">Database Target</span>
-                        <span className="font-black text-[#F36C21] text-sm">PostgreSQL</span>
-                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSyncModalOpen(false);
+                          setTimeout(() => {
+                            const el = document.getElementById('student-cohort-table-section');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }, 150);
+                        }}
+                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
+                      >
+                        <span>👉</span>
+                        <span>View Synced Students in Table ({syncResult.count} Students Ready)</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -4266,27 +4515,44 @@ export default function StudentMasterPage() {
                 >
                   Close
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleExecuteStudentSync()}
-                  disabled={syncing}
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white font-extrabold text-xs shadow-lg shadow-orange-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 disabled:opacity-50 cursor-pointer"
-                >
-                  {syncing ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-1 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span>Syncing from SRMS Portal...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>⚡</span>
-                      <span>Start Sync Process</span>
-                    </>
-                  )}
-                </button>
+                {syncResult?.success ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSyncModalOpen(false);
+                      setTimeout(() => {
+                        const el = document.getElementById('student-cohort-table-section');
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }, 150);
+                    }}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>👥</span>
+                    <span>Done! View Students in Table ({syncResult.count})</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteStudentSync()}
+                    disabled={syncing}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white font-extrabold text-xs shadow-lg shadow-orange-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    {syncing ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-1 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Syncing from SRMS Portal...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>⚡</span>
+                        <span>Start Sync Process</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
             </div>

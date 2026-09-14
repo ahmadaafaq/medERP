@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
+import { resolveCourseTitle, resolveDepartmentTitle } from '../../utils/courseResolver';
 import LogbookSubmitModal from '../../../components/LogbookSubmitModal';
 import FeeReceiptModal from '../../../components/FeeReceiptModal';
 import RecentLessonsWidget from '../../../components/RecentLessonsWidget';
@@ -32,6 +33,11 @@ interface StudentInfo {
   batch: string;
   course: string;
   department?: string;
+  course_cd?: string;
+  branch_cd?: string;
+  batch_cd?: string;
+  semester?: string;
+  section?: string;
 }
 
 interface ExamResult {
@@ -115,6 +121,11 @@ export default function StudentDashboard() {
     let cachedReg = '';
     let cachedName = '';
     let cachedRoll = '';
+    let cachedCourseCd = '';
+    let cachedCourseName = '';
+    let cachedDeptName = '';
+    let cachedBatchCd = '';
+    let cachedBatchName = '';
 
     if (typeof window !== 'undefined') {
       try {
@@ -127,11 +138,14 @@ export default function StudentDashboard() {
             cached?.registrationNo ||
             cached?.registration_no ||
             p.reg_no ||
-            p.rollno ||
-            cached?.rollno ||
             '';
           cachedName = cached?.name || p.name || cached?.student_name || '';
           cachedRoll = p.rollno || cached?.rollno || '';
+          cachedCourseCd = p.course_cd || cached?.courseCd || cached?.course_cd || '';
+          cachedCourseName = p.course_name || cached?.courseName || '';
+          cachedDeptName = p.department_name || cached?.departmentName || cached?.department || '';
+          cachedBatchCd = p.batch_cd || cached?.batchCd || cached?.batch_cd || '';
+          cachedBatchName = p.batch_name || cached?.batchName || '';
         }
       } catch (e) {
         console.warn('Error reading localStorage user:', e);
@@ -141,12 +155,12 @@ export default function StudentDashboard() {
     try {
       // 1. Fetch Logged-In Student Profile
       const isMed = slug.includes('ims') || slug.includes('med');
-      let regNo = cachedReg || (isMed ? '2023MBBS045' : '2025107990');
-      let studentNameVal = cachedName || (isMed ? 'Rahul Verma' : 'AAFREEN KHAN');
-      let studentRollVal = cachedRoll || (isMed ? 'MBBS2023045' : '2500141790001');
-      let courseCd = isMed ? '1' : '13';
+      let regNo = cachedReg || (isMed ? '2023MBBS045' : '');
+      let studentNameVal = cachedName || (isMed ? 'Rahul Verma' : 'Student');
+      let studentRollVal = cachedRoll || (isMed ? 'MBBS2023045' : '');
+      let courseCd = cachedCourseCd || (isMed ? '1' : '');
       let branchCd = '1';
-      let batchCd = '2';
+      let batchCd = cachedBatchCd || '2';
       let batchId = '';
       let semester = '3';
       let section = '1';
@@ -162,44 +176,55 @@ export default function StudentDashboard() {
           p.registration_no ||
           meData.registrationNo ||
           meData.registration_no ||
-          p.rollno ||
-          meData.rollno ||
+          p.reg_no ||
           regNo;
         studentNameVal = meData.name || p.name || meData.student_name || studentNameVal;
         studentRollVal = p.rollno || meData.rollno || studentRollVal;
 
-        courseCd = p.course_cd || meData.course_cd || meData.courseCd || (p.course_name?.includes('BCA') ? '13' : courseCd);
-        branchCd = p.branch_cd || meData.branch_cd || meData.branchCd || '1';
-        batchCd = p.batch_cd || meData.batch_cd || meData.batchCd || '2';
+        courseCd = p.course_cd || meData.course_cd || meData.courseCd || courseCd;
+        branchCd = p.branch_cd || meData.branch_cd || meData.branchCd || branchCd;
+        batchCd = p.batch_cd || meData.batch_cd || meData.batchCd || batchCd;
         batchId = p.batch_id || meData.batch_id || meData.batchId || '';
         semester = p.semester || p.current_semester || meData.semester || '3';
         section = p.section || meData.section || '1';
         colgCd = p.colg_cd || meData.colg_cd || meData.colgcd || '1';
 
-        const courseStr = meData.courseName || p.course_name || (courseCd === '13' ? 'BCA' : courseCd === '1' ? 'B.Tech' : courseCd);
-        const deptStr = meData.departmentName || p.department_name || (isMed ? 'Phase 2 MBBS' : 'Computer Applications (BCA)');
+        const courseStr = resolveCourseTitle(courseCd, meData.courseName || p.course_name || cachedCourseName);
+        const deptStr = resolveDepartmentTitle(courseCd, meData.departmentName || p.department_name || cachedDeptName);
 
         setStudentInfo({
           name: studentNameVal,
           rollno: studentRollVal,
           registration_no: regNo,
-          batch: p.batch_name || p.batch_cd || (isMed ? '2023-MBBS Batch' : 'Batch 2025'),
+          batch: p.batch_name || p.batch_code || p.batch_cd || meData.batchName || meData.batchCd || cachedBatchName || (isMed ? '2023-MBBS Batch' : '2025 Batch'),
           course: courseStr,
           department: deptStr,
+          course_cd: courseCd,
+          branch_cd: branchCd,
+          batch_cd: batchCd,
+          semester: semester,
+          section: section,
         });
       } else {
+        const courseStr = resolveCourseTitle(courseCd, cachedCourseName);
+        const deptStr = resolveDepartmentTitle(courseCd, cachedDeptName);
         setStudentInfo({
           name: studentNameVal,
           rollno: studentRollVal,
           registration_no: regNo,
-          batch: isMed ? '2023-MBBS Batch' : 'Batch 2025',
-          course: isMed ? 'MBBS' : 'BCA',
-          department: isMed ? 'Phase 2 MBBS' : 'Computer Applications (BCA)',
+          batch: isMed ? '2023-MBBS Batch' : (cachedBatchName || cachedBatchCd || '2025 Batch'),
+          course: courseStr,
+          department: deptStr,
+          course_cd: courseCd,
+          branch_cd: branchCd,
+          batch_cd: batchCd,
+          semester: semester,
+          section: section,
         });
       }
 
       // 2. Fetch all real data in PARALLEL to load in one shot accurately
-      const targetReg = regNo || '2025107990';
+      const targetReg = regNo || studentRollVal;
 
       let ttUrl = `${API_BASE}/timetable/student-schedule?tenant=${slug}`;
       if (batchId) ttUrl += `&batchId=${encodeURIComponent(batchId)}`;
@@ -209,6 +234,11 @@ export default function StudentDashboard() {
       if (semester) ttUrl += `&semester=${encodeURIComponent(semester)}`;
       if (section) ttUrl += `&section=${encodeURIComponent(section)}`;
       if (colgCd) ttUrl += `&colgCd=${encodeURIComponent(colgCd)}`;
+
+      const incParams = new URLSearchParams({ tenant: slug });
+      if (courseCd) incParams.set('courseId', String(courseCd));
+      if (branchCd) incParams.set('branchId', String(branchCd));
+      if (batchCd) incParams.set('batchId', String(batchCd));
 
       const [
         attendanceResult,
@@ -225,7 +255,7 @@ export default function StudentDashboard() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             colg_cd: Number(colgCd) || 1,
-            course_cd: Number(courseCd) || 13,
+            course_cd: Number(courseCd) || 4,
             branch_cd: Number(branchCd) || 1,
             batch_cd: Number(batchCd) || 2,
             stud_reg_no: targetReg,
@@ -237,12 +267,12 @@ export default function StudentDashboard() {
           .then((res) => (res.ok ? res.json() : null))
           .catch(() => null),
 
-        // 2c. Student Results Ledger
+        // 2c. Student Results Ledger (Internal Assessment & Examination Scores)
         fetch(`${API_BASE}/exams/student/${encodeURIComponent(targetReg)}?tenant=${slug}`, { headers })
           .then((res) => (res.ok ? res.json() : null))
           .catch(() => null),
 
-        // 2d. Timetable Schedule
+        // 2d. Weekly Timetable Classes
         fetch(ttUrl, { headers })
           .then((res) => (res.ok ? res.json() : null))
           .catch(() => null),
@@ -258,12 +288,15 @@ export default function StudentDashboard() {
           .then((res) => (res.ok ? res.json() : null))
           .catch(() => null),
 
-        // 2f. Incubation Projects
-        fetch(`/api/incubation-cell/projects?tenant=${slug}`, {
+        // 2f. Incubation Projects (Strictly scoped to student course/branch/batch)
+        fetch(`/api/incubation-cell/projects?${incParams.toString()}`, {
           headers: {
             'x-tenant-id': `tenant_${slug}`,
             'x-tenant': slug,
             'x-tenant-slug': slug,
+            'x-user-reg-no': targetReg,
+            'x-user-role': 'STUDENT',
+            'x-user-name': studentNameVal,
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         })
@@ -389,24 +422,60 @@ export default function StudentDashboard() {
         });
       }
 
-      // Apply Incubation Projects
+      // Apply Incubation Projects (Strict Department / Course Scoping)
       if (incubationResult.status === 'fulfilled' && incubationResult.value) {
         const list = Array.isArray(incubationResult.value.data)
           ? incubationResult.value.data
           : Array.isArray(incubationResult.value)
             ? incubationResult.value
             : [];
-        const myIncubated = list.filter(
-          (p: any) =>
-            p.studentRegNo === targetReg ||
-            p.rollNo === studentRollVal ||
-            (p.studentName && studentNameVal && p.studentName.toLowerCase().trim() === studentNameVal.toLowerCase().trim()) ||
-            ['Selected', 'Funded', 'Incubated'].includes(p.incubationStatus)
-        );
+
+        const studentCourseUpper = (courseCd || studentInfo?.course || '').toString().toUpperCase();
+
+        const isCourseMatch = (p: any) => {
+          const projCourse = (p.courseName || p.course_cd || p.courseId || '').toString().toUpperCase();
+          if (studentCourseUpper.includes('4') || studentCourseUpper.includes('MBA')) {
+            // Strict MBA isolation: reject B.Tech, BCA, MCA, Pharmacy
+            if (projCourse.includes('BCA') || projCourse.includes('B.TECH') || projCourse.includes('MCA') || projCourse.includes('PHARM')) {
+              return false;
+            }
+            return projCourse.includes('MBA') || projCourse.includes('MANAGEMENT') || projCourse === '4' || !projCourse;
+          }
+          if (studentCourseUpper.includes('13') || studentCourseUpper.includes('BCA')) {
+            if (projCourse.includes('MBA') || projCourse.includes('B.TECH')) return false;
+            return projCourse.includes('BCA') || projCourse === '13';
+          }
+          return !projCourse || projCourse.includes(studentCourseUpper) || studentCourseUpper.includes(projCourse);
+        };
+
+        const myIncubated = list
+          .filter((p: any) => {
+            const isMine =
+              (p.studentRegNo && targetReg && String(p.studentRegNo).trim() === String(targetReg).trim()) ||
+              (p.rollNo && studentRollVal && String(p.rollNo).trim() === String(studentRollVal).trim()) ||
+              (p.studentName && studentNameVal && p.studentName.toLowerCase().trim() === studentNameVal.toLowerCase().trim());
+
+            if (isMine) return true;
+
+            // Only show batch peer projects if they belong strictly to the student's department/course
+            const isPeerInDepartment = isCourseMatch(p) && ['Selected', 'Funded', 'Incubated'].includes(p.incubationStatus);
+            return isPeerInDepartment;
+          })
+          .map((p: any) => {
+            const isMine =
+              (p.studentRegNo && targetReg && String(p.studentRegNo).trim() === String(targetReg).trim()) ||
+              (p.rollNo && studentRollVal && String(p.rollNo).trim() === String(studentRollVal).trim()) ||
+              (p.studentName && studentNameVal && p.studentName.toLowerCase().trim() === studentNameVal.toLowerCase().trim());
+            return {
+              ...p,
+              isMine,
+            };
+          });
+
         setIncubatedProjects(myIncubated);
       }
 
-      // Apply Placement Drives
+      // Apply Placement Drives (Strict Department / Course Scoping)
       if (placementResult.status === 'fulfilled' && placementResult.value) {
         const list = Array.isArray(placementResult.value.data?.data)
           ? placementResult.value.data.data
@@ -415,7 +484,25 @@ export default function StudentDashboard() {
             : Array.isArray(placementResult.value)
               ? placementResult.value
               : [];
-        setPlacementAlertDrives(list);
+
+        const studentCourseUpper = (courseCd || studentInfo?.course || '').toString().toUpperCase();
+        const filteredDrives = list.filter((d: any) => {
+          if (d.has_applied) return true;
+          if (studentCourseUpper.includes('4') || studentCourseUpper.includes('MBA')) {
+            const driveCourses = [
+              d.eligibility_course_cd,
+              ...(Array.isArray(d.extra_fields?.eligible_courses) ? d.extra_fields.eligible_courses : []),
+              d.extra_fields?.['Eligible Courses'],
+            ].map((x) => String(x || '').toUpperCase()).join(' ');
+
+            if ((driveCourses.includes('B.TECH') || driveCourses.includes('BCA') || driveCourses.includes('13')) && !driveCourses.includes('MBA') && !driveCourses.includes('4')) {
+              return false;
+            }
+          }
+          return true;
+        });
+
+        setPlacementAlertDrives(filteredDrives);
       }
     } catch {
       setExamResults([]);
@@ -444,11 +531,11 @@ export default function StudentDashboard() {
                   ACTIVE STUDENT PORTAL
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white/90 border border-white/20 text-xs font-mono font-bold">
-                  {studentInfo?.course || 'BCA'}
+                  {studentInfo?.course || 'Student'}
                 </span>
               </div>
               <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white">
-                Welcome back, {studentInfo?.name || 'Tanish Pandey'}! 👋
+                Welcome back, {studentInfo?.name || 'Student'}! 👋
               </h1>
               <p className="text-xs text-white/80 max-w-2xl leading-relaxed">
                 Official College Student Ledger. Track subject-wise attendance across Theory & Practical Lectures, examine published test results, and manage your academic syllabus.
@@ -917,11 +1004,20 @@ export default function StudentDashboard() {
 
           {/* Lessons & Materials */}
           <div className="grid grid-cols-1 gap-6">
-            <RecentLessonsWidget role="STUDENT" />
+            <RecentLessonsWidget role="STUDENT" studentInfo={studentInfo} />
           </div>
 
           <div className="grid grid-cols-1 gap-6">
-            <AttendanceWidget role="STUDENT" />
+            <AttendanceWidget
+              role="STUDENT"
+              studentInfo={studentInfo}
+              courseCd={studentInfo?.course_cd}
+              courseName={studentInfo?.course}
+              batchCd={studentInfo?.batch_cd}
+              batchName={studentInfo?.batch}
+              semester={studentInfo?.semester}
+              regNo={studentInfo?.registration_no}
+            />
           </div>
 
           {/* TWO COLUMN CONTENT SECTION */}
@@ -935,7 +1031,7 @@ export default function StudentDashboard() {
                     🏆 Recent Examination & Assessment Results
                   </h3>
                   <p className="text-xs text-[#4E5969] dark:text-slate-400">
-                    Official internal assessment scores registered for Registration No: <strong className="font-mono text-[#5B4BFF]">{studentInfo?.registration_no || '2023MBBS045'}</strong>
+                    Official internal assessment scores registered for Registration No: <strong className="font-mono text-[#5B4BFF]">{studentInfo?.registration_no || studentInfo?.rollno || 'Active Student'}</strong>
                   </p>
                 </div>
                 <Link
@@ -972,9 +1068,9 @@ export default function StudentDashboard() {
                         const maxM = r.max_marks || 100;
                         return (
                           <tr key={r.id} className="hover:bg-[#F1F4F9]/60 dark:hover:bg-slate-800/40 transition">
-                            <td className="py-3.5 px-4 font-mono font-black text-[#5B4BFF]">{r.paper_code || 'EXAM_RES'}</td>
-                            <td className="py-3.5 px-4 font-bold text-[#1B1E28] dark:text-white">{r.paper_name || 'Assessment'}</td>
-                            <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300">{r.subject_name || 'Physiology'}</td>
+                            <td className="py-3.5 px-4 font-mono font-black text-[#5B4BFF]">{r.paper_code || 'ASSESS'}</td>
+                            <td className="py-3.5 px-4 font-bold text-[#1B1E28] dark:text-white">{r.paper_name || 'Internal Assessment'}</td>
+                            <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300">{r.subject_name || r.paper_name || 'Academic Subject'}</td>
                             <td className="py-3.5 px-4 font-black text-[#1B1E28] dark:text-white text-sm">{r.marks_obtained}</td>
                             <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-400">{maxM}</td>
                             <td className="py-3.5 px-4 text-center">

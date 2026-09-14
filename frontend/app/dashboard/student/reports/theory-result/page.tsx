@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
+import { resolveCourseTitle } from '../../../../utils/courseResolver';
 import { 
   BookOpen, 
   FileText, 
@@ -90,13 +91,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export default function StudentTheoryResultPage() {
   // Student Profile Auto-Locked States
-  const [studentName, setStudentName] = useState('AAFREEN KHAN');
-  const [studentRegNo, setStudentRegNo] = useState('2025107990');
-  const [studentRollNo, setStudentRollNo] = useState('2500141790001');
+  const [studentName, setStudentName] = useState('');
+  const [studentRegNo, setStudentRegNo] = useState('');
+  const [studentRollNo, setStudentRollNo] = useState('');
   const [studentBatch, setStudentBatch] = useState('2025');
   const [studentSem, setStudentSem] = useState('3');
-  const [studentCourse, setStudentCourse] = useState('BCA');
-  const [studentCourseCd, setStudentCourseCd] = useState('13');
+  const [studentCourse, setStudentCourse] = useState('');
+  const [studentCourseCd, setStudentCourseCd] = useState('');
 
   // Interactive Selection
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
@@ -121,9 +122,28 @@ export default function StudentTheoryResultPage() {
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     };
 
-    let reg = '2025107990';
-    let roll = '2500141790001';
-    let name = 'AAFREEN KHAN';
+    let reg = '';
+    let roll = '';
+    let name = '';
+    let courseCd = '';
+    let courseName = '';
+    let batch = '2025';
+
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedUserStr = localStorage.getItem('user');
+        if (cachedUserStr) {
+          const cached = JSON.parse(cachedUserStr);
+          const p = cached?.profile || cached || {};
+          reg = p.registration_no || cached?.registrationNo || cached?.registration_no || p.reg_no || '';
+          name = cached?.name || p.name || cached?.student_name || '';
+          roll = p.rollno || cached?.rollno || '';
+          courseCd = p.course_cd || cached?.courseCd || cached?.course_cd || '';
+          courseName = p.course_name || cached?.courseName || '';
+          batch = p.batch_cd || cached?.batchCd || cached?.batch_cd || '2025';
+        }
+      } catch {}
+    }
 
     try {
       // 1. Resolve logged in student
@@ -132,16 +152,21 @@ export default function StudentTheoryResultPage() {
         const json = await meRes.json();
         const meData = json.data || json;
         const p = meData.profile || meData;
-        reg = p.registration_no || meData.registrationNo || reg;
+        reg = p.registration_no || meData.registrationNo || meData.registration_no || p.reg_no || reg;
         roll = p.rollno || meData.rollno || roll;
         name = p.name || meData.name || name;
-
-        setStudentName(name);
-        setStudentRegNo(reg);
-        setStudentRollNo(roll);
-        if (p.batch_cd || meData.batchCd) setStudentBatch(String(p.batch_cd || meData.batchCd));
-        if (p.course_cd || meData.courseCd) setStudentCourseCd(String(p.course_cd || meData.courseCd));
+        courseCd = p.course_cd || meData.courseCd || courseCd;
+        courseName = meData.courseName || p.course_name || courseName;
+        batch = p.batch_name || p.batch_code || p.batch_cd || meData.batchName || meData.batchCd || batch;
       }
+
+      const resolvedCourse = resolveCourseTitle(courseCd, courseName);
+      setStudentName(name);
+      setStudentRegNo(reg);
+      setStudentRollNo(roll);
+      setStudentBatch(batch);
+      setStudentCourseCd(courseCd);
+      setStudentCourse(resolvedCourse);
 
       // 2. Fetch Subjects for BCA Sem 3
       const subjRes = await fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }).catch(() => null);

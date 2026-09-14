@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-let rawBackend = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://backend:8081/api/v1';
+let rawBackend = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8081/api/v1';
 
 if (rawBackend.endsWith('/:path*')) {
   // already formatted
@@ -9,7 +9,15 @@ if (rawBackend.endsWith('/:path*')) {
   rawBackend = rawBackend.replace(/\/+$/, '') + '/api/v1/:path*';
 }
 
-const backendBase = process.env.BACKEND_BASE_URL || (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '') : 'http://backend:8081');
+let backendBase = process.env.BACKEND_BASE_URL || (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '') : 'http://127.0.0.1:8081');
+
+// Normalize localhost to IPv4 127.0.0.1 for server-side proxying to prevent Windows Node IPv6 ::1 ECONNREFUSED
+if (rawBackend.includes('localhost:8081')) {
+  rawBackend = rawBackend.replace('localhost:8081', '127.0.0.1:8081');
+}
+if (backendBase.includes('localhost:8081')) {
+  backendBase = backendBase.replace('localhost:8081', '127.0.0.1:8081');
+}
 
 const nextConfig = {
   output: 'standalone',

@@ -26,13 +26,20 @@ interface Lesson {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
-export default function RecentLessonsWidget({ role = 'FACULTY' }: { role?: string }) {
+export default function RecentLessonsWidget({
+  role = 'FACULTY',
+  studentInfo = null,
+}: {
+  role?: string;
+  studentInfo?: any;
+}) {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
+  const [courseName, setCourseName] = useState('');
 
   useEffect(() => {
     fetchRecentLessons();
-  }, []);
+  }, [role, studentInfo?.course_cd, studentInfo?.batch_cd, studentInfo?.semester]);
 
   const fetchRecentLessons = async () => {
     try {
@@ -40,8 +47,50 @@ export default function RecentLessonsWidget({ role = 'FACULTY' }: { role?: strin
       const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
       const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
 
-      const res = await fetch(`${API_BASE}/lessons/recent?tenant=${tenant}&limit=5`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      let courseCd = studentInfo?.course_cd || '';
+      let branchCd = studentInfo?.branch_cd || '';
+      let batchCd = studentInfo?.batch_cd || '';
+      let semCd = studentInfo?.semester || '';
+      let cName = studentInfo?.course || '';
+      let userId = studentInfo?.registration_no || '';
+      let userName = studentInfo?.name || '';
+
+      if (typeof window !== 'undefined') {
+        try {
+          const cachedUserStr = localStorage.getItem('user');
+          if (cachedUserStr) {
+            const cached = JSON.parse(cachedUserStr);
+            const p = cached?.profile || cached || {};
+            if (!userId) userId = p.registration_no || cached?.registrationNo || cached?.registration_no || p.reg_no || p.id || '';
+            if (!userName) userName = cached?.name || p.name || cached?.student_name || '';
+            if (!courseCd) courseCd = p.course_cd || cached?.courseCd || cached?.course_cd || '';
+            if (!branchCd) branchCd = p.branch_id || p.branch_cd || cached?.branchCd || '';
+            if (!batchCd) batchCd = p.batch_cd || p.batch_year || cached?.batchCd || '';
+            if (!semCd) semCd = p.sem_cd || p.semester || cached?.semCd || '';
+            if (!cName) cName = p.course_name || cached?.courseName || '';
+          }
+        } catch {}
+      }
+      if (cName) setCourseName(cName);
+
+      const params = new URLSearchParams();
+      params.set('tenant', tenant);
+      params.set('limit', '5');
+      if (role === 'STUDENT') {
+        if (courseCd) params.set('courseCd', String(courseCd));
+        if (branchCd) params.set('branchCd', String(branchCd));
+        if (batchCd) params.set('batchCd', String(batchCd));
+        if (semCd) params.set('semCd', String(semCd));
+      }
+
+      const res = await fetch(`${API_BASE}/lessons/recent?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-slug': tenant,
+          'x-user-role': role,
+          'x-user-id': userId,
+          'x-user-name': userName,
+        },
       });
 
       if (res.ok) {
@@ -89,6 +138,7 @@ export default function RecentLessonsWidget({ role = 'FACULTY' }: { role?: strin
   };
 
   const getCurriculumLink = () => {
+    if (role === 'STUDENT') return '/dashboard/student/repository';
     if (role === 'ADMIN') return '/dashboard/admin/assessment';
     if (role === 'CLERK') return '/dashboard/clerk/assessment';
     return '/dashboard/faculty/lessons';
@@ -127,8 +177,12 @@ export default function RecentLessonsWidget({ role = 'FACULTY' }: { role?: strin
           </div>
         ) : lessons.length === 0 ? (
           <div className="py-8 text-center text-xs text-[#7B8794] border border-dashed border-[#E7EAF3] dark:border-slate-800 rounded-2xl space-y-1 my-auto">
-            <p className="font-bold text-[#1B1E28] dark:text-slate-200">No lesson materials uploaded yet</p>
-            <p className="text-[11px]">Uploaded study materials and lecture notes will appear here automatically.</p>
+            <p className="font-bold text-[#1B1E28] dark:text-slate-200">
+              No lesson materials uploaded {courseName ? `for ${courseName}` : ''} yet
+            </p>
+            <p className="text-[11px]">
+              Uploaded study materials and lecture notes from your {courseName ? `${courseName} ` : ''}faculty will appear here automatically.
+            </p>
           </div>
         ) : (
           lessons.map((item) => {

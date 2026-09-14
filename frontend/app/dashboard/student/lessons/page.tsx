@@ -32,6 +32,8 @@ export default function StudentLessonsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const [studentCourseCd, setStudentCourseCd] = useState('');
+
   useEffect(() => {
     fetchStudentLessons();
   }, []);
@@ -42,8 +44,44 @@ export default function StudentLessonsPage() {
       const tenant = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
       const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
 
-      const res = await fetch(`${API_BASE}/lessons?tenant=${tenant}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      let courseCd = '';
+      let branchCd = '';
+      let batchCd = '';
+      let semCd = '';
+      let userId = '';
+      let regNo = '';
+
+      if (typeof window !== 'undefined') {
+        try {
+          const userStr = localStorage.getItem('user');
+          if (userStr) {
+            const u = JSON.parse(userStr);
+            const p = u?.profile || u || {};
+            courseCd = p.course_cd || u.course_cd || u.courseCd || '';
+            branchCd = p.branch_id || p.branch_cd || u.branch_cd || u.branchCd || '';
+            batchCd = p.batch_cd || u.batch_cd || u.batchCd || '';
+            semCd = p.sem_cd || p.semester || u.semester || '';
+            userId = p.id || u.id || u.sub || '';
+            regNo = p.registration_no || u.registration_no || p.rollno || u.rollno || '';
+            setStudentCourseCd(String(courseCd));
+          }
+        } catch {}
+      }
+
+      const params = new URLSearchParams({ tenant });
+      if (courseCd) params.set('courseCd', String(courseCd));
+      if (branchCd) params.set('branchCd', String(branchCd));
+      if (batchCd) params.set('batchCd', String(batchCd));
+      if (semCd) params.set('semCd', String(semCd));
+
+      const res = await fetch(`${API_BASE}/lessons?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-slug': tenant,
+          'x-user-role': 'STUDENT',
+          'x-user-id': userId,
+          'x-user-reg-no': regNo,
+        }
       });
 
       if (res.ok) {
@@ -58,6 +96,13 @@ export default function StudentLessonsPage() {
   };
 
   const filteredLessons = lessons.filter(item => {
+    // Strict department/course check: if current student is MBA, exclude non-MBA lessons (e.g. BCA, B.Tech)
+    if (studentCourseCd === '4' || studentCourseCd.toUpperCase().includes('MBA')) {
+      if (item.course_cd && item.course_cd !== '4' && !item.course_cd.toUpperCase().includes('MBA')) {
+        return false;
+      }
+    }
+
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (

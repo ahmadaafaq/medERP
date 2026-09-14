@@ -19,6 +19,7 @@ interface ExamPaper {
 
 interface StudentResult {
   id: string;
+  paper_id?: string;
   paper_name?: string;
   paper_code?: string;
   subject_name?: string;
@@ -130,7 +131,7 @@ export default function StudentAssessmentPage() {
       }
 
       // 3. Fetch live completed results for this student from PostgreSQL
-      const searchIdentifier = targetReg || targetRoll || '2025107990';
+      const searchIdentifier = targetReg || targetRoll || '';
       if (searchIdentifier) {
         const resultsRes = await fetch(`${API_BASE}/exams/student/${encodeURIComponent(searchIdentifier)}?tenant=${slug}`, { headers }).catch(() => null);
         if (resultsRes && resultsRes.ok) {
@@ -187,10 +188,11 @@ export default function StudentAssessmentPage() {
     try {
       const slug = getTenantSlug();
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-      const reg = studentInfo.registration_no || studentInfo.rollno || '2025107990';
+      const reg = studentInfo.registration_no || studentInfo.rollno || '';
+      const roll = studentInfo.rollno || reg;
       const score = Math.round(Number(attemptPaper.max_marks || 50) * 0.85);
 
-      await fetch(`${API_BASE}/exams/results?tenant=${slug}`, {
+      const res = await fetch(`${API_BASE}/exams/results?tenant=${slug}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -198,15 +200,22 @@ export default function StudentAssessmentPage() {
           'x-tenant-slug': slug,
         },
         body: JSON.stringify({
+          studentId: reg || roll || 'STUDENT',
           paperId: attemptPaper.id,
-          rollno: studentInfo.rollno || reg,
+          paperCode: attemptPaper.code,
+          rollno: roll,
           registrationNo: reg,
           studentName: studentInfo.name || 'Student',
           marksObtained: score,
           isPass: score >= (attemptPaper.passing_marks || 20),
           attemptNumber: 1,
         }),
-      }).catch(() => null);
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        console.warn('Submission response not ok:', err);
+      }
 
       alert(`Assessment "${attemptPaper.name}" submitted successfully! Score: ${score}/${attemptPaper.max_marks}`);
       setAttemptPaper(null);
@@ -311,6 +320,10 @@ export default function StudentAssessmentPage() {
                   <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
                     {papers.map((p) => {
                       const isQuiz = isOnlineQuiz(p);
+                      const attempted = results.find((r) =>
+                        (r.paper_id && p.id && String(r.paper_id).toLowerCase() === String(p.id).toLowerCase()) ||
+                        (r.paper_code && p.code && String(r.paper_code).toLowerCase() === String(p.code).toLowerCase())
+                      );
 
                       return (
                         <tr key={p.id} className="hover:bg-[#F1F4F9]/60 dark:hover:bg-slate-800/40 transition">
@@ -334,7 +347,33 @@ export default function StudentAssessmentPage() {
                           <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-400">{p.passing_marks}</td>
                           <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300 font-mono">{p.exam_date || 'Published'}</td>
                           <td className="py-3.5 px-4 text-center">
-                            {isQuiz ? (
+                            {attempted ? (
+                              <div className="flex flex-col items-center justify-center gap-1">
+                                <span className="px-2.5 py-1 rounded-full bg-[#00C48C]/15 text-[#00C48C] font-black text-[11px] border border-[#00C48C]/30 inline-flex items-center gap-1">
+                                  <span>✓ Attempted:</span>
+                                  <span className="font-mono font-black">{attempted.marks_obtained} / {attempted.max_marks || p.max_marks}</span>
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider border ${
+                                      attempted.is_pass
+                                        ? 'bg-[#00C48C]/10 text-[#00C48C] border-[#00C48C]/20'
+                                        : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                                    }`}
+                                  >
+                                    {attempted.is_pass ? 'PASSED' : 'FAILED'}
+                                  </span>
+                                  {isQuiz && (
+                                    <button
+                                      onClick={() => handleSimulateAttempt(p)}
+                                      className="text-[10px] text-[#5B4BFF] hover:underline font-bold cursor-pointer"
+                                    >
+                                      Retake ↺
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ) : isQuiz ? (
                               <button
                                 onClick={() => handleSimulateAttempt(p)}
                                 className="px-3.5 py-1.5 bg-[#00C48C] hover:bg-[#00B07E] text-white font-bold rounded-xl text-xs shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1.5 mx-auto"

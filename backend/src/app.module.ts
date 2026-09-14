@@ -19,6 +19,7 @@ import { StudentMasterModule } from './student-master/student-master.module';
 import { AdminMasterModule } from './admin-master/admin-master.module';
 import { TimetableModule } from './timetable/timetable.module';
 import { MedicalTimetableModule } from './medical-timetable/medical-timetable.module';
+import { MedicalLogbookModule } from './medical-logbook/medical-logbook.module';
 import { LessonModule } from './lesson/lesson.module';
 import { RepositoryModule } from './repository/repository.module';
 import { PlacementDriveModule } from './placement-drive/placement-drive.module';
@@ -60,6 +61,7 @@ import { validationSchema } from './config/joi.validation';
     AdminMasterModule,
     TimetableModule,
     MedicalTimetableModule,
+    MedicalLogbookModule,
     LessonModule,
     RepositoryModule,
     PlacementDriveModule,

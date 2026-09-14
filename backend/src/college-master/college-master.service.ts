@@ -542,9 +542,12 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       return 'Electrical & Electronics Engineering';
     }
     if (clean.includes('PHARM')) {
-      return 'Pharmacy';
+      return 'Faculty of Pharmacy';
     }
-    if (clean.includes('MBA') || clean.includes('BUSINESS')) {
+    if (clean.includes('BBA') || (clean.includes('MANAGEMENT') && clean.includes('UG'))) {
+      return 'BBA Department';
+    }
+    if (clean.includes('MBA') || clean.includes('BUSINESS') || (clean.includes('MANAGEMENT') && clean.includes('PG'))) {
       return 'Master of Business Administration (MBA)';
     }
     if (clean.includes('MCA')) {
@@ -644,29 +647,64 @@ export class CollegeMasterService implements OnApplicationBootstrap {
    * Synchronize employees from SRMS HR API into tenant PostgreSQL database
    * Sets default password '12345678' for all synced staff accounts.
    */
-  async syncExternalEmployees(locidOrTenantSlug?: string): Promise<any[]> {
-    this.logger.log(`Starting syncExternalEmployees for ${locidOrTenantSlug || 'all'} with default password '12345678'...`);
+  async syncExternalEmployees(locidOrTenantSlug?: string, targetTenantSlug?: string): Promise<any[]> {
+    this.logger.log(`Starting syncExternalEmployees for '${locidOrTenantSlug || 'all'}' (target tenant: '${targetTenantSlug || 'auto'}') with default password '12345678'...`);
 
     // Precompute bcrypt hash for default password '12345678'
     const defaultPasswordHash = await bcrypt.hash('12345678', 10);
 
-    // Resolve location mapping
-    let targets: Array<{ locid: string; name: string; slug: string; code: string }> = [];
+    const normalizedInput = String(locidOrTenantSlug || '7').toLowerCase().trim();
+    const effectiveTenantSlug = targetTenantSlug
+      ? this.tenantSchemaService.resolveTenantSlug(targetTenantSlug)
+      : (normalizedInput === '7' || normalizedInput.includes('cet') || normalizedInput === 'mba' || normalizedInput === 'mca' || normalizedInput === 'bba' || normalizedInput === 'pharmacy' || normalizedInput === 'bpharm' || normalizedInput === 'mpharm' ? 'srms-cet-bareilly' : null);
 
-    if (locidOrTenantSlug && locidOrTenantSlug !== 'all') {
-      const locIds = locidOrTenantSlug.split(',').map((s) => s.trim());
+    // Resolve location mapping
+    let targets: Array<{ locid: string; name: string; slug: string; code: string; deptFilter?: (dept: string) => boolean }> = [];
+
+    if (normalizedInput === 'cet-all' || normalizedInput === 'srms-cet-complete') {
+      // Complete campus sync for CET Bareilly:
+      // Loc 7 (Engineering, MBA, MCA) + Loc 12 (B.Pharma & M.Pharma) + Loc 4 (BBA/MBA)
+      targets = [
+        { locid: '7', name: 'SRMS CET, BAREILLY (Engineering, MBA & MCA)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1' },
+        { locid: '12', name: 'SRMS COLLEGE OF PHARMACY (B.Pharma & M.Pharma)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1' },
+        { locid: '4', name: 'SRMS IBS (BBA & Management UG)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1', deptFilter: (d) => d.includes('MANAGEMENT') || d.includes('BBA') || d.includes('UG') },
+      ];
+    } else if (normalizedInput === 'mba') {
+      targets = [
+        { locid: '7', name: 'SRMS CET (MBA Faculty)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1', deptFilter: (d) => d.includes('MBA') || d.includes('BUSINESS') },
+        { locid: '4', name: 'SRMS IBS (MBA Faculty)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1', deptFilter: (d) => d.includes('MBA') || d.includes('PG') },
+      ];
+    } else if (normalizedInput === 'mca') {
+      targets = [
+        { locid: '7', name: 'SRMS CET (MCA Faculty)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1', deptFilter: (d) => d.includes('MCA') },
+        { locid: '8', name: 'SRMS CETR (MCA Faculty)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1', deptFilter: (d) => d.includes('MCA') },
+      ];
+    } else if (normalizedInput === 'pharmacy' || normalizedInput === 'bpharm' || normalizedInput === 'mpharm' || normalizedInput === 'bpharma' || normalizedInput === 'mpharma' || normalizedInput === '12') {
+      targets = [
+        { locid: '12', name: 'SRMS College of Pharmacy (B.Pharma & M.Pharma)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1' },
+      ];
+    } else if (normalizedInput === 'bba') {
+      targets = [
+        { locid: '4', name: 'SRMS IBS (BBA Faculty)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1', deptFilter: (d) => d.includes('BBA') || d.includes('UG') || d.includes('MANAGEMENT') },
+        { locid: '7', name: 'SRMS CET (BBA Faculty)', slug: effectiveTenantSlug || 'srms-cet-bareilly', code: '1', deptFilter: (d) => d.includes('BBA') },
+      ];
+    } else if (normalizedInput && normalizedInput !== 'all') {
+      const locIds = locidOrTenantSlug!.split(',').map((s) => s.trim());
       for (const singleLoc of locIds) {
         const locMatch = SRMS_FIRM_LOCATIONS.find(
           (l) => l.locid === singleLoc || l.slug === singleLoc || l.code === singleLoc,
         );
+        const resolvedSlug = effectiveTenantSlug || (locMatch ? locMatch.slug : (singleLoc === '7' ? 'srms-cet-bareilly' : (singleLoc === '12' && effectiveTenantSlug ? effectiveTenantSlug : singleLoc)));
         if (locMatch) {
-          targets.push(locMatch);
+          targets.push({ ...locMatch, slug: resolvedSlug });
         } else if (singleLoc === '7') {
-          targets.push({ locid: '7', name: 'SRMS CET, BAREILLY', slug: 'srms-cet-bareilly', code: '1' });
+          targets.push({ locid: '7', name: 'SRMS CET, BAREILLY', slug: resolvedSlug, code: '1' });
+        } else if (singleLoc === '12') {
+          targets.push({ locid: '12', name: 'SRMS COLLEGE OF PHARMACY', slug: resolvedSlug, code: '1' });
         } else if (singleLoc === '8') {
-          targets.push({ locid: '8', name: 'SRMS CETR, BAREILLY', slug: 'srms-cetr-bareilly', code: '2' });
+          targets.push({ locid: '8', name: 'SRMS CETR, BAREILLY', slug: resolvedSlug, code: '2' });
         } else {
-          targets.push({ locid: singleLoc, name: `Location ${singleLoc}`, slug: singleLoc, code: singleLoc });
+          targets.push({ locid: singleLoc, name: `Location ${singleLoc}`, slug: resolvedSlug, code: singleLoc });
         }
       }
     } else {
@@ -785,6 +823,11 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       }
 
       for (const emp of liveEmployees) {
+        if (target.deptFilter) {
+          const rawDept = String(emp.Department || '').toUpperCase();
+          if (!target.deptFilter(rawDept)) continue;
+        }
+
         const empId = String(emp.EmpID || emp.emp_id || '').trim();
         const rawEmpName = String(emp.EmpName || emp.name || '').trim();
         if (!empId || !rawEmpName) continue;
@@ -815,7 +858,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         const aadhaarNo = emp.aadharno ? String(emp.aadharno).trim() : null;
         const uan = emp.UAN ? String(emp.UAN).trim() : null;
         const bankAcNo = emp.BankAcNo ? String(emp.BankAcNo).trim() : null;
-        const basicPay = emp.EmpCurrBasic ? parseFloat(emp.EmpCurrBasic) : null;
+        const basicPay = emp.EmpCurrBasic ? String(emp.EmpCurrBasic).trim() : null;
         const deviceCd = emp.DEVICECD ? String(emp.DEVICECD).trim() : null;
         const salgrade = emp.salgrade ? String(emp.salgrade).trim() : null;
         const fatherName = emp.FatherNm ? this.toTitleCase(emp.FatherNm) : null;
@@ -883,14 +926,17 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         const dob = parseDotNetDate(emp.dob);
         const doj = parseDotNetDate(emp.DOJ);
         const dol = parseDotNetDate(emp.dol);
+        const isoJoiningDate = doj ? new Date(doj).toISOString() : null;
         const experience = this.calculateExperience(doj);
         const gender = this.inferGender(emp.SexCd, rawEmpName);
 
         // 10. Resolve / Create Department
         let deptId: string | null = null;
         const deptRows = await this.ds.query(
-          `SELECT id FROM "${schema}".departments WHERE name ILIKE $1 OR code ILIKE $1 LIMIT 1`,
-          [department],
+          `SELECT id FROM "${schema}".departments 
+           WHERE name ILIKE $1 OR code ILIKE $1 OR name ILIKE $2 OR code ILIKE $2
+           LIMIT 1`,
+          [department, `%${departmentRaw}%`],
         ).catch(() => []);
         if (deptRows.length > 0) {
           deptId = deptRows[0].id;
@@ -974,23 +1020,23 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                  payroll_category = COALESCE($28, payroll_category),
                  date_of_birth = COALESCE($29, date_of_birth),
                  date_of_joining = COALESCE($30, date_of_joining),
-                 joining_date = COALESCE($30, joining_date),
-                 date_of_leaving = COALESCE($31, date_of_leaving),
-                 photo_url = $32,
-                 staff_type = $33,
-                 employment_status = $34,
-                 experience = $35,
-                 gender = $36,
-                 is_active = $37,
-                 user_id = COALESCE($38, user_id),
+                 joining_date = COALESCE($31::timestamptz, joining_date),
+                 date_of_leaving = COALESCE($32, date_of_leaving),
+                 photo_url = $33,
+                 staff_type = $34,
+                 employment_status = $35,
+                 experience = $36,
+                 gender = $37,
+                 is_active = $38,
+                 user_id = COALESCE($39, user_id),
                  updated_at = NOW()
-             WHERE id = $39`,
+             WHERE id = $40`,
             [
               empName, email, phone, validDeptId, designation, qualification,
               bloodGroup, caste, panNo, aadhaarNo, uan, bankAcNo, basicPay, deviceCd,
               salgrade, fatherName, spouseName, address, city, state, permAddr,
               permCity, permState, homephone, permanentTelNo, qualification, category,
-              payrollCategory, dob, doj, dol, photoUrl, staffType, status,
+              payrollCategory, dob, doj, isoJoiningDate, dol, photoUrl, staffType, status,
               experience, gender, isActive, validUserId, facultyId,
             ],
           );
@@ -1010,8 +1056,8 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                $15, $16, $17, $18, $19, $20, $21,
                $22, $23, $24, $25, $26,
                $27, $28, $29, $30,
-               $31, $31, $32, $33, $34,
-               $35, $36, $37, $38, $39
+               $31, $32::timestamptz, $33, $34, $35,
+               $36, $37, $38, $39, $40
              ) RETURNING id`,
             [
               empId, empName, email, phone, validDeptId, designation, qualification,
@@ -1019,7 +1065,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
               deviceCd, salgrade, fatherName, spouseName, address, city, state,
               permAddr, permCity, permState, homephone, permanentTelNo,
               qualification, category, payrollCategory, dob,
-              doj, dol, photoUrl, staffType,
+              doj, isoJoiningDate, dol, photoUrl, staffType,
               status, experience, gender, isActive, validUserId,
             ],
           );

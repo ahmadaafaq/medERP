@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import { resolveCourseTitle, resolveDepartmentTitle } from '../../../utils/courseResolver';
 import { 
   FolderGit2, 
   CalendarCheck, 
@@ -86,8 +87,16 @@ export default function StudentProfilePage() {
   }, []);
 
   const getStudentIdentity = () => {
-    let regNo = '2025107990';
-    let name = 'AAFREEN KHAN';
+    let regNo = '';
+    let name = '';
+    let rollno = '';
+    let courseCd = '';
+    let courseName = '';
+    let departmentName = '';
+    let batchCd = '';
+    let batchName = '';
+    let photoUrl = '';
+
     if (typeof window !== 'undefined') {
       try {
         const cachedUserStr = localStorage.getItem('user');
@@ -99,21 +108,28 @@ export default function StudentProfilePage() {
             cached?.registrationNo ||
             cached?.registration_no ||
             p.reg_no ||
-            p.rollno ||
-            cached?.rollno ||
-            regNo;
-          name = cached?.name || p.name || cached?.student_name || name;
+            '';
+          name = cached?.name || p.name || cached?.student_name || '';
+          rollno = p.rollno || cached?.rollno || '';
+          courseCd = p.course_cd || cached?.courseCd || cached?.course_cd || '';
+          courseName = p.course_name || cached?.courseName || '';
+          departmentName = p.department_name || cached?.departmentName || cached?.department || '';
+          batchCd = p.batch_cd || cached?.batchCd || cached?.batch_cd || '';
+          batchName = p.batch_name || cached?.batchName || '';
+          photoUrl = p.photo_url || cached?.photoUrl || cached?.photo_url || '';
         }
       } catch {}
     }
-    return { regNo, name };
+    return { regNo, name, rollno, courseCd, courseName, departmentName, batchCd, batchName, photoUrl };
   };
 
   const fetchProfile = async () => {
     setLoading(true);
     const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-    const { regNo, name } = getStudentIdentity();
+    const identity = getStudentIdentity();
+    const regNo = identity.regNo;
+    const name = identity.name;
 
     try {
       // 1. Fetch Auth Profile
@@ -129,44 +145,48 @@ export default function StudentProfilePage() {
 
       // 2. Fetch Student Repositories Count
       let repoCount = 0;
-      try {
-        const repoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/list?student_reg_no=${regNo}&tenant=${slug}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'x-tenant-slug': slug,
-            'x-user-reg-no': regNo,
-          },
-        });
-        if (repoRes.ok) {
-          const rJson = await repoRes.json();
-          const rawData = rJson.data?.data || rJson.data || [];
-          const uniqueList = Array.isArray(rawData) ? Array.from(new Map(rawData.map((x: any) => [x.repo_id || x.id, x])).values()) : [];
-          repoCount = uniqueList.length;
-        }
-      } catch {}
+      if (regNo) {
+        try {
+          const repoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/list?student_reg_no=${encodeURIComponent(regNo)}&tenant=${slug}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'x-tenant-slug': slug,
+              'x-user-reg-no': regNo,
+            },
+          });
+          if (repoRes.ok) {
+            const rJson = await repoRes.json();
+            const rawData = rJson.data?.data || rJson.data || [];
+            const uniqueList = Array.isArray(rawData) ? Array.from(new Map(rawData.map((x: any) => [x.repo_id || x.id, x])).values()) : [];
+            repoCount = uniqueList.length;
+          }
+        } catch {}
+      }
 
       // 3. Fetch Live SRMS Attendance
       let liveAttPct = '24.84%';
-      try {
-        const liveRes = await fetch('/api/srms/student-individual-attendance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            colg_cd: 1,
-            course_cd: 13,
-            branch_cd: 1,
-            batch_cd: 2,
-            stud_reg_no: regNo,
-          }),
-        });
-        if (liveRes.ok) {
-          const liveJson = await liveRes.json();
-          if (liveJson.success && liveJson.data?.formattedPercentage) {
-            liveAttPct = liveJson.data.formattedPercentage;
+      if (regNo) {
+        try {
+          const liveRes = await fetch('/api/srms/student-individual-attendance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              colg_cd: 1,
+              course_cd: Number(identity.courseCd || 4),
+              branch_cd: 1,
+              batch_cd: 2,
+              stud_reg_no: regNo,
+            }),
+          });
+          if (liveRes.ok) {
+            const liveJson = await liveRes.json();
+            if (liveJson.success && liveJson.data?.formattedPercentage) {
+              liveAttPct = liveJson.data.formattedPercentage;
+            }
           }
+        } catch (e) {
+          console.warn('Failed to load individual live attendance in profile:', e);
         }
-      } catch (e) {
-        console.warn('Failed to load individual live attendance in profile:', e);
       }
 
       if (res.ok) {
@@ -174,94 +194,98 @@ export default function StudentProfilePage() {
         const meData = json.data || json;
         const p = meData.profile || meData;
 
-        const courseStr = meData.courseName || p.course_name || (p.course_cd === '13' ? 'BCA' : p.course_cd === '1' ? 'B.Tech' : p.course_cd || 'BCA');
-        const deptStr = meData.departmentName || p.department_name || (p.course_cd === '13' ? 'BCA General' : 'Computer Science & Engineering');
+        const resolvedCourseCd = p.course_cd || meData.courseCd || identity.courseCd || '';
+        const courseStr = resolveCourseTitle(resolvedCourseCd, meData.courseName || p.course_name || identity.courseName);
+        const deptStr = resolveDepartmentTitle(resolvedCourseCd, meData.departmentName || p.department_name || identity.departmentName);
 
-        const finalRegNo = p.registration_no || regNo;
+        const finalRegNo = p.registration_no || meData.registrationNo || regNo;
+        const finalRollNo = p.rollno || meData.rollno || identity.rollno || '';
         const studentData: StudentProfile = {
           id: p.id || meData.id || '',
-          name: p.name || meData.name || name,
+          name: p.name || meData.name || name || 'Student Profile',
           registration_no: finalRegNo,
-          rollno: p.rollno || meData.rollno || '2500141790001',
-          photo_url: p.photo_url || meData.photoUrl || meData.photo_url || (finalRegNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${finalRegNo}/${finalRegNo}.JPG` : ''),
+          rollno: finalRollNo,
+          photo_url: p.photo_url || meData.photoUrl || meData.photo_url || identity.photoUrl || (finalRegNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${finalRegNo}/${finalRegNo}.JPG` : ''),
           cover_url: p.cover_url || meData.coverUrl || '/campus-cover.png',
           course_name: courseStr,
-          course_cd: p.course_cd || meData.courseCd || '13',
+          course_cd: resolvedCourseCd,
           department_name: deptStr,
-          batch_cd: p.batch_cd || meData.batchCd || 'Batch 2025',
+          batch_cd: p.batch_name || p.batch_code || p.batch_cd || meData.batchName || meData.batchCd || identity.batchName || identity.batchCd || '2025 Batch',
           admission_year: p.admission_year || '2025',
-          email: meData.email || p.email || 'student@srms.ac.in',
-          phone: p.phone || meData.phone || '8979900657',
+          email: meData.email || p.email || (typeof window !== 'undefined' ? (JSON.parse(localStorage.getItem('user') || '{}')?.email || '') : ''),
+          phone: p.phone || meData.phone || '',
           father_name: p.father_name || 'N/A',
           mother_name: p.mother_name || 'N/A',
-          residency_type: p.residency_type || 'Day Scholar',
+          residency_type: p.residency_type || 'Hosteller',
           academic_session: p.academic_session || '2025-2026',
           admission_status: p.admission_status || 'ACTIVE',
           college_name: meData.collegeName || meData.tenantName || 'SRMS College of Engineering & Technology, Bareilly',
-          bio: p.bio || 'Passionate software engineering student specializing in Full-Stack Web Development, distributed microservices, and modern JavaScript architectures.',
-          github_url: p.github_url || 'https://github.com/aafreen-khan',
-          github_followers: p.github_followers ?? 48,
-          linkedin_url: p.linkedin_url || 'https://linkedin.com/in/aafreen-khan',
-          linkedin_connections: p.linkedin_connections ?? 350,
-          repository_count: repoCount || p.repository_count || 2,
+          bio: p.bio || 'Enrolled & Active Student at SRMS CET.',
+          github_url: p.github_url || '',
+          github_followers: p.github_followers ?? 0,
+          linkedin_url: p.linkedin_url || '',
+          linkedin_connections: p.linkedin_connections ?? 0,
+          repository_count: repoCount || p.repository_count || 0,
           attendance_percentage: liveAttPct,
-          followers_count: (p.github_followers ?? 48) + (p.linkedin_connections ?? 350),
+          followers_count: (p.github_followers ?? 0) + (p.linkedin_connections ?? 0),
         };
 
         setProfile(studentData);
         setBioInput(studentData.bio || '');
         setGithubUrlInput(studentData.github_url || '');
-        setGithubFollowersInput(studentData.github_followers ?? 48);
+        setGithubFollowersInput(studentData.github_followers ?? 0);
         setLinkedinUrlInput(studentData.linkedin_url || '');
-        setLinkedinConnectionsInput(studentData.linkedin_connections ?? 350);
+        setLinkedinConnectionsInput(studentData.linkedin_connections ?? 0);
       } else {
         loadFallback(repoCount, liveAttPct);
       }
     } catch (err) {
       console.error('Failed to fetch student profile:', err);
-      loadFallback(2, '24.84%');
+      loadFallback(0, '24.84%');
     } finally {
       setLoading(false);
     }
   };
 
   const loadFallback = (repoCount: number, liveAttPct: string) => {
-    const { regNo, name } = getStudentIdentity();
+    const identity = getStudentIdentity();
+    const resolvedCourse = resolveCourseTitle(identity.courseCd, identity.courseName);
+    const resolvedDept = resolveDepartmentTitle(identity.courseCd, identity.departmentName);
     const fallbackData: StudentProfile = {
       id: '1',
-      name: name,
-      registration_no: regNo,
-      rollno: '2500141790001',
-      photo_url: regNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${regNo}/${regNo}.JPG` : '',
+      name: identity.name || 'Student Profile',
+      registration_no: identity.regNo,
+      rollno: identity.rollno || '',
+      photo_url: identity.photoUrl || (identity.regNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${identity.regNo}/${identity.regNo}.JPG` : ''),
       cover_url: '/campus-cover.png',
-      course_name: 'BCA',
-      course_cd: '13',
-      department_name: 'BCA General',
-      batch_cd: 'Batch 2025',
+      course_name: resolvedCourse,
+      course_cd: identity.courseCd || '4',
+      department_name: resolvedDept,
+      batch_cd: identity.batchName || identity.batchCd || '2025 Batch',
       admission_year: '2025',
-      email: 'student@srms.ac.in',
-      phone: '8979900657',
+      email: typeof window !== 'undefined' ? (JSON.parse(localStorage.getItem('user') || '{}')?.email || 'student@srms.ac.in') : 'student@srms.ac.in',
+      phone: '',
       father_name: 'N/A',
       mother_name: 'N/A',
-      residency_type: 'Day Scholar',
+      residency_type: 'Hosteller',
       academic_session: '2025-2026',
       admission_status: 'ACTIVE',
       college_name: 'SRMS College of Engineering & Technology, Bareilly',
-      bio: 'Passionate software engineering student specializing in Full-Stack Web Development, distributed microservices, and modern JavaScript architectures.',
-      github_url: 'https://github.com/aafreen-khan',
-      github_followers: 48,
-      linkedin_url: 'https://linkedin.com/in/aafreen-khan',
-      linkedin_connections: 350,
+      bio: 'Enrolled & Active Student at SRMS CET.',
+      github_url: '',
+      github_followers: 0,
+      linkedin_url: '',
+      linkedin_connections: 0,
       repository_count: repoCount,
       attendance_percentage: liveAttPct,
-      followers_count: 398,
+      followers_count: 0,
     };
     setProfile(fallbackData);
     setBioInput(fallbackData.bio || '');
     setGithubUrlInput(fallbackData.github_url || '');
-    setGithubFollowersInput(fallbackData.github_followers ?? 48);
+    setGithubFollowersInput(fallbackData.github_followers ?? 0);
     setLinkedinUrlInput(fallbackData.linkedin_url || '');
-    setLinkedinConnectionsInput(fallbackData.linkedin_connections ?? 350);
+    setLinkedinConnectionsInput(fallbackData.linkedin_connections ?? 0);
   };
 
   // Auto-fetch GitHub Followers from Public API

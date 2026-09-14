@@ -26,16 +26,14 @@ export default function ChatDashboardWidget({
     }
   };
 
-  // Only show groups that have real conversation messages!
-  // If a group has no messages, it will not clutter the dashboard widget.
-  const topGroups = groups
-    .filter((g) => !!g.last_message?.body)
-    .sort((a, b) => {
-      const aTs = a.last_message?.created_at ? new Date(a.last_message.created_at).getTime() : 0;
-      const bTs = b.last_message?.created_at ? new Date(b.last_message.created_at).getTime() : 0;
-      return bTs - aTs; // newest first
-    })
-    .slice(0, 3);
+  // Prioritize groups with messages; if no messages yet, show student's active batch channel
+  const groupsWithMessages = groups.filter((g) => !!g.last_message?.body).sort((a, b) => {
+    const aTs = a.last_message?.created_at ? new Date(a.last_message.created_at).getTime() : 0;
+    const bTs = b.last_message?.created_at ? new Date(b.last_message.created_at).getTime() : 0;
+    return bTs - aTs; // newest first
+  });
+
+  const topGroups = (groupsWithMessages.length > 0 ? groupsWithMessages : groups).slice(0, 3);
 
   return (
     <div className="h-full flex flex-col justify-between bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md transition-all">
@@ -119,7 +117,7 @@ export default function ChatDashboardWidget({
                         {group.last_message.body}
                       </span>
                     ) : (
-                      <span className="italic text-slate-400">Active discussion channel</span>
+                      <span className="italic text-slate-400">No messages yet • Discussion channel active</span>
                     )}
                   </p>
                 </div>

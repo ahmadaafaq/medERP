@@ -487,12 +487,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         await runner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
         await runner.query(`SET search_path TO "${schema}", public`);
 
-        // 1. Check if base tables exist in tenant schema, if not create and seed them
-        const usersTableExists = await runner.query(
-          `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'users'`,
+        // 1. Check if core tables exist in tenant schema, if not create and seed them
+        const coreTableExists = await runner.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'students'`,
           [schema]
         );
-        if (usersTableExists.length === 0) {
+        if (coreTableExists.length === 0) {
+          this.logger.log(`Core tables (students, etc.) missing in ${schema}. Provisioning all tenant tables...`);
           await this.createTenantTables(runner, schema);
           await this.seedDefaultData(runner, resolvedSlug);
         }
@@ -746,6 +747,71 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           phone VARCHAR(20)
         );
       `);
+
+        // ── Student Tables Integrity & Batch Code Normalization ─────────────
+        await runner.query(`
+          DO $$
+          BEGIN
+            -- 1. Deduplicate & ensure PRIMARY KEY on student_admissions
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint c
+              JOIN pg_namespace n ON n.oid = c.connamespace
+              WHERE n.nspname = '${schema}' 
+                AND conrelid = '${schema}.student_admissions'::regclass 
+                AND contype = 'p'
+            ) THEN
+              WITH ranked AS (
+                SELECT ctid, ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY ctid DESC) as rn
+                FROM "${schema}".student_admissions
+              )
+              DELETE FROM "${schema}".student_admissions
+              WHERE ctid IN (SELECT ctid FROM ranked WHERE rn > 1);
+
+              ALTER TABLE "${schema}".student_admissions ADD PRIMARY KEY (student_id);
+            END IF;
+
+            -- 2. Deduplicate & ensure PRIMARY KEY on student_addresses
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint c
+              JOIN pg_namespace n ON n.oid = c.connamespace
+              WHERE n.nspname = '${schema}' 
+                AND conrelid = '${schema}.student_addresses'::regclass 
+                AND contype = 'p'
+            ) THEN
+              WITH ranked AS (
+                SELECT ctid, ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY ctid DESC) as rn
+                FROM "${schema}".student_addresses
+              )
+              DELETE FROM "${schema}".student_addresses
+              WHERE ctid IN (SELECT ctid FROM ranked WHERE rn > 1);
+
+              ALTER TABLE "${schema}".student_addresses ADD PRIMARY KEY (student_id);
+            END IF;
+
+            -- 3. Deduplicate & ensure PRIMARY KEY on student_academic_details
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint c
+              JOIN pg_namespace n ON n.oid = c.connamespace
+              WHERE n.nspname = '${schema}' 
+                AND conrelid = '${schema}.student_academic_details'::regclass 
+                AND contype = 'p'
+            ) THEN
+              WITH ranked AS (
+                SELECT ctid, ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY ctid DESC) as rn
+                FROM "${schema}".student_academic_details
+              )
+              DELETE FROM "${schema}".student_academic_details
+              WHERE ctid IN (SELECT ctid FROM ranked WHERE rn > 1);
+
+              ALTER TABLE "${schema}".student_academic_details ADD PRIMARY KEY (student_id);
+            END IF;
+
+            -- 4. Clean any synthetic B20* batch codes into standard format (e.g. 2024 Batch)
+            UPDATE "${schema}".student_admissions
+            SET batch_code = regexp_replace(batch_code, '^B(20\\d\\d).*$', '\\1 Batch')
+            WHERE batch_code LIKE 'B20%';
+          END $$;
+        `).catch(() => { });
 
         // ── Courses (added in later migration) ───────────────────────────────
         await runner.query(`
@@ -1298,8 +1364,14 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       `).catch(() => { });
 
         try {
+          await this.ensureMedicalLogbookTables(runner, schema);
+        } catch (tableErr: any) {
+          this.logger.warn(`Non-fatal warning in ensureMedicalLogbookTables for ${slug}: ${tableErr.message}`);
+        }
+
+        try {
           await this.seedDefaultData(runner, slug);
-        } catch (seedErr) {
+        } catch (seedErr: any) {
           this.logger.warn(`Non-fatal warning in seedDefaultData for ${slug}: ${seedErr.message}`);
         }
         TenantSchemaService.ensuredSchemas.add(resolvedSlug);
@@ -2357,7 +2429,206 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       );
     `);
 
+    await this.ensureMedicalLogbookTables(runner, schema);
+
     this.logger.log(`All tables created in schema: ${schema}`);
+  }
+
+  public async ensureMedicalLogbookTables(runner: QueryRunner, schema: string): Promise<void> {
+    // 1. Medical Activity Types Master
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".medical_activity_types (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        sort_order INT DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_med_act_types_code ON "${schema}".medical_activity_types(code);
+    `).catch(() => {});
+
+    // Seed default activity types if empty
+    try {
+      const existingTypes = await runner.query(`SELECT id FROM "${schema}".medical_activity_types LIMIT 1`).catch(() => []);
+      if (existingTypes.length === 0) {
+        await runner.query(`
+          INSERT INTO "${schema}".medical_activity_types (code, name, description, sort_order) VALUES
+            ('PRACTICAL', 'Practical', 'Standard Laboratory and Clinical Practicals', 1),
+            ('LAB', 'Lab', 'Laboratory Investigation and Testing', 2),
+            ('CERTIFICATE', 'Certificate', 'Certification Modules and Skill Assessments', 3),
+            ('SKILLS', 'Skills', 'Clinical Skills and Simulation Training', 4),
+            ('AETCOM', 'AETCOM', 'Attitude, Ethics and Communication Module', 5),
+            ('VERTICAL_INT', 'Vertical Integration', 'Inter-departmental and Clinical Correlation', 6),
+            ('ORIENTATION', 'Orientation', 'Foundation Course and Institutional Orientation', 7)
+          ON CONFLICT (code) DO NOTHING;
+        `).catch(() => {});
+      }
+    } catch (e) {}
+
+    // 2. Status Rubrics Master (F / M / C)
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".medical_logbook_status_rubrics (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(20) UNIQUE NOT NULL,
+        label VARCHAR(100) NOT NULL,
+        description TEXT,
+        sort_order INT DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_med_rubrics_code ON "${schema}".medical_logbook_status_rubrics(code);
+    `).catch(() => {});
+
+    // Seed default status rubrics if empty
+    try {
+      const existingRubrics = await runner.query(`SELECT id FROM "${schema}".medical_logbook_status_rubrics LIMIT 1`).catch(() => []);
+      if (existingRubrics.length === 0) {
+        await runner.query(`
+          INSERT INTO "${schema}".medical_logbook_status_rubrics (code, label, description, sort_order) VALUES
+            ('C', 'Competent / Completed', 'Student has met competency criteria and completed the task successfully', 1),
+            ('M', 'Meets Expectations / Moderate', 'Student has completed task with moderate proficiency', 2),
+            ('F', 'Follow-up Needed / Facilitated', 'Student requires remediation or repeated demonstration', 3)
+          ON CONFLICT (code) DO NOTHING;
+        `).catch(() => {});
+      }
+    } catch (e) {}
+
+    // 3. Activity Master
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".medical_activity_master (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        course_id VARCHAR(50),
+        branch_id VARCHAR(50),
+        batch_id VARCHAR(50),
+        professional_year_id VARCHAR(50),
+        cbme_year_id VARCHAR(50),
+        subject_id VARCHAR(50),
+        unit_id VARCHAR(50),
+        topic_id VARCHAR(50),
+        competency_id VARCHAR(50),
+        activity_name TEXT NOT NULL,
+        activity_type_id UUID,
+        activity_type_code VARCHAR(50),
+        is_active BOOLEAN DEFAULT true,
+        created_by VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_by VARCHAR(100),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_med_act_master_comp ON "${schema}".medical_activity_master(competency_id);
+      CREATE INDEX IF NOT EXISTS idx_med_act_master_prof ON "${schema}".medical_activity_master(professional_year_id);
+      CREATE INDEX IF NOT EXISTS idx_med_act_master_subj ON "${schema}".medical_activity_master(subject_id);
+      CREATE INDEX IF NOT EXISTS idx_med_act_master_act ON "${schema}".medical_activity_master(is_active);
+    `).catch(() => {});
+
+    // 4. Seminar Master
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".medical_seminar_master (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        course_id VARCHAR(50),
+        branch_id VARCHAR(50),
+        batch_id VARCHAR(50),
+        professional_year_id VARCHAR(50),
+        cbme_year_id VARCHAR(50),
+        subject_id VARCHAR(50),
+        unit_id VARCHAR(50),
+        topic_id VARCHAR(50),
+        competency_id VARCHAR(50),
+        category VARCHAR(100) NOT NULL,
+        title VARCHAR(300) NOT NULL,
+        seminar_date DATE,
+        venue VARCHAR(200),
+        presenter_name VARCHAR(200),
+        remarks TEXT,
+        is_active BOOLEAN DEFAULT true,
+        created_by VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_by VARCHAR(100),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_med_sem_master_cat ON "${schema}".medical_seminar_master(category);
+      CREATE INDEX IF NOT EXISTS idx_med_sem_master_prof ON "${schema}".medical_seminar_master(professional_year_id);
+      CREATE INDEX IF NOT EXISTS idx_med_sem_master_act ON "${schema}".medical_seminar_master(is_active);
+    `).catch(() => {});
+
+    // 5. Logbook Sessions (UG & PG)
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".medical_logbook_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        activity_master_id UUID,
+        activity_type_id UUID,
+        session_date DATE NOT NULL,
+        group_id VARCHAR(50),
+        group_name VARCHAR(100),
+        professional_year_id VARCHAR(50),
+        subject_id VARCHAR(50),
+        program_level VARCHAR(10) DEFAULT 'UG',
+        metadata JSONB DEFAULT '{}',
+        created_by VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_med_log_sess_date ON "${schema}".medical_logbook_sessions(session_date);
+      CREATE INDEX IF NOT EXISTS idx_med_log_sess_group ON "${schema}".medical_logbook_sessions(group_id);
+      CREATE INDEX IF NOT EXISTS idx_med_log_sess_prof ON "${schema}".medical_logbook_sessions(professional_year_id);
+      CREATE INDEX IF NOT EXISTS idx_med_log_sess_prog ON "${schema}".medical_logbook_sessions(program_level);
+    `).catch(() => {});
+
+    // 6. Logbook Student Records (UG)
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".medical_logbook_student_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id UUID NOT NULL,
+        student_id VARCHAR(100) NOT NULL,
+        rollno VARCHAR(50),
+        student_name VARCHAR(255),
+        status_code VARCHAR(20) DEFAULT 'C',
+        remarks TEXT,
+        score NUMERIC(5,2),
+        record_status VARCHAR(20) DEFAULT 'Pending',
+        verified_by VARCHAR(100),
+        verified_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT uq_session_student UNIQUE (session_id, student_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_med_log_rec_sess ON "${schema}".medical_logbook_student_records(session_id);
+      CREATE INDEX IF NOT EXISTS idx_med_log_rec_stu ON "${schema}".medical_logbook_student_records(student_id);
+      CREATE INDEX IF NOT EXISTS idx_med_log_rec_stat ON "${schema}".medical_logbook_student_records(record_status);
+    `).catch(() => {});
+
+    // 7. PG Logbook Records (Distinct Post-Graduate Tracking)
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".medical_pg_logbook_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id VARCHAR(100),
+        student_name VARCHAR(255),
+        rollno VARCHAR(50),
+        pg_year VARCHAR(20) DEFAULT 'JR-1',
+        department_id VARCHAR(50),
+        category VARCHAR(100) NOT NULL,
+        title VARCHAR(300) NOT NULL,
+        case_date DATE NOT NULL,
+        patient_details VARCHAR(255),
+        procedure_type VARCHAR(100),
+        faculty_id VARCHAR(50),
+        faculty_name VARCHAR(200),
+        score NUMERIC(5,2),
+        remarks TEXT,
+        record_status VARCHAR(20) DEFAULT 'Pending',
+        verified_by VARCHAR(100),
+        verified_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_med_pg_rec_year ON "${schema}".medical_pg_logbook_records(pg_year);
+      CREATE INDEX IF NOT EXISTS idx_med_pg_rec_cat ON "${schema}".medical_pg_logbook_records(category);
+      CREATE INDEX IF NOT EXISTS idx_med_pg_rec_stat ON "${schema}".medical_pg_logbook_records(record_status);
+      CREATE INDEX IF NOT EXISTS idx_med_pg_rec_stu ON "${schema}".medical_pg_logbook_records(student_id);
+    `).catch(() => {});
   }
 
   private async seedDefaultData(runner: QueryRunner, slug: string): Promise<void> {

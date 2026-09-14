@@ -22,6 +22,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       ? 'owner'
       : 'student');
   const [misReportsOpen, setMisReportsOpen] = useState(true);
+  const [medicalLogbookOpen, setMedicalLogbookOpen] = useState(true);
   const [collegeDisplayName, setCollegeDisplayName] = useState<string>('SRMS CET, BAREILLY');
   const [collegeLogoUrl, setCollegeLogoUrl] = useState<string | null>(null);
   const [enabledKeys, setEnabledKeys] = useState<string[] | null>(null);
@@ -262,6 +263,9 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
   useEffect(() => {
     if (pathname?.startsWith('/dashboard/faculty/reports') || pathname?.startsWith('/dashboard/admin/reports')) {
       setMisReportsOpen(true);
+    }
+    if (pathname?.includes('/medical-logbook')) {
+      setMedicalLogbookOpen(true);
     }
   }, [pathname]);
 
@@ -606,6 +610,70 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
+              {isMedicalModule && (
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setMedicalLogbookOpen(!medicalLogbookOpen)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-r-xl font-bold transition-all group ${
+                      pathname?.includes('/medical-logbook')
+                        ? 'text-[#F36C21] bg-[#F36C21]/10 border-l-4 border-[#F36C21] shadow-xs'
+                        : 'text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border-l-4 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                      <span>Medical Logbook</span>
+                    </div>
+                    <span className="w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-800 text-[#11141A] dark:text-white font-black flex items-center justify-center text-xs">
+                      {medicalLogbookOpen ? '−' : '+'}
+                    </span>
+                  </button>
+
+                  {medicalLogbookOpen && (
+                    <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-slate-200 dark:border-slate-800 ml-3">
+                      <Link
+                        href="/dashboard/admin/medical-logbook/data-directory"
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                          pathname?.includes('/medical-logbook/data-directory')
+                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#5B4BFF]"></span>
+                        <span>1. Data Directory</span>
+                      </Link>
+
+                      <Link
+                        href="/dashboard/admin/medical-logbook/ug-logbook"
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                          pathname?.includes('/medical-logbook/ug-logbook')
+                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
+                        <span>2. UG LogBook</span>
+                      </Link>
+
+                      <Link
+                        href="/dashboard/admin/medical-logbook/pg-logbook"
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                          pathname?.includes('/medical-logbook/pg-logbook')
+                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]"></span>
+                        <span>3. PG LogBook</span>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {(isAllowed('admin_placement', '/dashboard/admin/placement') || isAllowed('placement') || isAllowed('placement_drive')) && (
                 <Link href="/dashboard/admin/placement" data-active={isLinkActive('/dashboard/admin/placement') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/placement')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -833,6 +901,70 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </svg>
                 <span>Academic Portfolio Entry &amp; Evaluation</span>
               </Link>
+
+              {isMedicalModule && (
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setMedicalLogbookOpen(!medicalLogbookOpen)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-r-xl font-bold transition-all group ${
+                      pathname?.includes('/medical-logbook')
+                        ? 'text-[#F36C21] bg-[#F36C21]/10 border-l-4 border-[#F36C21] shadow-xs'
+                        : 'text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border-l-4 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                      <span>Medical Logbook</span>
+                    </div>
+                    <span className="w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-800 text-[#11141A] dark:text-white font-black flex items-center justify-center text-xs">
+                      {medicalLogbookOpen ? '−' : '+'}
+                    </span>
+                  </button>
+
+                  {medicalLogbookOpen && (
+                    <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-slate-200 dark:border-slate-800 ml-3">
+                      <Link
+                        href="/dashboard/faculty/medical-logbook/data-directory"
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                          pathname?.includes('/medical-logbook/data-directory')
+                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#5B4BFF]"></span>
+                        <span>1. Data Directory</span>
+                      </Link>
+
+                      <Link
+                        href="/dashboard/faculty/medical-logbook/ug-logbook"
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                          pathname?.includes('/medical-logbook/ug-logbook')
+                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
+                        <span>2. UG LogBook</span>
+                      </Link>
+
+                      <Link
+                        href="/dashboard/faculty/medical-logbook/pg-logbook"
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                          pathname?.includes('/medical-logbook/pg-logbook')
+                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]"></span>
+                        <span>3. PG LogBook</span>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {isAllowed('faculty_lessons') && (
                 <Link href="/dashboard/faculty/lessons" className={getLinkClass('/dashboard/faculty/lessons')}>

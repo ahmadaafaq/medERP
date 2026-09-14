@@ -166,6 +166,9 @@ export class ChatService implements OnModuleInit {
       `ALTER TABLE "${schema}".chat_messages ALTER COLUMN sender_id TYPE VARCHAR(255) USING sender_id::text`,
       `ALTER TABLE "${schema}".chat_read_state ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::text`,
 
+      `ALTER TABLE "${schema}".chat_groups ALTER COLUMN is_active SET DEFAULT true`,
+      `UPDATE "${schema}".chat_groups SET is_active = true WHERE is_active IS NULL`,
+
       // Indices
       `CREATE INDEX IF NOT EXISTS idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cg_dept ON "${schema}".chat_groups(department_id)`,
       `CREATE INDEX IF NOT EXISTS idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cg_by ON "${schema}".chat_groups(batch_year)`,
@@ -313,7 +316,7 @@ export class ChatService implements OnModuleInit {
     const role = (user?.role || 'STUDENT').toUpperCase();
 
     const params: any[] = [];
-    let whereConditions: string[] = ['g.is_active = true'];
+    let whereConditions: string[] = ['(g.is_active IS TRUE OR g.is_active IS NULL)'];
 
     // Never return old legacy batches (e.g. 2013, 2014)
     whereConditions.push(`(g.batch_year::text >= '2024' OR g.batch_year IS NULL)`);
@@ -343,12 +346,15 @@ export class ChatService implements OnModuleInit {
       ).catch(() => []);
 
       if (facultyRecord.length === 0) {
-        // Pure Student: restrict to student's enrolled department and batch
+        // Pure Student: restrict strictly to student's enrolled department, course and batch
         const studentRecord = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT s.department_id, s.batch_cd, s.admission_year, b.year as batch_year
+          `SELECT s.department_id, s.course_cd, s.batch_cd, s.admission_year, b.year as batch_year,
+                  d.name as department_name, c.name as course_name
            FROM "${schema}".students s
            LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
+           LEFT JOIN "${schema}".departments d ON d.id::text = s.department_id::text
+           LEFT JOIN "${schema}".courses c ON c.course_cd::text = s.course_cd::text
            WHERE (s.user_id::text = $1 OR s.registration_no = $1 OR s.rollno = $1) LIMIT 1`,
           [userId],
         ).catch(() => []);
@@ -357,26 +363,48 @@ export class ChatService implements OnModuleInit {
         params.push(userId);
         const pUser = params.length;
 
-        if (stu?.department_id) {
-          const sYear = String(stu.batch_year || stu.admission_year || '');
-          params.push(stu.department_id);
+        if (stu) {
+          const sYear = String(stu.batch_year || stu.admission_year || stu.batch_cd || '');
+          const sDeptId = stu.department_id ? String(stu.department_id) : '';
+          const sCourseCd = stu.course_cd ? String(stu.course_cd) : '';
+          const sCourseName = (stu.course_name || '').toUpperCase();
+          const sDeptName = (stu.department_name || '').toUpperCase();
+
+          const isMba = sCourseCd === '4' || sCourseName.includes('MBA') || sDeptName.includes('MBA');
+          const isBca = sCourseCd === '13' || sCourseName.includes('BCA') || sDeptName.includes('BCA');
+          const isMca = sCourseCd === '3' || sCourseCd === '9' || sCourseName.includes('MCA') || sDeptName.includes('MCA');
+          const isBtech = sCourseCd === '1' || sCourseCd === '7' || sCourseName.includes('B.TECH');
+          const isPharm = sCourseCd === '2' || sCourseCd === '6' || sCourseCd === '8' || sCourseName.includes('PHARM');
+
+          // Strict Course Exclusions to prevent cross-course leakage:
+          if (isMba) {
+            whereConditions.push(`(g.name NOT ILIKE '%BCA%' AND g.department_name NOT ILIKE '%BCA%' AND g.name NOT ILIKE '%B.TECH%' AND g.name NOT ILIKE '%B.PHARM%' AND g.name NOT ILIKE '%MCA%')`);
+          } else if (isBca) {
+            whereConditions.push(`(g.name NOT ILIKE '%MBA%' AND g.department_name NOT ILIKE '%MBA%' AND g.name NOT ILIKE '%B.TECH%' AND g.name NOT ILIKE '%B.PHARM%')`);
+          } else if (isMca) {
+            whereConditions.push(`(g.name NOT ILIKE '%MBA%' AND g.department_name NOT ILIKE '%MBA%' AND g.name NOT ILIKE '%BCA%')`);
+          }
+
+          params.push(sDeptId);
           const pDept = params.length;
           params.push(sYear);
           const pYear = params.length;
 
           whereConditions.push(`(
-            EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${pUser})
-            OR EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text AND (msg.sender_id::text = $${pUser} OR msg.sender_name ILIKE '%${userName.replace(/'/g, "''")}%'))
-            OR (
-              g.department_id::text = $${pDept}::text 
-              AND ($${pYear} = '' OR g.batch_year::text = $${pYear}::text OR g.name ILIKE '%' || $${pYear} || '%')
-              AND EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text)
-            )
+            g.department_id::text = $${pDept}::text
+            OR (g.id::text IN (SELECT m.chat_group_id::text FROM "${schema}".chat_group_members m WHERE m.user_id::text = $${pUser}))
+            OR ($${pDept}::text != '' AND g.name ILIKE '%' || (SELECT name FROM "${schema}".departments WHERE id::text = $${pDept}::text LIMIT 1) || '%')
+            ${isMba ? "OR g.name ILIKE '%MBA%' OR g.department_name ILIKE '%MBA%'" : ''}
+            ${isBca ? "OR g.name ILIKE '%BCA%' OR g.department_name ILIKE '%BCA%'" : ''}
+            ${isMca ? "OR g.name ILIKE '%MCA%' OR g.department_name ILIKE '%MCA%'" : ''}
           )`);
+
+          if (sYear) {
+            whereConditions.push(`(g.batch_year::text = $${pYear}::text OR g.batch_year IS NULL OR g.name ILIKE '%' || $${pYear} || '%')`);
+          }
         } else {
           whereConditions.push(`(
             EXISTS (SELECT 1 FROM "${schema}".chat_group_members m WHERE m.chat_group_id::text = g.id::text AND m.user_id::text = $${pUser})
-            OR EXISTS (SELECT 1 FROM "${schema}".chat_messages msg WHERE msg.chat_group_id::text = g.id::text AND (msg.sender_id::text = $${pUser} OR msg.sender_name ILIKE '%${userName.replace(/'/g, "''")}%'))
           )`);
         }
       }

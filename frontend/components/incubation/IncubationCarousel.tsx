@@ -24,6 +24,13 @@ export interface IncubatedProjectAlert {
   incubationNotes?: string;
   techStack?: string[];
   screenshots?: string[];
+  studentName?: string;
+  studentRegNo?: string;
+  rollNo?: string;
+  courseName?: string;
+  branchName?: string;
+  batchName?: string;
+  isMine?: boolean;
 }
 
 interface IncubationCarouselProps {
@@ -232,16 +239,34 @@ export default function IncubationCarousel({
 
                     {/* Congratulatory Project Title */}
                     <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
-                      <span>🎉 Congratulations! Selected Project: &quot;{p.title}&quot;</span>
+                      {p.isMine ? (
+                        <span>🎉 Congratulations! Your Project Selected: &quot;{p.title}&quot;</span>
+                      ) : (
+                        <span>🏛️ {p.branchName || p.courseName || 'Department'} Spotlight: &quot;{p.title}&quot;</span>
+                      )}
                     </h2>
 
                     {/* Explanatory Description */}
                     <p className="text-xs sm:text-sm text-white/95 leading-relaxed font-medium">
-                      🌟 You are a genius! Your repository project <strong>&quot;{p.title}&quot;</strong> has achieved top faculty marks and has been officially selected by the College Administration for the <strong>SRMS Venture Incubation Cell & Corporate Commercialization Pipeline</strong>.
+                      {p.isMine ? (
+                        <>
+                          🌟 You are a genius! Your repository project <strong>&quot;{p.title}&quot;</strong> has achieved top faculty marks and has been officially selected by the College Administration for the <strong>SRMS Venture Incubation Cell & Corporate Commercialization Pipeline</strong>.
+                        </>
+                      ) : (
+                        <>
+                          🌟 Outstanding innovation by student <strong>{p.studentName || 'Batch Colleague'}</strong> ({p.branchName || p.courseName || 'Department'})! Officially shortlisted by the College Administration for the <strong>SRMS Venture Incubation Cell & Corporate Commercialization Pipeline</strong>.
+                        </>
+                      )}
                     </p>
 
                     {/* Seed Funding / Mentor Tagline / Notes */}
                     <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                      {p.studentName && !p.isMine && (
+                        <span className="px-3 py-1 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white font-medium">
+                          👨‍🎓 <strong>Author:</strong> {p.studentName}
+                        </span>
+                      )}
+
                       {(p.fundingAmount || 0) > 0 && (
                         <span className="px-3 py-1 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white font-black flex items-center gap-1.5">
                           <span>💰 Seed Grant Approved:</span>

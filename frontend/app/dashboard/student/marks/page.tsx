@@ -112,21 +112,35 @@ export default function StudentMarksPage() {
     };
 
     try {
-      const meRes = await fetch(`${API_BASE}/auth/me`, { headers });
-      if (meRes.ok) {
+      let identifier = '';
+      const meRes = await fetch(`${API_BASE}/auth/me`, { headers }).catch(() => null);
+      if (meRes && meRes.ok) {
         const meJson = await meRes.json();
-        const identifier = meJson.profile?.registration_no || meJson.profile?.rollno || meJson.profile?.id || '';
-        if (identifier) {
-          const marksRes = await fetch(`${API_BASE}/exams/student/${identifier}?tenant=${slug}`, { headers });
-          if (marksRes.ok) {
-            const mJson = await marksRes.json();
-            const mData = mJson.data !== undefined ? mJson.data : mJson;
-            if (Array.isArray(mData) && mData.length > 0) {
-              setResults(mData);
-              setSelectedResultId(mData[0].id);
-              setLoading(false);
-              return;
-            }
+        const meData = meJson.data || meJson;
+        const p = meData.profile || meData || {};
+        identifier = p.registration_no || meData.registrationNo || meData.registration_no || p.rollno || meData.rollno || p.id || '';
+      }
+      if (!identifier && typeof window !== 'undefined') {
+        try {
+          const cachedUserStr = localStorage.getItem('user');
+          if (cachedUserStr) {
+            const cached = JSON.parse(cachedUserStr);
+            const p = cached?.profile || cached || {};
+            identifier = p.registration_no || cached?.registrationNo || cached?.registration_no || p.rollno || cached?.rollno || '';
+          }
+        } catch {}
+      }
+
+      if (identifier) {
+        const marksRes = await fetch(`${API_BASE}/exams/student/${encodeURIComponent(identifier)}?tenant=${slug}`, { headers });
+        if (marksRes && marksRes.ok) {
+          const mJson = await marksRes.json();
+          const mData = mJson.data !== undefined ? mJson.data : mJson;
+          if (Array.isArray(mData) && mData.length > 0) {
+            setResults(mData);
+            setSelectedResultId(mData[0].id);
+            setLoading(false);
+            return;
           }
         }
       }
