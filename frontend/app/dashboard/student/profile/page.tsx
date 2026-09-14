@@ -32,6 +32,7 @@ import {
 
 interface StudentProfile {
   id?: string;
+  user_id?: string;
   name?: string;
   registration_no?: string;
   rollno?: string;
@@ -64,6 +65,7 @@ interface StudentProfile {
 
 export default function StudentProfilePage() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [repositories, setRepositories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Edit Modals & State
@@ -77,7 +79,7 @@ export default function StudentProfilePage() {
 
   const [isEditingLinkedin, setIsEditingLinkedin] = useState(false);
   const [linkedinUrlInput, setLinkedinUrlInput] = useState('');
-  const [linkedinConnectionsInput, setLinkedinConnectionsInput] = useState<number | string>(500);
+  const [linkedinConnectionsInput, setLinkedinConnectionsInput] = useState<number | string>(0);
 
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
@@ -87,6 +89,7 @@ export default function StudentProfilePage() {
   }, []);
 
   const getStudentIdentity = () => {
+    let userId = '';
     let regNo = '';
     let name = '';
     let rollno = '';
@@ -103,6 +106,7 @@ export default function StudentProfilePage() {
         if (cachedUserStr) {
           const cached = JSON.parse(cachedUserStr);
           const p = cached?.profile || cached || {};
+          userId = cached?.id || p.user_id || p.id || '';
           regNo =
             p.registration_no ||
             cached?.registrationNo ||
@@ -120,7 +124,7 @@ export default function StudentProfilePage() {
         }
       } catch {}
     }
-    return { regNo, name, rollno, courseCd, courseName, departmentName, batchCd, batchName, photoUrl };
+    return { userId, regNo, name, rollno, courseCd, courseName, departmentName, batchCd, batchName, photoUrl };
   };
 
   const fetchProfile = async () => {
@@ -143,8 +147,9 @@ export default function StudentProfilePage() {
         },
       });
 
-      // 2. Fetch Student Repositories Count
+      // 2. Fetch Student Repositories Count & List
       let repoCount = 0;
+      let fetchedRepos: any[] = [];
       if (regNo) {
         try {
           const repoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/repository/list?student_reg_no=${encodeURIComponent(regNo)}&tenant=${slug}`, {
@@ -152,6 +157,9 @@ export default function StudentProfilePage() {
               'Authorization': `Bearer ${token}`,
               'x-tenant-slug': slug,
               'x-user-reg-no': regNo,
+              'x-user-id': regNo,
+              'x-user-name': name,
+              'x-user-role': 'STUDENT',
             },
           });
           if (repoRes.ok) {
@@ -159,12 +167,14 @@ export default function StudentProfilePage() {
             const rawData = rJson.data?.data || rJson.data || [];
             const uniqueList = Array.isArray(rawData) ? Array.from(new Map(rawData.map((x: any) => [x.repo_id || x.id, x])).values()) : [];
             repoCount = uniqueList.length;
+            fetchedRepos = uniqueList;
+            setRepositories(uniqueList);
           }
         } catch {}
       }
 
       // 3. Fetch Live SRMS Attendance
-      let liveAttPct = '24.84%';
+      let liveAttPct = '0.00%';
       if (regNo) {
         try {
           const liveRes = await fetch('/api/srms/student-individual-attendance', {
@@ -174,7 +184,7 @@ export default function StudentProfilePage() {
               colg_cd: 1,
               course_cd: Number(identity.courseCd || 4),
               branch_cd: 1,
-              batch_cd: 2,
+              batch_cd: 16,
               stud_reg_no: regNo,
             }),
           });
@@ -194,12 +204,24 @@ export default function StudentProfilePage() {
         const meData = json.data || json;
         const p = meData.profile || meData;
 
-        const resolvedCourseCd = p.course_cd || meData.courseCd || identity.courseCd || '';
+        const resolvedCourseCd = p.course_cd || meData.courseCd || identity.courseCd || '4';
         const courseStr = resolveCourseTitle(resolvedCourseCd, meData.courseName || p.course_name || identity.courseName);
         const deptStr = resolveDepartmentTitle(resolvedCourseCd, meData.departmentName || p.department_name || identity.departmentName);
 
         const finalRegNo = p.registration_no || meData.registrationNo || regNo;
         const finalRollNo = p.rollno || meData.rollno || identity.rollno || '';
+
+        let derivedGithubUrl = p.github_url || '';
+        if (!derivedGithubUrl && fetchedRepos.length > 0) {
+          const ghRepo = fetchedRepos.find((r: any) => r.repo_link && r.repo_link.includes('github.com/'));
+          if (ghRepo) {
+            const cleanUrl = ghRepo.repo_link.replace(/^https?:\/\/github\.com\//i, '').split('/');
+            if (cleanUrl[0] && cleanUrl[0].trim() !== '') {
+              derivedGithubUrl = `https://github.com/${cleanUrl[0].trim()}`;
+            }
+          }
+        }
+
         const studentData: StudentProfile = {
           id: p.id || meData.id || '',
           name: p.name || meData.name || name || 'Student Profile',
@@ -220,14 +242,14 @@ export default function StudentProfilePage() {
           academic_session: p.academic_session || '2025-2026',
           admission_status: p.admission_status || 'ACTIVE',
           college_name: meData.collegeName || meData.tenantName || 'SRMS College of Engineering & Technology, Bareilly',
-          bio: p.bio || 'Enrolled & Active Student at SRMS CET.',
-          github_url: p.github_url || '',
-          github_followers: p.github_followers ?? 0,
-          linkedin_url: p.linkedin_url || '',
-          linkedin_connections: p.linkedin_connections ?? 0,
+          bio: p.bio || meData.bio || 'Enrolled & Active Student at SRMS CET.',
+          github_url: derivedGithubUrl || p.github_url || meData.github_url || '',
+          github_followers: Number(p.github_followers ?? meData.github_followers) || 0,
+          linkedin_url: p.linkedin_url || meData.linkedin_url || '',
+          linkedin_connections: Number(p.linkedin_connections ?? meData.linkedin_connections) || 0,
           repository_count: repoCount || p.repository_count || 0,
           attendance_percentage: liveAttPct,
-          followers_count: (p.github_followers ?? 0) + (p.linkedin_connections ?? 0),
+          followers_count: (Number(p.github_followers ?? meData.github_followers) || 0) + (Number(p.linkedin_connections ?? meData.linkedin_connections) || 0),
         };
 
         setProfile(studentData);
@@ -237,25 +259,40 @@ export default function StudentProfilePage() {
         setLinkedinUrlInput(studentData.linkedin_url || '');
         setLinkedinConnectionsInput(studentData.linkedin_connections ?? 0);
       } else {
-        loadFallback(repoCount, liveAttPct);
+        loadFallback(repoCount, liveAttPct, fetchedRepos);
       }
     } catch (err) {
       console.error('Failed to fetch student profile:', err);
-      loadFallback(0, '24.84%');
+      loadFallback(0, '0.00%', []);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadFallback = (repoCount: number, liveAttPct: string) => {
+  const loadFallback = (repoCount: number, liveAttPct: string, fetchedRepos: any[] = []) => {
     const identity = getStudentIdentity();
-    const resolvedCourse = resolveCourseTitle(identity.courseCd, identity.courseName);
-    const resolvedDept = resolveDepartmentTitle(identity.courseCd, identity.departmentName);
+    const resolvedCourse = resolveCourseTitle(identity.courseCd || '4', identity.courseName);
+    const resolvedDept = resolveDepartmentTitle(identity.courseCd || '4', identity.departmentName);
+    if (fetchedRepos.length > 0) {
+      setRepositories(fetchedRepos);
+    }
+
+    let derivedGithubUrl = '';
+    if (fetchedRepos.length > 0) {
+      const ghRepo = fetchedRepos.find((r: any) => r.repo_link && r.repo_link.includes('github.com/'));
+      if (ghRepo) {
+        const cleanUrl = ghRepo.repo_link.replace(/^https?:\/\/github\.com\//i, '').split('/');
+        if (cleanUrl[0] && cleanUrl[0].trim() !== '') {
+          derivedGithubUrl = `https://github.com/${cleanUrl[0].trim()}`;
+        }
+      }
+    }
+
     const fallbackData: StudentProfile = {
-      id: '1',
+      id: identity.userId || identity.regNo || '',
       name: identity.name || 'Student Profile',
-      registration_no: identity.regNo,
-      rollno: identity.rollno || '',
+      registration_no: identity.regNo || '2025107990',
+      rollno: identity.rollno || '2500140500000',
       photo_url: identity.photoUrl || (identity.regNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${identity.regNo}/${identity.regNo}.JPG` : ''),
       cover_url: '/campus-cover.png',
       course_name: resolvedCourse,
@@ -263,7 +300,7 @@ export default function StudentProfilePage() {
       department_name: resolvedDept,
       batch_cd: identity.batchName || identity.batchCd || '2025 Batch',
       admission_year: '2025',
-      email: typeof window !== 'undefined' ? (JSON.parse(localStorage.getItem('user') || '{}')?.email || 'student@srms.ac.in') : 'student@srms.ac.in',
+      email: typeof window !== 'undefined' ? (JSON.parse(localStorage.getItem('user') || '{}')?.email || '') : '',
       phone: '',
       father_name: 'N/A',
       mother_name: 'N/A',
@@ -272,14 +309,15 @@ export default function StudentProfilePage() {
       admission_status: 'ACTIVE',
       college_name: 'SRMS College of Engineering & Technology, Bareilly',
       bio: 'Enrolled & Active Student at SRMS CET.',
-      github_url: '',
+      github_url: derivedGithubUrl,
       github_followers: 0,
       linkedin_url: '',
       linkedin_connections: 0,
-      repository_count: repoCount,
+      repository_count: repoCount || 0,
       attendance_percentage: liveAttPct,
       followers_count: 0,
     };
+
     setProfile(fallbackData);
     setBioInput(fallbackData.bio || '');
     setGithubUrlInput(fallbackData.github_url || '');
@@ -290,7 +328,11 @@ export default function StudentProfilePage() {
 
   // Auto-fetch GitHub Followers from Public API
   const handleFetchGithubStats = async () => {
-    if (!githubUrlInput.trim()) return;
+    if (!githubUrlInput || !githubUrlInput.trim()) {
+      alert('Please enter a GitHub profile URL or username first.');
+      return;
+    }
+
     setIsFetchingGithub(true);
     try {
       let username = githubUrlInput.trim();
@@ -327,7 +369,7 @@ export default function StudentProfilePage() {
     setSaveMessage('');
     const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-    const { regNo } = getStudentIdentity();
+    const { regNo, userId, rollno } = getStudentIdentity();
 
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/auth/profile`, {
@@ -337,38 +379,53 @@ export default function StudentProfilePage() {
           'Authorization': `Bearer ${token}`,
           'x-tenant-slug': slug,
           'x-user-reg-no': regNo,
+          'x-user-id': profile?.user_id || userId || regNo,
+          'x-user-role': 'STUDENT',
         },
         body: JSON.stringify({
+          role: 'STUDENT',
+          student_id: profile?.id,
+          id: profile?.id,
+          user_id: profile?.user_id || userId,
+          rollno: profile?.rollno || rollno,
           student_reg_no: regNo,
+          registration_no: profile?.registration_no || regNo,
           tenant: slug,
           ...payload,
         }),
       });
 
       if (res.ok) {
-        setProfile((prev) => prev ? { ...prev, ...payload } : prev);
+        const json = await res.json().catch(() => null);
+        const updatedData = json?.data || payload;
+        setProfile((prev) => prev ? { ...prev, ...payload, ...updatedData } : prev);
         setSaveMessage('Profile details updated successfully!');
         setIsEditingBio(false);
         setIsEditingGithub(false);
         setIsEditingLinkedin(false);
 
         // Sync with local storage and other components like Chat/Header
-        if (payload.photo_url !== undefined) {
-          try {
-            const cachedStr = localStorage.getItem('user');
-            if (cachedStr) {
-              const cachedObj = JSON.parse(cachedStr);
+        try {
+          const cachedStr = localStorage.getItem('user');
+          if (cachedStr) {
+            const cachedObj = JSON.parse(cachedStr);
+            if (payload.photo_url !== undefined) {
               cachedObj.photo_url = payload.photo_url;
               cachedObj.photoUrl = payload.photo_url;
               if (cachedObj.profile) {
                 cachedObj.profile.photo_url = payload.photo_url;
                 cachedObj.profile.photoUrl = payload.photo_url;
               }
-              localStorage.setItem('user', JSON.stringify(cachedObj));
             }
-            window.dispatchEvent(new CustomEvent('user-profile-updated', { detail: { photo_url: payload.photo_url } }));
-          } catch {}
-        }
+            if (payload.github_followers !== undefined) {
+              cachedObj.github_followers = payload.github_followers;
+              if (cachedObj.profile) {
+                cachedObj.profile.github_followers = payload.github_followers;
+              }
+            }
+            localStorage.setItem('user', JSON.stringify(cachedObj));
+          }
+        } catch {}
 
         setTimeout(() => setSaveMessage(''), 3000);
       } else {
@@ -542,7 +599,7 @@ export default function StudentProfilePage() {
                         <div className="flex items-center justify-center gap-1.5 text-[#5B4BFF] mb-1">
                           <FolderGit2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
                           <span className="text-xl font-black text-[#1B1E28] dark:text-white">
-                            {profile?.repository_count ?? 2}
+                            {profile?.repository_count ?? 0}
                           </span>
                         </div>
                         <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 group-hover:text-[#5B4BFF]">
@@ -557,7 +614,7 @@ export default function StudentProfilePage() {
                         <div className="flex items-center justify-center gap-1.5 text-[#00C48C] mb-1">
                           <CalendarCheck className="w-4 h-4 group-hover:scale-110 transition-transform" />
                           <span className="text-xl font-black text-[#1B1E28] dark:text-white">
-                            {profile?.attendance_percentage ?? '24.84%'}
+                            {profile?.attendance_percentage ?? '0.00%'}
                           </span>
                         </div>
                         <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 group-hover:text-[#00C48C]">
@@ -572,7 +629,7 @@ export default function StudentProfilePage() {
                         <div className="flex items-center justify-center gap-1.5 text-[#F36C21] mb-1">
                           <Users className="w-4 h-4 group-hover:scale-110 transition-transform" />
                           <span className="text-xl font-black text-[#1B1E28] dark:text-white">
-                            {((profile?.github_followers ?? 0) + (profile?.linkedin_connections ?? 0)) || 398}
+                            {(profile?.github_followers ?? 0) + (profile?.linkedin_connections ?? 0)}
                           </span>
                         </div>
                         <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
@@ -637,7 +694,7 @@ export default function StudentProfilePage() {
                       </form>
                     ) : (
                       <p className="text-xs sm:text-sm text-[#4E5969] dark:text-slate-300 leading-relaxed italic bg-[#F6F8FC] dark:bg-slate-800/50 p-4 rounded-xl border border-dashed border-[#E7EAF3] dark:border-slate-700">
-                        "{profile?.bio || 'Passionate software engineering student specializing in Full-Stack Web Development, distributed microservices, and modern JavaScript architectures.'}"
+                        "{profile?.bio || 'Enrolled & Active Student at SRMS CET.'}"
                       </p>
                     )}
                   </div>
@@ -668,7 +725,7 @@ export default function StudentProfilePage() {
                           <div>
                             <span className="text-xs font-black text-[#1B1E28] dark:text-white block">GitHub Profile</span>
                             <span className="text-[10px] font-bold text-[#5B4BFF]">
-                              {profile?.github_followers ?? 48} Followers
+                              {profile?.github_followers ?? 0} Followers
                             </span>
                           </div>
                         </div>
@@ -769,7 +826,7 @@ export default function StudentProfilePage() {
                           <div>
                             <span className="text-xs font-black text-[#1B1E28] dark:text-white block">LinkedIn Profile</span>
                             <span className="text-[10px] font-bold text-[#00C48C]">
-                              {profile?.linkedin_connections ?? 350}+ Connections
+                              {profile?.linkedin_connections ?? 0}+ Connections
                             </span>
                           </div>
                         </div>
@@ -931,17 +988,116 @@ export default function StudentProfilePage() {
                       <span className="text-[#4E5969] dark:text-slate-400 font-medium">Residency Type</span>
                       <span className="font-bold text-[#1B1E28] dark:text-slate-200">{profile?.residency_type}</span>
                     </div>
-                    <div className="flex justify-between py-1 border-b border-[#E7EAF3] dark:border-slate-800/50">
-                      <span className="text-[#4E5969] dark:text-slate-400 font-medium flex items-center gap-1.5">
+                    <div className="flex justify-between items-start gap-4 py-1 border-b border-[#E7EAF3] dark:border-slate-800/50">
+                      <span className="text-[#4E5969] dark:text-slate-400 font-medium flex items-center gap-1.5 shrink-0">
                         <MapPin className="w-3.5 h-3.5 text-[#F36C21]" /> Campus
                       </span>
-                      <span className="font-bold text-[#1B1E28] dark:text-slate-200 truncate max-w-[200px]" title={profile?.college_name}>
+                      <span className="font-bold text-[#1B1E28] dark:text-slate-200 text-right leading-snug" title={profile?.college_name}>
                         {profile?.college_name}
                       </span>
                     </div>
                   </div>
                 </div>
 
+              </div>
+
+              {/* Repositories & Capstone Projects Showcase */}
+              <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
+                <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
+                  <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
+                    <FolderGit2 className="w-4 h-4" />
+                    <span>Student Repositories &amp; Academic Projects ({repositories.length})</span>
+                  </h3>
+                  <a
+                    href="/dashboard/student/repository"
+                    className="px-3 py-1 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white transition-all flex items-center gap-1.5"
+                  >
+                    <span>Manage Repositories</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+
+                {repositories.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                    <FolderGit2 className="w-8 h-8 text-slate-400 mx-auto" />
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">No repositories submitted yet</p>
+                    <p className="text-[11px] text-slate-400">Projects submitted under My Repository will appear here on your public profile.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {repositories.map((repo: any) => {
+                      const techArr = Array.isArray(repo.tech_stack)
+                        ? repo.tech_stack
+                        : typeof repo.tech_stack === 'string'
+                        ? repo.tech_stack.replace(/[\[\]"]/g, '').split(',').map((s: string) => s.trim()).filter(Boolean)
+                        : [];
+                      const isReviewed = repo.status === 'Reviewed';
+
+                      return (
+                        <div
+                          key={repo.repo_id || repo.id}
+                          className="bg-[#F6F8FC] dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all group"
+                        >
+                          <div className="space-y-2.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="text-sm font-black text-[#1B1E28] dark:text-white line-clamp-1 group-hover:text-[#5B4BFF] transition-colors">
+                                {repo.title}
+                              </h4>
+                              {isReviewed ? (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
+                                  Reviewed
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 shrink-0">
+                                  Pending Review
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-[#4E5969] dark:text-slate-400 line-clamp-2 leading-relaxed">
+                              {repo.description || 'No description provided.'}
+                            </p>
+
+                            {techArr.length > 0 && (
+                              <div className="flex flex-wrap gap-1 pt-1">
+                                {techArr.slice(0, 4).map((tech: string, tIdx: number) => (
+                                  <span
+                                    key={tIdx}
+                                    className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600"
+                                  >
+                                    {tech}
+                                  </span>
+                                ))}
+                                {techArr.length > 4 && (
+                                  <span className="text-[10px] text-slate-400 font-bold self-center">
+                                    +{techArr.length - 4}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="pt-3 mt-3 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs">
+                            <span className="text-[10px] font-medium text-slate-400">
+                              {repo.submitted_at ? new Date(repo.submitted_at).toLocaleDateString() : 'Active Project'}
+                            </span>
+                            {repo.repo_link && (
+                              <a
+                                href={repo.repo_link}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] font-bold text-[#5B4BFF] hover:underline flex items-center gap-1"
+                              >
+                                <span>View Code</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}

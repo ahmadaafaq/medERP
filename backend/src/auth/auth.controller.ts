@@ -153,12 +153,27 @@ export class AuthController {
     @Body() dto: any,
     @Req() req: any,
   ) {
+    let tokenSub = '';
+    let tokenRole = '';
+    if (req.headers?.authorization?.startsWith('Bearer ')) {
+      try {
+        const parts = req.headers.authorization.substring(7).split('.');
+        if (parts.length === 3) {
+          const parsed = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+          tokenSub = parsed.sub || parsed.id || '';
+          tokenRole = parsed.role || '';
+        }
+      } catch {}
+    }
+
     const slug = tenantSlug || dto?.tenant || '';
+    const regNo = req.headers?.['x-user-reg-no'] || dto?.student_reg_no || dto?.registration_no || '';
+    const userRole = req.headers?.['x-user-role'] || tokenRole || dto?.role || (regNo ? 'STUDENT' : 'FACULTY');
     const user = {
-      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || dto?.userId || '',
-      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || dto?.registration_no || '',
+      sub: tokenSub || req.headers?.['x-user-id'] || regNo || dto?.userId || '',
+      registration_no: regNo,
       emp_id: req.headers?.['x-user-id'] || dto?.emp_id || dto?.empId || '',
-      role: req.headers?.['x-user-role'] || dto?.role || 'FACULTY',
+      role: userRole,
       email: dto?.email || req.headers?.['x-user-email'] || '',
     };
     return this.authService.updateProfile(slug, user, dto);
@@ -172,12 +187,27 @@ export class AuthController {
     @Body() dto: any,
     @Req() req: any,
   ) {
+    let tokenSub = '';
+    let tokenRole = '';
+    if (req.headers?.authorization?.startsWith('Bearer ')) {
+      try {
+        const parts = req.headers.authorization.substring(7).split('.');
+        if (parts.length === 3) {
+          const parsed = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+          tokenSub = parsed.sub || parsed.id || '';
+          tokenRole = parsed.role || '';
+        }
+      } catch {}
+    }
+
     const slug = tenantSlug || dto?.tenant || '';
+    const regNo = req.headers?.['x-user-reg-no'] || dto?.student_reg_no || dto?.registration_no || '';
+    const userRole = req.headers?.['x-user-role'] || tokenRole || dto?.role || (regNo ? 'STUDENT' : 'FACULTY');
     const user = {
-      sub: req.headers?.['x-user-id'] || req.headers?.['x-user-reg-no'] || dto?.userId || '',
-      registration_no: req.headers?.['x-user-reg-no'] || req.headers?.['x-user-id'] || dto?.registration_no || '',
+      sub: tokenSub || req.headers?.['x-user-id'] || regNo || dto?.userId || '',
+      registration_no: regNo,
       emp_id: req.headers?.['x-user-id'] || dto?.emp_id || dto?.empId || '',
-      role: req.headers?.['x-user-role'] || dto?.role || 'FACULTY',
+      role: userRole,
       email: dto?.email || req.headers?.['x-user-email'] || '',
     };
     return this.authService.updateProfile(slug, user, dto);

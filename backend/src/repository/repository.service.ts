@@ -39,9 +39,9 @@ export class RepositoryService {
         `SELECT s.registration_no, s.name, s.course_cd, s.batch_cd, sa.branch_code, sa.branch_id, sa.professional_phase
          FROM "${schema}".students s
          LEFT JOIN "${schema}".student_admissions sa ON s.id = sa.student_id
-         WHERE s.registration_no = $1 OR s.rollno = $1 OR s.user_id = $2
+         WHERE s.registration_no = $1 OR s.rollno = $1 OR s.user_id::text = $2
          LIMIT 1`,
-        [regNo, user?.id || '00000000-0000-0000-0000-000000000000'],
+        [regNo, user?.id ? String(user.id) : '00000000-0000-0000-0000-000000000000'],
       );
 
       if (studentRows && studentRows.length > 0) {
@@ -55,6 +55,30 @@ export class RepositoryService {
     } catch (e) {
       this.logger.warn(`Student resolution fallback used for ${regNo}`);
     }
+
+    const techStackJson = Array.isArray(dto.tech_stack)
+      ? JSON.stringify(dto.tech_stack)
+      : typeof (dto.tech_stack as any) === 'string'
+      ? JSON.stringify(String(dto.tech_stack).split(',').map((s: string) => s.trim()).filter(Boolean))
+      : '[]';
+
+    const screenshotsJson = Array.isArray(dto.screenshots)
+      ? JSON.stringify(dto.screenshots)
+      : typeof (dto.screenshots as any) === 'string'
+      ? JSON.stringify([String(dto.screenshots)])
+      : '[]';
+
+    // Synchronize sequence with existing rows before inserting
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT setval(
+          pg_get_serial_sequence('"${schema}".repositories', 'repo_id'),
+          COALESCE((SELECT MAX(repo_id) FROM "${schema}".repositories), 0) + 1,
+          false
+        );`
+      );
+    } catch {}
 
     // Insert repository record
     const insertResult = await this.tenantSchemaService.queryInTenant(
@@ -76,8 +100,8 @@ export class RepositoryService {
         dto.title,
         dto.description,
         dto.repo_link,
-        dto.tech_stack || [],
-        dto.screenshots || [],
+        techStackJson,
+        screenshotsJson,
       ],
     );
 
@@ -268,8 +292,12 @@ export class RepositoryService {
     const updatedTitle = dto.title !== undefined ? dto.title : repo.title;
     const updatedDesc = dto.description !== undefined ? dto.description : repo.description;
     const updatedLink = dto.repo_link !== undefined ? dto.repo_link : repo.repo_link;
-    const updatedTech = dto.tech_stack !== undefined ? dto.tech_stack : repo.tech_stack;
-    const updatedScreenshots = dto.screenshots !== undefined ? dto.screenshots : repo.screenshots;
+    const updatedTech = dto.tech_stack !== undefined
+      ? (Array.isArray(dto.tech_stack) ? JSON.stringify(dto.tech_stack) : String(dto.tech_stack))
+      : (Array.isArray(repo.tech_stack) ? JSON.stringify(repo.tech_stack) : repo.tech_stack);
+    const updatedScreenshots = dto.screenshots !== undefined
+      ? (Array.isArray(dto.screenshots) ? JSON.stringify(dto.screenshots) : String(dto.screenshots))
+      : (Array.isArray(repo.screenshots) ? JSON.stringify(repo.screenshots) : repo.screenshots);
 
     const updated = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -318,6 +346,18 @@ export class RepositoryService {
     }
 
     const isPlacementEligible = dto.is_placement_eligible ?? (dto.score >= 75);
+
+    // Synchronize review sequence before inserting
+    try {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT setval(
+          pg_get_serial_sequence('"${schema}".repository_reviews', 'review_id'),
+          COALESCE((SELECT MAX(review_id) FROM "${schema}".repository_reviews), 0) + 1,
+          false
+        );`
+      );
+    } catch {}
 
     // Insert review record
     await this.tenantSchemaService.queryInTenant(

@@ -79,11 +79,56 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   const [userColgCd, setUserColgCd] = useState<string>('1');
   const [userTenantSlug, setUserTenantSlug] = useState<string>('srms-cet-bareilly');
 
-  const [selectedCollege, setSelectedCollege] = useState('1');
-  const [selectedCourse, setSelectedCourse] = useState('13'); // BCA
-  const [selectedBranch, setSelectedBranch] = useState('1');
-  const [selectedBatch, setSelectedBatch] = useState('2'); // 2025
-  const [selectedSem, setSelectedSem] = useState('3'); // Sem 3
+  const [selectedCollege, setSelectedCollege] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('user') || '{}');
+        const p = cached?.profile || cached || {};
+        return String(p.colg_cd || cached?.colgcd || '1');
+      } catch {}
+    }
+    return '1';
+  });
+  const [selectedCourse, setSelectedCourse] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('user') || '{}');
+        const p = cached?.profile || cached || {};
+        return String(p.course_cd || cached?.courseCd || cached?.course_cd || '4');
+      } catch {}
+    }
+    return '4';
+  });
+  const [selectedBranch, setSelectedBranch] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('user') || '{}');
+        const p = cached?.profile || cached || {};
+        return String(p.branch_cd || cached?.branchCd || cached?.branch_cd || '1');
+      } catch {}
+    }
+    return '1';
+  });
+  const [selectedBatch, setSelectedBatch] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('user') || '{}');
+        const p = cached?.profile || cached || {};
+        return String(p.batch_cd || cached?.batchCd || cached?.batch_cd || '16');
+      } catch {}
+    }
+    return '16';
+  });
+  const [selectedSem, setSelectedSem] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('user') || '{}');
+        const p = cached?.profile || cached || {};
+        return String(p.semester || p.current_semester || cached?.semester || '3');
+      } catch {}
+    }
+    return '3';
+  });
   const [selectedSection, setSelectedSection] = useState('1'); // Section A = 1
 
   // Date Range States
@@ -108,9 +153,36 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DEFAULTER' | 'GOOD'>('ALL');
 
   // Student Specific State
-  const [selectedStudentUid, setSelectedStudentUid] = useState('');
-  const [selectedStudentName, setSelectedStudentName] = useState('');
-  const [selectedStudentRoll, setSelectedStudentRoll] = useState('');
+  const [selectedStudentUid, setSelectedStudentUid] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('user') || '{}');
+        const p = cached?.profile || cached || {};
+        return String(p.registration_no || cached?.registrationNo || cached?.registration_no || p.reg_no || '');
+      } catch {}
+    }
+    return '';
+  });
+  const [selectedStudentName, setSelectedStudentName] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('user') || '{}');
+        const p = cached?.profile || cached || {};
+        return String(cached?.name || p.name || cached?.student_name || '');
+      } catch {}
+    }
+    return '';
+  });
+  const [selectedStudentRoll, setSelectedStudentRoll] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('user') || '{}');
+        const p = cached?.profile || cached || {};
+        return String(p.rollno || cached?.rollno || '');
+      } catch {}
+    }
+    return '';
+  });
   const [summaryData, setSummaryData] = useState<SubjectSummary[]>([]);
   const [studentTotalPct, setStudentTotalPct] = useState('0.00%');
   const [loadingSummary, setLoadingSummary] = useState(false);
@@ -323,12 +395,12 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         const j = await crsRes.json();
         const list = Array.isArray(j) ? j : j.data || [];
         const mappedCourses: DropdownItem[] = list.map((c: any) => ({
-          id: String(c.course_cd || c.code || '13'),
-          code: String(c.course_cd || c.code || '13'),
-          name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+          id: String(c.course_cd || c.code || '4'),
+          code: String(c.course_cd || c.code || '4'),
+          name: c.course_name || c.name || `Course ${c.course_cd || 4}`,
         }));
         setCoursesList(mappedCourses);
-        const crsToUse = selectedCourse || (mappedCourses[0] ? mappedCourses[0].code : '13');
+        const crsToUse = selectedCourse || (mappedCourses[0] ? mappedCourses[0].code : '4');
         fetchBranchesAndBatches(userColg, crsToUse, mappedCourses, userSlug);
       } else {
         setCoursesList([]);
@@ -345,9 +417,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     customSlug?: string
   ) => {
     const effectiveColg = colg || selectedCollege || '1';
-    const effectiveCrs = crs || selectedCourse || '13';
+    const effectiveCrs = crs || selectedCourse || '4';
     const slug = customSlug || userTenantSlug || 'srms-cet-bareilly';
-    const activeCourses = customCourses || coursesList;
+    const activeCourses = (customCourses && customCourses.length > 0) ? customCourses : coursesList;
 
     try {
       const [brRes, btRes] = await Promise.all([
@@ -355,22 +427,24 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${slug}`).catch(() => null),
       ]);
 
+      const courseObj = activeCourses.find(
+        (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
+      );
+      const defaultCourseName = effectiveCrs === '4' ? 'MBA' : effectiveCrs === '13' ? 'BCA' : 'Department';
+      const courseName = (courseObj?.name || defaultCourseName)
+        .replace(/^\[#\d+\]\s*/, '')
+        .trim();
+
       if (brRes && brRes.ok) {
         const j = await brRes.json();
         const list = Array.isArray(j) ? j : j.data || [];
-        const courseObj = activeCourses.find(
-          (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
-        );
-        const courseName = (courseObj?.name || (effectiveCrs === '13' ? 'BCA' : 'Course'))
-          .replace(/^\[#\d+\]\s*/, '')
-          .trim();
 
         const mapped: DropdownItem[] = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
           const rawName = (b.branch_name || b.name || '').trim();
           const validName =
             rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
               ? rawName
-              : (effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
+              : (effectiveCrs === '4' ? 'MBA Department' : effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
           return {
             id: String(b.branch_cd || b.code || '1'),
             code: String(b.branch_cd || b.code || '1'),
@@ -385,16 +459,12 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
             return exists ? prev : mapped[0].code;
           });
         } else {
-          const fallback = [{ id: '1', code: '1', name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department` }];
+          const fallback = [{ id: '1', code: '1', name: effectiveCrs === '4' ? 'MBA Department' : effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department` }];
           setBranchesList(fallback);
           setSelectedBranch('1');
         }
       } else {
-        const courseObj = activeCourses.find(
-          (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
-        );
-        const courseName = (courseObj?.name || 'BCA').replace(/^\[#\d+\]\s*/, '').trim();
-        const fallback = [{ id: '1', code: '1', name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department` }];
+        const fallback = [{ id: '1', code: '1', name: effectiveCrs === '4' ? 'MBA Department' : effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department` }];
         setBranchesList(fallback);
         setSelectedBranch('1');
       }
@@ -426,9 +496,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       setLoadingMatrix(true);
       const payload = {
         colg_cd: Number(selectedCollege || 1),
-        course_cd: Number(selectedCourse || 13),
+        course_cd: Number(selectedCourse || 4),
         branch_cd: Number(selectedBranch || 1),
-        batch_cd: Number(selectedBatch || 2),
+        batch_cd: Number(selectedBatch || 16),
         sem_cd: Number(selectedSem || 3),
         section_cd: Number(selectedSection || 1),
         fdt: fromDate,
@@ -477,7 +547,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
               rollno: stud.stud_roll_no || stud.stud_reg_no,
               registration_no: stud.stud_reg_no,
               name: stud.stud_name,
-              course: stud.course_name || 'BCA',
+              course: stud.course_name || (String(selectedCourse) === '4' ? 'MBA' : 'BCA'),
               batch: stud.batch_name ? `${stud.batch_name} Batch` : '2025 Batch',
               semester: String(selectedSem),
               TotalPresentPercentage: stud.TotalPresentPercentage || '0.00%',
@@ -534,13 +604,14 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
           (targetName && s.name.toLowerCase() === targetName) ||
           (targetName && s.name.toLowerCase().includes(targetName))
       ) ||
-      (isStudentRole ? matrixStudents.find((s) => s.registration_no === '2025107990' || s.name.toLowerCase().includes('aafreen')) : null) ||
-      matrixStudents[0];
+      (isStudentRole ? null : matrixStudents[0]);
 
     if (stud) {
-      setSelectedStudentName(stud.name);
-      setSelectedStudentRoll(stud.rollno);
-      setSelectedStudentUid(stud.registration_no);
+      if (!isStudentRole) {
+        setSelectedStudentName(stud.name);
+        setSelectedStudentRoll(stud.rollno);
+        setSelectedStudentUid(stud.registration_no);
+      }
       setStudentTotalPct(stud.TotalPresentPercentage || '0.00%');
 
       const summaries: SubjectSummary[] = matrixSubjects.map((sub) => {
@@ -558,6 +629,21 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       });
 
       setSummaryData(summaries);
+    } else if (isStudentRole) {
+      // If student is not in matrix section list, keep subject list cards cleanly rendered with 0/pending
+      const summaries: SubjectSummary[] = matrixSubjects.map((sub) => ({
+        sub_cd: sub.sub_cd,
+        sub_name: sub.sub_name,
+        stud_reg_no: selectedStudentUid,
+        stud_name: selectedStudentName,
+        TotalLectures: 0,
+        PresentCount: 0,
+        AbsentCount: 0,
+        AttendancePercentage: 0,
+      }));
+      if (summaries.length > 0) {
+        setSummaryData(summaries);
+      }
     }
     setLoadingSummary(false);
   };
@@ -599,13 +685,13 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ddl_sub: subCd,
-          ddl_batch: selectedBatch || '2',
+          ddl_batch: selectedBatch || '16',
           colgcd: selectedCollege || '1',
-          coursecd: selectedCourse || '13',
+          coursecd: selectedCourse || '4',
           ddl_branch: selectedBranch || '1',
           sem_cd: selectedSem || '3',
           section_cd: selectedSection || '1',
-          uid: studReg || selectedStudentUid || '2025107990',
+          uid: studReg || selectedStudentUid || '',
         }),
       });
 

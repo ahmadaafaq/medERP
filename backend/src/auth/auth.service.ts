@@ -1223,12 +1223,13 @@ export class AuthService {
       gender: profile?.gender || null,
       qualification: profile?.qualification || null,
       experience: profile?.experience || null,
-      joining_date: profile?.joining_date || profile?.date_of_joining || null,
       bio: profile?.bio || null,
+      github_url: profile?.github_url || null,
+      github_followers: Number(profile?.github_followers) || 0,
       linkedin_url: profile?.linkedin_url || null,
-      linkedin_connections: profile?.linkedin_connections || '1,420',
-      repository_evaluated_count: profile?.repository_evaluated_count ?? 18,
-      followers_count: profile?.followers_count ?? 384,
+      linkedin_connections: Number(profile?.linkedin_connections) || 0,
+      repository_evaluated_count: profile?.repository_evaluated_count ?? (isStudent ? 0 : 18),
+      followers_count: isStudent ? ((Number(profile?.github_followers) || 0) + (Number(profile?.linkedin_connections) || 0)) : (profile?.followers_count ?? 384),
       research_interests: profile?.research_interests || [],
       profile,
       tenantSlug,
@@ -1240,7 +1241,9 @@ export class AuthService {
     const slug = tenantSlug || 'srms-cet-bareilly';
     const schema = `tenant_${slug}`;
     const role = (user?.role || dto?.role || '').toUpperCase();
-    const isStudent = role === 'STUDENT' || (!['FACULTY', 'HOD', 'CLERK', 'STAFF', 'COLLEGE_ADMIN', 'ADMIN', 'WARDEN'].includes(role) && (dto.registration_no || dto.rollno));
+    const hasStudentReg = Boolean(dto.student_reg_no || dto.registration_no || dto.rollno || user?.registration_no);
+    const hasEmpId = Boolean(dto.emp_id || dto.empId || user?.emp_id);
+    const isStudent = role === 'STUDENT' || (hasStudentReg && !hasEmpId) || (!['FACULTY', 'HOD', 'CLERK', 'STAFF', 'COLLEGE_ADMIN', 'ADMIN', 'WARDEN'].includes(role) && hasStudentReg);
 
     if (isStudent) {
       return this.updateStudentSocialProfile(slug, user, dto);
@@ -1271,57 +1274,52 @@ export class AuthService {
       params.push(dto.phone);
       fields.push(`phone = $${params.length}`);
     }
-    if (dto.designation !== undefined && dto.designation !== null) {
-      params.push(dto.designation);
-      fields.push(`designation = $${params.length}`);
+    if (dto.gender !== undefined && dto.gender !== null) {
+      params.push(dto.gender);
+      fields.push(`gender = $${params.length}`);
     }
     if (dto.qualification !== undefined && dto.qualification !== null) {
       params.push(dto.qualification);
       fields.push(`qualification = $${params.length}`);
     }
-    if (dto.specialization !== undefined && dto.specialization !== null) {
-      params.push(dto.specialization);
-      fields.push(`specialization = $${params.length}`);
-    }
     if (dto.experience !== undefined && dto.experience !== null) {
       params.push(dto.experience);
       fields.push(`experience = $${params.length}`);
     }
-    if (dto.gender !== undefined && dto.gender !== null) {
-      params.push(dto.gender);
-      fields.push(`gender = $${params.length}`);
+    if (dto.specialization !== undefined && dto.specialization !== null) {
+      params.push(dto.specialization);
+      fields.push(`specialization = $${params.length}`);
     }
-    if (dto.bio !== undefined) {
+    if (dto.joining_date !== undefined && dto.joining_date !== null) {
+      params.push(dto.joining_date);
+      fields.push(`joining_date = $${params.length}`);
+    }
+    if (dto.bio !== undefined && dto.bio !== null) {
       params.push(dto.bio);
       fields.push(`bio = $${params.length}`);
     }
-    if (dto.github_url !== undefined) {
+    if (dto.github_url !== undefined && dto.github_url !== null) {
       params.push(dto.github_url);
       fields.push(`github_url = $${params.length}`);
     }
-    if (dto.linkedin_url !== undefined) {
+    if (dto.linkedin_url !== undefined && dto.linkedin_url !== null) {
       params.push(dto.linkedin_url);
       fields.push(`linkedin_url = $${params.length}`);
     }
-    if (dto.linkedin_connections !== undefined) {
-      params.push(String(dto.linkedin_connections));
+    if (dto.linkedin_connections !== undefined && dto.linkedin_connections !== null) {
+      params.push(dto.linkedin_connections);
       fields.push(`linkedin_connections = $${params.length}`);
     }
-    if (dto.repository_evaluated_count !== undefined) {
+    if (dto.repository_evaluated_count !== undefined && dto.repository_evaluated_count !== null) {
       params.push(Number(dto.repository_evaluated_count) || 0);
       fields.push(`repository_evaluated_count = $${params.length}`);
     }
-    if (dto.followers_count !== undefined) {
+    if (dto.followers_count !== undefined && dto.followers_count !== null) {
       params.push(Number(dto.followers_count) || 0);
       fields.push(`followers_count = $${params.length}`);
     }
-    if (dto.research_interests !== undefined) {
-      const arr = Array.isArray(dto.research_interests) 
-        ? dto.research_interests 
-        : typeof dto.research_interests === 'string'
-          ? dto.research_interests.split(',').map((s: string) => s.trim()).filter(Boolean)
-          : [];
-      params.push(arr);
+    if (dto.research_interests !== undefined && dto.research_interests !== null) {
+      params.push(Array.isArray(dto.research_interests) ? dto.research_interests : [dto.research_interests]);
       fields.push(`research_interests = $${params.length}`);
     }
 
@@ -1329,40 +1327,47 @@ export class AuthService {
       return { success: true, message: 'No fields to update' };
     }
 
-    params.push(userId);
-    const uIdx = params.length;
     params.push(empId);
-    const empIdx = params.length;
-    params.push(email);
-    const emailIdx = params.length;
-    params.push(emailPrefix);
-    const prefixIdx = params.length;
+    const whereIdx = params.length;
 
     const sql = `
-      UPDATE "${schema}".faculty
+      UPDATE "${schema}".faculty 
       SET ${fields.join(', ')}, updated_at = NOW()
-      WHERE (user_id::text = $${uIdx}::text)
-         OR (emp_id IS NOT NULL AND LOWER(emp_id) = LOWER($${empIdx}))
-         OR (email IS NOT NULL AND LOWER(email) = LOWER($${emailIdx}))
-         OR (emp_id IS NOT NULL AND LOWER(emp_id) = LOWER($${prefixIdx}))
+      WHERE emp_id = $${whereIdx} OR user_id = $${whereIdx} OR user_id = (SELECT id FROM "${schema}".users WHERE email ILIKE '${emailPrefix}%' LIMIT 1)
       RETURNING *
     `;
 
-    const updated = await this.ds.query(sql, params).catch((err: any) => {
-      this.logger.error(`Error updating faculty profile: ${err.message}`);
-      return [];
-    });
+    const updated = await this.ds.query(sql, params).catch(() => []);
 
-    // Auto sync updated avatar and name to chat groups and historical messages
-    const newAvatar = dto.photo_url || dto.photoUrl;
-    if (newAvatar !== undefined) {
+    // Also update users.name / avatar if photo or name updated
+    const userUpdates: string[] = [];
+    const userParams: any[] = [];
+    if (dto.name) {
+      userParams.push(dto.name);
+      userUpdates.push(`name = $${userParams.length}`);
+    }
+    if (dto.photo_url || dto.photoUrl) {
+      userParams.push(dto.photo_url || dto.photoUrl);
+      userUpdates.push(`avatar_url = $${userParams.length}`);
+    }
+    if (userUpdates.length > 0) {
+      userParams.push(userId);
+      await this.ds.query(
+        `UPDATE "${schema}".users SET ${userUpdates.join(', ')}, updated_at = NOW() WHERE id = $${userParams.length} OR email ILIKE '${emailPrefix}%'`,
+        userParams,
+      ).catch(() => null);
+    }
+
+    // Auto sync updated avatar to chat groups and messages
+    const facultyAvatar = dto.photo_url || dto.photoUrl;
+    if (facultyAvatar !== undefined) {
       await this.ds.query(
         `UPDATE "${schema}".chat_group_members 
          SET avatar_url = $1 
          WHERE user_id::text = $2::text 
             OR user_id::text = $3::text 
-            OR user_id::text = (SELECT id::text FROM "${schema}".users WHERE email = $4 LIMIT 1)`,
-        [newAvatar || null, userId, empId, email],
+            OR user_id::text = (SELECT user_id::text FROM "${schema}".faculty WHERE emp_id = $2 LIMIT 1)`,
+        [facultyAvatar || null, empId, userId],
       ).catch(() => null);
 
       await this.ds.query(
@@ -1370,8 +1375,8 @@ export class AuthService {
          SET sender_avatar = $1 
          WHERE sender_id::text = $2::text 
             OR sender_id::text = $3::text 
-            OR sender_name = $4`,
-        [newAvatar || null, userId, empId, dto.name || ''],
+            OR sender_id::text = (SELECT user_id::text FROM "${schema}".faculty WHERE emp_id = $2 LIMIT 1)`,
+        [facultyAvatar || null, empId, userId],
       ).catch(() => null);
     }
 
@@ -1386,12 +1391,19 @@ export class AuthService {
     const slug = tenantSlug || 'srms-cet-bareilly';
     const schema = `tenant_${slug}`;
 
-    const regNo = dto.student_reg_no || dto.registration_no || user?.registration_no || user?.username || user?.rollno || '2025107990';
-    const userId = user?.sub || user?.id;
+    const studentId = String(dto.student_id || dto.studentId || dto.id || '').trim();
+    const regNo = String(dto.student_reg_no || dto.registration_no || user?.registration_no || '').trim();
+    const rollNo = String(dto.rollno || dto.roll_no || user?.rollno || '').trim();
+    const userId = String(user?.sub || user?.id || dto.user_id || dto.userId || '').trim();
+    const email = String(user?.email || dto.email || '').trim();
 
     const fields: string[] = [];
     const params: any[] = [];
 
+    if (dto.name !== undefined && dto.name !== null) {
+      params.push(dto.name);
+      fields.push(`name = $${params.length}`);
+    }
     if (dto.photo_url !== undefined || dto.photoUrl !== undefined) {
       params.push(dto.photo_url || dto.photoUrl || null);
       fields.push(`photo_url = $${params.length}`);
@@ -1404,20 +1416,24 @@ export class AuthService {
       params.push(dto.bio);
       fields.push(`bio = $${params.length}`);
     }
-    if (dto.github_url !== undefined) {
-      params.push(dto.github_url);
-      fields.push(`github_url = $${params.length}`);
-    }
-    if (dto.github_followers !== undefined) {
-      params.push(Number(dto.github_followers) || 0);
+    const ghFollowers = dto.github_followers ?? dto.followers ?? dto.githubFollowers;
+    if (ghFollowers !== undefined && ghFollowers !== null) {
+      params.push(String(ghFollowers));
       fields.push(`github_followers = $${params.length}`);
     }
-    if (dto.linkedin_url !== undefined) {
-      params.push(dto.linkedin_url);
+    const ghUrl = dto.github_url ?? dto.githubUrl ?? dto.github;
+    if (ghUrl !== undefined && ghUrl !== null) {
+      params.push(String(ghUrl).trim());
+      fields.push(`github_url = $${params.length}`);
+    }
+    const liUrl = dto.linkedin_url ?? dto.linkedinUrl ?? dto.linkedin;
+    if (liUrl !== undefined && liUrl !== null) {
+      params.push(String(liUrl).trim());
       fields.push(`linkedin_url = $${params.length}`);
     }
-    if (dto.linkedin_connections !== undefined) {
-      params.push(Number(dto.linkedin_connections) || 0);
+    const liConn = dto.linkedin_connections ?? dto.connections ?? dto.linkedinConnections;
+    if (liConn !== undefined && liConn !== null) {
+      params.push(String(liConn));
       fields.push(`linkedin_connections = $${params.length}`);
     }
 
@@ -1425,17 +1441,31 @@ export class AuthService {
       return { success: true, message: 'No fields to update' };
     }
 
-    params.push(regNo);
-    const whereIdx = params.length;
+    params.push(studentId || 'NO_STUDENT_ID');
+    const sidIdx = params.length;
+    params.push(userId || 'NO_USER');
+    const userIdx = params.length;
+    params.push(rollNo || 'NO_ROLL');
+    const rollIdx = params.length;
+    params.push(regNo || 'NO_REG');
+    const regIdx = params.length;
 
     const sql = `
       UPDATE "${schema}".students 
-      SET ${fields.join(', ')}, updated_at = NOW()
-      WHERE registration_no = $${whereIdx} OR rollno = $${whereIdx} OR user_id::text = (SELECT id::text FROM "${schema}".users WHERE id::text = $${whereIdx} LIMIT 1)
+      SET ${fields.join(', ')}
+      WHERE id::text = $${sidIdx}
+         OR user_id::text = $${userIdx}
+         OR rollno = $${rollIdx}
+         OR rollno = $${regIdx}
+         OR registration_no = $${regIdx}
+         OR registration_no = $${rollIdx}
       RETURNING id, name, registration_no, rollno, photo_url, cover_url, bio, github_url, github_followers, linkedin_url, linkedin_connections
     `;
 
-    const updated = await this.ds.query(sql, params).catch(() => []);
+    const updated = await this.ds.query(sql, params).catch((err: any) => {
+      this.logger.error(`Error updating student profile: ${err.message}`);
+      return [];
+    });
 
     // Auto sync updated student avatar to chat groups and messages
     const studentAvatar = dto.photo_url || dto.photoUrl;

@@ -50,9 +50,15 @@ export default function StudentRepositoryPage() {
   const [techStackInput, setTechStackInput] = useState('');
   const [screenshots, setScreenshots] = useState<string[]>([]);
   const [newImageUrl, setNewImageUrl] = useState('');
+  
+  // Academic Hierarchy States
+  const [collegesList, setCollegesList] = useState<any[]>([]);
   const [colgCd, setColgCd] = useState('1');
+  const [coursesList, setCoursesList] = useState<any[]>([]);
   const [courseCd, setCourseCd] = useState('13');
-  const [branchCd, setBranchCd] = useState('1301');
+  const [branchesList, setBranchesList] = useState<any[]>([]);
+  const [branchCd, setBranchCd] = useState('1');
+  const [batchesList, setBatchesList] = useState<any[]>([]);
   const [batchCd, setBatchCd] = useState('2025');
   const [semCd, setSemCd] = useState('3');
   const [formError, setFormError] = useState('');
@@ -63,13 +69,177 @@ export default function StudentRepositoryPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const getTenantSlug = () => {
+    if (typeof window === 'undefined') return 'srms-cet-bareilly';
+    const slug =
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('colg_slug') ||
+      'srms-cet-bareilly';
+    return (slug || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '');
+  };
+
+  const fetchColleges = async () => {
+    try {
+      const res = await fetch('/api/srms/colleges');
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map((c: any) => ({
+            code: String(c.colg_cd || c.code || '1'),
+            name: c.name || c.colg_name || 'SRMS CET Bareilly',
+            slug: c.slug || 'srms-cet-bareilly',
+          }));
+        }
+      }
+    } catch {}
+    return [{ code: '1', name: 'SRMS College of Engineering & Technology, Bareilly', slug: 'srms-cet-bareilly' }];
+  };
+
+  const fetchCoursesForCollege = async (colgcd: string) => {
+    const cd = colgcd || '1';
+    const slug = getTenantSlug();
+    try {
+      const res = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((c: any) => ({
+            code: String(c.course_cd || c.code || '1'),
+            name: c.course_name || c.name || `Course ${c.course_cd}`,
+            colg_cd: String(c.colg_cd || cd),
+          }));
+          setCoursesList(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
+    setCoursesList([]);
+    return [];
+  };
+
+  const fetchBranchesForCourse = async (colgcd: string, coursecd: string, currentCoursesList?: any[]) => {
+    const cd = colgcd || '1';
+    const crs = coursecd || '13';
+    const slug = getTenantSlug();
+    try {
+      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const courseListToUse = currentCoursesList || coursesList;
+          const courseObj = courseListToUse.find((c) => String(c.code) === String(crs));
+          const courseName = courseObj?.name || 'BCA';
+          const mapped = list.map((b: any) => {
+            const rawName = (b.branch_name || b.name || '').trim();
+            const validName = (rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE')
+              ? rawName
+              : `${b.course_name || courseName} General`;
+            return {
+              id: String(b.branch_cd || b.code || '1'),
+              code: String(b.branch_cd || b.code || '1'),
+              branch_cd: String(b.branch_cd || b.code || '1'),
+              name: validName,
+              course_cd: String(b.course_cd || crs),
+              colg_cd: String(b.colg_cd || cd),
+            };
+          });
+          setBranchesList(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
+    setBranchesList([]);
+    return [];
+  };
+
+  const fetchBatchesForCourse = async (colgcd: string, coursecd: string) => {
+    const cd = colgcd || '1';
+    const crs = coursecd || '13';
+    const slug = getTenantSlug();
+    try {
+      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((b: any) => ({
+            code: String(b.batch_cd || b.code || b.batch_name || '1'),
+            name: String(b.batch_name || b.name || b.year || b.batch_cd),
+            year: Number(b.batch_name || b.year || 2025),
+            course_cd: String(b.course_cd || crs),
+            colg_cd: String(b.colg_cd || cd),
+          }));
+          setBatchesList(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
+    setBatchesList([]);
+    return [];
+  };
+
+  const handleCourseChange = async (newCourseCd: string) => {
+    setCourseCd(newCourseCd);
+    const branches = await fetchBranchesForCourse(colgCd, newCourseCd, coursesList);
+    const batches = await fetchBatchesForCourse(colgCd, newCourseCd);
+    const defaultBranch = branches[0]?.code || '1';
+    const defaultBatch = batches.find((b) => b.name === '2025' || b.year === 2025)?.code || batches[0]?.code || '2025';
+    setBranchCd(defaultBranch);
+    setBatchCd(defaultBatch);
+  };
+
+  const initAcademicHierarchy = async () => {
+    const userColg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+    const userSlug = getTenantSlug();
+    const { studentCourse, studentBranch, studentBatch, studentSem } = getStudentIdentity();
+
+    const allColleges = await fetchColleges();
+    const myCol = allColleges.find(
+      (c: any) => String(c.colg_cd || c.code) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug
+    ) || {
+      code: userColg,
+      name: 'SRMS College of Engineering & Technology, Bareilly',
+      slug: userSlug,
+    };
+    setCollegesList([myCol]);
+    setColgCd(myCol.code);
+
+    const courses = await fetchCoursesForCollege(myCol.code);
+    const initialCourseCd = (studentCourse && courses.some((c) => String(c.code) === String(studentCourse)))
+      ? studentCourse
+      : (courses.find((c) => c.code === '13' || c.name === 'BCA')?.code || courses[0]?.code || '13');
+    setCourseCd(initialCourseCd);
+
+    const branches = await fetchBranchesForCourse(myCol.code, initialCourseCd, courses);
+    const initialBranchCd = (studentBranch && branches.some((b) => String(b.code) === String(studentBranch)))
+      ? studentBranch
+      : (branches[0]?.code || '1');
+    setBranchCd(initialBranchCd);
+
+    const batches = await fetchBatchesForCourse(myCol.code, initialCourseCd);
+    const initialBatchCd = (studentBatch && batches.some((b) => String(b.code) === String(studentBatch)))
+      ? studentBatch
+      : (batches.find((b) => b.name === '2025' || b.year === 2025)?.code || batches[0]?.code || '2025');
+    setBatchCd(initialBatchCd);
+
+    if (studentSem) {
+      setSemCd(studentSem.replace(/^Sem\s*/i, '').replace(/^Semester\s*/i, ''));
+    }
+  };
+
   useEffect(() => {
     fetchRepositories();
+    initAcademicHierarchy();
   }, []);
 
   const getStudentIdentity = () => {
     let regNo = '';
     let name = '';
+    let studentCourse = '';
+    let studentBranch = '1';
+    let studentBatch = '2025';
+    let studentSem = '3';
+
     if (typeof window !== 'undefined') {
       try {
         const cachedUserStr = localStorage.getItem('user');
@@ -85,10 +255,14 @@ export default function StudentRepositoryPage() {
             cached?.rollno ||
             '';
           name = cached?.name || p.name || cached?.student_name || '';
+          studentCourse = String(p.course_cd || cached?.courseCd || cached?.course_cd || '');
+          studentBranch = String(p.branch_cd || cached?.branchCd || cached?.branch_cd || '1');
+          studentBatch = String(p.batch_cd || cached?.batchCd || cached?.batch_cd || '2025');
+          studentSem = String(p.sem_cd || cached?.semCd || cached?.semester || '3');
         }
       } catch {}
     }
-    return { regNo, name };
+    return { regNo, name, studentCourse, studentBranch, studentBatch, studentSem };
   };
 
   const fetchRepositories = async () => {
@@ -508,295 +682,326 @@ export default function StudentRepositoryPage() {
             </div>
           )}
 
-          {/* Submit / Edit Repository Modal */}
-          {showSubmitModal && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-              <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] max-w-xl w-full p-6 shadow-2xl space-y-5 relative my-8">
-                <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-                  <h3 className="text-lg font-black text-[#1B1E28] dark:text-white flex items-center gap-2">
-                    <FolderGit2 className="w-5 h-5 text-[#5B4BFF]" />
-                    <span>{editingRepo ? 'Edit Repository (Pending Review)' : 'Submit New Repository'}</span>
+        </main>
+      </div>
+
+      {/* Submit / Edit Repository Modal — Spacious & Premium */}
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[28px] max-w-2xl sm:max-w-3xl w-full p-6 sm:p-7 shadow-2xl space-y-4.5 relative max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#2D2575] to-[#5B4BFF] text-white font-black text-lg flex items-center justify-center shrink-0 shadow-md">
+                  <FolderGit2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
+                    {editingRepo ? 'Edit Repository (Pending Review)' : 'Submit New Project Repository'}
                   </h3>
-                  <button
-                    onClick={() => setShowSubmitModal(false)}
-                    className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-sm font-bold cursor-pointer"
-                  >
-                    ✕
-                  </button>
+                  <p className="text-xs text-slate-500">
+                    Provide project details, GitHub codebase repository link, and UI screenshots for faculty review.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSubmitModal(false)}
+                className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Academic Scope & Program Context */}
+              {!editingRepo && (
+                <div className="bg-[#F6F8FC] dark:bg-slate-800/70 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-1.5">
+                      <span>🎯</span> Academic Scope &amp; Program Context
+                    </h4>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#5B4BFF]/10 text-[#5B4BFF] border border-[#5B4BFF]/20">
+                      Tenant Scoped
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        🏛️ College Campus *
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={colgCd}
+                          disabled
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-xs font-bold text-slate-900 dark:text-white cursor-not-allowed appearance-none"
+                        >
+                          {collegesList.map((colg, idx) => (
+                            <option key={colg.code || idx} value={colg.code}>
+                              {colg.name}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center gap-1">
+                          <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
+                            🔒 Locked
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        🎓 Course Program * <span className="text-[#5B4BFF]">({coursesList.length})</span>
+                      </label>
+                      <select
+                        value={courseCd}
+                        onChange={(e) => handleCourseChange(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                      >
+                        {coursesList.map((crs, idx) => (
+                          <option key={crs.code || idx} value={crs.code}>
+                            [#{crs.code}] {crs.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        🏢 Branch / Dept * <span className="text-[#5B4BFF]">({branchesList.length})</span>
+                      </label>
+                      <select
+                        value={branchCd}
+                        onChange={(e) => setBranchCd(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                      >
+                        {branchesList.map((br: any, idx: number) => (
+                          <option key={br.code || idx} value={br.code}>
+                            [#{br.code}] {br.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        👥 Batch * <span className="text-[#5B4BFF]">({batchesList.length})</span>
+                      </label>
+                      <select
+                        value={batchCd}
+                        onChange={(e) => setBatchCd(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                      >
+                        {batchesList.map((batch: any, idx: number) => (
+                          <option key={batch.code || idx} value={batch.code}>
+                            [#{batch.code}] Batch {batch.name || batch.year} {batch.year && batch.name !== String(batch.year) ? `(${batch.year})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        📖 Semester *
+                      </label>
+                      <select
+                        value={semCd}
+                        onChange={(e) => setSemCd(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                          <option key={sem} value={String(sem)}>
+                            [#{sem}] Semester {sem}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Project Title & Repository Link Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Project Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g. E-Commerce Multi-Vendor Microservices Architecture"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    required
+                  />
                 </div>
 
-                {formError && (
-                  <div className="bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 text-xs p-3 rounded-xl font-bold">
-                    {formError}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Repository URL (GitHub / GitLab / Live Deployment) *
+                  </label>
+                  <input
+                    type="url"
+                    value={repoLink}
+                    onChange={(e) => setRepoLink(e.target.value)}
+                    placeholder="https://github.com/username/project-name"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Tech Stack Tags */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Tech Stack Tags (Comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={techStackInput}
+                  onChange={(e) => setTechStackInput(e.target.value)}
+                  placeholder="e.g. Next.js, TypeScript, PostgreSQL, NestJS, TailwindCSS, Docker"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                />
+              </div>
+
+              {/* Project Description */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Project Description *
+                </label>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Briefly describe what this software accomplishes, its modules, database schema, and technical highlights..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                  required
+                />
+              </div>
+
+              {/* Project Screenshots & Media Upload Section */}
+              <div className="bg-[#F6F8FC] dark:bg-slate-800/70 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-black text-[#5B4BFF] uppercase tracking-wider">
+                    📸 Project UI Screenshots &amp; Diagrams (Optional)
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-bold">
+                    {screenshots.length} uploaded
+                  </span>
+                </div>
+
+                {/* Screenshot Preview Grid */}
+                {screenshots.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 pt-1">
+                    {screenshots.map((shot, idx) => (
+                      <div key={idx} className="relative group rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 aspect-video bg-black/40">
+                        <img src={shot} alt="preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveScreenshot(idx)}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity shadow-md cursor-pointer"
+                          title="Remove image"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Academic & Program Context */}
-                  {!editingRepo && (
-                    <div className="bg-[#F6F8FC] dark:bg-slate-800/70 p-3.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 space-y-3">
-                      <h4 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider">
-                        Academic Scope &amp; Program Context
-                      </h4>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            College Campus *
-                          </label>
-                          <select
-                            value={colgCd}
-                            onChange={(e) => setColgCd(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-[#1B1E28] dark:text-white"
-                          >
-                            <option value="1">SRMS CET, Bareilly</option>
-                            <option value="2">SRMS CETR, Bareilly</option>
-                            <option value="3">SRMS IMS, Bareilly</option>
-                          </select>
-                        </div>
+                {/* Upload Buttons */}
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[#5B4BFF] hover:bg-[#5B4BFF]/10 flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-xs"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    <span>Upload Images from Device</span>
+                  </button>
 
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Course Program *
-                          </label>
-                          <select
-                            value={courseCd}
-                            onChange={(e) => setCourseCd(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-[#1B1E28] dark:text-white"
-                          >
-                            <option value="13">BCA</option>
-                            <option value="1">B.Tech</option>
-                            <option value="2">MCA</option>
-                            <option value="3">M.Tech</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Branch / Dept *
-                          </label>
-                          <select
-                            value={branchCd}
-                            onChange={(e) => setBranchCd(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-[#1B1E28] dark:text-white"
-                          >
-                            <option value="1301">BCA General</option>
-                            <option value="101">CSE</option>
-                            <option value="102">IT</option>
-                            <option value="103">ECE</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Batch *
-                          </label>
-                          <select
-                            value={batchCd}
-                            onChange={(e) => setBatchCd(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-[#1B1E28] dark:text-white"
-                          >
-                            <option value="2025">Batch 2025</option>
-                            <option value="2024">Batch 2024</option>
-                            <option value="2023">Batch 2023</option>
-                            <option value="2022">Batch 2022</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Semester *
-                          </label>
-                          <select
-                            value={semCd}
-                            onChange={(e) => setSemCd(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-[#1B1E28] dark:text-white"
-                          >
-                            <option value="1">Sem 1</option>
-                            <option value="2">Sem 2</option>
-                            <option value="3">Sem 3</option>
-                            <option value="4">Sem 4</option>
-                            <option value="5">Sem 5</option>
-                            <option value="6">Sem 6</option>
-                            <option value="7">Sem 7</option>
-                            <option value="8">Sem 8</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-xs font-bold text-[#1B1E28] dark:text-slate-200 mb-1">
-                      Project Title *
-                    </label>
-                    <input
-                      type="text"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="e.g. E-Commerce Multi-Vendor Microservices Architecture"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-[#1B1E28] dark:text-slate-200 mb-1">
-                      Repository URL (GitHub / GitLab / Live Deployment) *
-                    </label>
+                  <div className="flex-1 flex gap-1.5">
                     <input
                       type="url"
-                      value={repoLink}
-                      onChange={(e) => setRepoLink(e.target.value)}
-                      placeholder="https://github.com/username/project-name"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                      required
+                      value={newImageUrl}
+                      onChange={(e) => setNewImageUrl(e.target.value)}
+                      placeholder="Or paste screenshot image URL..."
+                      className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-[#1B1E28] dark:text-slate-200 mb-1">
-                      Tech Stack Tags (Comma separated)
-                    </label>
-                    <input
-                      type="text"
-                      value={techStackInput}
-                      onChange={(e) => setTechStackInput(e.target.value)}
-                      placeholder="e.g. Next.js, TypeScript, PostgreSQL, NestJS, TailwindCSS, Docker"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-[#1B1E28] dark:text-slate-200 mb-1">
-                      Project Description *
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Briefly describe what this software accomplishes, its modules, database schema, and technical highlights..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-medium text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                      required
-                    />
-                  </div>
-
-                  {/* Project Screenshots & Media Upload Section */}
-                  <div className="bg-[#F6F8FC] dark:bg-slate-800/70 p-4 rounded-xl border border-[#E7EAF3] dark:border-slate-700 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-black text-[#5B4BFF] uppercase tracking-wider">
-                        📸 Project UI Screenshots &amp; Diagrams (Optional)
-                      </label>
-                      <span className="text-[10px] text-slate-400 font-bold">
-                        {screenshots.length} uploaded
-                      </span>
-                    </div>
-
-                    {/* Screenshot Preview Grid */}
-                    {screenshots.length > 0 && (
-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 pt-1">
-                        {screenshots.map((shot, idx) => (
-                          <div key={idx} className="relative group rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 aspect-video bg-black/40">
-                            <img src={shot} alt="preview" className="w-full h-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveScreenshot(idx)}
-                              className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity shadow-md cursor-pointer"
-                              title="Remove image"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Upload Buttons */}
-                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileUpload}
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[#5B4BFF] hover:bg-[#5B4BFF]/10 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <ImageIcon className="w-4 h-4" />
-                        <span>Upload Images from Device</span>
-                      </button>
-
-                      <div className="flex-1 flex gap-1.5">
-                        <input
-                          type="url"
-                          value={newImageUrl}
-                          onChange={(e) => setNewImageUrl(e.target.value)}
-                          placeholder="Or paste screenshot image URL..."
-                          className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-[#1B1E28] dark:text-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleAddImageUrl}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#5B4BFF] text-white hover:bg-indigo-600 cursor-pointer"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-2">
                     <button
                       type="button"
-                      onClick={() => setShowSubmitModal(false)}
-                      className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                      onClick={handleAddImageUrl}
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-[#5B4BFF] text-white hover:bg-indigo-600 cursor-pointer shadow-xs shrink-0"
                     >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#5B4BFF] hover:bg-indigo-600 text-white shadow-md shadow-indigo-500/20 disabled:opacity-50 cursor-pointer"
-                    >
-                      {submitting ? 'Saving Project...' : editingRepo ? 'Update Repository' : 'Submit Repository'}
+                      Add
                     </button>
                   </div>
-                </form>
+                </div>
               </div>
-            </div>
-          )}
 
-          {/* Full Image Preview Lightbox */}
-          {previewImage && (
-            <div
-              className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
-              onClick={() => setPreviewImage(null)}
-            >
-              <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center">
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setPreviewImage(null)}
-                  className="absolute -top-10 right-0 text-white hover:text-orange-400 font-black text-xl bg-black/40 p-2 rounded-full cursor-pointer"
+                  onClick={() => setShowSubmitModal(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
                 >
-                  <X className="w-6 h-6" />
+                  Cancel
                 </button>
-                <img
-                  src={previewImage}
-                  alt="Project Screenshot Full Preview"
-                  className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl border border-white/20"
-                />
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#F36C21] hover:bg-orange-600 text-white shadow-md shadow-orange-500/20 disabled:opacity-50 cursor-pointer transition-all"
+                >
+                  {submitting ? 'Saving Project...' : editingRepo ? 'Update Repository' : 'Submit Repository'}
+                </button>
               </div>
-            </div>
-          )}
+            </form>
+          </div>
+        </div>
+      )}
 
-        </main>
-      </div>
+      {/* Full Image Preview Lightbox */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-10 right-0 text-white hover:text-orange-400 font-black text-xl bg-black/40 p-2 rounded-full cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={previewImage}
+              alt="Project Screenshot Full Preview"
+              className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl border border-white/20"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
