@@ -21,11 +21,11 @@ import { TenantSchemaService } from './tenant-schema.service';
         logging: config.get<string>('app.env') === 'development' ? ['error', 'warn'] : ['error'],
         // Connection pool
         extra: {
-          max: 20,
-          min: 5,
+          max: 25,
+          min: 2,
           idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 5000,
-          statement_timeout: 30000,
+          connectionTimeoutMillis: 30000,
+          statement_timeout: 45000,
         },
         // Search path defaults to public; per-request schema is set via SET search_path
         schema: 'public',

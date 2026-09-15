@@ -43,19 +43,28 @@ export class InternshipsController {
     const regNo =
       dto?.student_reg_no ||
       req.headers?.['x-user-reg-no'] ||
-      req.headers?.['x-user-id'] ||
+      req.headers?.['x-student-reg-no'] ||
       tokenUser?.registration_no ||
-      tokenUser?.username ||
+      tokenUser?.registrationNo ||
+      req.headers?.['x-user-rollno'] ||
       tokenUser?.rollno ||
-      '2025107666';
+      tokenUser?.username ||
+      '';
+
+    const userId =
+      req.headers?.['x-user-id'] ||
+      tokenUser?.id ||
+      tokenUser?.sub ||
+      regNo;
+
     const role = (dto?.role || req.headers?.['x-user-role'] || tokenUser?.role || 'STUDENT').toUpperCase();
-    const name = dto?.student_name || req.headers?.['x-user-name'] || tokenUser?.name || tokenUser?.first_name || 'JASPREET SINGH';
+    const name = dto?.student_name || req.headers?.['x-user-name'] || tokenUser?.name || tokenUser?.first_name || '';
 
     return {
-      id: tokenUser?.id || tokenUser?.sub || regNo,
+      id: userId,
       registration_no: regNo,
-      username: regNo,
-      rollno: regNo,
+      username: tokenUser?.username || regNo,
+      rollno: req.headers?.['x-user-rollno'] || tokenUser?.rollno || regNo,
       role,
       name,
     };

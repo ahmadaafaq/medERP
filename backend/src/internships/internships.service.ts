@@ -147,13 +147,19 @@ export class InternshipsService {
 
       const certColumns = [
         `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS applicant_name VARCHAR(255)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS student_name VARCHAR(255)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS student_reg_no VARCHAR(100)`,
         `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS internship_name VARCHAR(255)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS program_title VARCHAR(255)`,
         `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS organization_name VARCHAR(255)`,
         `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS course VARCHAR(100)`,
         `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS batch VARCHAR(100)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS duration VARCHAR(50)`,
+        `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS approved_by VARCHAR(100) DEFAULT 'Prof. (Dr.) Prabhakar Gupta'`,
         `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS pdf_url TEXT`,
         `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS external_cert_url TEXT`,
         `ALTER TABLE "${schema}".certificates ADD COLUMN IF NOT EXISTS cert_source VARCHAR(50) DEFAULT 'in_house'`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS certificates_app_id_idx ON "${schema}".certificates (application_id)`,
       ];
 
       for (const colSql of certColumns) {
@@ -285,22 +291,47 @@ export class InternshipsService {
     const programs = await this.tenantSchemaService.queryInTenant(slug, sql, params);
 
     // If student, attach their specific application status
-    const regNo = user?.registration_no || user?.rollno || user?.username || user?.id || '';
-    if (regNo) {
+    const candidateIdentifiers = new Set<string>();
+    if (user?.registration_no) candidateIdentifiers.add(String(user.registration_no).trim());
+    if (user?.rollno) candidateIdentifiers.add(String(user.rollno).trim());
+    if (user?.username) candidateIdentifiers.add(String(user.username).trim());
+    if (user?.id) candidateIdentifiers.add(String(user.id).trim());
+
+    if (user?.id || user?.registration_no || user?.rollno) {
+      try {
+        const sRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, registration_no, rollno, user_id FROM "${schema}".students 
+           WHERE user_id::text = $1 OR id::text = $1 OR registration_no = $2 OR rollno = $2 LIMIT 1`,
+          [user?.id ? String(user.id) : '', user?.registration_no || user?.rollno || ''],
+        );
+        if (sRows[0]) {
+          if (sRows[0].registration_no) candidateIdentifiers.add(String(sRows[0].registration_no).trim());
+          if (sRows[0].rollno) candidateIdentifiers.add(String(sRows[0].rollno).trim());
+          if (sRows[0].id) candidateIdentifiers.add(String(sRows[0].id).trim());
+          if (sRows[0].user_id) candidateIdentifiers.add(String(sRows[0].user_id).trim());
+        }
+      } catch {}
+    }
+
+    const idsArray = Array.from(candidateIdentifiers).filter(Boolean);
+    if (idsArray.length > 0) {
       const myApps = await this.tenantSchemaService.queryInTenant(
         slug,
         `SELECT a.*, c.certificate_no, c.issued_date, c.approved_by, c.external_cert_url AS cert_external_url, c.cert_source AS certificate_source
          FROM "${schema}".internship_applications a
          LEFT JOIN "${schema}".certificates c ON a.id::text = c.application_id::text
-         WHERE a.student_reg_no = $1 OR a.student_id::text = $1 OR a.student_id::text = $2 OR a.student_reg_no = $2`,
-        [regNo, user?.id || regNo],
+         WHERE a.student_reg_no = ANY($1) 
+            OR a.student_id::text = ANY($1)
+            OR ($2 != '' AND LOWER(a.student_name) = LOWER($2))`,
+        [idsArray, user?.name || ''],
       );
 
-      const appMap = new Map(myApps.map((a: any) => [a.program_id, a]));
+      const appMap = new Map(myApps.map((a: any) => [String(a.program_id).toLowerCase(), a]));
 
       return programs.map((p: any) => ({
         ...p,
-        my_application: appMap.get(p.id) || null,
+        my_application: appMap.get(String(p.id).toLowerCase()) || null,
       }));
     }
 
@@ -583,13 +614,14 @@ export class InternshipsService {
               crs.name AS course_full_name,
               bth.name AS batch_full_name
        FROM "${schema}".internship_applications a
-       JOIN "${schema}".internship_programs p ON a.program_id = p.id
+       JOIN "${schema}".internship_programs p ON a.program_id::text = p.id::text
        LEFT JOIN "${schema}".students s ON (
          a.student_reg_no = s.registration_no 
          OR a.student_reg_no = s.rollno 
-         OR a.student_id = s.registration_no 
-         OR a.student_id = s.rollno
-         OR a.student_id = s.user_id::text
+         OR a.student_id::text = s.registration_no 
+         OR a.student_id::text = s.rollno
+         OR a.student_id::text = s.user_id::text
+         OR a.student_id::text = s.id::text
        )
        LEFT JOIN "${schema}".courses crs ON (
          s.course_cd = crs.code 
@@ -600,10 +632,10 @@ export class InternshipsService {
        LEFT JOIN "${schema}".batches bth ON (
          s.batch_cd = bth.batch_cd 
          OR s.batch_cd = bth.code 
-         OR s.batch_id = bth.id 
+         OR s.batch_id::text = bth.id::text 
          OR a.batch_cd = bth.batch_cd
        )
-       WHERE a.id = $1`,
+       WHERE a.id::text = $1::text`,
       [applicationId],
     );
 
@@ -720,7 +752,8 @@ export class InternshipsService {
   async getCertificate(tenantSlug: string, applicationId: string, user: any) {
     const slug = this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${slug}`;
-    const regNo = user?.registration_no || user?.rollno || user?.username;
+    const regNo = user?.registration_no || user?.rollno || user?.username || '';
+    const userId = user?.id || '';
 
     const apps = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -733,9 +766,9 @@ export class InternshipsService {
               c.organization_name AS cert_org_name,
               c.course AS cert_course, c.batch AS cert_batch
        FROM "${schema}".internship_applications a
-       JOIN "${schema}".internship_programs p ON a.program_id = p.id
-       LEFT JOIN "${schema}".certificates c ON a.id = c.application_id
-       WHERE a.id = $1`,
+       JOIN "${schema}".internship_programs p ON a.program_id::text = p.id::text
+       LEFT JOIN "${schema}".certificates c ON a.id::text = c.application_id::text
+       WHERE a.id::text = $1::text`,
       [applicationId],
     );
 
@@ -747,8 +780,36 @@ export class InternshipsService {
     const targetRegNo = app.student_reg_no || regNo || '2025107990';
 
     // Verify ownership if student
-    if (user?.role === 'STUDENT' && regNo && app.student_reg_no !== regNo && app.student_id !== regNo) {
-      throw new ForbiddenException('You are not authorized to view another student\'s certificate.');
+    if (user?.role === 'STUDENT') {
+      const isOwner =
+        (regNo && (app.student_reg_no === regNo || app.student_id === regNo)) ||
+        (userId && (app.student_id === userId || app.student_reg_no === userId));
+
+      if (!isOwner) {
+        const stRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, registration_no, rollno, user_id FROM "${schema}".students
+           WHERE user_id::text = $1 OR id::text = $1 OR registration_no = $2 OR rollno = $2
+           LIMIT 1`,
+          [userId || '', regNo || ''],
+        ).catch(() => []);
+
+        if (stRows[0]) {
+          const st = stRows[0];
+          const matchesStudent =
+            app.student_reg_no === st.registration_no ||
+            app.student_reg_no === st.rollno ||
+            app.student_id === st.registration_no ||
+            app.student_id === st.rollno ||
+            app.student_id === String(st.id) ||
+            app.student_id === String(st.user_id);
+          if (!matchesStudent) {
+            throw new ForbiddenException("You are not authorized to view another student's certificate.");
+          }
+        } else if (regNo && app.student_reg_no !== regNo && app.student_id !== regNo) {
+          throw new ForbiddenException("You are not authorized to view another student's certificate.");
+        }
+      }
     }
 
     // Gate 1: Must be marked completed
@@ -769,9 +830,9 @@ export class InternshipsService {
               crs.name AS course_full_name,
               bth.name AS batch_full_name
        FROM "${schema}".students s
-       LEFT JOIN "${schema}".student_admissions sa ON s.id = sa.student_id
-       LEFT JOIN "${schema}".courses crs ON (s.course_cd = crs.code OR s.course_cd = crs.course_cd OR sa.course_id = crs.id OR sa.course_code = crs.code)
-       LEFT JOIN "${schema}".batches bth ON (s.batch_cd = bth.batch_cd OR s.batch_cd = bth.code OR sa.batch_id = bth.id OR sa.batch_code = bth.code OR bth.year::text = s.batch_cd)
+       LEFT JOIN "${schema}".student_admissions sa ON s.id::text = sa.student_id::text
+       LEFT JOIN "${schema}".courses crs ON (s.course_cd = crs.code OR s.course_cd = crs.course_cd OR sa.course_id::text = crs.id::text OR sa.course_code = crs.code)
+       LEFT JOIN "${schema}".batches bth ON (s.batch_cd = bth.batch_cd OR s.batch_cd = bth.code OR sa.batch_id::text = bth.id::text OR sa.batch_code = bth.code OR bth.year::text = s.batch_cd)
        WHERE s.registration_no = $1 
           OR s.rollno = $1 
           OR s.id::text = $1 

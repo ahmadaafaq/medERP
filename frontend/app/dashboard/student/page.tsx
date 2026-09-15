@@ -610,7 +610,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
               <Link
-                href="/dashboard/student/internships"
+                href="/dashboard/student/internships?viewCert=true"
                 className="px-4 py-2.5 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-md transition-all shrink-0 active:scale-95 flex items-center justify-center gap-1.5"
               >
                 <span>View & Download Certificate</span>
