@@ -135,10 +135,52 @@ export default function FacultyLogbookPage() {
     fetchData();
   }, []);
 
+  const getFacultyCohort = () => {
+    if (typeof window === 'undefined') return { facultyId: '', courseCd: '', branchCd: '', batchCd: '', department: '' };
+    try {
+      const rawUser = localStorage.getItem('user');
+      if (rawUser) {
+        const u = JSON.parse(rawUser);
+        const p = u?.profile || u;
+        let cCd = String(p.course_cd || p.courseCd || p.course_id || u.course_cd || u.courseCd || '').trim();
+        const dept = String(
+          p.department_name ||
+            p.department_code ||
+            p.department ||
+            p.departmentName ||
+            u.department ||
+            u.departmentName ||
+            u.department_name ||
+            ''
+        ).toLowerCase();
+        if (!cCd) {
+          if (dept.includes('mca') || dept.includes('master of computer applications')) cCd = '3';
+          else if (dept.includes('mba') || dept.includes('master of business administration')) cCd = '4';
+          else if (dept.includes('bca') || dept.includes('bachelor of computer applications')) cCd = '13';
+          else if (dept.includes('pharm') || dept.includes('pharmacy')) cCd = '2';
+          else if (dept.includes('b.tech') || dept.includes('btech') || dept.includes('tech') || dept.includes('engineering') || dept.includes('cse') || dept.includes('cs')) cCd = '1';
+        }
+        return {
+          facultyId: String(p.id || p.faculty_id || p.emp_id || u.id || u.userId || u.emp_id || '').trim(),
+          courseCd: cCd,
+          branchCd: String(p.branch_cd || p.branchId || p.branch_id || p.department_id || u.branch_cd || '').trim(),
+          batchCd: String(p.batch_cd || p.batchCd || p.batch_id || u.batch_cd || '').trim(),
+          department: dept,
+        };
+      }
+    } catch (e) {}
+    return { facultyId: '', courseCd: '', branchCd: '', batchCd: '', department: '' };
+  };
+
   const fetchData = async (targetProjId?: string) => {
     setLoading(true);
     const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
     const token = localStorage.getItem('token') || '';
+    const facCohort = getFacultyCohort();
+    const facultyParam = facCohort.facultyId ? `&facultyId=${encodeURIComponent(facCohort.facultyId)}` : '';
+    const courseParam = facCohort.courseCd ? `&courseId=${encodeURIComponent(facCohort.courseCd)}` : '';
+    const branchParam = facCohort.branchCd ? `&branchId=${encodeURIComponent(facCohort.branchCd)}` : '';
+    const batchParam = facCohort.batchCd ? `&batchId=${encodeURIComponent(facCohort.batchCd)}` : '';
 
     const headers = {
       Authorization: `Bearer ${token}`,
@@ -147,14 +189,14 @@ export default function FacultyLogbookPage() {
 
     try {
       // 1. Fetch faculty topics
-      const topRes = await fetch(`/api/v1/logbook/topics?tenant=${slug}`, { headers });
+      const topRes = await fetch(`/api/v1/logbook/topics?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
       if (topRes.ok) {
         const topJson = await topRes.json();
         setTopics(Array.isArray(topJson.data) ? topJson.data : Array.isArray(topJson) ? topJson : []);
       }
 
       // 2. Fetch submissions queue
-      const subRes = await fetch(`/api/v1/logbook/submissions?tenant=${slug}`, { headers });
+      const subRes = await fetch(`/api/v1/logbook/submissions?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
       if (subRes.ok) {
         const subJson = await subRes.json();
         setSubmissions(Array.isArray(subJson.data) ? subJson.data : Array.isArray(subJson) ? subJson : []);
@@ -164,7 +206,7 @@ export default function FacultyLogbookPage() {
       let activeProjId = targetProjId || selectedProjectId;
       let projectsArray: any[] = [];
 
-      const allProjRes = await fetch(`/api/v1/logbook/mini-projects/all?tenant=${slug}`, { headers });
+      const allProjRes = await fetch(`/api/v1/logbook/mini-projects/all?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
       if (allProjRes.ok) {
         const allProjJson = await allProjRes.json();
         const rawList = Array.isArray(allProjJson.data) ? allProjJson.data : Array.isArray(allProjJson) ? allProjJson : [];
@@ -172,7 +214,7 @@ export default function FacultyLogbookPage() {
         setMiniProjectsList(rawList);
       }
 
-      const projRes = await fetch(`/api/v1/logbook/mini-project?tenant=${slug}`, { headers });
+      const projRes = await fetch(`/api/v1/logbook/mini-project?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
       if (projRes.ok) {
         const projJson = await projRes.json();
         const rawProj = projJson?.data !== undefined ? projJson.data : projJson;
@@ -194,7 +236,7 @@ export default function FacultyLogbookPage() {
       }
 
       // 4. Fetch all weekly logs
-      const weekRes = await fetch(`/api/v1/logbook/weekly-logs/all?tenant=${slug}`, { headers });
+      const weekRes = await fetch(`/api/v1/logbook/weekly-logs/all?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
       if (weekRes.ok) {
         const weekJson = await weekRes.json();
         const rawWeek = weekJson?.data !== undefined ? weekJson.data : weekJson;
@@ -203,7 +245,7 @@ export default function FacultyLogbookPage() {
 
       // 5. Fetch enrolled applicants & tracking for selected project
       const projFilterParam = currentProj?.id ? `&projectId=${encodeURIComponent(currentProj.id)}` : '';
-      const appRes = await fetch(`/api/v1/logbook/mini-projects/applicants?tenant=${slug}${projFilterParam}`, { headers });
+      const appRes = await fetch(`/api/v1/logbook/mini-projects/applicants?tenant=${slug}${projFilterParam}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
       if (appRes.ok) {
         const appJson = await appRes.json();
         const rawApp = appJson?.data !== undefined ? appJson.data : appJson;

@@ -271,11 +271,38 @@ export default function StudentLogbookPage() {
     );
   };
 
+  const getStudentCohort = () => {
+    if (typeof window === 'undefined') return { courseCd: '', batchCd: '', branchId: '', semester: '' };
+    try {
+      const rawUser = localStorage.getItem('user');
+      if (rawUser) {
+        const u = JSON.parse(rawUser);
+        const p = u?.profile || u;
+        return {
+          courseCd: String(p.course_cd || p.courseCd || p.course_id || u.course_cd || u.courseCd || '').trim(),
+          batchCd: String(p.batch_cd || p.batchCd || p.batch_id || u.batch_cd || u.batchCd || '').trim(),
+          branchId: String(p.branch_id || p.branchId || p.branch_cd || p.department_id || u.branch_id || '').trim(),
+          semester: String(p.semester || p.current_semester || p.semester_id || u.semester || '').trim(),
+        };
+      }
+    } catch (e) {}
+    return {
+      courseCd: localStorage.getItem('courseCd') || localStorage.getItem('course_cd') || '',
+      batchCd: localStorage.getItem('batchCd') || localStorage.getItem('batch_cd') || '',
+      branchId: localStorage.getItem('branchId') || localStorage.getItem('branch_id') || '',
+      semester: localStorage.getItem('semester') || '',
+    };
+  };
+
   const fetchAllData = async () => {
     setLoading(true);
     const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
     const token = localStorage.getItem('token') || '';
     const studentIdentifier = getStudentIdentifier();
+    const cohort = getStudentCohort();
+    const courseQuery = cohort.courseCd ? `&courseId=${encodeURIComponent(cohort.courseCd)}` : '';
+    const batchQuery = cohort.batchCd ? `&batchId=${encodeURIComponent(cohort.batchCd)}` : '';
+    const branchQuery = cohort.branchId ? `&branchId=${encodeURIComponent(cohort.branchId)}` : '';
 
     const headers = {
       Authorization: `Bearer ${token}`,
@@ -304,11 +331,11 @@ export default function StudentLogbookPage() {
     try {
       const results = await Promise.allSettled([
         // 1. Dashboard Overview
-        fetchSafe(`/api/v1/logbook/dashboard/overview?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        fetchSafe(`/api/v1/logbook/dashboard/overview?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}${courseQuery}${batchQuery}${branchQuery}`),
         // 2. My Activity Submissions
         fetchSafe(`/api/v1/logbook/submissions/me?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
         // 3. Mini Project
-        fetchSafe(`/api/v1/logbook/mini-project?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
+        fetchSafe(`/api/v1/logbook/mini-project?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}${courseQuery}${batchQuery}${branchQuery}`),
         // 4. Weekly Logs
         fetchSafe(`/api/v1/logbook/weekly-logs?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
         // 5. Seminars
@@ -324,7 +351,7 @@ export default function StudentLogbookPage() {
         // 10. Final Evaluation
         fetchSafe(`/api/v1/logbook/final-evaluation?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
         // 11. Topics
-        fetchSafe(`/api/v1/logbook/topics?tenant=${slug}&studentView=true&studentId=${encodeURIComponent(studentIdentifier)}`),
+        fetchSafe(`/api/v1/logbook/topics?tenant=${slug}&studentView=true&studentId=${encodeURIComponent(studentIdentifier)}${courseQuery}${batchQuery}${branchQuery}`),
       ]);
 
       const [dash, subs, proj, weeks, sems, tuts, techs, revs, rems, finalEv, tops] = results.map(

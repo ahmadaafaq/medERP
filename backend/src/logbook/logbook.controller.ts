@@ -65,9 +65,12 @@ export class LogbookController {
     @Tenant() tenantSlug: string,
     @CurrentUser() user: any,
     @Query('studentId') queryStudentId?: string,
+    @Query('courseId') courseId?: string,
+    @Query('batchId') batchId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const studentId = queryStudentId || user?.profile?.id || user?.sub || user?.id || user?.userId;
-    return this.logbookService.getStudentDashboardStats(tenantSlug, studentId);
+    return this.logbookService.getStudentDashboardStats(tenantSlug, studentId, { courseId, batchId, branchId });
   }
 
   // ==========================================
@@ -80,9 +83,13 @@ export class LogbookController {
     @Tenant() tenantSlug: string,
     @CurrentUser() user: any,
     @Query('studentId') queryStudentId?: string,
+    @Query('courseId') courseId?: string,
+    @Query('batchId') batchId?: string,
+    @Query('branchId') branchId?: string,
+    @Query('semesterId') semesterId?: string,
   ) {
     const studentId = queryStudentId || user?.profile?.id || user?.sub || user?.id || user?.userId;
-    return this.logbookService.getMiniProject(tenantSlug, studentId);
+    return this.logbookService.getMiniProject(tenantSlug, studentId, { courseId, batchId, branchId, semesterId });
   }
 
   @Public()
@@ -167,9 +174,13 @@ export class LogbookController {
   async getAllFacultyMiniProjects(
     @Tenant() tenantSlug: string,
     @CurrentUser() user: any,
+    @Query('facultyId') queryFacultyId?: string,
+    @Query('courseId') courseId?: string,
+    @Query('batchId') batchId?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    const facultyId = user?.profile?.id || user?.userId || user?.id;
-    return this.logbookService.getAllFacultyMiniProjects(tenantSlug, facultyId);
+    const facultyId = queryFacultyId || user?.profile?.id || user?.userId || user?.id;
+    return this.logbookService.getAllFacultyMiniProjects(tenantSlug, facultyId, { courseId, batchId, branchId });
   }
 
   @Public()
@@ -178,8 +189,11 @@ export class LogbookController {
   async getMiniProjectApplicants(
     @Tenant() tenantSlug: string,
     @Query('projectId') projectId?: string,
+    @Query('courseId') courseId?: string,
+    @Query('batchId') batchId?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.logbookService.getMiniProjectApplicants(tenantSlug, projectId);
+    return this.logbookService.getMiniProjectApplicants(tenantSlug, projectId, { courseId, batchId, branchId });
   }
 
   @Public()
@@ -214,8 +228,11 @@ export class LogbookController {
     @Tenant() tenantSlug: string,
     @Query('projectId') projectId?: string,
     @Query('status') status?: string,
+    @Query('courseId') courseId?: string,
+    @Query('batchId') batchId?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.logbookService.getAllWeeklyLogs(tenantSlug, { projectId, status });
+    return this.logbookService.getAllWeeklyLogs(tenantSlug, { projectId, status, courseId, batchId, branchId });
   }
 
   // ==========================================
@@ -593,8 +610,15 @@ export class LogbookController {
 
   @Public()
   @Get('submissions')
-  async getSubmissions(@Tenant() tenantSlug: string, @Query('topicId') topicId?: string, @Query('status') status?: string, @Query('search') search?: string) {
-    return this.logbookService.getSubmissions(tenantSlug, { topicId, status, search });
+  async getSubmissions(
+    @Tenant() tenantSlug: string,
+    @Query('topicId') topicId?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('courseId') courseId?: string,
+    @Query('facultyId') facultyId?: string,
+  ) {
+    return this.logbookService.getSubmissions(tenantSlug, { topicId, status, search, courseId, facultyId });
   }
 
   @Public()
