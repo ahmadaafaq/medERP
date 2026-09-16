@@ -454,22 +454,29 @@ export async function GET(request: NextRequest) {
     const activeDbEvents = dbEvents.filter((db: any) => {
       const dbId = String(db.id || '');
       const srmsId = String(db.srms_id || '');
+      const pgId = String(db.postgres_id || '');
       if (dbId && deletedEventIds.has(dbId)) return false;
       if (srmsId && deletedEventIds.has(srmsId)) return false;
+      if (pgId && deletedEventIds.has(pgId)) return false;
       return true;
     });
 
     const combined: any[] = [];
     const seenSlots = new Set<string>();
 
-    // Helper key generator: day + start time + subject title
+    // Helper key generator: day + start time (HH:MM)
     const getSlotKey = (item: any): string => {
       const startSec = parseDateToUnix(item.start);
       const istStartDate = new Date((startSec + 19800) * 1000);
-      const dayVal = item.day_of_week ?? (istStartDate.getUTCDay() === 0 ? 7 : istStartDate.getUTCDay());
-      const timeStr = String(item.start_time || item.start_str || `${istStartDate.getUTCHours()}:${istStartDate.getUTCMinutes()}`).slice(0, 5);
-      const subKey = normalizeTitle(item.title || item.subject_name || item.topic);
-      return `${dayVal}_${timeStr}_${subKey}`;
+      const dayVal = item.day_of_week !== undefined && item.day_of_week !== null
+        ? Number(item.day_of_week)
+        : (istStartDate.getUTCDay() === 0 ? 7 : istStartDate.getUTCDay());
+      const rawTime = String(item.start_time || item.start_str || '');
+      const timeParts = rawTime.includes(':') ? rawTime.split(':') : [];
+      const timeStr = timeParts.length >= 2 
+        ? `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}`
+        : `${String(istStartDate.getUTCHours()).padStart(2, '0')}:${String(istStartDate.getUTCMinutes()).padStart(2, '0')}`;
+      return `${dayVal}_${timeStr}`;
     };
 
     // Index and add remote items first

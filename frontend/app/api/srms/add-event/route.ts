@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { srmsPost } from '@/lib/srms-client';
+import { srmsPostDirect, isSrmsTenant } from '@/lib/srms-client';
 import { queryDb } from '@/lib/db';
 
 function formatToSrmsTimetblDate(dateStr?: string, defaultTime: string = '08:30'): { formatted: string; date: Date; iso: string; dayOfWeek: number; timeStr: string } {
@@ -101,9 +101,23 @@ export async function POST(req: NextRequest) {
 
     // 1. Resolve target PostgreSQL schema first
     const tenantHeader = req.headers.get('x-tenant-id') || req.headers.get('x-tenant') || req.headers.get('x-tenant-slug') || '';
-    let slug = tenantHeader.replace(/^tenant_/, '').replace(/^tenant-/, '') || (colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly');
-    if (!slug) slug = 'srms-cet-bareilly';
+    let slug = tenantHeader.replace(/^tenant_/, '').replace(/^tenant-/, '');
+    // Derive slug from colgcd when no header is present (SRMS college codes 1-14 -> srms-* slugs)
+    if (!slug) {
+      const srmsCollegeSlugMap: Record<string, string> = {
+        '1': 'srms-cet-bareilly',
+        '2': 'srms-cetr-bareilly',
+        '3': 'srms-cet-unnao',
+        '4': 'srms-law',
+        '5': 'srms-ibs-lucknow',
+        '6': 'srms-iahs-bareilly',
+        '11': 'srms-ims',
+      };
+      slug = srmsCollegeSlugMap[colgcd] || 'srms-cet-bareilly';
+    }
     const schema = `tenant_${slug}`;
+    // Determines whether this college should sync to the SRMS portal
+    const callSrmsApi = isSrmsTenant(slug);
 
     // 2. Pre-Validation: Faculty Overlap Validation across All Departments & Courses for the SAME DAY & TIME SLOT
     const facIdentifier = empid || linkcd;
@@ -258,25 +272,36 @@ export async function POST(req: NextRequest) {
     let srmsId: number | string | null = null;
     let srmsMessage = '';
 
-    try {
-      const srmsApiUrl = 'https://myportal.srms.ac.in/srmserp/Timetbl/AddEvent';
-      const srmsRes = await fetch(srmsApiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(srmsPayload),
-      });
-
-      if (srmsRes.ok) {
-        srmsResponse = await srmsRes.json().catch(() => null);
+    if (callSrmsApi) {
+      // Use srmsPostDirect (https.request + rejectUnauthorized:false) to bypass expired SSL on myportal.srms.ac.in.
+      try {
+        srmsResponse = await srmsPostDirect(
+          'https://myportal.srms.ac.in/srmserp/Timetbl/AddEvent',
+          srmsPayload,
+        );
         if (srmsResponse) {
-          srmsSuccess = srmsResponse.success === true || (srmsResponse.id && srmsResponse.id > 0);
+          srmsSuccess = srmsResponse.success === true || (srmsResponse.id && Number(srmsResponse.id) > 0);
           srmsId = srmsResponse.id ?? null;
           srmsMessage = srmsResponse.message || '';
         }
+      } catch (srmsErr: any) {
+        console.warn('[SRMS AddEvent remote error]:', srmsErr.message);
+        srmsMessage = srmsErr.message;
       }
-    } catch (srmsErr: any) {
-      console.warn('[SRMS AddEvent remote error]:', srmsErr.message);
-      srmsMessage = srmsErr.message;
+
+      if (!srmsSuccess) {
+        const errMsg = srmsMessage || 'SRMS portal rejected slot: Lecture already exists for this faculty at the selected time.';
+        return NextResponse.json({
+          success: false,
+          error: errMsg,
+          message: errMsg,
+          srms_data: srmsResponse,
+        }, { status: 409 });
+      }
+    } else {
+      // Non-SRMS tenant (e.g. Rajshree): skip SRMS portal, treat as DB-only success
+      srmsSuccess = true;
+      srmsMessage = 'Lecture added successfully (local DB only).';
     }
 
     // 4. Ensure srms_timetable_events table and extended columns exist in PostgreSQL
@@ -507,7 +532,20 @@ export async function DELETE(req: NextRequest) {
     if (!slug) slug = 'srms-cet-bareilly';
     const schema = `tenant_${slug}`;
 
-    await queryDb(`DELETE FROM "${schema}".srms_timetable_events WHERE id::text = $1`, [id]).catch(() => {});
+    // Match by Postgres UUID (id) OR numeric SRMS id (srms_id) so rollback always finds the row
+    await queryDb(`DELETE FROM "${schema}".srms_timetable_events WHERE id::text = $1 OR srms_id::text = $1`, [id]).catch(() => {});
+    // Also insert into deleted blacklist so the schedule view doesn't re-fetch it from SRMS portal
+    await queryDb(`
+      CREATE TABLE IF NOT EXISTS "${schema}".deleted_timetable_events (event_id VARCHAR(100) PRIMARY KEY, colg_cd VARCHAR(50) DEFAULT '1', deleted_at TIMESTAMPTZ DEFAULT NOW());
+      INSERT INTO "${schema}".deleted_timetable_events (event_id, colg_cd) VALUES ($1, $2) ON CONFLICT DO NOTHING;
+    `, [id, colgcd]).catch(() => {});
+    // Also try to call SRMS portal delete if id looks like a numeric SRMS id
+    if (id && /^\d+$/.test(id)) {
+      try {
+        const { srmsPostDirect } = await import('@/lib/srms-client');
+        await srmsPostDirect('https://myportal.srms.ac.in/srmserp/Timetbl/DeleteEvent', { id: Number(id), colgcd });
+      } catch { /* non-blocking */ }
+    }
 
     return NextResponse.json({ success: true, message: 'Rollback delete completed' });
   } catch (err: any) {

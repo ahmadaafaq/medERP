@@ -56,4 +56,14 @@ export class CreateLessonDto {
   @IsString()
   @IsOptional()
   subtopicId?: string;
+
+  @ApiPropertyOptional({ description: 'Faculty Name' })
+  @IsString()
+  @IsOptional()
+  facultyName?: string;
+
+  @ApiPropertyOptional({ description: 'Faculty Emp ID' })
+  @IsString()
+  @IsOptional()
+  empid?: string;
 }

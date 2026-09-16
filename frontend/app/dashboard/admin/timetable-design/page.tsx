@@ -756,44 +756,114 @@ export default function TimetableDesignPage() {
     const list: { subject_code: string; subject_name: string; faculty_name: string }[] = [];
     const seenKeys = new Set<string>();
 
-    const safeSlots = Array.isArray(slots) ? slots : [];
-    for (const s of safeSlots) {
-      if (!s) continue;
-      const subCode = s.subject_code || s.subject_id || '';
-      const subName = (s.subject_name && s.subject_name !== 'Medical Subject') ? s.subject_name : (s.topic || '');
-      const facName = (s.faculty_name && s.faculty_name !== 'Faculty Member') ? s.faculty_name : '';
+    // Normalize subject name for dedup: lowercase, strip faculty name in parens, collapse spaces
+    const normName = (n: string) => String(n || '').replace(/\([^)]*\)/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
 
-      const key = (subCode || subName).toLowerCase().trim();
-      if (key && !seenKeys.has(key)) {
-        seenKeys.add(key);
-        list.push({
-          subject_code: subCode || '-',
-          subject_name: subName || 'Scheduled Session',
-          faculty_name: facName || 'Faculty Incharge',
+    const safeSlots = Array.isArray(slots) ? slots : [];
+
+    // 1. Process official SRMS timetable subjects first (they contain authentic numeric sub_cd)
+    if (Array.isArray(srmsTimetableSubjects) && srmsTimetableSubjects.length > 0) {
+      for (const s of srmsTimetableSubjects) {
+        const code = String(s.sub_cd || s.code || '').trim();
+        const rawName = String(s.sub_name || s.name || '').trim();
+        let cleanName = rawName.replace(/\([^)]*\)/g, '').trim();
+        let teacher = s.EmpName || (rawName.match(/\(([^)]+)\)/)?.[1] || '').trim();
+
+        // If subject name is missing or purely faculty name, look up in availableFormSubjects or safeSlots
+        if (!cleanName || cleanName.length < 2) {
+          const matchedSub = (availableFormSubjects || []).find((af: any) => String(af.code) === code || String(af.linkcd) === code || String(af.id) === code);
+          if (matchedSub?.name) {
+            cleanName = matchedSub.name;
+          } else {
+            const matchedSlot = safeSlots.find((sl: any) => String(sl.subject_code) === code || String(sl.subject_id) === code);
+            if (matchedSlot?.subject_name) {
+              cleanName = matchedSlot.subject_name;
+            }
+          }
+        }
+
+        // Check if a scheduled slot has an assigned faculty for this subject
+        const slotForSubject = safeSlots.find((sl: any) => {
+          const slName = normName(sl.subject_name || sl.topic || '');
+          const curName = normName(cleanName || rawName);
+          return (curName && slName === curName) || (code && (String(sl.subject_code) === code || String(sl.subject_id) === code));
         });
+        if (slotForSubject?.faculty_name && slotForSubject.faculty_name !== 'Faculty Member') {
+          teacher = slotForSubject.faculty_name;
+        }
+
+        const nameKey = normName(cleanName || rawName);
+        const codeKey = code.toLowerCase().trim();
+        const key = nameKey.length > 3 ? nameKey : codeKey;
+
+        if (key && !seenKeys.has(key) && !seenKeys.has(codeKey)) {
+          seenKeys.add(key);
+          if (codeKey) seenKeys.add(codeKey);
+          list.push({
+            subject_code: (!isUUID(code) && code) ? code : '-',
+            subject_name: cleanName || rawName || 'Academic Subject',
+            faculty_name: teacher || 'Faculty Incharge',
+          });
+        } else if (seenKeys.has(key) && teacher) {
+          const existingIdx = list.findIndex(l => normName(l.subject_name) === key);
+          if (existingIdx !== -1) {
+            if (!list[existingIdx].faculty_name || list[existingIdx].faculty_name === 'Faculty Incharge') {
+              list[existingIdx].faculty_name = teacher;
+            }
+            if ((!list[existingIdx].subject_code || list[existingIdx].subject_code === '-' || isUUID(list[existingIdx].subject_code)) && code && !isUUID(code)) {
+              list[existingIdx].subject_code = code;
+            }
+          }
+        }
       }
     }
 
-    if (Array.isArray(srmsTimetableSubjects) && srmsTimetableSubjects.length > 0) {
-      for (const s of srmsTimetableSubjects) {
-        const code = String(s.sub_cd || '');
-        const rawName = String(s.sub_name || '');
-        const cleanName = rawName.replace(/\([^)]*\)/g, '').trim();
-        const teacher = s.EmpName || '';
-        const key = (code || cleanName).toLowerCase().trim();
-        if (key && !seenKeys.has(key)) {
-          seenKeys.add(key);
-          list.push({
-            subject_code: code || '-',
-            subject_name: cleanName || rawName,
-            faculty_name: teacher || 'Faculty Incharge',
-          });
+    // 2. Include any scheduled slots not already in the official SRMS subject list
+    for (const s of safeSlots) {
+      if (!s) continue;
+      const subName = (s.subject_name && s.subject_name !== 'Medical Subject') ? s.subject_name : (s.topic || '');
+      const facName = (s.faculty_name && s.faculty_name !== 'Faculty Member') ? s.faculty_name : '';
+      let subCode = String(s.subject_code || s.subject_id || '').trim();
+
+      // If subCode is a UUID, look up the authentic numeric code from SRMS subjects or availableFormSubjects
+      if (isUUID(subCode) || !subCode) {
+        const matched = (srmsTimetableSubjects || []).find((st: any) => {
+          const stName = normName(st.sub_name || st.name || '');
+          return stName && stName === normName(subName);
+        }) || (availableFormSubjects || []).find((af: any) => {
+          const afName = normName(af.name || af.raw_name || '');
+          return afName && afName === normName(subName);
+        });
+        subCode = (!isUUID(matched?.sub_cd) && matched?.sub_cd) || (!isUUID(matched?.code) && matched?.code) || (!isUUID(matched?.linkcd) && matched?.linkcd) || '-';
+      }
+
+      const nameKey = normName(subName);
+      const codeKey = subCode.toLowerCase().trim();
+      const key = nameKey.length > 3 ? nameKey : codeKey;
+
+      if (key && !seenKeys.has(key)) {
+        seenKeys.add(key);
+        if (codeKey && codeKey !== '-') seenKeys.add(codeKey);
+        list.push({
+          subject_code: (!isUUID(subCode) && subCode) ? subCode : '-',
+          subject_name: subName || 'Scheduled Session',
+          faculty_name: facName || 'Faculty Incharge',
+        });
+      } else if (seenKeys.has(key)) {
+        const existingIdx = list.findIndex(l => normName(l.subject_name) === key);
+        if (existingIdx !== -1) {
+          if (facName && (!list[existingIdx].faculty_name || list[existingIdx].faculty_name === 'Faculty Incharge')) {
+            list[existingIdx].faculty_name = facName;
+          }
+          if ((!list[existingIdx].subject_code || list[existingIdx].subject_code === '-' || isUUID(list[existingIdx].subject_code)) && subCode && !isUUID(subCode)) {
+            list[existingIdx].subject_code = subCode;
+          }
         }
       }
     }
 
     return list;
-  }, [slots, srmsTimetableSubjects]);
+  }, [slots, srmsTimetableSubjects, availableFormSubjects]);
 
   // ─── API FETCHING HELPERS ──────────────────────────────────────────────────
   const fetchColleges = async () => {
@@ -1668,8 +1738,8 @@ export default function TimetableDesignPage() {
       return `${pad(h || 8)}:${pad(m || 30)}`;
     };
 
-    const startFormatted = `${ymdDateStr} ${formatTimeTo24h(formData.startTime)} `;
-    const endFormatted = `${ymdDateStr} ${formatTimeTo24h(formData.endTime)} `;
+    const startFormatted = `${ymdDateStr} ${formatTimeTo24h(formData.startTime)}`.trim();
+    const endFormatted = `${ymdDateStr} ${formatTimeTo24h(formData.endTime)}`.trim();
 
     const srmsTitle = formData.topic ? `${subTitle} - ${formData.topic}` : subTitle;
     const srmsDesc = formData.subjectDescription || `${subTitle}${facName ? ' ' + facName : ''}`;
@@ -1741,7 +1811,8 @@ export default function TimetableDesignPage() {
         const sJson = await sRes.json().catch(() => null);
         if (sRes.ok && sJson?.success) {
           srmsSaved = true;
-          srmsEventId = sJson.id || sJson.event?.id || null;
+          // Prefer the Postgres UUID (event.id) over the SRMS numeric id for rollback DELETE
+          srmsEventId = sJson.event?.id || sJson.id || null;
         } else {
           srmsErrorMsg = sJson?.error || sJson?.message || 'SRMS portal event scheduling failed.';
         }
@@ -1749,29 +1820,31 @@ export default function TimetableDesignPage() {
         srmsErrorMsg = sErr?.message || 'Network error communicating with SRMS API.';
       }
 
-      // 2. Call NestJS backend PostgreSQL timetable API
+      // 2. Call NestJS backend PostgreSQL timetable API ONLY IF SRMS portal save was successful
       let pgSaved = false;
       let pgSlotId: string | null = null;
       let pgErrorMsg = '';
 
-      try {
-        const pRes = await fetch(url, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(pgPayload),
-        });
-        const pJson = await pRes.json().catch(() => null);
-        if (pRes.ok && (pJson?.success || pJson?.id)) {
-          pgSaved = true;
-          pgSlotId = pJson?.data?.id || pJson?.id || null;
-        } else {
-          pgErrorMsg = pJson?.message || pJson?.error || (pRes.status === 401 ? 'Session expired (401 Unauthorized). Please refresh your login.' : 'Database slot creation failed.');
+      if (srmsSaved) {
+        try {
+          const pRes = await fetch(url, {
+            method,
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(pgPayload),
+          });
+          const pJson = await pRes.json().catch(() => null);
+          if (pRes.ok && (pJson?.success || pJson?.id)) {
+            pgSaved = true;
+            pgSlotId = pJson?.data?.id || pJson?.id || null;
+          } else {
+            pgErrorMsg = pJson?.message || pJson?.error || (pRes.status === 401 ? 'Session expired (401 Unauthorized). Please refresh your login.' : 'Database slot creation failed.');
+          }
+        } catch (pErr: any) {
+          pgErrorMsg = pErr?.message || 'Network error communicating with PostgreSQL timetable endpoint.';
         }
-      } catch (pErr: any) {
-        pgErrorMsg = pErr?.message || 'Network error communicating with PostgreSQL timetable endpoint.';
       }
 
       // 3. ATOMIC TRANSACTION EVALUATION
@@ -1817,38 +1890,53 @@ export default function TimetableDesignPage() {
     }
   };
 
-  const handleDeleteSlot = async (slotId: string, e?: React.MouseEvent) => {
+  const handleDeleteSlot = async (slotId: string, e?: React.MouseEvent, slotObj?: TimetableSlot) => {
     if (e) e.stopPropagation();
     if (!confirm('Are you sure you want to delete this scheduled session?')) return;
     setLoading(true);
     try {
       const tenantSlug = getActiveTenantSlug();
       const cleanId = String(slotId);
+      const pgId = (slotObj as any)?.postgres_id || (editingSlot as any)?.postgres_id || null;
 
-      // 1. Server-side proxy call to official SRMS deleteEvent + PostgreSQL cleanup
+      // 1. Server-side proxy call to official SRMS deleteEvent + PostgreSQL cross-table cleanup
       const srmsDelRes = await fetch('/api/srms/delete-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: cleanId, colgcd: selectedCollege || '1' }),
+        body: JSON.stringify({
+          id: cleanId,
+          postgres_id: pgId,
+          colgcd: selectedCollege || '1',
+          day_of_week: slotObj?.day_of_week ?? editingSlot?.day_of_week,
+          start_time: slotObj?.start_time || editingSlot?.start_time,
+          end_time: slotObj?.end_time || editingSlot?.end_time,
+          course: selectedCourse,
+          branch: selectedBranch,
+          batch: selectedBatch,
+          sem: selectedSemester,
+          sec: selectedSection,
+        }),
       });
       const srmsDelJson = await srmsDelRes.json().catch(() => null);
 
       // 2. Delete from PostgreSQL timetable_slots
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
-      await fetch(`${API_BASE}/timetable/${cleanId}?tenant=${tenantSlug}`, {
-        method: 'DELETE',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      }).catch(() => { });
+      const idsToDelete = [cleanId, pgId, ...(srmsDelJson?.deleted_ids || [])].filter(Boolean);
+      for (const tid of Array.from(new Set(idsToDelete))) {
+        await fetch(`${API_BASE}/timetable/${tid}?tenant=${tenantSlug}`, {
+          method: 'DELETE',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }).catch(() => { });
+      }
 
-      if (srmsDelJson?.srms_deleted) {
-        showAlert('success', 'Timetable session deleted successfully across SRMS Portal & Database!');
-      } else if (srmsDelJson?.success) {
-        showAlert('success', srmsDelJson?.message || 'Timetable session deleted from Database!');
+      if (srmsDelJson?.srms_deleted || srmsDelJson?.success) {
+        showAlert('success', srmsDelJson?.message || 'Timetable session deleted successfully across SRMS Portal & Database!');
       } else {
         showAlert('warning', srmsDelJson?.d || 'Session removed from database.');
       }
       setHoveredSlotInfo(null);
       setIsModalOpen(false);
+      setSlots(prev => prev.filter(s => !idsToDelete.includes(s.id) && !idsToDelete.includes((s as any).postgres_id)));
       fetchTimetableSlots();
       fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate);
     } catch (err: any) {
@@ -1860,7 +1948,7 @@ export default function TimetableDesignPage() {
 
   const handleDelete = async () => {
     if (!editingSlot) return;
-    await handleDeleteSlot(editingSlot.id);
+    await handleDeleteSlot(editingSlot.id, undefined, editingSlot);
   };
 
   const handleGridCellClick = (dayVal: number, timeStart: string, defaultEnd: string) => {
@@ -2928,7 +3016,7 @@ export default function TimetableDesignPage() {
             </button>
             <button
               type="button"
-              onClick={(e) => handleDeleteSlot(hoveredSlotInfo.slot.id, e)}
+              onClick={(e) => handleDeleteSlot(hoveredSlotInfo.slot.id, e, hoveredSlotInfo.slot)}
               className="flex-1 py-2 px-3 bg-rose-500 hover:bg-rose-600 active:scale-95 text-white font-black rounded-xl text-center text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>🗑️</span>

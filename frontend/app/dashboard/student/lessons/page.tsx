@@ -63,6 +63,22 @@ export default function StudentLessonsPage() {
             semCd = p.sem_cd || p.semester || u.semester || '';
             userId = p.id || u.id || u.sub || '';
             regNo = p.registration_no || u.registration_no || p.rollno || u.rollno || '';
+            
+            // Clean course code if it contains annotations like "13 (2025 Batch)"
+            if (courseCd) {
+              const cleanC = String(courseCd).split('(')[0].trim();
+              if (cleanC) courseCd = cleanC;
+            }
+            // Normalize batch to standard code or year
+            if (batchCd) {
+              const bStr = String(batchCd).trim();
+              const bDigits = bStr.replace(/\D/g, '');
+              if (bDigits === '2025' || bStr.includes('2025')) batchCd = '2';
+              else if (bDigits === '2024' || bStr.includes('2024')) batchCd = '18';
+              else if (bDigits === '2026' || bStr.includes('2026')) batchCd = '3';
+              else if (bDigits === '2023' || bStr.includes('2023')) batchCd = '17';
+            }
+
             setStudentCourseCd(String(courseCd));
           }
         } catch {}

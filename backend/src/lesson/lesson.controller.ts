@@ -35,6 +35,7 @@ export class LessonController {
     }
 
     const headerId =
+      dto?.empid ||
       dto?.sender_id ||
       req.headers?.['x-user-id'] ||
       req.headers?.['x-user-reg-no'] ||
@@ -44,6 +45,7 @@ export class LessonController {
       tokenUser?.registration_no ||
       '';
     const headerName =
+      dto?.facultyName ||
       dto?.sender_name ||
       req.headers?.['x-user-name'] ||
       tokenUser?.name ||
@@ -65,7 +67,7 @@ export class LessonController {
       role: String(headerRole),
       colgCd: String(headerColg),
       registration_no: tokenUser?.registration_no || req.headers?.['x-user-reg-no'] || String(headerId),
-      emp_id: tokenUser?.emp_id || String(headerId),
+      emp_id: dto?.empid || tokenUser?.emp_id || String(headerId),
     };
   }
 
@@ -84,8 +86,8 @@ export class LessonController {
     const mockUser = {
       role: user.role || 'FACULTY',
       colgCd: dto.colgCd || user.colgCd || '1',
-      emp_id: user.emp_id || 'FAC001',
-      name: user.name || 'Faculty Member',
+      emp_id: dto.empid || user.emp_id || 'FAC001',
+      name: dto.facultyName || user.name || 'Faculty Member',
     };
     const data = await this.lessonService.createLesson(tenantSlug, mockUser, dto, file);
     return { success: true, message: 'Lesson uploaded successfully', data };

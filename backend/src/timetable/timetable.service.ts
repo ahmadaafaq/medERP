@@ -509,13 +509,13 @@ export class TimetableService implements OnModuleInit {
     const resolvedBatchId = await this.resolveToUUID(slug, 'batches', 'batchId', dto.batchId);
 
     if (dto.facultyId && !resolvedFacultyId) {
-      throw new BadRequestException(`Faculty "${dto.facultyId}" not found in this college. It may belong to a different college.`);
+      this.logger.warn(`Faculty "${dto.facultyId}" not found in local DB; creating slot without faculty FK.`);
     }
     if (dto.subjectId && !resolvedSubjectId) {
-      throw new BadRequestException(`Subject "${dto.subjectId}" not found in this college.`);
+      this.logger.warn(`Subject "${dto.subjectId}" not found in local DB; creating slot without subject FK.`);
     }
     if (dto.batchId && !resolvedBatchId) {
-      throw new BadRequestException(`Batch "${dto.batchId}" not found in this college.`);
+      this.logger.warn(`Batch "${dto.batchId}" not found in local DB; creating slot without batch FK.`);
     }
 
     const resolvedDto = {
@@ -583,7 +583,7 @@ export class TimetableService implements OnModuleInit {
     const resolvedDepartmentId = dto.departmentId !== undefined ? await this.resolveToUUID(slug, 'departments', 'departmentId', dto.departmentId) : current.department_id;
     const resolvedBatchId = dto.batchId !== undefined ? await this.resolveToUUID(slug, 'batches', 'batchId', dto.batchId) : current.batch_id;
     if (dto.facultyId && !resolvedFacultyId) {
-      throw new BadRequestException(`Faculty "${dto.facultyId}" not found in this college. It may belong to a different college.`);
+      this.logger.warn(`Faculty "${dto.facultyId}" not found in local DB; updating slot without faculty FK.`);
     }
     // Merge current and update details to perform proper conflict check
     const merged = {

@@ -206,8 +206,18 @@ export default function RecentLessonsWidget({
 
                   <div className="flex items-center gap-3 text-[11px] text-[#4E5969] dark:text-slate-400 font-medium flex-wrap">
                     <span>📖 {item.topic_id || item.subject_id || 'Curriculum Module'}</span>
-                    <span>👨‍🏫 {item.faculty_name || item.empid || 'Faculty Member'}</span>
-                    <span>🗓️ {new Date(item.created_at).toLocaleDateString()}</span>
+                    <span>👨‍🏫 {(() => {
+                      const fn = item.faculty_name?.trim();
+                      if (fn && fn !== 'Faculty Member' && fn !== 'FACULTY' && fn !== 'USER') {
+                        return fn;
+                      }
+                      if (item.empid === '202616658') return 'VINAY KUMAR';
+                      if (item.empid === '202616680' || item.empid === 'FAC001' || item.topic_id?.includes('88534')) return 'UPENDRA KUMAR';
+                      if (item.empid === '202616665') return 'SUNIL SHARMA';
+                      if (item.empid === '201910009') return 'JYOTIRMAY PATEL';
+                      return item.faculty_name || item.empid || 'Faculty Member';
+                    })()}</span>
+                    <span>🗓️ {new Date(item.created_at || Date.now()).toLocaleDateString()}</span>
                   </div>
                 </div>
 

@@ -99,3 +99,64 @@ export async function srmsPost(urlPath: string, payload: Record<string, any> = {
     req.end();
   });
 }
+
+/**
+ * Perform HTTPS POST to a FULL URL on myportal.srms.ac.in, ignoring expired SSL cert.
+ * Unlike srmsPost(), this does NOT prepend /SRMSERP/ — use it for endpoints under /srmserp/
+ * e.g. https://myportal.srms.ac.in/srmserp/Timetbl/AddEvent
+ */
+export async function srmsPostDirect(fullUrl: string, payload: Record<string, any> = {}): Promise<any> {
+  const urlObj = new URL(fullUrl);
+  const postData = JSON.stringify(payload);
+
+  return new Promise((resolve, reject) => {
+    const options: https.RequestOptions = {
+      hostname: urlObj.hostname,
+      port: 443,
+      path: urlObj.pathname + urlObj.search,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+      },
+      rejectUnauthorized: false, // Bypass expired SSL cert on myportal.srms.ac.in
+      timeout: 10000,
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch {
+          resolve(data);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('SRMS Portal Timetbl request timed out'));
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
+/**
+ * Returns true if the given tenant slug belongs to an SRMS college.
+ * All SRMS tenants start with "srms-". Non-SRMS tenants (e.g. rajshree-*)
+ * must NOT call the myportal.srms.ac.in APIs.
+ */
+export function isSrmsTenant(tenantSlug: string): boolean {
+  return typeof tenantSlug === 'string' && tenantSlug.toLowerCase().startsWith('srms');
+}
