@@ -334,7 +334,10 @@ export class LessonService {
       whereConditions.push(`(course_cd = ANY($${paramIdx++}))`);
       params.push(cVars);
     }
-    if (filters.branchCd && user?.role !== 'STUDENT') { whereConditions.push(`branch_cd = $${paramIdx++}`); params.push(filters.branchCd); }
+    if (filters.branchCd && user?.role !== 'STUDENT') {
+      whereConditions.push(`(branch_cd = $${paramIdx++} OR branch_cd IS NULL OR branch_cd = '' OR branch_cd = '0')`);
+      params.push(filters.branchCd);
+    }
     if (filters.batchCd && user?.role !== 'STUDENT') {
       const bVars = resolveBatchVariants(filters.batchCd);
       whereConditions.push(`(batch_cd = ANY($${paramIdx++}) OR batch_cd IS NULL OR batch_cd = '')`);
@@ -346,7 +349,11 @@ export class LessonService {
       whereConditions.push(`(sem_cd = ANY($${paramIdx++}) OR sem_cd IS NULL OR sem_cd = '')`);
       params.push(semVars);
     }
-    if (filters.subjectId) { whereConditions.push(`subject_id = $${paramIdx++}`); params.push(filters.subjectId); }
+    if (filters.subjectId) {
+      whereConditions.push(`(subject_id = $${paramIdx} OR subject_id IN (SELECT code FROM "${schema}".subjects WHERE id::text = $${paramIdx} OR code = $${paramIdx}) OR subject_id IN (SELECT id::text FROM "${schema}".subjects WHERE code = $${paramIdx} OR id::text = $${paramIdx}))`);
+      params.push(filters.subjectId);
+      paramIdx++;
+    }
 
     const limit = filters.limit || 100;
     const prefixedConditions = whereConditions.map((w) =>
