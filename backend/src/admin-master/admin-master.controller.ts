@@ -149,8 +149,14 @@ export class AdminMasterController {
   // ─── 4. TOPICS ─────────────────────────────────────────────────────────────
   @Get('topics')
   @ApiOperation({ summary: 'List Topics — tenant read' })
-  async listTopics(@TenantSlug() tenant: string) {
-    const data = await this.adminMasterService.listTopics(tenant);
+  async listTopics(
+    @TenantSlug() tenant: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('subjectCode') subjectCode?: string,
+    @Query('unitId') unitId?: string,
+    @Query('unitCode') unitCode?: string,
+  ) {
+    const data = await this.adminMasterService.listTopics(tenant, subjectId, subjectCode, unitId, unitCode);
     return { success: true, data };
   }
 
@@ -320,8 +326,13 @@ export class AdminMasterController {
   // ─── 9. UNIT MASTER ─────────────────────────────────────────────────────────
   @Get('units')
   @ApiOperation({ summary: 'List Units — tenant read' })
-  async listUnits(@TenantSlug() tenant: string) {
-    const data = await this.adminMasterService.listUnits(tenant);
+  async listUnits(
+    @TenantSlug() tenant: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('subjectCode') subjectCode?: string,
+    @Query('courseCd') courseCd?: string,
+  ) {
+    const data = await this.adminMasterService.listUnits(tenant, subjectId, subjectCode, courseCd);
     return { success: true, data };
   }
 

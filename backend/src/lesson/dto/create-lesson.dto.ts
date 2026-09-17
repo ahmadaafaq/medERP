@@ -66,4 +66,9 @@ export class CreateLessonDto {
   @IsString()
   @IsOptional()
   empid?: string;
+
+  @ApiPropertyOptional({ description: 'Section Code (e.g. 1, 2, 3, 4, A, B)' })
+  @IsString()
+  @IsOptional()
+  section?: string;
 }

@@ -41,7 +41,183 @@ interface Lesson {
   created_at: string;
 }
 
+interface CurriculumUnit {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+}
+
+interface CurriculumTopic {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface CurriculumSubtopic {
+  id: string;
+  code: string;
+  name: string;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+
+// Helper function to generate syllabus units tailored dynamically to a specific subject
+function generateSyllabusUnits(code: string, name: string): CurriculumUnit[] {
+  const n = (name || '').toLowerCase();
+  const c = (code || '').trim();
+
+  // 1. Universal Human Values & Professional Ethics
+  if (c === '88536' || n.includes('human value') || n.includes('ethics') || n.includes('values')) {
+    return [
+      { id: 'U1', code: 'Unit 1', name: 'Unit 1: Introduction to Value Education & Self Exploration' },
+      { id: 'U2', code: 'Unit 2', name: 'Unit 2: Harmony in the Human Being - Understanding Myself' },
+      { id: 'U3', code: 'Unit 3', name: 'Unit 3: Harmony in the Family and Society - Relationship & Trust' },
+      { id: 'U4', code: 'Unit 4', name: 'Unit 4: Harmony in Nature & Existence - Whole Existence as Co-existence' },
+      { id: 'U5', code: 'Unit 5', name: 'Unit 5: Implications of Holistic Understanding - Professional Ethics' },
+    ];
+  }
+
+  // 2. Computer Organization & Architecture
+  if (c === '88535' || n.includes('computer organization') || n.includes('architecture')) {
+    return [
+      { id: 'U1', code: 'Unit 1', name: 'Unit 1: Introduction to Computer System, Data Representation & Logic' },
+      { id: 'U2', code: 'Unit 2', name: 'Unit 2: Central Processing Unit & Instruction Cycle' },
+      { id: 'U3', code: 'Unit 3', name: 'Unit 3: Memory Hierarchy, Cache Memory & Virtual Memory' },
+      { id: 'U4', code: 'Unit 4', name: 'Unit 4: Input-Output Organization & DMA Controllers' },
+      { id: 'U5', code: 'Unit 5', name: 'Unit 5: Pipelining, Instruction Hazards & Parallel Processing' },
+    ];
+  }
+
+  // 3. Web Technology & Front End Development
+  if (c === '88534' || c === '88539' || c === '88541' || n.includes('web') || n.includes('front end') || n.includes('html') || n.includes('css')) {
+    return [
+      { id: 'CO1', code: 'CO1', name: 'CO1: Fundamentals of Web Architecture, HTML5 & CSS3 Styling' },
+      { id: 'CO2', code: 'CO2', name: 'CO2: JavaScript Essentials, DOM Manipulation & Event Handling' },
+      { id: 'CO3', code: 'CO3', name: 'CO3: Responsive Layouts, Flexbox, Grid & UI Components' },
+      { id: 'CO4', code: 'CO4', name: 'CO4: Client-Server Architecture, REST APIs & Asynchronous JS' },
+      { id: 'CO5', code: 'CO5', name: 'CO5: Full Stack Integration, Web Security & Project Deployment' },
+    ];
+  }
+
+  // 4. Object Oriented Programming in C++ / Java
+  if (c === '88532' || c === '88538' || n.includes('c++') || n.includes('java') || n.includes('object oriented')) {
+    return [
+      { id: 'U1', code: 'Unit 1', name: 'Unit 1: Principles of OOP, Data Types & Control Structures' },
+      { id: 'U2', code: 'Unit 2', name: 'Unit 2: Classes, Objects, Constructors & Destructors' },
+      { id: 'U3', code: 'Unit 3', name: 'Unit 3: Operator Overloading & Type Conversion Mechanisms' },
+      { id: 'U4', code: 'Unit 4', name: 'Unit 4: Inheritance, Virtual Functions & Dynamic Polymorphism' },
+      { id: 'U5', code: 'Unit 5', name: 'Unit 5: Templates, Exception Handling & File Stream I/O' },
+    ];
+  }
+
+  // 5. Business Communication / Soft Skills
+  if (c === '88533' || n.includes('communication') || n.includes('english')) {
+    return [
+      { id: 'U1', code: 'Unit 1', name: 'Unit 1: Basics of Communication & Structural Language Skills' },
+      { id: 'U2', code: 'Unit 2', name: 'Unit 2: Business Writing: Letters, Emails, Memos & Resumes' },
+      { id: 'U3', code: 'Unit 3', name: 'Unit 3: Oral Presentations, Phonetics & Body Language' },
+      { id: 'U4', code: 'Unit 4', name: 'Unit 4: Group Discussions, Interview Preparation & Meetings' },
+      { id: 'U5', code: 'Unit 5', name: 'Unit 5: Technical Report Writing & Proposal Drafting' },
+    ];
+  }
+
+  // 6. Operating System
+  if (c === '88537' || c === '87665' || c === '87659' || n.includes('operating system') || n.includes('os')) {
+    return [
+      { id: 'U1', code: 'Unit 1', name: 'Unit 1: Introduction to Operating Systems & System Structures' },
+      { id: 'U2', code: 'Unit 2', name: 'Unit 2: Process Management, Threads & CPU Scheduling Algorithms' },
+      { id: 'U3', code: 'Unit 3', name: 'Unit 3: Process Synchronization, Semaphores & Deadlock Handling' },
+      { id: 'U4', code: 'Unit 4', name: 'Unit 4: Memory Management, Paging, Segmentation & Virtual Memory' },
+      { id: 'U5', code: 'Unit 5', name: 'Unit 5: Storage Management, File Systems & Disk Scheduling' },
+    ];
+  }
+
+  // 7. Mathematics
+  if (c === '88595' || n.includes('math') || n.includes('discrete')) {
+    return [
+      { id: 'U1', code: 'Unit 1', name: 'Unit 1: Matrices, Determinants & Systems of Linear Equations' },
+      { id: 'U2', code: 'Unit 2', name: 'Unit 2: Differential Calculus, Limits & Mean Value Theorems' },
+      { id: 'U3', code: 'Unit 3', name: 'Unit 3: Integral Calculus & Numerical Integration Methods' },
+      { id: 'U4', code: 'Unit 4', name: 'Unit 4: Discrete Structures, Set Theory & Boolean Algebra' },
+      { id: 'U5', code: 'Unit 5', name: 'Unit 5: Probability Distributions & Statistical Analysis' },
+    ];
+  }
+
+  // 8. Digital Marketing & SEO
+  if (c === '88540' || n.includes('marketing') || n.includes('seo')) {
+    return [
+      { id: 'U1', code: 'Unit 1', name: 'Unit 1: Digital Marketing Landscape & Consumer Conversion Funnels' },
+      { id: 'U2', code: 'Unit 2', name: 'Unit 2: Search Engine Optimization (On-Page, Off-Page & Technical)' },
+      { id: 'U3', code: 'Unit 3', name: 'Unit 3: Search Engine Marketing, Google Ads & PPC Campaigns' },
+      { id: 'U4', code: 'Unit 4', name: 'Unit 4: Social Media Marketing & Content Strategy' },
+      { id: 'U5', code: 'Unit 5', name: 'Unit 5: Web Analytics, Conversion Tracking & ROI Measurement' },
+    ];
+  }
+
+  // 9. Practical / Lab Subjects
+  if (n.includes('lab') || n.includes('workshop') || n.includes('seminar')) {
+    return [
+      { id: 'L1', code: 'Lab Unit 1', name: 'Lab Unit 1: Environment Setup, Tool Configuration & Foundation' },
+      { id: 'L2', code: 'Lab Unit 2', name: 'Lab Unit 2: Implementation of Core Algorithmic Techniques' },
+      { id: 'L3', code: 'Lab Unit 3', name: 'Lab Unit 3: Intermediate Problem Solving & Module Testing' },
+      { id: 'L4', code: 'Lab Unit 4', name: 'Lab Unit 4: Complex Application Scenarios & Mini-Project Build' },
+      { id: 'L5', code: 'Lab Unit 5', name: 'Lab Unit 5: Viva Voce, Project Evaluation & Code Optimization' },
+    ];
+  }
+
+  // 10. Default dynamic units for any other subject
+  return [
+    { id: 'U1', code: 'Unit 1', name: `Unit 1: ${name || 'Subject'} - Fundamental Concepts & Architecture` },
+    { id: 'U2', code: 'Unit 2', name: `Unit 2: ${name || 'Subject'} - Core Methodologies & Mechanics` },
+    { id: 'U3', code: 'Unit 3', name: `Unit 3: ${name || 'Subject'} - Analytical Formulation & Design` },
+    { id: 'U4', code: 'Unit 4', name: `Unit 4: ${name || 'Subject'} - Practical Applications & Case Studies` },
+    { id: 'U5', code: 'Unit 5', name: `Unit 5: ${name || 'Subject'} - Advanced Trends, Assessment & Review` },
+  ];
+}
+
+// Helper to generate contextual topics for a chosen unit
+function generateSyllabusTopics(unitCode: string, unitName: string, subjectCode: string): CurriculumTopic[] {
+  const cleanU = unitCode.replace(/\s+/g, '');
+  return [
+    {
+      id: `${subjectCode}-${cleanU}-T01`,
+      code: `${subjectCode}-${cleanU}-T01`,
+      name: `${unitCode}: Conceptual Foundations & Principles`,
+    },
+    {
+      id: `${subjectCode}-${cleanU}-T02`,
+      code: `${subjectCode}-${cleanU}-T02`,
+      name: `${unitCode}: Detailed Methodology, Architecture & Analysis`,
+    },
+    {
+      id: `${subjectCode}-${cleanU}-T03`,
+      code: `${subjectCode}-${cleanU}-T03`,
+      name: `${unitCode}: Applied Case Studies & Problem Solving`,
+    },
+  ];
+}
+
+// Helper to generate competencies for a chosen topic
+function generateSyllabusSubtopics(topicCode: string): CurriculumSubtopic[] {
+  return [
+    {
+      id: `${topicCode}-C01`,
+      code: `${topicCode}-C01`,
+      name: `Core Competency 1: Conceptual Knowledge & Definitions`,
+    },
+    {
+      id: `${topicCode}-C02`,
+      code: `${topicCode}-C02`,
+      name: `Core Competency 2: Application, Modeling & Analysis`,
+    },
+    {
+      id: `${topicCode}-C03`,
+      code: `${topicCode}-C03`,
+      name: `Core Competency 3: Practical Demonstration, Verification & Viva`,
+    },
+  ];
+}
 
 export default function FacultyLessonsPage() {
   const [colgCd, setColgCd] = useState<string>('1');
@@ -56,18 +232,26 @@ export default function FacultyLessonsPage() {
   const [selectedCourse, setSelectedCourse] = useState<string>('13'); // Default BCA
   const [selectedBranch, setSelectedBranch] = useState<string>('1');
   const [selectedBatch, setSelectedBatch] = useState<string>('2');
-  const [selectedSem, setSelectedSem] = useState<string>('1');
+  const [selectedSem, setSelectedSem] = useState<string>('3');
+  const [selectedSection, setSelectedSection] = useState<string>('1'); // Section 1 = A, 2 = B, 3 = C, 4 = D
 
-  // Curriculum Hierarchy Selectors (Master Data from Backend & Live Portal)
+  // Curriculum State
   const [rawSubjects, setRawSubjects] = useState<any[]>([]);
-  const [rawUnits, setRawUnits] = useState<any[]>([]);
-  const [rawTopics, setRawTopics] = useState<any[]>([]);
-  const [rawSubtopics, setRawSubtopics] = useState<any[]>([]);
+  const [subjectsLoaded, setSubjectsLoaded] = useState<boolean>(false);
+  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
 
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [selectedTopic, setSelectedTopic] = useState<string>('');
   const [selectedSubtopic, setSelectedSubtopic] = useState<string>('');
+
+  // Dynamic Units, Topics, Subtopics lists for active subject & unit
+  const [subjectUnits, setSubjectUnits] = useState<CurriculumUnit[]>([]);
+  const [unitTopics, setUnitTopics] = useState<CurriculumTopic[]>([]);
+  const [topicSubtopics, setTopicSubtopics] = useState<CurriculumSubtopic[]>([]);
+
+  const [loadingUnits, setLoadingUnits] = useState<boolean>(false);
+  const [loadingTopics, setLoadingTopics] = useState<boolean>(false);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -228,7 +412,7 @@ export default function FacultyLessonsPage() {
         }
       }
     } catch {}
-    if (crs === '13') return [{ code: '1', name: 'Computer Science & Engineering (CSE)' }];
+    if (crs === '13') return [{ code: '1', name: 'BCA Department' }];
     if (crs === '1') {
       return [
         { code: '1', name: 'Computer Science & Engineering (CSE)' },
@@ -300,154 +484,243 @@ export default function FacultyLessonsPage() {
     return sems;
   };
 
-  // 1. Available Subjects from Curriculum Subject Master List
-  const availableSubjects = useMemo(() => {
-    if (!rawSubjects || rawSubjects.length === 0) return [];
+  // 1. All subject list load on button press
+  const handleGetSubjects = async () => {
+    try {
+      setLoadingSubjects(true);
+      setAlert(null);
+      const tenant = getTenantSlug();
+      const cd = getColgCd();
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+      const headers = { 'Authorization': `Bearer ${token}` };
 
-    // Filter by selectedCourse and selectedSem if matched
-    const filtered = rawSubjects.filter((s: any) => {
-      const matchCourse = !selectedCourse || !s.course_cd || String(s.course_cd) === String(selectedCourse);
-      const matchSem = !selectedSem || !s.sem_cd || String(s.sem_cd) === String(selectedSem) || String(s.semester) === String(selectedSem);
-      return matchCourse && matchSem;
-    });
+      // A. Fetch from Curriculum Subject Master in PostgreSQL
+      const subjRes = await fetch(`${API_BASE}/admin-master/subjects?tenant=${tenant}`, { headers }).catch(() => null);
+      let backendSubjects: any[] = [];
+      if (subjRes && subjRes.ok) {
+        const j = await subjRes.json();
+        backendSubjects = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
+      }
 
-    if (filtered.length > 0) {
-      return filtered.map((s: any) => ({
+      // B. Fetch from live SRMS portal proxy
+      let liveSubjects: any[] = [];
+      try {
+        const secParam = selectedSection === 'ALL' ? '1' : selectedSection;
+        const liveRes = await fetch(
+          `/api/srms/all-subjects?colgcd=${cd}&coursecd=${selectedCourse}&branchcd=${selectedBranch}&batchcd=${selectedBatch}&semcd=${selectedSem}&section=${secParam}&tenant=${tenant}`
+        );
+        if (liveRes.ok) {
+          const liveData = await liveRes.json();
+          if (Array.isArray(liveData)) {
+            liveSubjects = liveData.map((s: any) => ({
+              id: String(s.sub_cd || s.code || s.id),
+              code: String(s.sub_cd || s.code || s.id),
+              name: s.sub_name || s.name,
+              course_cd: String(selectedCourse),
+              branch_cd: String(selectedBranch),
+              batch_cd: String(selectedBatch),
+              sem_cd: String(selectedSem),
+              section: String(selectedSection),
+              mst_sub_name: s.mst_sub_name,
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn('Live SRMS portal subjects fetch error:', err);
+      }
+
+      // C. Filter backend subjects by current academic scope (course & sem)
+      const cleanSem = String(selectedSem).replace(/\D/g, '');
+      const filteredBackend = backendSubjects.filter((s: any) => {
+        const matchCourse = !selectedCourse || !s.course_cd || String(s.course_cd) === String(selectedCourse);
+        const sSem = String(s.sem_cd || s.semester || '').replace(/\D/g, '');
+        const matchSem = !cleanSem || !sSem || sSem === cleanSem;
+        return matchCourse && matchSem;
+      });
+
+      // Merge and deduplicate by code
+      const mergedMap = new Map<string, any>();
+      (filteredBackend.length > 0 ? filteredBackend : backendSubjects).forEach((s: any) => {
+        const key = String(s.code || s.id).trim().toUpperCase();
+        mergedMap.set(key, s);
+      });
+      liveSubjects.forEach((s: any) => {
+        const key = String(s.code || s.id).trim().toUpperCase();
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, s);
+        }
+      });
+
+      const subjectsList = Array.from(mergedMap.values()).map((s: any) => ({
         id: String(s.id || s.code || s.sub_cd),
         code: String(s.code || s.sub_cd || s.id),
         name: s.name || s.sub_name || s.mst_sub_name || `Subject #${s.code || s.id}`,
         sem_cd: s.sem_cd || s.semester,
       }));
+
+      setRawSubjects(subjectsList);
+      setSubjectsLoaded(true);
+      setSelectedSubject('');
+      setSelectedUnit('');
+      setSelectedTopic('');
+      setSelectedSubtopic('');
+      setSubjectUnits([]);
+      setUnitTopics([]);
+      setTopicSubtopics([]);
+
+      const secLabel = selectedSection === 'ALL' ? 'All Sections' : `Section ${selectedSection === '1' ? 'A' : selectedSection === '2' ? 'B' : selectedSection === '3' ? 'C' : 'D'}`;
+      if (subjectsList.length > 0) {
+        setAlert({
+          type: 'success',
+          message: `Loaded ${subjectsList.length} subjects for Course #${selectedCourse} • Sem ${selectedSem} • ${secLabel}. Please choose a subject below.`,
+        });
+      } else {
+        setAlert({
+          type: 'error',
+          message: `No curriculum subjects found for Course #${selectedCourse} • Sem ${selectedSem}.`,
+        });
+      }
+    } catch (err) {
+      setAlert({ type: 'error', message: 'Failed to fetch subjects from curriculum master.' });
+    } finally {
+      setLoadingSubjects(false);
     }
+  };
 
-    // Fallback: match by course only
-    const courseFiltered = rawSubjects.filter((s: any) => {
-      return !selectedCourse || !s.course_cd || String(s.course_cd) === String(selectedCourse);
-    });
+  // 2. On subject select: dynamically fetch & load units specifically for the selected subject
+  const handleSubjectChange = async (newSubjectCode: string) => {
+    setSelectedSubject(newSubjectCode);
+    setSelectedUnit('');
+    setSelectedTopic('');
+    setSelectedSubtopic('');
+    setSubjectUnits([]);
+    setUnitTopics([]);
+    setTopicSubtopics([]);
 
-    const listToUse = courseFiltered.length > 0 ? courseFiltered : rawSubjects;
-    return listToUse.map((s: any) => ({
-      id: String(s.id || s.code || s.sub_cd),
-      code: String(s.code || s.sub_cd || s.id),
-      name: s.name || s.sub_name || s.mst_sub_name || `Subject #${s.code || s.id}`,
-      sem_cd: s.sem_cd || s.semester,
-    }));
-  }, [rawSubjects, selectedCourse, selectedSem]);
+    if (!newSubjectCode) return;
 
-  // 2. Available Units filtered dynamically based on Selected Subject
-  const availableUnits = useMemo(() => {
-    if (!selectedSubject) return [];
+    try {
+      setLoadingUnits(true);
+      const tenant = getTenantSlug();
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+      const headers = { 'Authorization': `Bearer ${token}` };
 
-    const subjObj = rawSubjects.find(
-      (s: any) => String(s.code).toLowerCase() === String(selectedSubject).toLowerCase() ||
-                  String(s.id).toLowerCase() === String(selectedSubject).toLowerCase()
-    );
-
-    const subCode = (subjObj?.code || selectedSubject || '').toLowerCase();
-    const subId = (subjObj?.id || '').toLowerCase();
-
-    const filtered = rawUnits.filter((u: any) => {
-      const uSubId = String(u.subject_id || '').toLowerCase();
-      const uSubCode = String(u.subject_code || '').toLowerCase();
-      return (
-        (subId && uSubId === subId) ||
-        (subCode && (uSubCode === subCode || uSubId === subCode)) ||
-        (subCode && u.code && String(u.code).toLowerCase().includes(subCode))
+      // Find subject details from loaded rawSubjects
+      const subjObj = rawSubjects.find(
+        (s: any) => String(s.code).toLowerCase() === String(newSubjectCode).toLowerCase() ||
+                    String(s.id).toLowerCase() === String(newSubjectCode).toLowerCase()
       );
-    });
+      const subName = (subjObj?.name || '').trim();
+      const subCode = (subjObj?.code || newSubjectCode).trim();
+      const subId = subjObj?.id || '';
 
-    if (filtered.length > 0) {
-      return filtered.map((u: any) => ({
-        id: String(u.id || u.code),
-        code: String(u.code || u.unit_code || u.id),
-        name: u.name || u.unit_name || `Unit ${u.code || u.id}`,
-      }));
+      // A. Fetch custom units from backend PostgreSQL for this specific subject
+      const res = await fetch(
+        `${API_BASE}/admin-master/units?tenant=${tenant}&subjectCode=${encodeURIComponent(subCode)}&subjectId=${encodeURIComponent(subId)}`,
+        { headers }
+      ).catch(() => null);
+
+      let fetchedUnits: any[] = [];
+      if (res && res.ok) {
+        const j = await res.json();
+        const list = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
+        fetchedUnits = list.filter((u: any) => {
+          const uSubCode = String(u.subject_code || '').toLowerCase();
+          const uSubId = String(u.subject_id || '').toLowerCase();
+          return (
+            (subCode && uSubCode === subCode.toLowerCase()) ||
+            (subId && uSubId === subId.toLowerCase()) ||
+            (subCode && u.code && String(u.code).toLowerCase().includes(subCode.toLowerCase()))
+          );
+        });
+      }
+
+      // If DB has custom units for this subject, use them!
+      if (fetchedUnits.length > 0) {
+        setSubjectUnits(
+          fetchedUnits.map((u: any) => ({
+            id: String(u.id || u.code),
+            code: String(u.code || u.unit_code || u.id),
+            name: u.name || u.unit_name || `Unit ${u.code}`,
+            description: u.description || '',
+          }))
+        );
+      } else {
+        // Dynamically generate syllabus units tailored to this specific subject!
+        const dynamicUnits = generateSyllabusUnits(subCode, subName);
+        setSubjectUnits(dynamicUnits);
+      }
+    } catch (err) {
+      console.warn('Error loading dynamic units for subject:', err);
+    } finally {
+      setLoadingUnits(false);
     }
+  };
 
-    // Standard Course Outcome units fallback (CO1 to CO5) so teacher is never blocked
-    return [
-      { id: 'CO1', code: 'CO1', name: 'Course Outcome 1 (CO1)' },
-      { id: 'CO2', code: 'CO2', name: 'Course Outcome 2 (CO2)' },
-      { id: 'CO3', code: 'CO3', name: 'Course Outcome 3 (CO3)' },
-      { id: 'CO4', code: 'CO4', name: 'Course Outcome 4 (CO4)' },
-      { id: 'CO5', code: 'CO5', name: 'Course Outcome 5 (CO5)' },
-    ];
-  }, [rawUnits, selectedSubject, rawSubjects]);
+  // 3. On unit select: dynamically fetch & load topics specifically for the selected unit & subject
+  const handleUnitChange = async (newUnitCode: string) => {
+    setSelectedUnit(newUnitCode);
+    setSelectedTopic('');
+    setSelectedSubtopic('');
+    setUnitTopics([]);
+    setTopicSubtopics([]);
 
-  // 3. Available Topics filtered by Selected Unit & Subject
-  const availableTopics = useMemo(() => {
-    if (!selectedUnit) return [];
+    if (!newUnitCode) return;
 
-    const subjObj = rawSubjects.find(
-      (s: any) => String(s.code).toLowerCase() === String(selectedSubject).toLowerCase() ||
-                  String(s.id).toLowerCase() === String(selectedSubject).toLowerCase()
-    );
-    const subCode = (subjObj?.code || selectedSubject || '').toLowerCase();
-    const subId = (subjObj?.id || '').toLowerCase();
-    const uId = String(selectedUnit).toLowerCase();
+    try {
+      setLoadingTopics(true);
+      const tenant = getTenantSlug();
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+      const headers = { 'Authorization': `Bearer ${token}` };
 
-    const filtered = rawTopics.filter((t: any) => {
-      const matchUnit = (
-        String(t.unit_id || '').toLowerCase() === uId ||
-        String(t.unit_code || '').toLowerCase() === uId ||
-        String(t.unit_name || '').toLowerCase() === uId ||
-        String(t.code || '').toLowerCase().includes(uId)
-      );
+      // Query topics from backend
+      const res = await fetch(
+        `${API_BASE}/admin-master/topics?tenant=${tenant}&subjectCode=${encodeURIComponent(selectedSubject)}&unitCode=${encodeURIComponent(newUnitCode)}`,
+        { headers }
+      ).catch(() => null);
 
-      const matchSubject = !selectedSubject || (
-        (subId && String(t.subject_id || '').toLowerCase() === subId) ||
-        (subCode && (String(t.subject_code || '').toLowerCase() === subCode || String(t.code || '').toLowerCase().includes(subCode)))
-      );
+      let fetchedTopics: any[] = [];
+      if (res && res.ok) {
+        const j = await res.json();
+        const list = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
+        fetchedTopics = list.filter((t: any) => {
+          const matchSub = !selectedSubject || String(t.subject_code || '').toLowerCase() === selectedSubject.toLowerCase();
+          const matchUnit = String(t.unit_code || t.unit_id || '').toLowerCase() === newUnitCode.toLowerCase();
+          return matchSub && matchUnit;
+        });
+      }
 
-      return matchUnit && matchSubject;
-    });
-
-    if (filtered.length > 0) {
-      return filtered.map((t: any) => ({
-        id: String(t.id || t.code),
-        code: String(t.code || t.topic_code || t.id),
-        name: t.name || t.topic_name || `Topic ${t.code || t.id}`,
-      }));
+      if (fetchedTopics.length > 0) {
+        setUnitTopics(
+          fetchedTopics.map((t: any) => ({
+            id: String(t.id || t.code),
+            code: String(t.code || t.topic_code || t.id),
+            name: t.name || t.topic_name || `Topic ${t.code}`,
+          }))
+        );
+      } else {
+        const selectedUnitObj = subjectUnits.find((u) => u.code === newUnitCode);
+        const dynamicTopics = generateSyllabusTopics(newUnitCode, selectedUnitObj?.name || newUnitCode, selectedSubject);
+        setUnitTopics(dynamicTopics);
+      }
+    } catch (err) {
+      console.warn('Error loading topics for unit:', err);
+    } finally {
+      setLoadingTopics(false);
     }
+  };
 
-    const prefix = subCode ? `${subCode.toUpperCase()}-${selectedUnit}` : selectedUnit;
-    return [
-      { id: `${prefix}-T01`, code: `${prefix}-T01`, name: `${prefix}-T01: Introduction & Fundamental Principles` },
-      { id: `${prefix}-T02`, code: `${prefix}-T02`, name: `${prefix}-T02: In-Depth Conceptual Architecture & Theory` },
-      { id: `${prefix}-T03`, code: `${prefix}-T03`, name: `${prefix}-T03: Practical Implementation & Problem Solving` },
-    ];
-  }, [rawTopics, selectedUnit, selectedSubject, rawSubjects]);
+  // 4. On topic select: dynamically load competencies / subtopics
+  const handleTopicChange = (newTopicCode: string) => {
+    setSelectedTopic(newTopicCode);
+    setSelectedSubtopic('');
+    setTopicSubtopics([]);
 
-  // 4. Available Subtopics / Competencies filtered by Selected Topic
-  const availableSubtopics = useMemo(() => {
-    if (!selectedTopic) return [];
+    if (!newTopicCode) return;
 
-    const tId = String(selectedTopic).toLowerCase();
-    const uId = String(selectedUnit).toLowerCase();
-
-    const filtered = rawSubtopics.filter((st: any) => {
-      return (
-        String(st.topic_id || '').toLowerCase() === tId ||
-        String(st.topic_code || '').toLowerCase() === tId ||
-        String(st.code || '').toLowerCase().includes(tId) ||
-        (String(st.unit_id || '').toLowerCase() === uId && !st.topic_id)
-      );
-    });
-
-    if (filtered.length > 0) {
-      return filtered.map((st: any) => ({
-        id: String(st.id || st.code),
-        code: String(st.code || st.id),
-        name: st.description || st.name || st.code,
-      }));
-    }
-
-    return [
-      { id: `${selectedTopic}-C01`, code: `${selectedTopic}-C01`, name: `Core Competency 1: Conceptual Knowledge & Theory` },
-      { id: `${selectedTopic}-C02`, code: `${selectedTopic}-C02`, name: `Core Competency 2: Application & Problem Solving` },
-      { id: `${selectedTopic}-C03`, code: `${selectedTopic}-C03`, name: `Core Competency 3: Practical Demonstration & Viva` },
-    ];
-  }, [rawSubtopics, selectedTopic, selectedUnit]);
+    const dynamicSubtopics = generateSyllabusSubtopics(newTopicCode);
+    setTopicSubtopics(dynamicSubtopics);
+  };
 
   // Dynamic Lessons Fetching Scoped to Selection
   const fetchLessons = async (
@@ -456,6 +729,7 @@ export default function FacultyLessonsPage() {
     bat = selectedBatch,
     sem = selectedSem,
     sub = selectedSubject,
+    sec = selectedSection,
   ) => {
     try {
       setLoading(true);
@@ -468,6 +742,7 @@ export default function FacultyLessonsPage() {
       if (bat) queryParams.append('batchCd', bat);
       if (sem) queryParams.append('semCd', sem);
       if (sub) queryParams.append('subjectId', sub);
+      if (sec && sec !== 'ALL') queryParams.append('section', sec);
 
       const res = await fetch(`${API_BASE}/lessons?${queryParams.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` },
@@ -484,90 +759,19 @@ export default function FacultyLessonsPage() {
     }
   };
 
-  const fetchCurriculumHierarchy = async (
-    courseCd = selectedCourse,
-    branchCd = selectedBranch,
-    batchCd = selectedBatch,
-    semCd = selectedSem,
-  ) => {
-    try {
-      const tenant = getTenantSlug();
-      const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
-      const headers = { 'Authorization': `Bearer ${token}` };
-
-      const [subjRes, unitRes, topRes, compRes] = await Promise.all([
-        fetch(`${API_BASE}/admin-master/subjects?tenant=${tenant}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/units?tenant=${tenant}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/topics?tenant=${tenant}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/competencies?tenant=${tenant}`, { headers }).catch(() => null),
-      ]);
-
-      let backendSubjects: any[] = [];
-      if (subjRes && subjRes.ok) {
-        const j = await subjRes.json();
-        backendSubjects = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
-      }
-      if (unitRes && unitRes.ok) {
-        const j = await unitRes.json();
-        const list = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
-        setRawUnits(list);
-      }
-      if (topRes && topRes.ok) {
-        const j = await topRes.json();
-        const list = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
-        setRawTopics(list);
-      }
-      if (compRes && compRes.ok) {
-        const j = await compRes.json();
-        const list = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
-        setRawSubtopics(list);
-      }
-
-      // Fetch live portal subjects for selected academic scope as well
-      const cd = getColgCd();
-      let liveSubjects: any[] = [];
-      try {
-        const liveRes = await fetch(`/api/srms/all-subjects?colgcd=${cd}&coursecd=${courseCd}&branchcd=${branchCd}&batchcd=${batchCd}&semcd=${semCd}&tenant=${tenant}`);
-        if (liveRes.ok) {
-          const liveData = await liveRes.json();
-          if (Array.isArray(liveData)) {
-            liveSubjects = liveData.map((s: any) => ({
-              id: String(s.sub_cd || s.code || s.id),
-              code: String(s.sub_cd || s.code || s.id),
-              name: s.sub_name || s.name,
-              course_cd: String(courseCd),
-              branch_cd: String(branchCd),
-              batch_cd: String(batchCd),
-              sem_cd: String(semCd),
-              mst_sub_name: s.mst_sub_name,
-            }));
-          }
-        }
-      } catch (err) {
-        console.warn('Live SRMS portal subjects fetch error:', err);
-      }
-
-      // Merge backend subjects and live portal subjects (deduplicating by code)
-      const mergedMap = new Map<string, any>();
-      backendSubjects.forEach((s: any) => {
-        const key = String(s.code || s.id).trim().toUpperCase();
-        mergedMap.set(key, s);
-      });
-      liveSubjects.forEach((s: any) => {
-        const key = String(s.code || s.id).trim().toUpperCase();
-        if (!mergedMap.has(key)) {
-          mergedMap.set(key, s);
-        }
-      });
-
-      setRawSubjects(Array.from(mergedMap.values()));
-    } catch (err) {
-      console.warn('Error fetching curriculum hierarchy:', err);
-    }
-  };
-
+  // Academic cascading change handlers
   const handleCourseChange = async (newCourseCd: string) => {
     setSelectedCourse(newCourseCd);
+    setSubjectsLoaded(false);
+    setRawSubjects([]);
+    setSelectedSubject('');
+    setSelectedUnit('');
+    setSelectedTopic('');
+    setSelectedSubtopic('');
+    setSubjectUnits([]);
+    setUnitTopics([]);
+    setTopicSubtopics([]);
+
     const cd = getColgCd();
     const slug = getTenantSlug();
 
@@ -585,18 +789,69 @@ export default function FacultyLessonsPage() {
 
     const defaultBranch = branches[0]?.code || '1';
     const defaultBatch = batches.find((b) => b.name === '2025' || b.name === '2026' || b.year === 2025 || b.year === 2026)?.code || batches[0]?.code || '1';
-    const defaultSem = sems[0]?.code || '1';
+    const defaultSem = sems.some((s) => s.code === '3') ? '3' : (sems[0]?.code || '1');
 
     setSelectedBranch(defaultBranch);
     setSelectedBatch(defaultBatch);
     setSelectedSem(defaultSem);
+
+    fetchLessons(newCourseCd, defaultBranch, defaultBatch, defaultSem, '', selectedSection);
+  };
+
+  const handleBranchChange = (newBranchCd: string) => {
+    setSelectedBranch(newBranchCd);
+    setSubjectsLoaded(false);
+    setRawSubjects([]);
     setSelectedSubject('');
     setSelectedUnit('');
     setSelectedTopic('');
     setSelectedSubtopic('');
+    setSubjectUnits([]);
+    setUnitTopics([]);
+    setTopicSubtopics([]);
+    fetchLessons(selectedCourse, newBranchCd, selectedBatch, selectedSem, '', selectedSection);
+  };
 
-    fetchLessons(newCourseCd, defaultBranch, defaultBatch, defaultSem, '');
-    fetchCurriculumHierarchy(newCourseCd, defaultBranch, defaultBatch, defaultSem);
+  const handleBatchChange = (newBatchCd: string) => {
+    setSelectedBatch(newBatchCd);
+    setSubjectsLoaded(false);
+    setRawSubjects([]);
+    setSelectedSubject('');
+    setSelectedUnit('');
+    setSelectedTopic('');
+    setSelectedSubtopic('');
+    setSubjectUnits([]);
+    setUnitTopics([]);
+    setTopicSubtopics([]);
+    fetchLessons(selectedCourse, selectedBranch, newBatchCd, selectedSem, '', selectedSection);
+  };
+
+  const handleSemChange = (newSemCd: string) => {
+    setSelectedSem(newSemCd);
+    setSubjectsLoaded(false);
+    setRawSubjects([]);
+    setSelectedSubject('');
+    setSelectedUnit('');
+    setSelectedTopic('');
+    setSelectedSubtopic('');
+    setSubjectUnits([]);
+    setUnitTopics([]);
+    setTopicSubtopics([]);
+    fetchLessons(selectedCourse, selectedBranch, selectedBatch, newSemCd, '', selectedSection);
+  };
+
+  const handleSectionChange = (newSecCd: string) => {
+    setSelectedSection(newSecCd);
+    setSubjectsLoaded(false);
+    setRawSubjects([]);
+    setSelectedSubject('');
+    setSelectedUnit('');
+    setSelectedTopic('');
+    setSelectedSubtopic('');
+    setSubjectUnits([]);
+    setUnitTopics([]);
+    setTopicSubtopics([]);
+    fetchLessons(selectedCourse, selectedBranch, selectedBatch, selectedSem, '', newSecCd);
   };
 
   // Initial Data Load
@@ -636,8 +891,7 @@ export default function FacultyLessonsPage() {
         setSelectedBatch(defaultBatch);
         setSelectedSem(defaultSem);
 
-        fetchCurriculumHierarchy(initialCourseCd, defaultBranch, defaultBatch, defaultSem);
-        fetchLessons(initialCourseCd, defaultBranch, defaultBatch, defaultSem, '');
+        fetchLessons(initialCourseCd, defaultBranch, defaultBatch, defaultSem, '', '1');
       } catch (err) {
         console.warn('Error loading academic metadata:', err);
       }
@@ -645,13 +899,6 @@ export default function FacultyLessonsPage() {
 
     initAcademicMetadata();
   }, []);
-
-  // Dynamic Reload when Course, Branch, Batch, Semester or Subject changes
-  useEffect(() => {
-    if (selectedCourse) {
-      fetchLessons(selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubject);
-    }
-  }, [selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubject]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -694,6 +941,9 @@ export default function FacultyLessonsPage() {
       formData.append('branchCd', selectedBranch);
       formData.append('batchCd', selectedBatch);
       formData.append('semCd', selectedSem);
+      if (selectedSection && selectedSection !== 'ALL') {
+        formData.append('section', selectedSection);
+      }
       if (selectedSubject) {
         formData.append('subjectId', selectedSubject);
       }
@@ -720,7 +970,7 @@ export default function FacultyLessonsPage() {
         setTitle('');
         setDescription('');
         setSelectedFile(null);
-        fetchLessons(selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubject);
+        fetchLessons(selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubject, selectedSection);
       } else {
         const json = await res.json();
         setAlert({ type: 'error', message: json.message || 'Failed to upload lesson material.' });
@@ -745,7 +995,7 @@ export default function FacultyLessonsPage() {
 
       if (res.ok) {
         setAlert({ type: 'success', message: 'Lesson deleted successfully.' });
-        fetchLessons(selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubject);
+        fetchLessons(selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubject, selectedSection);
       }
     } catch (err) {
       setAlert({ type: 'error', message: 'Failed to delete lesson.' });
@@ -798,7 +1048,7 @@ export default function FacultyLessonsPage() {
             </div>
           )}
 
-          {/* Step 1 & 2: Cascading Selectors */}
+          {/* STEP 1: Academic & Semester Scoping with Section Dropdown & Get Subject Button */}
           <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-5">
             <div className="border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <h3 className="text-sm font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
@@ -806,12 +1056,12 @@ export default function FacultyLessonsPage() {
                 <span>STEP 1: ACADEMIC & SEMESTER SCOPING</span>
               </h3>
               <p className="text-xs text-[#7B8794] mt-0.5 font-medium">
-                Select target Academic Hierarchy (College, Course, Branch, Batch, Semester).
+                Select target Academic Hierarchy (College, Course, Branch, Batch, Semester, Section) then click &quot;Get Subject&quot;.
               </p>
             </div>
 
-            {/* 5-Level Academic Cascading Selectors */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+            {/* Cascading Selectors: College, Course, Branch, Batch, Semester, Section, and Get Subject Button */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 text-xs items-end">
 
               {/* 1. College (Locked to Active Tenant) */}
               <div>
@@ -853,7 +1103,7 @@ export default function FacultyLessonsPage() {
                 </label>
                 <select
                   value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  onChange={(e) => handleBranchChange(e.target.value)}
                   className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {branchesList.map((br) => (
@@ -869,7 +1119,7 @@ export default function FacultyLessonsPage() {
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">4. Batch *</label>
                 <select
                   value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
+                  onChange={(e) => handleBatchChange(e.target.value)}
                   className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
                   {batchesList.map((bt) => (
@@ -885,7 +1135,7 @@ export default function FacultyLessonsPage() {
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">5. Semester *</label>
                 <select
                   value={selectedSem}
-                  onChange={(e) => setSelectedSem(e.target.value)}
+                  onChange={(e) => handleSemChange(e.target.value)}
                   className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#F36C21] dark:text-orange-400 focus:outline-none focus:border-[#F36C21]"
                 >
                   {semestersList.map((s) => (
@@ -896,9 +1146,39 @@ export default function FacultyLessonsPage() {
                 </select>
               </div>
 
+              {/* 6. Section Dropdown (Right side of Semester) */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">6. Section *</label>
+                <select
+                  value={selectedSection}
+                  onChange={(e) => handleSectionChange(e.target.value)}
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  <option value="1">[#1] Section A</option>
+                  <option value="2">[#2] Section B</option>
+                  <option value="3">[#3] Section C</option>
+                  <option value="4">[#4] Section D</option>
+                  <option value="ALL">All Sections</option>
+                </select>
+              </div>
+
+              {/* 7. Get Subject Button */}
+              <div>
+                <button
+                  type="button"
+                  onClick={handleGetSubjects}
+                  disabled={loadingSubjects}
+                  className="w-full h-[42px] px-3 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] hover:opacity-90 text-white font-black text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-60"
+                  title="Click to load subjects for selected course, branch, batch, semester, and section"
+                >
+                  <span>{loadingSubjects ? '⏳' : '📚'}</span>
+                  <span>{loadingSubjects ? 'Loading...' : 'Get Subject'}</span>
+                </button>
+              </div>
+
             </div>
 
-            {/* Step 2: Curriculum Hierarchy Selectors (Subject ➔ Unit ➔ Topic ➔ Sub-Topic) */}
+            {/* STEP 2: Curriculum Topic Mapping (Subject ➔ Unit ➔ Topic ➔ Sub-Topic) */}
             <div className="border-t border-[#E7EAF3] dark:border-slate-800 pt-4 space-y-3">
               <h4 className="text-xs font-black uppercase text-[#F36C21] tracking-wider flex items-center gap-2">
                 <span>📖</span>
@@ -907,100 +1187,129 @@ export default function FacultyLessonsPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
 
-                {/* 1. Subject Dropdown (Curriculum Subject Master List) */}
+                {/* 1. Subject Dropdown (Loads on Get Subject button press) */}
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Subject * <span className="text-[#5B4BFF]">({availableSubjects.length})</span>
+                    Subject * {subjectsLoaded ? (
+                      <span className="text-[#5B4BFF]">({rawSubjects.length})</span>
+                    ) : (
+                      <span className="text-[#F36C21] font-semibold text-[10px]">(Click &quot;Get Subject&quot; Above)</span>
+                    )}
                   </label>
                   <select
                     value={selectedSubject}
-                    onChange={(e) => {
-                      setSelectedSubject(e.target.value);
-                      setSelectedUnit('');
-                      setSelectedTopic('');
-                      setSelectedSubtopic('');
-                    }}
-                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                    onChange={(e) => handleSubjectChange(e.target.value)}
+                    disabled={!subjectsLoaded || rawSubjects.length === 0}
+                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="">-- Select Curriculum Subject --</option>
-                    {availableSubjects.map((sub) => (
-                      <option key={sub.id || sub.code} value={sub.code}>
-                        [#{sub.code}] {sub.name}
-                      </option>
-                    ))}
+                    {!subjectsLoaded ? (
+                      <option value="">-- Click &quot;Get Subject&quot; button above to load --</option>
+                    ) : rawSubjects.length === 0 ? (
+                      <option value="">-- No subjects found for this selection --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Curriculum Subject --</option>
+                        {rawSubjects.map((sub) => (
+                          <option key={sub.id || sub.code} value={sub.code}>
+                            [#{sub.code}] {sub.name}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
 
-                {/* 2. Unit Dropdown (Subject Based) */}
+                {/* 2. Unit Dropdown (Loads dynamically on Subject selection) */}
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Unit {selectedSubject && <span className="text-[#5B4BFF]">({availableUnits.length})</span>}
+                    Unit {selectedSubject && (
+                      <span className="text-[#5B4BFF]">({subjectUnits.length})</span>
+                    )}
                   </label>
                   <select
                     value={selectedUnit}
-                    onChange={(e) => {
-                      setSelectedUnit(e.target.value);
-                      setSelectedTopic('');
-                      setSelectedSubtopic('');
-                    }}
-                    disabled={!selectedSubject}
-                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    onChange={(e) => handleUnitChange(e.target.value)}
+                    disabled={!selectedSubject || loadingUnits}
+                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                   >
-                    <option value="">
-                      {selectedSubject ? '-- Select Curriculum Unit / CO --' : '-- Select Subject First --'}
-                    </option>
-                    {availableUnits.map((u) => (
-                      <option key={u.id} value={u.code}>
-                        [{u.code}] {u.name}
-                      </option>
-                    ))}
+                    {loadingUnits ? (
+                      <option value="">⏳ Loading units for {selectedSubject}...</option>
+                    ) : !selectedSubject ? (
+                      <option value="">-- Select Subject First --</option>
+                    ) : subjectUnits.length === 0 ? (
+                      <option value="">-- No units available --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Curriculum Unit / Chapter --</option>
+                        {subjectUnits.map((u) => (
+                          <option key={u.id || u.code} value={u.code}>
+                            [{u.code}] {u.name}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
 
-                {/* 3. Topic Dropdown (Unit Based) */}
+                {/* 3. Topic Dropdown (Loads dynamically on Unit selection) */}
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Topic {selectedUnit && <span className="text-[#5B4BFF]">({availableTopics.length})</span>}
+                    Topic {selectedUnit && (
+                      <span className="text-[#5B4BFF]">({unitTopics.length})</span>
+                    )}
                   </label>
                   <select
                     value={selectedTopic}
-                    onChange={(e) => {
-                      setSelectedTopic(e.target.value);
-                      setSelectedSubtopic('');
-                    }}
-                    disabled={!selectedUnit}
-                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    onChange={(e) => handleTopicChange(e.target.value)}
+                    disabled={!selectedUnit || loadingTopics}
+                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                   >
-                    <option value="">
-                      {selectedUnit ? '-- Select Teaching Topic --' : '-- Select Unit First --'}
-                    </option>
-                    {availableTopics.map((t) => (
-                      <option key={t.id} value={t.code}>
-                        [{t.code}] {t.name}
-                      </option>
-                    ))}
+                    {loadingTopics ? (
+                      <option value="">⏳ Loading topics...</option>
+                    ) : !selectedUnit ? (
+                      <option value="">-- Select Unit First --</option>
+                    ) : unitTopics.length === 0 ? (
+                      <option value="">-- No topics available --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Teaching Topic --</option>
+                        {unitTopics.map((t) => (
+                          <option key={t.id || t.code} value={t.code}>
+                            [{t.code}] {t.name}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
 
-                {/* 4. Sub-Topic / Competency Dropdown (Topic Based) */}
+                {/* 4. Sub-Topic / Competency Dropdown (Loads dynamically on Topic selection) */}
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Sub-Topic / Competency {selectedTopic && <span className="text-[#5B4BFF]">({availableSubtopics.length})</span>}
+                    Sub-Topic / Competency {selectedTopic && (
+                      <span className="text-[#5B4BFF]">({topicSubtopics.length})</span>
+                    )}
                   </label>
                   <select
                     value={selectedSubtopic}
                     onChange={(e) => setSelectedSubtopic(e.target.value)}
                     disabled={!selectedTopic}
-                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                   >
-                    <option value="">
-                      {selectedTopic ? '-- Select Sub-Topic --' : '-- Select Topic First --'}
-                    </option>
-                    {availableSubtopics.map((st) => (
-                      <option key={st.id} value={st.code}>
-                        [{st.code}] {st.name}
-                      </option>
-                    ))}
+                    {!selectedTopic ? (
+                      <option value="">-- Select Topic First --</option>
+                    ) : topicSubtopics.length === 0 ? (
+                      <option value="">-- No sub-topics available --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Sub-Topic / Competency --</option>
+                        {topicSubtopics.map((st) => (
+                          <option key={st.id || st.code} value={st.code}>
+                            [{st.code}] {st.name}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -1008,7 +1317,7 @@ export default function FacultyLessonsPage() {
             </div>
           </div>
 
-          {/* Step 3: File Upload & Details Form */}
+          {/* STEP 3: File Upload & Details Form */}
           <form onSubmit={handleUploadSubmit} className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
             <div className="border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <h3 className="text-sm font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
@@ -1069,7 +1378,7 @@ export default function FacultyLessonsPage() {
             </div>
           </form>
 
-          {/* Lessons List Table */}
+          {/* Lessons List Table (Filtered dynamically by academic scope) */}
           <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
             <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
               <h3 className="text-sm font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
@@ -1078,7 +1387,7 @@ export default function FacultyLessonsPage() {
               </h3>
               <button
                 type="button"
-                onClick={() => fetchLessons(selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubject)}
+                onClick={() => fetchLessons(selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubject, selectedSection)}
                 className="text-xs font-bold text-[#5B4BFF] hover:text-[#4335e6] dark:text-indigo-400 flex items-center gap-1 transition"
               >
                 <span>🔄</span>

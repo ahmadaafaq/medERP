@@ -10,6 +10,7 @@ export interface LessonFilterQuery {
   branchCd?: string;
   batchCd?: string;
   semCd?: string;
+  section?: string;
   subjectId?: string;
   empid?: string;
   limit?: number;
@@ -64,6 +65,7 @@ export class LessonService {
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
         ALTER TABLE "${schema}".lessons ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+        ALTER TABLE "${schema}".lessons ADD COLUMN IF NOT EXISTS section VARCHAR(20);
         ALTER TABLE "${schema}".lessons ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
         ALTER TABLE "${schema}".lessons ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
         UPDATE "${schema}".lessons SET is_active = TRUE WHERE is_active IS NULL;
@@ -159,12 +161,12 @@ export class LessonService {
     // Save metadata in Postgres
     const query = `
       INSERT INTO "${schema}".lessons (
-        colg_cd, course_cd, branch_cd, batch_cd, sem_cd,
+        colg_cd, course_cd, branch_cd, batch_cd, sem_cd, section,
         subject_id, unit_id, topic_id, subtopic_id,
         empid, faculty_name, title, description,
         file_name, file_type, file_size, file_path,
         is_active, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, TRUE, NOW(), NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, TRUE, NOW(), NOW())
       RETURNING *
     `;
 
@@ -174,6 +176,7 @@ export class LessonService {
       dto.branchCd,
       dto.batchCd,
       dto.semCd,
+      dto.section || null,
       dto.subjectId || null,
       dto.unitId || null,
       dto.topicId || null,
@@ -349,6 +352,10 @@ export class LessonService {
       whereConditions.push(`(sem_cd = ANY($${paramIdx++}) OR sem_cd IS NULL OR sem_cd = '')`);
       params.push(semVars);
     }
+    if (filters.section && filters.section !== 'ALL' && user?.role !== 'STUDENT') {
+      whereConditions.push(`(section = $${paramIdx++} OR section IS NULL OR section = '' OR section = 'ALL')`);
+      params.push(filters.section);
+    }
     if (filters.subjectId) {
       whereConditions.push(`(subject_id = $${paramIdx} OR subject_id IN (SELECT code FROM "${schema}".subjects WHERE id::text = $${paramIdx} OR code = $${paramIdx}) OR subject_id IN (SELECT id::text FROM "${schema}".subjects WHERE code = $${paramIdx} OR id::text = $${paramIdx}))`);
       params.push(filters.subjectId);
@@ -357,7 +364,7 @@ export class LessonService {
 
     const limit = filters.limit || 100;
     const prefixedConditions = whereConditions.map((w) =>
-      w.replace(/\b(colg_cd|course_cd|branch_cd|batch_cd|sem_cd|subject_id|empid|is_active|created_at)\b/g, 'l.$1')
+      w.replace(/\b(colg_cd|course_cd|branch_cd|batch_cd|sem_cd|section|subject_id|empid|is_active|created_at)\b/g, 'l.$1')
     );
 
     const query = `

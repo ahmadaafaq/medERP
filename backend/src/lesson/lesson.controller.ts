@@ -111,6 +111,7 @@ export class LessonController {
     @Query('branchCd') branchCd?: string,
     @Query('batchCd') batchCd?: string,
     @Query('semCd') semCd?: string,
+    @Query('section') section?: string,
     @Query('subjectId') subjectId?: string,
     @Query('empid') empid?: string,
   ) {
@@ -121,6 +122,7 @@ export class LessonController {
       branchCd,
       batchCd,
       semCd,
+      section,
       subjectId,
       empid,
     });
