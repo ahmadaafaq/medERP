@@ -14,8 +14,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG NEXT_PUBLIC_API_URL=http://34.236.107.120:8081/api/v1
-ARG NEXT_PUBLIC_WS_URL=http://34.236.107.120:8081
+ARG NEXT_PUBLIC_API_URL=http://100.63.22.73:8081/api/v1
+ARG NEXT_PUBLIC_WS_URL=http://100.63.22.73:8081
 ARG BACKEND_INTERNAL_URL=http://backend:8081/api/v1/:path*
 ARG BACKEND_BASE_URL=http://backend:8081
 
