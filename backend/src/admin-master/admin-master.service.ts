@@ -1148,9 +1148,12 @@ export class AdminMasterService {
   }
 
   // ─── 4. TOPIC MASTER ───────────────────────────────────────────────────────
-  async listTopics(tenantSlug?: string) {
+  async listTopics(tenantSlug?: string, subjectId?: string, subjectCode?: string, unitId?: string, unitCode?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
     const colleges = await this.listColleges();
+
+    const targetSub = subjectId || subjectCode;
+    const targetUnit = unitId || unitCode;
 
     if (slug === 'all') {
       const activeTenants = colleges.filter((c: any) => c.slug);
@@ -1201,6 +1204,24 @@ export class AdminMasterService {
 
     const currentCollege = colleges.find((c: any) => c.slug === slug);
     await this.ensureAdminMasterTables(slug);
+
+    const whereConditions: string[] = [];
+    const params: any[] = [];
+    let pIdx = 1;
+
+    if (targetSub) {
+      whereConditions.push(`(t.subject_id::text = $${pIdx} OR t.subject_code = $${pIdx} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
+      params.push(targetSub);
+      pIdx++;
+    }
+    if (targetUnit) {
+      whereConditions.push(`(t.unit_id::text = $${pIdx} OR t.unit_code = $${pIdx} OR u.code = $${pIdx} OR u.id::text = $${pIdx})`);
+      params.push(targetUnit);
+      pIdx++;
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
     const topicsQuery = `
       SELECT * FROM (
         SELECT DISTINCT ON (t.id)
@@ -1219,6 +1240,7 @@ export class AdminMasterService {
         LEFT JOIN subjects s ON (s.id::text = t.subject_id::text OR s.code::text = t.subject_code::text)
         LEFT JOIN units u ON (u.id::text = t.unit_id::text OR u.code::text = t.unit_code::text)
         LEFT JOIN professional_linkers l ON l.id::text = t.linker_id::text
+        ${whereClause}
         ORDER BY t.id
       ) sub
       ORDER BY sub.created_at DESC, sub.code ASC
@@ -1226,6 +1248,7 @@ export class AdminMasterService {
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       topicsQuery,
+      params,
     );
 
     return rows.map((r: any) => ({
@@ -2859,7 +2882,7 @@ export class AdminMasterService {
   }
 
   // ─── 9. UNIT MASTER ─────────────────────────────────────────────────────────
-  async listUnits(tenantSlug?: string) {
+  async listUnits(tenantSlug?: string, subjectId?: string, subjectCode?: string, courseCd?: string) {
     const colleges = await this.listColleges();
 
     if (tenantSlug && tenantSlug !== 'all') {
@@ -2869,6 +2892,24 @@ export class AdminMasterService {
       const collegeId = targetCollege?.id || slug;
       const collegeName = targetCollege?.name || 'SRMS Institution';
       const collegeCode = targetCollege?.code || '';
+
+      const whereConditions: string[] = [];
+      const params: any[] = [];
+      let pIdx = 1;
+
+      const subTarget = subjectId || subjectCode;
+      if (subTarget) {
+        whereConditions.push(`(u.subject_id::text = $${pIdx} OR u.subject_code = $${pIdx} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
+        params.push(subTarget);
+        pIdx++;
+      }
+      if (courseCd) {
+        whereConditions.push(`(COALESCE(u.course_cd, s.course_cd) = $${pIdx})`);
+        params.push(courseCd);
+        pIdx++;
+      }
+
+      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
       const unitsQuery = `
         SELECT * FROM (
@@ -2880,6 +2921,7 @@ export class AdminMasterService {
             COALESCE(u.branch_cd, s.branch_cd) AS branch_cd
           FROM units u
           LEFT JOIN subjects s ON s.id::text = u.subject_id::text
+          ${whereClause}
           ORDER BY u.id
         ) sub
         ORDER BY sub.unit_order ASC, sub.code ASC
@@ -2887,6 +2929,7 @@ export class AdminMasterService {
       const rows = await this.tenantSchemaService.queryInTenant(
         slug,
         unitsQuery,
+        params,
       ).catch(() => []);
 
       return rows.map((r: any) => ({
