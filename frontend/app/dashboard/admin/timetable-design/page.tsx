@@ -296,20 +296,20 @@ export default function TimetableDesignPage() {
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() - 7);
     setCurrentDate(newDate);
-    fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, newDate);
+    fetchTimetableSlots(newDate);
   };
 
   const handleNextWeek = () => {
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() + 7);
     setCurrentDate(newDate);
-    fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, newDate);
+    fetchTimetableSlots(newDate);
   };
 
   const handleToday = () => {
     const newDate = new Date();
     setCurrentDate(newDate);
-    fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, newDate);
+    fetchTimetableSlots(newDate);
   };
 
   // Form Modal Popup State
@@ -891,7 +891,8 @@ export default function TimetableDesignPage() {
   const fetchSessionsForCollege = async (colgcd: string) => {
     const cd = colgcd || '1';
     try {
-      const res = await fetch(`/api/srms/sessions?colgcd=${cd}`);
+      const activeTenant = getActiveTenantSlug();
+      const res = await fetch(`/api/srms/sessions?colgcd=${cd}&tenant=${activeTenant}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -916,7 +917,8 @@ export default function TimetableDesignPage() {
   const fetchCoursesForCollege = async (colgcd: string) => {
     const cd = colgcd || '1';
     try {
-      const res = await fetch(`/api/srms/courses?colgcd=${cd}`);
+      const activeTenant = getActiveTenantSlug();
+      const res = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${activeTenant}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -1016,7 +1018,8 @@ export default function TimetableDesignPage() {
     const cd = colgcd || '1';
     const crs = coursecd || '13';
     try {
-      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}`);
+      const activeTenant = getActiveTenantSlug();
+      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}&tenant=${activeTenant}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -1181,90 +1184,81 @@ export default function TimetableDesignPage() {
     }
   };
 
-  const generateGridSlotsFromSubjects = (subsList: any[], targetDate: Date = currentDate) => {
-    if (!Array.isArray(subsList) || subsList.length === 0) return [];
+  const fetchPostgresSlots = async (
+    courseCd?: string,
+    branchCd?: string,
+    batchCd?: string,
+    semCd?: string,
+    secCd?: string,
+    colgCd?: string,
+    targetDate: Date = currentDate
+  ) => {
+    try {
+      const crs = courseCd || selectedCourse || '13';
+      const br = branchCd || selectedBranch || '1';
+      const bat = batchCd || selectedBatch || '2';
+      const sem = semCd || selectedSemester || '3';
+      const sec = secCd || selectedSection || '1';
+      const colg = colgCd || selectedCollege || '1';
+      const tenantSlug = getActiveTenantSlug();
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
-    const d = new Date(targetDate);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(d.getFullYear(), d.getMonth(), diff);
+      const res = await fetch(
+        `${API_BASE}/timetable?tenant=${tenantSlug}&courseCd=${crs}&branchCd=${br}&batchCd=${bat}&semester=${sem}&section=${sec}&colgCd=${colg}`,
+        {
+          headers: {
+            'x-tenant-slug': tenantSlug,
+            'x-tenant-id': tenantSlug,
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+          cache: 'no-store',
+        }
+      );
 
-    // Week of Aug 9 - Aug 15, 2026 has the active scheduled classes
-    const isAug9to15Week = monday.getFullYear() === 2026 && monday.getMonth() === 7 && monday.getDate() === 10;
+      if (res.ok) {
+        const json = await res.json();
+        const rawSlots = json.data || [];
+        if (Array.isArray(rawSlots)) {
+          const mapped: TimetableSlot[] = rawSlots.map((item: any) => {
+            const rawSubName = item.subject_name || item.topic || 'Subject Session';
+            const cleanSubName = String(rawSubName).replace(/\([^)]*\)/g, '').trim();
+            const fac = item.faculty_name || (String(rawSubName).match(/\(([^)]+)\)/)?.[1] || 'Faculty Member').trim();
+            const isLab = String(rawSubName).toLowerCase().includes('lab') || (item.slot_type || '').toLowerCase().includes('practical');
 
-    // For other weeks like Aug 16 - 22 (today), no timetable has been scheduled yet
-    if (!isAug9to15Week) {
-      return [];
+            return {
+              id: String(item.id),
+              postgres_id: String(item.id),
+              faculty_id: item.faculty_id || '',
+              faculty_name: fac,
+              faculty_code: item.faculty_code || '',
+              subject_id: item.subject_id || String(item.id),
+              subject_name: cleanSubName || rawSubName,
+              subject_code: item.subject_code || '',
+              department_id: item.department_id || '',
+              batch_id: item.batch_id || '',
+              day_of_week: Number(item.day_of_week) || 1,
+              start_time: String(item.start_time || '08:30:00').slice(0, 8),
+              end_time: String(item.end_time || '09:30:00').slice(0, 8),
+              room: item.room || (isLab ? 'Comp Lab 2' : 'Room 204'),
+              slotType: item.slot_type || (isLab ? 'Practical' : 'Lecture'),
+              slot_type: item.slot_type || (isLab ? 'Practical' : 'Lecture'),
+              topic: item.topic || cleanSubName || rawSubName,
+              unit_name: item.unit_name || null,
+              unit_id: item.unit_id || null,
+              sub_topics: item.sub_topics || null,
+              competency_codes: item.competency_codes || null,
+            };
+          });
+
+          setSlots(mapped);
+          return mapped;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch PostgreSQL slots:', err);
     }
-
-    const activePeriods = configuredTimeSlots
-      .filter(s => !s.isBreak)
-      .map(s => ({ start: s.start, end: s.end, label: s.label }));
-
-    const findSub = (predicate: (name: string, emp: string, code: string) => boolean) => {
-      return subsList.find((s: any) => {
-        const nm = (s.sub_name || s.name || '').toLowerCase();
-        const emp = (s.EmpName || '').toLowerCase();
-        const cd = String(s.sub_cd || s.code || '');
-        return predicate(nm, emp, cd);
-      });
-    };
-
-    const subBC = findSub((nm, emp) => nm.includes('business communication') || emp.includes('deep'));
-    const subUHV = findSub((nm, emp) => nm.includes('human values') || nm.includes('ethics') || emp.includes('nisha'));
-    const subOOP = findSub((nm, emp) => (nm.includes('object oriented') || nm.includes('c++')) && !nm.includes('lab'));
-    const subWT = findSub((nm, emp) => nm.includes('web tech') && !nm.includes('lab'));
-    const subCO = findSub((nm, emp) => nm.includes('computer organization') || nm.includes('computer org') || emp.includes('jyotirmay'));
-    const subMath = findSub((nm, emp) => nm.includes('math') || emp.includes('kamlendra'));
-    const subFrontEnd = findSub((nm, emp) => nm.includes('front end') || emp.includes('shorab'));
-
-    // EXACT real scheduled slots for Aug 9 - Aug 15 (No fake repetition!)
-    const weeklySchedule: Record<number, (any | null)[]> = {
-      // 1: MONDAY (Aug 10)
-      1: [subBC, subUHV, subOOP, null, null, null, null],
-      // 2: TUESDAY (Aug 11)
-      2: [subBC, subUHV, subMath, null, null, null, null],
-      // 3: WEDNESDAY (Aug 12) - No scheduled classes
-      3: [null, null, null, null, null, null, null],
-      // 4: THURSDAY (Aug 13)
-      4: [subBC, subFrontEnd, subCO, null, null, null, null],
-      // 5: FRIDAY (Aug 14)
-      5: [subOOP, null, subWT, null, null, null, null],
-      // 6: SATURDAY (Aug 15)
-      6: [subOOP, subUHV, subWT, null, null, null, null],
-    };
-
-    const generated: TimetableSlot[] = [];
-
-    [1, 2, 3, 4, 5, 6].forEach((dayVal) => {
-      const daySlots = weeklySchedule[dayVal] || [];
-      daySlots.forEach((sub, pIdx) => {
-        if (!sub || pIdx >= activePeriods.length) return;
-        const period = activePeriods[pIdx];
-        const subCode = String(sub.sub_cd || sub.code || '');
-        const rawName = String(sub.sub_name || sub.name || '');
-        const cleanName = rawName.replace(/\([^)]*\)/g, '').trim();
-        const teacher = sub.EmpName || (rawName.match(/\(([^)]+)\)/)?.[1] || 'Faculty Incharge');
-
-        generated.push({
-          id: `srms_slot_d${dayVal}_p${pIdx + 1}`,
-          day_of_week: dayVal,
-          start_time: period.start,
-          end_time: period.end,
-          subject_id: subCode,
-          subject_code: subCode,
-          subject_name: cleanName || rawName,
-          faculty_id: String(sub.empid || ''),
-          faculty_name: teacher,
-          room: 'Room 204',
-          slotType: 'Lecture',
-          slot_type: 'Lecture',
-          topic: `${cleanName}`,
-        });
-      });
-    });
-
-    return generated;
+    setSlots([]);
+    return [];
   };
 
   const fetchSrmsSchedule = async (
@@ -1283,6 +1277,7 @@ export default function TimetableDesignPage() {
       const sem = semCd || selectedSemester || '3';
       const sec = secCd || selectedSection || '1';
       const colg = colgCd || selectedCollege || '1';
+      const tenantSlug = getActiveTenantSlug();
 
       const d = new Date(targetDate);
       const day = d.getDay();
@@ -1297,7 +1292,13 @@ export default function TimetableDesignPage() {
       const targetDateIso = monday.toISOString().slice(0, 10);
 
       const res = await fetch(
-        `/api/srms/timetable-schedule?course=${crs}&batch=${bat}&branch=${br}&sem=${sem}&sec=${sec}&colgcd=${colg}&start=${startSec}&end=${endSec}&target_date=${targetDateIso}`
+        `/api/srms/timetable-schedule?course=${crs}&batch=${bat}&branch=${br}&sem=${sem}&sec=${sec}&colgcd=${colg}&start=${startSec}&end=${endSec}&target_date=${targetDateIso}&tenant=${tenantSlug}`,
+        {
+          headers: {
+            'x-tenant-slug': tenantSlug,
+            'x-tenant-id': tenantSlug,
+          },
+        }
       );
       if (res.ok) {
         const json = await res.json();
@@ -1354,8 +1355,8 @@ export default function TimetableDesignPage() {
               if (item.Cancel_flg === '1') return false;
               if (['679267', '679268', '679303'].includes(String(item.id))) return false;
 
-              // Ensure item falls strictly within the currently selected week date bounds
-              if (item.start) {
+              // Only remote single-day events are strictly bounded; recurring weekly slots persist across all upcoming months
+              if (item.source !== 'POSTGRESQL_SLOT' && item.source !== 'POSTGRESQL' && !item.postgres_id && item.start) {
                 const dStart = parseItemDate(item.start);
                 const startTimeMs = dStart.getTime();
                 if (!isNaN(startTimeMs)) {
@@ -1383,6 +1384,7 @@ export default function TimetableDesignPage() {
 
               return {
                 id: String(item.id),
+                postgres_id: item.postgres_id ? String(item.postgres_id) : (isUUID(item.id) ? String(item.id) : undefined),
                 day_of_week: dayVal,
                 start_time: startTime,
                 end_time: endTime,
@@ -1395,18 +1397,16 @@ export default function TimetableDesignPage() {
                 slotType: isLab ? 'Practical' : 'Lecture',
                 slot_type: isLab ? 'Practical' : 'Lecture',
                 topic: item.topic || rawTitle,
-                unit_name: item.unit_name,
-                sub_topics: item.sub_topics,
+                unit_name: item.unit_name || null,
+                unit_id: item.unit_id || null,
+                sub_topics: item.sub_topics || null,
+                competency_codes: item.competency_codes || null,
               };
             });
 
           const seenSlotKeys = new Set<string>();
           const dedupedSlots = mappedSlots.filter(slot => {
-            const normSub = String(slot.subject_name || slot.subject_code || slot.topic || '')
-              .replace(/\([^)]*\)/g, '')
-              .trim()
-              .toLowerCase();
-            const key = `${slot.day_of_week}_${slot.start_time?.slice(0, 5)}_${normSub}`;
+            const key = `${slot.day_of_week}_${slot.start_time?.slice(0, 5)}`;
             if (seenSlotKeys.has(key)) return false;
             seenSlotKeys.add(key);
             return true;
@@ -1422,6 +1422,7 @@ export default function TimetableDesignPage() {
     } catch (err) {
       console.warn('Failed to fetch SRMS timetable schedule:', err);
     }
+    setSlots([]);
     return [];
   };
 
@@ -1433,8 +1434,9 @@ export default function TimetableDesignPage() {
       const sem = Number(semCd || selectedSemester || 3);
       const sec = Number(secCd || selectedSection || 1);
       const colg = Number(colgCd || selectedCollege || 1);
+      const tenantSlug = getActiveTenantSlug();
 
-      const res = await fetch(`/api/srms/timetable-subjects?course=${crs}&branch=${br}&batch=${bat}&semester=${sem}&section=${sec}&colgcd=${colg}`);
+      const res = await fetch(`/api/srms/timetable-subjects?course=${crs}&branch=${br}&batch=${bat}&semester=${sem}&section=${sec}&colgcd=${colg}&tenant=${tenantSlug}`);
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -1453,25 +1455,45 @@ export default function TimetableDesignPage() {
     try {
       const [subs, sched] = await Promise.all([
         fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege),
-        fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate)
+        fetchTimetableSlots(currentDate, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege)
       ]);
       const secLetter = selectedSection === '1' ? 'A' : selectedSection === '2' ? 'B' : selectedSection === '3' ? 'C' : 'D';
-      const schedCount = Array.isArray(sched) ? sched.length : 0;
-      showAlert('success', `Live Timetable synced! Loaded ${schedCount} scheduled slots and ${subs.length} subjects for Semester ${selectedSemester} - Section ${secLetter}.`);
+      const schedCount = Array.isArray(sched) ? sched.length : (Array.isArray(slots) ? slots.length : 0);
+      showAlert('success', `Live Timetable synced! Loaded ${schedCount} scheduled slots and ${Array.isArray(subs) ? subs.length : 0} subjects for Semester ${selectedSemester} - Section ${secLetter}.`);
     } catch (e: any) {
-      showAlert('error', 'Error syncing timetable from live portal.');
+      showAlert('error', 'Error syncing timetable from database/portal.');
     } finally {
       setSyncingTimetable(false);
     }
   };
 
-  const fetchTimetableSlots = async () => {
+  const fetchTimetableSlots = async (
+    targetDate: Date = currentDate,
+    courseCd?: string,
+    branchCd?: string,
+    batchCd?: string,
+    semCd?: string,
+    secCd?: string,
+    colgCd?: string
+  ) => {
     setLoading(true);
     try {
-      await Promise.all([
-        fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege),
-        fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate)
-      ]);
+      const tenantSlug = getActiveTenantSlug();
+      const isSrms = Boolean(tenantSlug && tenantSlug.toLowerCase().includes('srms'));
+
+      // 1. Fetch subjects (for non-SRMS, queries PostgreSQL subjects table; for SRMS, queries SRMS ASMX)
+      await fetchSrmsSubjects(courseCd, branchCd, batchCd, semCd, secCd, colgCd);
+
+      // 2. Fetch timetable schedule:
+      // /api/srms/timetable-schedule automatically checks tenant slug:
+      // - If SRMS tenant: queries SRMS portal + PostgreSQL and combines with topics/units
+      // - If non-SRMS tenant: queries strictly PostgreSQL timetable_slots and projects into calendar week
+      const scheduleSlots = await fetchSrmsSchedule(courseCd, branchCd, batchCd, semCd, secCd, colgCd, targetDate);
+
+      // 3. Fallback: if non-SRMS and scheduleSlots is empty, attempt direct backend timetable query
+      if (!isSrms && (!scheduleSlots || scheduleSlots.length === 0)) {
+        await fetchPostgresSlots(courseCd, branchCd, batchCd, semCd, secCd, colgCd, targetDate);
+      }
     } catch (err) {
       console.error('Failed to fetch timetable slots', err);
     } finally {
@@ -1699,7 +1721,9 @@ export default function TimetableDesignPage() {
     const pad = (n: number) => String(n).padStart(2, '0');
     const ymdDateStr = `${slotDate.getFullYear()}-${pad(slotDate.getMonth() + 1)}-${pad(slotDate.getDate())}`;
     const effFromStr = `${mondayDate.getFullYear()}-${pad(mondayDate.getMonth() + 1)}-${pad(mondayDate.getDate())}`;
-    const effUntilStr = `${sundayDate.getFullYear()}-${pad(sundayDate.getMonth() + 1)}-${pad(sundayDate.getDate())}`;
+    const oneYearLater = new Date(mondayDate);
+    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+    const effUntilStr = `${oneYearLater.getFullYear()}-${pad(oneYearLater.getMonth() + 1)}-${pad(oneYearLater.getDate())}`;
 
     // 1. PostgreSQL Save Payload with all academic hierarchy, effective duration & unit/topic/subtopic parameters
     const pgPayload = {
@@ -1780,7 +1804,7 @@ export default function TimetableDesignPage() {
       const method = isSlotUuid ? 'PUT' : 'POST';
       const token = localStorage.getItem('token') || '';
 
-      const isSrmsTenant = tenantSlug ? (tenantSlug.toLowerCase().startsWith('srms') || tenantSlug.toLowerCase().includes('srms')) : false;
+      const isSrmsTenant = Boolean(tenantSlug && tenantSlug.toLowerCase().includes('srms'));
 
       // 1. Call SRMS add-event API (Only if tenant is SRMS)
       let srmsSaved = false;
@@ -1836,6 +1860,8 @@ export default function TimetableDesignPage() {
             method,
             headers: {
               'Content-Type': 'application/json',
+              'x-tenant-slug': tenantSlug,
+              'x-tenant-id': tenantSlug,
               ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
             },
             body: JSON.stringify(pgPayload),
@@ -1861,10 +1887,7 @@ export default function TimetableDesignPage() {
           : 'Timetable slot scheduled successfully and saved to PostgreSQL!');
         setModalError(null);
         setIsModalOpen(false);
-        fetchTimetableSlots();
-        if (isSrmsTenant) {
-          fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate);
-        }
+        fetchTimetableSlots(currentDate);
       } else {
         // ROLLBACK PARTIAL WRITE TO PRESERVE CONSISTENCY
         if (srmsSaved && !pgSaved && srmsEventId) {
@@ -1905,7 +1928,7 @@ export default function TimetableDesignPage() {
     setLoading(true);
     try {
       const tenantSlug = getActiveTenantSlug();
-      const isSrmsTenant = tenantSlug ? (tenantSlug.toLowerCase().startsWith('srms') || tenantSlug.toLowerCase().includes('srms')) : false;
+      const isSrmsTenant = Boolean(tenantSlug && tenantSlug.toLowerCase().includes('srms'));
       const cleanId = String(slotId);
       const pgId = (slotObj as any)?.postgres_id || (editingSlot as any)?.postgres_id || null;
 
@@ -1938,7 +1961,11 @@ export default function TimetableDesignPage() {
       for (const tid of Array.from(new Set(idsToDelete))) {
         await fetch(`${API_BASE}/timetable/${tid}?tenant=${tenantSlug}`, {
           method: 'DELETE',
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          headers: {
+            'x-tenant-slug': tenantSlug,
+            'x-tenant-id': tenantSlug,
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
         }).catch(() => { });
       }
 
@@ -1946,10 +1973,7 @@ export default function TimetableDesignPage() {
       setHoveredSlotInfo(null);
       setIsModalOpen(false);
       setSlots(prev => prev.filter(s => !idsToDelete.includes(s.id) && !idsToDelete.includes((s as any).postgres_id)));
-      fetchTimetableSlots();
-      if (isSrmsTenant) {
-        fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate);
-      }
+      fetchTimetableSlots(currentDate);
     } catch (err: any) {
       showAlert('error', err?.message || 'Network error while deleting slot.');
     } finally {

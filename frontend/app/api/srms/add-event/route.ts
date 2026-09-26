@@ -100,9 +100,10 @@ export async function POST(req: NextRequest) {
     const endMeta = formatToSrmsTimetblDate(rawEnd, '09:40');
 
     // 1. Resolve target PostgreSQL schema first
+    const tenantParam = req.nextUrl?.searchParams?.get('tenant') || improperEvent.tenant || improperEvent.tenantSlug || '';
     const tenantHeader = req.headers.get('x-tenant-id') || req.headers.get('x-tenant') || req.headers.get('x-tenant-slug') || '';
-    let slug = tenantHeader.replace(/^tenant_/, '').replace(/^tenant-/, '');
-    // Derive slug from colgcd when no header is present (SRMS college codes 1-14 -> srms-* slugs)
+    let slug = (tenantParam || tenantHeader).replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+    // Derive slug from colgcd when no header or param is present (SRMS college codes 1-14 -> srms-* slugs)
     if (!slug) {
       const srmsCollegeSlugMap: Record<string, string> = {
         '1': 'srms-cet-bareilly',
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
       slug = srmsCollegeSlugMap[colgcd] || 'srms-cet-bareilly';
     }
     const schema = `tenant_${slug}`;
-    // Determines whether this college should sync to the SRMS portal
+    // Determines whether this college should sync to the SRMS portal (strictly tenants with srms)
     const callSrmsApi = isSrmsTenant(slug);
 
     // 2. Pre-Validation: Faculty Overlap Validation across All Departments & Courses for the SAME DAY & TIME SLOT

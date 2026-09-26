@@ -22,6 +22,8 @@ export class TimetableService implements OnModuleInit {
         for (const row of schemasRes) {
           const schemaName = row.schema_name;
           await this.dataSource.query(`
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS effective_from DATE;
+            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS effective_until DATE;
             ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
             ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS topic VARCHAR(255);
             ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS competency_codes VARCHAR(255);

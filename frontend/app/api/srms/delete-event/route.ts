@@ -94,9 +94,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Event ID is required for deletion' }, { status: 400 });
     }
 
+    const tenantParam = req.nextUrl?.searchParams?.get('tenant') || body.tenant || body.tenantSlug || '';
     const tenantHeader = req.headers.get('x-tenant-id') || req.headers.get('x-tenant') || req.headers.get('x-tenant-slug') || '';
-    let slug = tenantHeader.replace(/^tenant_/, '').replace(/^tenant-/, '') || (colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly');
-    if (!slug) slug = 'srms-cet-bareilly';
+    let slug = (tenantParam || tenantHeader).replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+    if (!slug) slug = colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly';
     const schema = `tenant_${slug}`;
 
     const numId = Number(eventId);

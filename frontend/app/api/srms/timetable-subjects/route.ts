@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { srmsPost } from '@/lib/srms-client';
+import { srmsPost, isSrmsTenant } from '@/lib/srms-client';
+import { queryDb } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,6 +11,26 @@ export async function POST(req: NextRequest) {
     const semester = Number(body.semester || body.sem_cd || 3);
     const section = Number(body.section || body.sec_cd || 1);
     const colgcd = Number(body.colgcd || body.colg_cd || 1);
+
+    const tenantParam = req.nextUrl?.searchParams?.get('tenant') || body.tenant || '';
+    const tenantHeader = req.headers.get('x-tenant-id') || req.headers.get('x-tenant') || req.headers.get('x-tenant-slug') || '';
+    const slug = (tenantParam || tenantHeader).replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+
+    if (slug && !isSrmsTenant(slug)) {
+      // Non-SRMS tenant: Load directly from PostgreSQL
+      const schema = `tenant_${slug}`;
+      const dbSubs = await queryDb(
+        `SELECT id, code, name AS sub_name, name, code AS sub_cd, code AS linkcd, 'N' AS electivests
+         FROM "${schema}".subjects
+         WHERE (course_cd = $1 OR course_id::text = $1 OR $1 = '13')
+         ORDER BY name ASC`,
+        [course]
+      ).catch(() => []);
+      return NextResponse.json({
+        success: true,
+        data: dbSubs,
+      });
+    }
 
     const payload = {
       course: course,

@@ -103,30 +103,36 @@ export async function GET(request: NextRequest) {
     let end = searchParams.get('end') || '';
     const targetDateParam = searchParams.get('target_date');
 
-    if ((!start || !end) && targetDateParam) {
-      const targetBase = new Date(targetDateParam);
+    const tenantParam = searchParams.get('tenant') || searchParams.get('tenantSlug') || '';
+    const tenantHeader = request.headers.get('x-tenant-id') || request.headers.get('x-tenant') || request.headers.get('x-tenant-slug') || '';
+    let slug = (tenantParam || tenantHeader).replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+    if (!slug) slug = colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly';
+    const schema = `tenant_${slug}`;
+    const isSrms = slug.toLowerCase().includes('srms');
+
+    let startTimestamp = Number(start);
+    let endTimestamp = Number(end);
+
+    if ((isNaN(startTimestamp) || startTimestamp <= 0) || (isNaN(endTimestamp) || endTimestamp <= 0)) {
+      const targetBase = targetDateParam ? new Date(targetDateParam) : new Date();
       const day = targetBase.getDay();
       const sundayStart = new Date(targetBase.getFullYear(), targetBase.getMonth(), targetBase.getDate() - day, 0, 0, 0);
       const sundayEnd = new Date(sundayStart);
       sundayEnd.setDate(sundayStart.getDate() + 7);
-      start = String(Math.floor(sundayStart.getTime() / 1000));
-      end = String(Math.floor(sundayEnd.getTime() / 1000));
+      startTimestamp = Math.floor(sundayStart.getTime() / 1000);
+      endTimestamp = Math.floor(sundayEnd.getTime() / 1000);
+      start = String(startTimestamp);
+      end = String(endTimestamp);
     }
 
     const ts = Date.now();
-    // 1. Always fetch live timetable from remote SRMS JsonResponse.ashx by default (unless explicitly fetch_remote=false)
+    // 1. Fetch live timetable from remote SRMS JsonResponse.ashx ONLY for SRMS tenants (never for non-SRMS)
     let remoteData: any[] = [];
-    if (searchParams.get('fetch_remote') !== 'false') {
+    if (isSrms && searchParams.get('fetch_remote') !== 'false') {
       const targetUrl = `https://myportal.srms.ac.in/timetable/master/JsonResponse.ashx?course=${course}&batch=${batch}&branch=${branch}&sem=${sem}&sec=${sec}&colgcd=${colgcd}&_=${ts}&start=${start}&end=${end}`;
       remoteData = await fetchSrmsJson(targetUrl);
       if (!Array.isArray(remoteData)) remoteData = [];
     }
-
-    // 2. Fetch PostgreSQL timetable events from srms_timetable_events (strictly within requested date range)
-    const tenantHeader = request.headers.get('x-tenant-id') || request.headers.get('x-tenant') || request.headers.get('x-tenant-slug') || '';
-    let slug = tenantHeader.replace(/^tenant_/, '').replace(/^tenant-/, '') || (colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly');
-    if (!slug) slug = 'srms-cet-bareilly';
-    const schema = `tenant_${slug}`;
 
     // Query deleted events blacklist
     let deletedEventIds = new Set<string>();
@@ -288,17 +294,12 @@ export async function GET(request: NextRequest) {
         slotWhereClauses.push(`(ts.section = $${slotQueryParams.length} OR ts.section IS NULL OR ts.section = '1' OR ts.section = 'A')`);
       }
 
-      // STRICT DURATION ISOLATION:
-      // Only include timetable_slots if the slot's effective duration overlaps with the queried week.
-      // Unscheduled future weeks must remain completely blank.
+      // Timetable slots are weekly recurring schedules for the academic session/year
       if (weekStartIso && weekEndIso) {
         slotQueryParams.push(weekEndIso);
-        slotWhereClauses.push(`(ts.effective_from IS NOT NULL AND ts.effective_from::date <= $${slotQueryParams.length}::date)`);
+        slotWhereClauses.push(`(ts.effective_from IS NULL OR ts.effective_from = '' OR ts.effective_from::date <= $${slotQueryParams.length}::date)`);
         slotQueryParams.push(weekStartIso);
-        slotWhereClauses.push(`(ts.effective_until IS NOT NULL AND ts.effective_until::date >= $${slotQueryParams.length}::date)`);
-      } else {
-        // Without explicit week boundaries, never project slots indefinitely
-        slotWhereClauses.push(`1=0`);
+        slotWhereClauses.push(`(ts.effective_until IS NULL OR ts.effective_until = '' OR ts.effective_until::date >= $${slotQueryParams.length}::date OR ts.effective_from::date <= $${slotQueryParams.length}::date)`);
       }
 
       const pgSlots = await queryDb(
@@ -315,37 +316,43 @@ export async function GET(request: NextRequest) {
          WHERE ${slotWhereClauses.join(' AND ')}
          ORDER BY ts.day_of_week ASC, ts.start_time ASC`,
         slotQueryParams
-      ).catch(() => []);
+      ).catch((err: any) => {
+        console.error('[pgSlots query error]:', err.message);
+        return [];
+      });
 
       for (const s of pgSlots) {
         const sTime = String(s.start_time || '08:30:00').slice(0, 8);
         const eTime = String(s.end_time || '09:30:00').slice(0, 8);
         const dayVal = Number(s.day_of_week) || 1;
 
-        let startUnix = 0;
-        let endUnix = 0;
-        if (startTimestamp > 0) {
-          const slotWeekDate = new Date(startTimestamp * 1000);
-          slotWeekDate.setDate(slotWeekDate.getDate() + (dayVal === 7 ? 0 : dayVal));
-          const [sh, sm] = sTime.split(':').map(Number);
-          const [eh, em] = eTime.split(':').map(Number);
-          slotWeekDate.setHours(sh || 8, sm || 30, 0, 0);
-          startUnix = Math.floor(slotWeekDate.getTime() / 1000);
-          const endSlotDate = new Date(slotWeekDate);
-          endSlotDate.setHours(eh || 9, em || 30, 0, 0);
-          endUnix = Math.floor(endSlotDate.getTime() / 1000);
-        }
+        const dayOffset = (dayVal === 7 || dayVal === 0) ? 0 : dayVal;
+        const slotWeekDate = new Date(startTimestamp * 1000);
+        slotWeekDate.setDate(slotWeekDate.getDate() + dayOffset);
+        const [sh, sm] = sTime.split(':').map(Number);
+        const [eh, em] = eTime.split(':').map(Number);
+        slotWeekDate.setHours(sh || 8, sm || 30, 0, 0);
+        const startUnix = Math.floor(slotWeekDate.getTime() / 1000);
+        const endSlotDate = new Date(slotWeekDate);
+        endSlotDate.setHours(eh || 9, em || 30, 0, 0);
+        const endUnix = Math.floor(endSlotDate.getTime() / 1000);
+
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const ymd = `${slotWeekDate.getFullYear()}-${pad(slotWeekDate.getMonth() + 1)}-${pad(slotWeekDate.getDate())}`;
+        const fullStartStr = `${ymd} ${sTime}`;
+        const fullEndStr = `${ymd} ${eTime}`;
 
         const validSubCode = s.subject_code || s.subject_paper_code || '';
         dbEvents.push({
           id: String(s.id),
+          postgres_id: String(s.id),
           srms_id: null,
           title: s.description || s.topic || s.subject_name || 'Subject Session',
           description: s.description || s.topic || s.subject_name || 'Subject Session',
           start: startUnix,
           end: endUnix,
-          start_str: sTime,
-          end_str: eTime,
+          start_str: fullStartStr,
+          end_str: fullEndStr,
           start_time: sTime,
           end_time: eTime,
           day_of_week: dayVal,
@@ -421,7 +428,13 @@ export async function GET(request: NextRequest) {
 
       // Find matching PostgreSQL record for extra metadata (unit, topic, camera, etc.)
       const match = dbEvents.find((db) => {
-        if (item.id && (String(db.srms_id) === String(item.id) || String(db.id) === String(item.id))) return true;
+        if (item.id && (String(db.srms_id) === String(item.id) || String(db.id) === String(item.id) || String(db.postgres_id) === String(item.id))) return true;
+        // Match by day_of_week and start time prefix (e.g. "09:30")
+        const sameDay = Number(db.day_of_week) === dayVal;
+        const dbStartTime = String(db.start_time || '').slice(0, 5);
+        const itemStartTime = startTimeStr.slice(0, 5);
+        if (sameDay && dbStartTime && itemStartTime && dbStartTime === itemStartTime) return true;
+
         const dbTitleNorm = normalizeTitle(db.title);
         const timeDiff = Math.abs((db.start || 0) - startUnix);
         if (timeDiff < 1800) {
@@ -595,6 +608,11 @@ export async function GET(request: NextRequest) {
               LIMIT 1
             `, [dayVal, `${startTimeStr.slice(0, 5)}%`, course, sem, sec, rawTitle, cleanSubName]).catch(() => []);
 
+            const effFromIso = istStartDate.toISOString().slice(0, 10);
+            const effUntilDate = new Date(istStartDate);
+            effUntilDate.setFullYear(effUntilDate.getFullYear() + 1);
+            const effUntilIso = effUntilDate.toISOString().slice(0, 10);
+
             if (!existSlot || existSlot.length === 0) {
               await queryDb(`
                 INSERT INTO "${schema}".timetable_slots (
@@ -605,7 +623,7 @@ export async function GET(request: NextRequest) {
               `, [
                 effectiveFacId, effectiveDeptId, dayVal, startTimeStr, endTimeStr,
                 room, isLab ? 'Practical' : 'Lecture', course, branch, batch, sem, sec, colgcd,
-                rawTitle, cleanSubName, '2026-09-14', '2026-09-20'
+                rawTitle, cleanSubName, effFromIso, effUntilIso
               ]).catch(() => {});
             }
           }
