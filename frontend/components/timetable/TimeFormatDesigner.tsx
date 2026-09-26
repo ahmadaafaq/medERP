@@ -132,12 +132,18 @@ export default function TimeFormatDesigner({
   selectedCourse = '13',
   selectedDept = '',
   selectedBatch = '2',
-  collegeName = 'SRMS CET, BAREILLY',
+  collegeName,
   courseName = 'BCA',
   deptName = 'BCA DEPARTMENT',
   onSaveTimeFormat,
   onSwitchToDesignTab,
 }: TimeFormatDesignerProps) {
+  const resolvedCollegeName =
+    collegeName ||
+    (typeof window !== 'undefined'
+      ? localStorage.getItem('college_name') || localStorage.getItem('tenantName')
+      : '') ||
+    'Institution';
   // Day Start and End Bounds
   const [dayStartTime, setDayStartTime] = useState<string>('08:30');
   const [dayEndTime, setDayEndTime] = useState<string>('17:00');
@@ -596,7 +602,7 @@ export default function TimeFormatDesigner({
             <div className="flex items-center gap-2 text-xs font-bold text-[#5B4BFF] uppercase tracking-wider mb-1">
               <span>⏱️ Academic Structure</span>
               <span>•</span>
-              <span>{collegeName}</span>
+              <span>{resolvedCollegeName}</span>
             </div>
             <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
               Course & Department Time Format Designer

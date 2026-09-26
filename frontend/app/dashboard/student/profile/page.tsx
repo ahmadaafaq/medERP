@@ -241,8 +241,8 @@ export default function StudentProfilePage() {
           residency_type: p.residency_type || 'Hosteller',
           academic_session: p.academic_session || '2025-2026',
           admission_status: p.admission_status || 'ACTIVE',
-          college_name: meData.collegeName || meData.tenantName || 'SRMS College of Engineering & Technology, Bareilly',
-          bio: p.bio || meData.bio || 'Enrolled & Active Student at SRMS CET.',
+          college_name: meData.collegeName || meData.tenantName || (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution',
+          bio: p.bio || meData.bio || 'Enrolled & Active Student.',
           github_url: derivedGithubUrl || p.github_url || meData.github_url || '',
           github_followers: Number(p.github_followers ?? meData.github_followers) || 0,
           linkedin_url: p.linkedin_url || meData.linkedin_url || '',
@@ -307,8 +307,8 @@ export default function StudentProfilePage() {
       residency_type: 'Hosteller',
       academic_session: '2025-2026',
       admission_status: 'ACTIVE',
-      college_name: 'SRMS College of Engineering & Technology, Bareilly',
-      bio: 'Enrolled & Active Student at SRMS CET.',
+      college_name: (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution',
+      bio: 'Enrolled & Active Student.',
       github_url: derivedGithubUrl,
       github_followers: 0,
       linkedin_url: '',
@@ -524,7 +524,7 @@ export default function StudentProfilePage() {
                   <div className="absolute top-4 right-4 flex items-center gap-2">
                     <div className="bg-black/40 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/20 text-xs font-bold text-white flex items-center gap-2 shadow-lg">
                       <Building2 className="w-3.5 h-3.5 text-[#F36C21]" />
-                      <span className="truncate max-w-[200px] sm:max-w-xs">{profile?.college_name || 'SRMS CET, Bareilly'}</span>
+                      <span className="truncate max-w-[200px] sm:max-w-xs">{profile?.college_name || (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution'}</span>
                     </div>
                   </div>
                 </div>
@@ -694,7 +694,7 @@ export default function StudentProfilePage() {
                       </form>
                     ) : (
                       <p className="text-xs sm:text-sm text-[#4E5969] dark:text-slate-300 leading-relaxed italic bg-[#F6F8FC] dark:bg-slate-800/50 p-4 rounded-xl border border-dashed border-[#E7EAF3] dark:border-slate-700">
-                        "{profile?.bio || 'Enrolled & Active Student at SRMS CET.'}"
+                        "{profile?.bio || 'Enrolled & Active Student.'}"
                       </p>
                     )}
                   </div>

@@ -37,9 +37,15 @@ const MODAL_PAGE_SIZE = 6;
 export default function StudentAssessmentMarksCard({
   role = 'admin',
   initialData,
-  collegeName = 'SRMS CET',
+  collegeName,
   className = '',
 }: StudentAssessmentMarksCardProps) {
+  const resolvedCollegeName =
+    collegeName ||
+    (typeof window !== 'undefined'
+      ? localStorage.getItem('college_name') || localStorage.getItem('tenantName')
+      : '') ||
+    'Institution';
   const [data, setData] = useState<MarksSummaryData>(
     initialData && initialData.recentList && initialData.recentList.length > 0
       ? initialData
@@ -168,7 +174,7 @@ export default function StudentAssessmentMarksCard({
             <span className="truncate">Student Assessment & Marks Results</span>
           </h2>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
-            Real-time evaluated records for {collegeName}
+            Real-time evaluated records for {resolvedCollegeName}
           </p>
         </div>
 

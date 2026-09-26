@@ -477,48 +477,85 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
           ? `ID: ${user.id.slice(0, 8)}...`
           : 'ID: Active';
 
-  const rawSlug = (user?.tenantSlug || (mounted ? (getStorageItem('tenantSlug') || getStorageItem('selectedTenant')) : '') || 'srms-cet-bareilly').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
-  const activeColgCd = user?.colgCd || (mounted ? getStorageItem('colg_cd') : '1');
+  const rawSlug = (
+    user?.tenantSlug ||
+    (mounted ? (getStorageItem('tenantSlug') || getStorageItem('selectedTenant') || getStorageItem('college_slug')) : '') ||
+    ''
+  ).toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
+  const activeColgCd = user?.colgCd || (mounted ? getStorageItem('colg_cd') : '');
 
   const getResolvedCollegeName = () => {
     if (userRole === 'SUPER_ADMIN') {
       return 'UniCampus Central University Administration';
     }
-    if (rawSlug === 'srms-cet-bareilly' || rawSlug.includes('cet-bareilly') || activeColgCd === '1') {
-      return 'SRMS College of Engineering & Technology, Bareilly';
-    }
-    if (rawSlug === 'srms-cetr-bareilly' || rawSlug.includes('cetr-bareilly') || activeColgCd === '2') {
-      return 'SRMS College of Engineering, Technology & Research, Bareilly';
-    }
-    if (rawSlug === 'srms-ims' || rawSlug.includes('ims') || activeColgCd === '11') {
-      return 'SRMS Institute of Medical Sciences, Bareilly';
+
+    const fallbackStored = mounted
+      ? (getStorageItem('collegeName') ||
+         getStorageItem('tenantName') ||
+         getStorageItem('colg_name') ||
+         getStorageItem('college_name') ||
+         getStorageItem('firm_name'))
+      : '';
+    const userColgName =
+      user?.collegeName ||
+      user?.tenantName ||
+      user?.firm_name ||
+      (user as any)?.firmName ||
+      (user as any)?.institution;
+
+    // 1. Rajshree Institutions
+    if (rawSlug === 'rimt-bareilly' || rawSlug.includes('rimt')) {
+      return userColgName || fallbackStored || 'Rajshree Institute of Management & Technology';
     }
     if (rawSlug === 'rmribar' || rawSlug.includes('rajshree')) {
-      return 'Rajshree Medical Research Institute & Hospital Bareilly';
+      return userColgName || fallbackStored || 'Rajshree Medical Research Institute & Hospital Bareilly';
     }
-    if (rawSlug === 'rmch-bareilly') {
-      return 'Rohilkhand Medical College & Hospital';
+    if (rawSlug === 'rmch-bareilly' || rawSlug.includes('rmch')) {
+      return userColgName || fallbackStored || 'Rohilkhand Medical College & Hospital';
     }
-    if (rawSlug === 'apex-tech') {
-      return 'Apex Institute of Technology & Management';
+    if (rawSlug === 'apex-tech' || rawSlug.includes('apex')) {
+      return userColgName || fallbackStored || 'Apex Institute of Technology & Management';
     }
-    if (rawSlug === 'srms-ibs-lucknow') return 'SRMS IBS, Lucknow';
-    if (rawSlug === 'srms-iahs-bareilly') return 'SRMS IAHS, Bareilly';
-    if (rawSlug === 'srms-trust-bareilly') return 'SRMS Trust, Bareilly';
-    if (rawSlug === 'srms-nursing-school') return 'SRMS Nursing School';
-    if (rawSlug === 'srms-nursing-college') return 'SRMS Nursing College';
-    if (rawSlug === 'srms-riddhima-bareilly') return 'SRMS Riddhima, Bareilly';
-    if (rawSlug === 'srms-college-of-nursing-paramedical-sciences-unnao') return 'SRMS College of Nursing & Paramedical Sciences, Unnao';
-    if (rawSlug === 'srms-quiz-panel') return 'SRMS Quiz Panel';
-    if (rawSlug === 'srms-cricket-academy') return 'SRMS Cricket Academy';
-    if (rawSlug === 'srms-cet-unnao') return 'SRMS CET, Unnao';
-    if (rawSlug === 'srms-college-of-law') return 'SRMS College of Law';
+    if (rawSlug === 'unicamp-med') {
+      return userColgName || fallbackStored || 'UniCampus Medical College & Hospital';
+    }
 
-    const fallbackStored = mounted ? (getStorageItem('collegeName') || getStorageItem('tenantName') || getStorageItem('colg_name')) : '';
-    if (fallbackStored && !fallbackStored.toLowerCase().includes('rajshree')) {
-      return fallbackStored;
+    // 2. SRMS Institutions (Strictly checked ONLY for SRMS tenants)
+    if (rawSlug.startsWith('srms') || rawSlug.includes('srms')) {
+      if (rawSlug === 'srms-cet-bareilly' || rawSlug.includes('cet-bareilly') || activeColgCd === '1') {
+        return userColgName || fallbackStored || 'SRMS College of Engineering & Technology, Bareilly';
+      }
+      if (rawSlug === 'srms-cetr-bareilly' || rawSlug.includes('cetr-bareilly') || activeColgCd === '2') {
+        return userColgName || fallbackStored || 'SRMS College of Engineering, Technology & Research, Bareilly';
+      }
+      if (rawSlug === 'srms-ims' || rawSlug.includes('ims') || activeColgCd === '11') {
+        return userColgName || fallbackStored || 'SRMS Institute of Medical Sciences, Bareilly';
+      }
+      if (rawSlug === 'srms-ibs-lucknow') return 'SRMS IBS, Lucknow';
+      if (rawSlug === 'srms-iahs-bareilly') return 'SRMS IAHS, Bareilly';
+      if (rawSlug === 'srms-trust-bareilly') return 'SRMS Trust, Bareilly';
+      if (rawSlug === 'srms-nursing-school') return 'SRMS Nursing School';
+      if (rawSlug === 'srms-nursing-college') return 'SRMS Nursing College';
+      if (rawSlug === 'srms-riddhima-bareilly') return 'SRMS Riddhima, Bareilly';
+      if (rawSlug === 'srms-college-of-nursing-paramedical-sciences-unnao') return 'SRMS College of Nursing & Paramedical Sciences, Unnao';
+      if (rawSlug === 'srms-quiz-panel') return 'SRMS Quiz Panel';
+      if (rawSlug === 'srms-cricket-academy') return 'SRMS Cricket Academy';
+      if (rawSlug === 'srms-cet-unnao') return 'SRMS CET, Unnao';
+      if (rawSlug === 'srms-college-of-law') return 'SRMS College of Law';
+      return userColgName || fallbackStored || 'SRMS College of Engineering & Technology, Bareilly';
     }
-    return user?.collegeName || user?.tenantName || 'SRMS College of Engineering & Technology, Bareilly';
+
+    // 3. Dynamic tenant / SaaS firm
+    if (userColgName) return userColgName;
+    if (fallbackStored) return fallbackStored;
+    if (rawSlug) {
+      return rawSlug
+        .replace(/^tenant[_-]/, '')
+        .split(/[-_]/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    }
+    return 'Academic ERP';
   };
 
   const collegeDisplayName = getResolvedCollegeName();

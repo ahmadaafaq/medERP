@@ -75,15 +75,15 @@ interface TenantThemeContextType {
 const TenantThemeContext = createContext<TenantThemeContextType>({
   theme: {
     tenant_id: null,
-    tenant_slug: 'srms-cet-bareilly',
-    title: 'SRMS College of Engineering & Technology, Bareilly',
+    tenant_slug: null,
+    title: 'Academic ERP',
     logo_url: null,
     favicon_url: null,
-    theme_color: '#5B4BFF',
+    theme_color: '#F36C21',
     theme_config: DEFAULT_PLATFORM_THEME_CONFIG,
   },
   loading: false,
-  activeSlug: 'srms-cet-bareilly',
+  activeSlug: '',
   setTenantTheme: () => {},
   reloadTheme: async () => {},
   applyThemeToDOM: () => {},
@@ -94,15 +94,40 @@ export const useTenantTheme = () => useContext(TenantThemeContext);
 export default function TenantThemeProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [loading, setLoading] = useState<boolean>(false);
-  const [activeSlug, setActiveSlug] = useState<string>('srms-cet-bareilly');
-  const [theme, setTheme] = useState<TenantThemeData>({
-    tenant_id: null,
-    tenant_slug: 'srms-cet-bareilly',
-    title: 'SRMS College of Engineering & Technology, Bareilly',
-    logo_url: null,
-    favicon_url: null,
-    theme_color: '#F36C21',
-    theme_config: DEFAULT_PLATFORM_THEME_CONFIG,
+  const [activeSlug, setActiveSlug] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const stored =
+        localStorage.getItem('tenantSlug') ||
+        localStorage.getItem('selectedTenant') ||
+        localStorage.getItem('colg_slug');
+      if (stored) return stored.toLowerCase().trim().replace(/^tenant_/, '');
+    }
+    return '';
+  });
+  const [theme, setTheme] = useState<TenantThemeData>(() => {
+    let initialTitle = 'Academic ERP';
+    let initialSlug = '';
+    if (typeof window !== 'undefined') {
+      const stored =
+        localStorage.getItem('college_name') ||
+        localStorage.getItem('tenantName') ||
+        localStorage.getItem('collegeName');
+      if (stored) initialTitle = stored;
+      const storedSlug =
+        localStorage.getItem('tenantSlug') ||
+        localStorage.getItem('selectedTenant') ||
+        localStorage.getItem('colg_slug');
+      if (storedSlug) initialSlug = storedSlug.toLowerCase().trim().replace(/^tenant_/, '');
+    }
+    return {
+      tenant_id: null,
+      tenant_slug: initialSlug || null,
+      title: initialTitle,
+      logo_url: null,
+      favicon_url: null,
+      theme_color: '#F36C21',
+      theme_config: DEFAULT_PLATFORM_THEME_CONFIG,
+    };
   });
 
   const applyThemeToDOM = (data: TenantThemeData) => {

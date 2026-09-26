@@ -23,7 +23,17 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       : 'student');
   const [misReportsOpen, setMisReportsOpen] = useState(true);
   const [medicalLogbookOpen, setMedicalLogbookOpen] = useState(true);
-  const [collegeDisplayName, setCollegeDisplayName] = useState<string>('SRMS CET, BAREILLY');
+  const [collegeDisplayName, setCollegeDisplayName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const stored =
+        localStorage.getItem('college_name') ||
+        localStorage.getItem('tenantName') ||
+        localStorage.getItem('colg_name') ||
+        localStorage.getItem('collegeName');
+      if (stored) return stored.toUpperCase();
+    }
+    return '';
+  });
   const [collegeLogoUrl, setCollegeLogoUrl] = useState<string | null>(null);
   const [enabledKeys, setEnabledKeys] = useState<string[] | null>(null);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
@@ -43,7 +53,14 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
         const u = JSON.parse(rawUser);
         const userName = (u.name || '').toLowerCase();
         const userEmail = (u.email || '').toLowerCase();
-        const userFirm = u.firm_name || u.firmName || u.organization || u.company || u.institution;
+        const userFirm =
+          u.firm_name ||
+          u.firmName ||
+          u.organization ||
+          u.company ||
+          u.institution ||
+          u.collegeName ||
+          u.tenantName;
         userFirmMode = u.firm_mode || u.firmMode || '';
         userTimetableModule = u.timetable_module_type || u.timetableModuleType || '';
 
@@ -59,7 +76,11 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
     const rawSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '';
     const slug = rawSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
     const colgCd = localStorage.getItem('colg_cd');
-    const storedName = localStorage.getItem('college_name') || localStorage.getItem('colg_name') || localStorage.getItem('tenantName');
+    const storedName =
+      localStorage.getItem('college_name') ||
+      localStorage.getItem('colg_name') ||
+      localStorage.getItem('tenantName') ||
+      localStorage.getItem('collegeName');
     const storedModuleType = localStorage.getItem('timetable_module_type') || userTimetableModule;
     const storedFirmMode = localStorage.getItem('firm_mode') || userFirmMode;
 
@@ -81,53 +102,73 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
         setCollegeDisplayName(userBrandName.toUpperCase());
       } else if (storedFirmName) {
         setCollegeDisplayName(storedFirmName.toUpperCase());
+      } else if (storedName) {
+        setCollegeDisplayName(storedName.toUpperCase());
       } else if (slug && !slug.includes('srms-cet')) {
-        setCollegeDisplayName(slug.toUpperCase().replace('TENANT_', '').replace('TENANT-', ''));
+        setCollegeDisplayName(slug.replace(/^tenant[_-]/, '').replace(/[-_]/g, ' ').toUpperCase());
       } else {
-        setCollegeDisplayName(storedName || 'NORNX PLATFORM');
+        setCollegeDisplayName(storedName?.toUpperCase() || 'UNICAMPUS PLATFORM');
       }
     } else {
-      if (slug === 'srms-cet-bareilly' || slug.includes('cet-bareilly') || colgCd === '1' || slug === '1') {
-        setCollegeDisplayName('SRMS CET, BAREILLY');
-      } else if (slug === 'srms-cetr-bareilly' || slug.includes('cetr-bareilly') || colgCd === '2' || slug === '2') {
-        setCollegeDisplayName('SRMS CETR, BAREILLY');
-      } else if (slug === 'srms-ims' || slug.includes('ims') || colgCd === '11') {
-        setCollegeDisplayName('SRMS IMS, BAREILLY');
+      let resolvedName = '';
+
+      // 1. Rajshree Institutions
+      if (slug === 'rimt-bareilly' || slug.includes('rimt')) {
+        resolvedName = storedName || userBrandName || 'RAJSHREE INSTITUTE OF MANAGEMENT & TECHNOLOGY';
       } else if (slug === 'rmribar' || slug.includes('rajshree')) {
-        setCollegeDisplayName('RAJSHREE MEDICAL RESEARCH INSTITUTE');
-      } else if (slug === 'rmch-bareilly') {
-        setCollegeDisplayName('ROHILKHAND MEDICAL COLLEGE');
-      } else if (slug === 'apex-tech') {
-        setCollegeDisplayName('APEX INSTITUTE OF TECHNOLOGY');
-      } else if (slug === 'srms-ibs-lucknow') {
-        setCollegeDisplayName('SRMS IBS, LUCKNOW');
-      } else if (slug === 'srms-iahs-bareilly') {
-        setCollegeDisplayName('SRMS IAHS, BAREILLY');
-      } else if (slug === 'srms-trust-bareilly') {
-        setCollegeDisplayName('SRMS TRUST, BAREILLY');
-      } else if (slug === 'srms-nursing-school') {
-        setCollegeDisplayName('SRMS NURSING SCHOOL');
-      } else if (slug === 'srms-nursing-college') {
-        setCollegeDisplayName('SRMS NURSING COLLEGE');
-      } else if (slug === 'srms-riddhima-bareilly') {
-        setCollegeDisplayName('SRMS RIDDHIMA, BAREILLY');
-      } else if (slug === 'srms-college-of-nursing-paramedical-sciences-unnao') {
-        setCollegeDisplayName('SRMS COLLEGE OF NURSING & PARAMEDICAL');
-      } else if (slug === 'srms-quiz-panel') {
-        setCollegeDisplayName('SRMS QUIZ PANEL');
-      } else if (slug === 'srms-cricket-academy') {
-        setCollegeDisplayName('SRMS CRICKET ACADEMY');
-      } else if (slug === 'srms-cet-unnao') {
-        setCollegeDisplayName('SRMS CET, UNNAO');
-      } else if (slug === 'srms-college-of-law') {
-        setCollegeDisplayName('SRMS COLLEGE OF LAW');
-      } else if (storedName && !storedName.toLowerCase().includes('rajshree')) {
-        setCollegeDisplayName(storedName.toUpperCase());
+        resolvedName = storedName || userBrandName || 'RAJSHREE MEDICAL RESEARCH INSTITUTE & HOSPITAL';
+      } else if (slug === 'rmch-bareilly' || slug.includes('rmch')) {
+        resolvedName = storedName || userBrandName || 'ROHILKHAND MEDICAL COLLEGE & HOSPITAL';
+      } else if (slug === 'apex-tech' || slug.includes('apex')) {
+        resolvedName = storedName || userBrandName || 'APEX INSTITUTE OF TECHNOLOGY & MANAGEMENT';
+      } else if (slug === 'unicamp-med') {
+        resolvedName = storedName || userBrandName || 'UNICAMPUS MEDICAL COLLEGE & HOSPITAL';
+      } else if (slug.startsWith('srms') || slug.includes('srms')) {
+        // 2. SRMS Institutions (strictly scoped to SRMS tenants)
+        if (slug === 'srms-cet-bareilly' || slug.includes('cet-bareilly') || colgCd === '1') {
+          resolvedName = storedName || 'SRMS CET, BAREILLY';
+        } else if (slug === 'srms-cetr-bareilly' || slug.includes('cetr-bareilly') || colgCd === '2') {
+          resolvedName = storedName || 'SRMS CETR, BAREILLY';
+        } else if (slug === 'srms-ims' || slug.includes('ims') || colgCd === '11') {
+          resolvedName = storedName || 'SRMS IMS, BAREILLY';
+        } else if (slug === 'srms-ibs-lucknow') {
+          resolvedName = storedName || 'SRMS IBS, LUCKNOW';
+        } else if (slug === 'srms-iahs-bareilly') {
+          resolvedName = storedName || 'SRMS IAHS, BAREILLY';
+        } else if (slug === 'srms-trust-bareilly') {
+          resolvedName = storedName || 'SRMS TRUST, BAREILLY';
+        } else if (slug === 'srms-nursing-school') {
+          resolvedName = storedName || 'SRMS NURSING SCHOOL';
+        } else if (slug === 'srms-nursing-college') {
+          resolvedName = storedName || 'SRMS NURSING COLLEGE';
+        } else if (slug === 'srms-riddhima-bareilly') {
+          resolvedName = storedName || 'SRMS RIDDHIMA, BAREILLY';
+        } else if (slug === 'srms-college-of-nursing-paramedical-sciences-unnao') {
+          resolvedName = storedName || 'SRMS COLLEGE OF NURSING & PARAMEDICAL';
+        } else if (slug === 'srms-quiz-panel') {
+          resolvedName = storedName || 'SRMS QUIZ PANEL';
+        } else if (slug === 'srms-cricket-academy') {
+          resolvedName = storedName || 'SRMS CRICKET ACADEMY';
+        } else if (slug === 'srms-cet-unnao') {
+          resolvedName = storedName || 'SRMS CET, UNNAO';
+        } else if (slug === 'srms-college-of-law') {
+          resolvedName = storedName || 'SRMS COLLEGE OF LAW';
+        } else {
+          resolvedName = storedName || 'SRMS CET, BAREILLY';
+        }
+      } else if (storedName && storedName.trim()) {
+        resolvedName = storedName;
+      } else if (userBrandName && userBrandName.trim()) {
+        resolvedName = userBrandName;
+      } else if (storedFirmName && storedFirmName.trim()) {
+        resolvedName = storedFirmName;
       } else if (slug) {
-        setCollegeDisplayName(slug.toUpperCase().replace('TENANT_', '').replace('TENANT-', ''));
+        resolvedName = slug.replace(/^tenant[_-]/, '').replace(/[-_]/g, ' ');
       } else {
-        setCollegeDisplayName('SRMS CET, BAREILLY');
+        resolvedName = 'ACADEMIC ERP';
       }
+
+      setCollegeDisplayName(resolvedName.toUpperCase());
     }
 
     // Dynamic College Logo resolution (from direct keys, tenant object, or institution presets)
@@ -151,8 +192,8 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       } catch {}
     }
 
-    // Default SRMS institutional logo for all SRMS institutions
-    if (!logoUrl && (slug.startsWith('srms') || slug === '1' || slug === '2' || slug === '11' || !slug)) {
+    // Default SRMS institutional logo ONLY for actual SRMS institutions
+    if (!logoUrl && (slug.startsWith('srms') || slug.includes('srms'))) {
       logoUrl = '/srms-logo.png';
     }
 

@@ -191,7 +191,7 @@ export default function DepartmentFacultyPage() {
             blood_group: f.blood_group,
             city: f.city || 'Bareilly',
             state: f.state || 'Uttar Pradesh',
-            college_name: f.college_name || 'SRMS CET, Bareilly',
+            college_name: f.college_name || (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution',
             college_code: f.college_code || '1',
           });
         });
@@ -422,8 +422,8 @@ export default function DepartmentFacultyPage() {
                         </span>
                       </div>
 
-                      <div className="absolute bottom-2 right-3 text-[10px] font-black text-white/40 uppercase tracking-widest pointer-events-none">
-                        SRMS CET
+                      <div className="absolute bottom-2 right-3 text-[10px] font-black text-white/40 uppercase tracking-widest pointer-events-none truncate max-w-[140px]">
+                        {fac.college_name || 'Faculty Member'}
                       </div>
                     </div>
 

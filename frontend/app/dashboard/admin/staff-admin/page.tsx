@@ -155,7 +155,20 @@ export default function StaffAdminPage() {
         if (Array.isArray(colList)) {
           if (role !== 'SUPER_ADMIN') {
             const myCol = colList.find((c: any) => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
-            loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SRMS CET, Bareilly', slug: userSlug }];
+            const storedColgName =
+              typeof window !== 'undefined'
+                ? localStorage.getItem('college_name') ||
+                  localStorage.getItem('tenantName') ||
+                  localStorage.getItem('collegeName')
+                : '';
+            const fallbackColgName =
+              storedColgName ||
+              (userSlug.includes('rimt') || userSlug.includes('rajshree')
+                ? 'Rajshree Institute of Management & Technology'
+                : userSlug.includes('srms')
+                ? 'SRMS CET, Bareilly'
+                : 'College Administration');
+            loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: fallbackColgName, slug: userSlug }];
             setSelectedCollegeFilter(loadedColleges[0].code || loadedColleges[0].id || '1');
           } else {
             loadedColleges = colList;
@@ -463,7 +476,8 @@ export default function StaffAdminPage() {
   // Active College Display Name
   const activeCollegeName = useMemo(() => {
     const found = colleges.find(c => String(c.code) === String(selectedCollegeFilter) || String(c.id) === String(selectedCollegeFilter) || c.slug === selectedCollegeFilter || c.slug === userTenantSlug);
-    return found ? `[#${found.code || found.id}] ${found.name}` : '[#1] SRMS CET, Bareilly';
+    const fallbackStored = typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '';
+    return found ? `[#${found.code || found.id}] ${found.name}` : (fallbackStored ? `[#${userColgCd || '1'}] ${fallbackStored}` : '[#1] Institution Administration');
   }, [colleges, selectedCollegeFilter, userTenantSlug]);
 
   // Filter available departments dynamically from actual staff records + department master
@@ -774,7 +788,8 @@ export default function StaffAdminPage() {
                   ) : (
                     filteredFaculties.map((fac) => {
                       const matchedCol = colleges.find(c => c.id === fac.college_id || c.code === fac.college_code || c.slug === fac.college_slug);
-                      const displayColName = matchedCol?.name || fac.college_name || 'SRMS CET';
+                      const fallbackStoredName = typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '';
+                      const displayColName = matchedCol?.name || fac.college_name || fallbackStoredName || 'Institution';
 
                       const isAdmin =
                         fac.role === 'COLLEGE_ADMIN' ||

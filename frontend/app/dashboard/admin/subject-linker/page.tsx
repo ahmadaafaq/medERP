@@ -200,7 +200,20 @@ export default function SubjectLinkerPage() {
         if (Array.isArray(colList)) {
           if (role !== 'SUPER_ADMIN') {
             const myCol = colList.find((c: any) => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
-            loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SRMS CET, Bareilly', slug: userSlug }];
+            const storedColgName =
+              typeof window !== 'undefined'
+                ? localStorage.getItem('college_name') ||
+                  localStorage.getItem('tenantName') ||
+                  localStorage.getItem('collegeName')
+                : '';
+            const fallbackColgName =
+              storedColgName ||
+              (userSlug.includes('rimt') || userSlug.includes('rajshree')
+                ? 'Rajshree Institute of Management & Technology'
+                : userSlug.includes('srms')
+                ? 'SRMS CET, Bareilly'
+                : 'College Administration');
+            loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: fallbackColgName, slug: userSlug }];
           } else {
             loadedColleges = colList;
           }
@@ -892,7 +905,7 @@ export default function SubjectLinkerPage() {
         subject_department_name: sub?.department_name || f.department_name,
         subject_department_code: sub?.department_code || f.department_code,
         college_id: facCol?.id || f.college_id,
-        college_name: facCol?.name || f.college_name || 'SRMS CET,BAREILLY',
+        college_name: facCol?.name || f.college_name || (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution',
         college_code: facCol?.code || f.college_code || '1',
         college_slug: facCol?.slug || f.college_slug || 'srms-cet-bareilly',
         created_at: new Date().toISOString(),
@@ -1469,7 +1482,8 @@ export default function SubjectLinkerPage() {
                       ) : (
                         filteredLinks.map((link) => {
                           const matchedCol = colleges.find(c => c.slug === link.college_slug || String(c.code) === String(link.college_code) || c.id === link.college_id);
-                          const displayColName = matchedCol?.name || link.college_name || 'SRMS CET,BAREILLY';
+                          const fallbackColg = typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '';
+                          const displayColName = matchedCol?.name || link.college_name || fallbackColg || 'Institution';
                           const displayColCode = matchedCol?.code || link.college_code || '1';
 
                           return (

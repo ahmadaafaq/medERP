@@ -483,7 +483,7 @@ export default function FacultyProfilePage() {
                   <div className="absolute top-4 right-4 flex items-center gap-2">
                     <div className="bg-black/40 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/20 text-xs font-bold text-white flex items-center gap-2 shadow-lg">
                       <Building2 className="w-3.5 h-3.5 text-[#F36C21]" />
-                      <span className="truncate max-w-[200px] sm:max-w-xs">{profile?.college_name || 'SRMS CET, Bareilly'}</span>
+                      <span className="truncate max-w-[200px] sm:max-w-xs">{profile?.college_name || (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution'}</span>
                     </div>
 
                     <button

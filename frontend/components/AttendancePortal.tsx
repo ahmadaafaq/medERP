@@ -431,16 +431,43 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
           name: c.colg_name || c.name || `College ${c.colg_cd || 1}`,
         }));
 
+        const storedColgName =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('college_name') ||
+              localStorage.getItem('tenantName') ||
+              localStorage.getItem('collegeName')
+            : '';
+        const fallbackColgName =
+          storedColgName ||
+          (userSlug.includes('rimt') || userSlug.includes('rajshree')
+            ? 'Rajshree Institute of Management & Technology'
+            : userSlug.includes('srms')
+            ? 'SRMS CET,BAREILLY'
+            : 'Institution');
+
         if (roleVal !== 'SUPER_ADMIN') {
           const myCol = mappedList.find((c: any) => String(c.code) === String(userColg) || String(c.id) === String(userColg));
-          loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SRMS CET,BAREILLY' }];
+          loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: fallbackColgName }];
           setSelectedCollege(loadedColleges[0].code || '1');
         } else {
           loadedColleges = mappedList;
         }
         setCollegesList(loadedColleges);
       } else {
-        const defaultCol = [{ id: userColg, code: userColg, name: 'SRMS CET,BAREILLY' }];
+        const storedColgName =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('college_name') ||
+              localStorage.getItem('tenantName') ||
+              localStorage.getItem('collegeName')
+            : '';
+        const fallbackColgName =
+          storedColgName ||
+          (userSlug.includes('rimt') || userSlug.includes('rajshree')
+            ? 'Rajshree Institute of Management & Technology'
+            : userSlug.includes('srms')
+            ? 'SRMS CET,BAREILLY'
+            : 'Institution');
+        const defaultCol = [{ id: userColg, code: userColg, name: fallbackColgName }];
         setCollegesList(defaultCol);
         setSelectedCollege(userColg);
       }
@@ -603,7 +630,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
             return {
               s_no: idx + 1,
-              college: stud.colg_name || 'SRMS CET,BAREILLY',
+              college: stud.colg_name || (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution',
               rollno: stud.stud_roll_no || stud.stud_reg_no,
               registration_no: stud.stud_reg_no,
               name: stud.stud_name,

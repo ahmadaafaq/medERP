@@ -179,20 +179,47 @@ export default function MISAttendanceReportsPage() {
           slug: c.slug || slug,
         }));
 
+        const storedColgName =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('college_name') ||
+              localStorage.getItem('tenantName') ||
+              localStorage.getItem('collegeName')
+            : '';
+        const fallbackColgName =
+          storedColgName ||
+          (slug.includes('rimt') || slug.includes('rajshree')
+            ? 'Rajshree Institute of Management & Technology'
+            : slug.includes('srms')
+            ? 'SRMS CET, BAREILLY'
+            : 'Institution');
+
         if (roleVal !== 'SUPER_ADMIN') {
           const myCol = mappedList.find(
             (c: any) => String(c.code) === String(userColg) || String(c.id) === String(userColg)
           );
           loadedColleges = myCol
             ? [myCol]
-            : [{ id: userColg, code: userColg, name: 'SRMS CET, BAREILLY', slug }];
+            : [{ id: userColg, code: userColg, name: fallbackColgName, slug }];
           setSelectedCollege(loadedColleges[0].code || '1');
         } else {
           loadedColleges = mappedList;
         }
         setColleges(loadedColleges);
       } else {
-        const defaultCol: College[] = [{ id: userColg, code: userColg, name: 'SRMS CET, BAREILLY', slug }];
+        const storedColgName =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('college_name') ||
+              localStorage.getItem('tenantName') ||
+              localStorage.getItem('collegeName')
+            : '';
+        const fallbackColgName =
+          storedColgName ||
+          (slug.includes('rimt') || slug.includes('rajshree')
+            ? 'Rajshree Institute of Management & Technology'
+            : slug.includes('srms')
+            ? 'SRMS CET, BAREILLY'
+            : 'Institution');
+        const defaultCol: College[] = [{ id: userColg, code: userColg, name: fallbackColgName, slug }];
         setColleges(defaultCol);
         setSelectedCollege(userColg);
       }
@@ -646,7 +673,8 @@ export default function MISAttendanceReportsPage() {
     document.body.removeChild(link);
   };
 
-  const selectedColgName = colleges.find((c) => c.code === selectedCollege)?.name || 'SRMS CET, BAREILLY';
+  const fallbackColgName = typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '';
+  const selectedColgName = colleges.find((c) => c.code === selectedCollege)?.name || fallbackColgName || 'Institution';
   const selectedCourseName = courses.find((c) => c.code === selectedCourse)?.name || 'BCA';
   const selectedBranchName = branches.find((b) => b.code === selectedBranch)?.name || (selectedCourse === '13' ? 'BCA Department' : 'Department 1');
   const selectedBatchName = batches.find((b) => b.code === selectedBatch)?.name || selectedBatch;

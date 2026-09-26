@@ -76,15 +76,17 @@ export default function FacultyPlacementPage() {
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
+          const storedColgName = typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '';
           return list.map((c: any) => ({
             code: String(c.colg_cd || c.code || '1'),
-            name: c.name || c.colg_name || 'SRMS CET Bareilly',
-            slug: c.slug || 'srms-cet-bareilly',
+            name: c.name || c.colg_name || storedColgName || 'Institution Placement',
+            slug: c.slug || getTenantSlug(),
           }));
         }
       }
     } catch {}
-    return [{ code: '1', name: 'SRMS College of Engineering & Technology, Bareilly', slug: 'srms-cet-bareilly' }];
+    const defStored = typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '';
+    return [{ code: '1', name: defStored || 'Institution Placement', slug: getTenantSlug() }];
   };
 
   const fetchCoursesForCollege = async (colgcd: string) => {
