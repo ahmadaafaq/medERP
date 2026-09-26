@@ -158,5 +158,7 @@ export async function srmsPostDirect(fullUrl: string, payload: Record<string, an
  * must NOT call the myportal.srms.ac.in APIs.
  */
 export function isSrmsTenant(tenantSlug: string): boolean {
-  return typeof tenantSlug === 'string' && tenantSlug.toLowerCase().startsWith('srms');
+  if (!tenantSlug || typeof tenantSlug !== 'string') return false;
+  const clean = tenantSlug.toLowerCase().replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
+  return clean.includes('srms');
 }

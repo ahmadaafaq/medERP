@@ -1817,23 +1817,35 @@ export default function TimetableDesignPage() {
             // Delete old slot from SRMS portal & DB first so new subject/faculty is cleanly scheduled
             await fetch('/api/srms/delete-event', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: String(editingSlot.id), colgcd: selectedCollege || '1' }),
+              headers: {
+                'Content-Type': 'application/json',
+                'x-tenant-slug': tenantSlug,
+                'x-tenant-id': tenantSlug,
+              },
+              body: JSON.stringify({ id: String(editingSlot.id), colgcd: selectedCollege || '1', tenant: tenantSlug, tenantSlug }),
             }).catch(() => null);
 
             if (editingSlot.postgres_id && editingSlot.postgres_id !== editingSlot.id) {
               await fetch('/api/srms/delete-event', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: String(editingSlot.postgres_id), colgcd: selectedCollege || '1' }),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-tenant-slug': tenantSlug,
+                  'x-tenant-id': tenantSlug,
+                },
+                body: JSON.stringify({ id: String(editingSlot.postgres_id), colgcd: selectedCollege || '1', tenant: tenantSlug, tenantSlug }),
               }).catch(() => null);
             }
           }
 
           const sRes = await fetch('/api/srms/add-event', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(srmsAddEventPayload),
+            headers: {
+              'Content-Type': 'application/json',
+              'x-tenant-slug': tenantSlug,
+              'x-tenant-id': tenantSlug,
+            },
+            body: JSON.stringify({ ...srmsAddEventPayload, tenant: tenantSlug, tenantSlug }),
           });
           const sJson = await sRes.json().catch(() => null);
           if (sRes.ok && sJson?.success) {
@@ -1937,11 +1949,17 @@ export default function TimetableDesignPage() {
         // 1. Server-side proxy call to official SRMS deleteEvent + PostgreSQL cross-table cleanup
         const srmsDelRes = await fetch('/api/srms/delete-event', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-tenant-slug': tenantSlug,
+            'x-tenant-id': tenantSlug,
+          },
           body: JSON.stringify({
             id: cleanId,
             postgres_id: pgId,
             colgcd: selectedCollege || '1',
+            tenant: tenantSlug,
+            tenantSlug,
             day_of_week: slotObj?.day_of_week ?? editingSlot?.day_of_week,
             start_time: slotObj?.start_time || editingSlot?.start_time,
             end_time: slotObj?.end_time || editingSlot?.end_time,
