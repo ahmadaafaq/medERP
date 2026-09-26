@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import Link from 'next/link';
+import { resolveCourseTitle, resolveDepartmentTitle } from '../../../utils/courseResolver';
 import { 
   FolderGit2, 
   Search, 
@@ -204,14 +205,14 @@ export default function AdminRepositoryPage() {
       const isBTech = selCourseName.includes('btech') || selCourseName.includes('bacheloroftech') || selCourseStr === '1';
       const repoIsBTech = repoCourseName.includes('btech') || repoCourseCd === '1';
 
-      const isMCA = selCourseName.includes('mca') || selCourseStr === '14';
-      const repoIsMCA = repoCourseName.includes('mca') || repoCourseCd === '14';
+      const isMCA = selCourseName.includes('mca') || selCourseStr === '3' || selCourseStr === '14';
+      const repoIsMCA = repoCourseName.includes('mca') || repoCourseCd === '3' || repoCourseCd === '14';
 
       const isBCA = selCourseName.includes('bca') || selCourseStr === '13';
       const repoIsBCA = repoCourseName.includes('bca') || repoCourseCd === '13';
 
-      const isMBA = selCourseName.includes('mba') || selCourseStr === '15';
-      const repoIsMBA = repoCourseName.includes('mba') || repoCourseCd === '15';
+      const isMBA = selCourseName.includes('mba') || selCourseStr === '4' || selCourseStr === '15';
+      const repoIsMBA = repoCourseName.includes('mba') || repoCourseCd === '4' || repoCourseCd === '15';
 
       const isBPharm = selCourseName.includes('pharm') || selCourseStr === '2';
       const repoIsBPharm = repoCourseName.includes('pharm') || repoCourseCd === '2';
@@ -596,14 +597,19 @@ export default function AdminRepositoryPage() {
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {filteredList.map((repo) => {
-                const scoreVal = repo.score !== undefined ? Number(repo.score) : null;
-                const isHighScorer = scoreVal !== null && scoreVal >= 70;
+                const scoreVal = repo.score !== null && repo.score !== undefined && !isNaN(Number(repo.score)) ? Number(repo.score) : null;
+                const isReviewed = repo.status === 'Reviewed' && scoreVal !== null;
+                const isHighScorer = isReviewed && scoreVal >= 70;
                 const isIncubated = ['Selected', 'Incubated', 'Funded'].includes(repo.incubation_status || '');
                 const screenshots = Array.isArray(repo.screenshots) ? repo.screenshots : (repo.screenshots ? [repo.screenshots] : []);
 
+                // Course and Department resolution
+                const resolvedCourse = resolveCourseTitle(repo.course_cd, repo.course_name);
+                const resolvedDepartment = resolveDepartmentTitle(repo.course_cd, repo.branch_name, repo.branch_cd);
+
                 // Profile photo fallback
                 const studentAvatar = repo.student_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(repo.student_name || 'Student')}&background=F36C21&color=fff&bold=true`;
-                const facultyAvatar = repo.faculty_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(repo.faculty_name || 'Faculty Evaluator')}&background=5B4BFF&color=fff&bold=true`;
+                const facultyAvatar = repo.faculty_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(repo.faculty_name || 'Faculty')}&background=5B4BFF&color=fff&bold=true`;
 
                 // Skill match check
                 const matchedSkills = selectedSkills.filter(sk => 
@@ -648,9 +654,9 @@ export default function AdminRepositoryPage() {
                         <div className="min-w-0 flex-1">
                           <h4 className="text-sm font-black text-[#1B1E28] uppercase truncate">{repo.student_name}</h4>
                           <p className="text-[11px] text-[#4E5969] font-medium flex items-center gap-1.5 mt-0.5 truncate">
-                            <span className="font-bold text-[#5B4BFF]">{repo.course_name || 'B.Tech'}</span>
+                            <span className="font-bold text-[#5B4BFF]">{resolvedCourse}</span>
                             <span>•</span>
-                            <span className="truncate">{repo.branch_name || 'CSE'}</span>
+                            <span className="truncate font-semibold">{resolvedDepartment}</span>
                             <span>•</span>
                             <span className="font-semibold text-slate-500">{repo.batch_name || 'Batch 2025'}</span>
                           </p>
@@ -725,7 +731,7 @@ export default function AdminRepositoryPage() {
                       )}
 
                       {/* Faculty Evaluation Score Card with Faculty Photo */}
-                      {scoreVal !== null ? (
+                      {isReviewed ? (
                         <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50/80 via-indigo-50/60 to-white border border-purple-100/90 space-y-3 shadow-sm">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -736,9 +742,11 @@ export default function AdminRepositoryPage() {
                                 <div className="text-xs font-black text-[#1B1E28] flex items-center gap-1.5">
                                   <span>Faculty Score:</span>
                                   <span className="text-[#5B4BFF] font-black text-sm">{scoreVal}%</span>
-                                  <span className="px-2 py-0.5 rounded-md bg-[#5B4BFF]/10 text-[#5B4BFF] text-[10px] font-black border border-[#5B4BFF]/20">
-                                    Grade: {repo.grade || 'A'}
-                                  </span>
+                                  {repo.grade && (
+                                    <span className="px-2 py-0.5 rounded-md bg-[#5B4BFF]/10 text-[#5B4BFF] text-[10px] font-black border border-[#5B4BFF]/20">
+                                      Grade: {repo.grade}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -762,7 +770,7 @@ export default function AdminRepositoryPage() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between">
                                 <h5 className="text-xs font-black text-[#1B1E28] truncate">
-                                  {repo.faculty_name || 'Prof. Faculty Evaluator'}
+                                  {repo.faculty_name || 'Department Faculty Reviewer'}
                                 </h5>
                                 {repo.faculty_reviewed_at && (
                                   <span className="text-[10px] text-slate-400 font-medium">
@@ -784,7 +792,15 @@ export default function AdminRepositoryPage() {
                       ) : (
                         <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/60 text-xs text-amber-800 font-bold flex items-center gap-2.5">
                           <Clock className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span>Awaiting Faculty Grading & Assessment Evaluation</span>
+                          <div className="space-y-0.5">
+                            <div className="font-extrabold text-amber-900 flex items-center gap-1.5">
+                              <span>Pending Review</span>
+                              <span className="px-1.5 py-0.2 rounded bg-amber-200/60 text-amber-800 text-[10px]">Awaiting Evaluation</span>
+                            </div>
+                            <div className="text-[11px] text-amber-700 font-medium">
+                              Submitted by student. Awaiting faculty evaluation & grading.
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -823,9 +839,14 @@ export default function AdminRepositoryPage() {
                           <Rocket className="w-3.5 h-3.5 text-[#F36C21]" />
                           <span>{nominatingId === repo.repo_id ? 'Incubating...' : 'Incubate 🚀'}</span>
                         </button>
+                      ) : isReviewed ? (
+                        <span className="text-[10px] text-slate-500 font-bold px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-200">
+                          Score: {scoreVal}%
+                        </span>
                       ) : (
-                        <span className="text-[10px] text-slate-400 font-bold px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-200">
-                          Score &lt; 70%
+                        <span className="text-[10px] text-amber-700 font-bold px-2.5 py-1 bg-amber-50 rounded-lg border border-amber-200 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          <span>Awaiting Review</span>
                         </span>
                       )}
                     </div>

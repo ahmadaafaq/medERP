@@ -305,8 +305,9 @@ export async function GET(request: NextRequest) {
         `SELECT ts.id, ts.day_of_week, ts.start_time, ts.end_time, ts.room, ts.slot_type,
                 ts.topic, ts.unit_id, ts.unit_name, ts.sub_topics, ts.competency_codes,
                 ts.colg_cd, ts.course_cd, ts.branch_cd, ts.batch_cd, ts.semester, ts.section, ts.description,
+                ts.subject_id, ts.batch_id,
                 f.name AS faculty_name, f.emp_id AS faculty_code,
-                sub.name AS subject_name, sub.code AS subject_code
+                sub.name AS subject_name, sub.code AS subject_code, sub.sub_addinfo AS subject_paper_code
          FROM "${schema}".timetable_slots ts
          LEFT JOIN "${schema}".faculty f ON f.id::text = ts.faculty_id::text
          LEFT JOIN "${schema}".subjects sub ON sub.id::text = ts.subject_id::text
@@ -335,6 +336,7 @@ export async function GET(request: NextRequest) {
           endUnix = Math.floor(endSlotDate.getTime() / 1000);
         }
 
+        const validSubCode = s.subject_code || s.subject_paper_code || '';
         dbEvents.push({
           id: String(s.id),
           srms_id: null,
@@ -347,7 +349,17 @@ export async function GET(request: NextRequest) {
           start_time: sTime,
           end_time: eTime,
           day_of_week: dayVal,
-          linkcd: s.subject_code || '',
+          linkcd: validSubCode,
+          subject_code: validSubCode,
+          subject_cd: validSubCode,
+          sub_cd: validSubCode,
+          subject_id: s.subject_id || null,
+          batch_id: s.batch_id || null,
+          course_cd: s.course_cd || course,
+          branch_cd: s.branch_cd || branch,
+          batch_cd: s.batch_cd || batch,
+          semester: s.semester || sem,
+          section: s.section || sec,
           electiveflg: 'N',
           txtG: '0',
           txtSec: s.section || sec,
@@ -429,6 +441,17 @@ export async function GET(request: NextRequest) {
         start_time: startTimeStr,
         end_time: endTimeStr,
         day_of_week: dayVal,
+        linkcd: item.linkcd || match?.linkcd || '',
+        subject_code: match?.subject_code || item.linkcd || '',
+        subject_cd: match?.subject_cd || item.linkcd || '',
+        sub_cd: match?.sub_cd || item.linkcd || '',
+        subject_id: match?.subject_id || null,
+        batch_id: match?.batch_id || null,
+        course_cd: item.course_cd || match?.course_cd || course,
+        branch_cd: item.branch_cd || match?.branch_cd || branch,
+        batch_cd: item.batch_cd || match?.batch_cd || batch,
+        semester: item.sem || item.semester || match?.semester || sem,
+        section: item.sec || match?.section || sec,
         subject_name: match?.subject_name || cleanName || rawTitle,
         faculty_name: match?.faculty_name || teacher,
         faculty_id: String(item.empid || match?.faculty_id || match?.empid || ''),
@@ -495,6 +518,101 @@ export async function GET(request: NextRequest) {
         seenSlots.add(key);
         combined.push(dbItem);
       }
+    }
+
+    // Background sync of live remote events into PostgreSQL so faculty schedules across all courses/branches stay up to date
+    if (activeRemoteData.length > 0 && slug) {
+      (async () => {
+        try {
+          const facRows = await queryDb(`SELECT id, name, emp_id, department_id FROM "${schema}".faculty`).catch(() => []);
+          for (const item of activeRemoteData) {
+            const srmsId = Number(item.id) || null;
+            const startSec = parseDateToUnix(item.start);
+            const endSec = parseDateToUnix(item.end);
+            const istStartDate = new Date((startSec + 19800) * 1000);
+            const istEndDate = new Date((endSec + 19800) * 1000);
+            const dayVal = item.day_of_week !== undefined && item.day_of_week !== null
+              ? Number(item.day_of_week)
+              : (istStartDate.getUTCDay() === 0 ? 7 : istStartDate.getUTCDay());
+
+            const pad = (n: number) => String(n).padStart(2, '0');
+            const startTimeStr = item.start_time || `${pad(istStartDate.getUTCHours())}:${pad(istStartDate.getUTCMinutes())}:00`;
+            const endTimeStr = item.end_time || `${pad(istEndDate.getUTCHours())}:${pad(istEndDate.getUTCMinutes())}:00`;
+
+            const rawTitle = String(item.title || item.description || '');
+            const facultyMatch = rawTitle.match(/\(([^)]+)\)/);
+            const teacherName = (facultyMatch ? facultyMatch[1] : (item.faculty_name || '')).trim();
+            const cleanSubName = rawTitle.replace(/\([^)]*\)/g, '').trim();
+            const isLab = rawTitle.toLowerCase().includes('lab') || rawTitle.toLowerCase().includes('practical');
+
+            let matchedFac = null;
+            if (item.empid) {
+              matchedFac = (facRows || []).find((f: any) => String(f.emp_id) === String(item.empid));
+            }
+            if (!matchedFac && teacherName) {
+              const normTeacher = teacherName.toLowerCase().replace(/\s+/g, ' ');
+              matchedFac = (facRows || []).find((f: any) => {
+                const normF = String(f.name || '').toLowerCase().replace(/\s+/g, ' ');
+                return normF === normTeacher || normF.includes(normTeacher) || normTeacher.includes(normF);
+              });
+            }
+
+            const effectiveEmpId = matchedFac ? matchedFac.emp_id : (item.empid || null);
+            const effectiveFacId = matchedFac ? matchedFac.id : null;
+            const effectiveDeptId = matchedFac ? matchedFac.department_id : null;
+            const room = item.room || (item.camera_link ? `Room 204 (Cam #${item.camera_link})` : (isLab ? 'Comp Lab 2' : 'Room 204'));
+
+            const existEv = await queryDb(
+              `SELECT id FROM "${schema}".srms_timetable_events WHERE srms_id = $1 OR (day_of_week = $2 AND start_str ILIKE $3 AND description = $4) LIMIT 1`,
+              [srmsId, dayVal, `%${startTimeStr.slice(0, 5)}%`, rawTitle]
+            ).catch(() => []);
+
+            if (!existEv || existEv.length === 0) {
+              await queryDb(`
+                INSERT INTO "${schema}".srms_timetable_events (
+                  title, description, start_time, end_time, start_str, end_str, day_of_week,
+                  linkcd, electiveflg, txt_g, txt_sec, empid, colg_cd, course_cd, branch_cd,
+                  batch_cd, sem_cd, camera_link, srms_id, raw_payload, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), NOW())
+              `, [
+                rawTitle, rawTitle, istStartDate.toISOString(), istEndDate.toISOString(),
+                `${istStartDate.toISOString().slice(0, 10)} ${startTimeStr} `,
+                `${istEndDate.toISOString().slice(0, 10)} ${endTimeStr} `,
+                dayVal, item.linkcd || '', 'N', item.grp || '0', sec,
+                effectiveEmpId, colgcd, course, branch, batch, sem,
+                item.camera_link || '0', srmsId, JSON.stringify(item)
+              ]).catch(() => {});
+            }
+
+            const existSlot = await queryDb(`
+              SELECT id FROM "${schema}".timetable_slots
+              WHERE day_of_week = $1 
+                AND start_time::text LIKE $2
+                AND (course_cd = $3 OR course_cd IS NULL)
+                AND (semester = $4 OR semester IS NULL)
+                AND (section = $5 OR section IS NULL)
+                AND (description = $6 OR topic = $7)
+              LIMIT 1
+            `, [dayVal, `${startTimeStr.slice(0, 5)}%`, course, sem, sec, rawTitle, cleanSubName]).catch(() => []);
+
+            if (!existSlot || existSlot.length === 0) {
+              await queryDb(`
+                INSERT INTO "${schema}".timetable_slots (
+                  faculty_id, department_id, day_of_week, start_time, end_time,
+                  room, slot_type, course_cd, branch_cd, batch_cd, semester, section, colg_cd,
+                  description, topic, effective_from, effective_until
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+              `, [
+                effectiveFacId, effectiveDeptId, dayVal, startTimeStr, endTimeStr,
+                room, isLab ? 'Practical' : 'Lecture', course, branch, batch, sem, sec, colgcd,
+                rawTitle, cleanSubName, '2026-09-14', '2026-09-20'
+              ]).catch(() => {});
+            }
+          }
+        } catch (syncErr: any) {
+          console.warn('[Auto-sync SRMS events error]:', syncErr.message);
+        }
+      })().catch(() => {});
     }
 
     return NextResponse.json({

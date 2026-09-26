@@ -234,6 +234,14 @@ export default function StudentLogbookPage() {
         await new Promise(r => setTimeout(r, interval));
         elapsed += interval;
       }
+      // Check URL parameters for tab selection (e.g. ?tab=SEMINARS)
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab');
+        if (tabParam && ['DASHBOARD', 'SEMINARS', 'TUTORIALS', 'MINI_PROJECT', 'WEEKLY_LOG', 'TECHNICAL_ACTIVITIES', 'REVIEWS', 'DOCUMENTS', 'FACULTY_REMARKS', 'FINAL_EVALUATION'].includes(tabParam.toUpperCase())) {
+          setActiveTab(tabParam.toUpperCase() as LogbookTabKey);
+        }
+      }
       fetchAllData();
     };
     waitAndFetch();
@@ -376,7 +384,16 @@ export default function StudentLogbookPage() {
       if (revs) setReviews(Array.isArray(revs.data) ? revs.data : Array.isArray(revs) ? revs : []);
       if (rems) setRemarks(Array.isArray(rems.data) ? rems.data : Array.isArray(rems) ? rems : []);
       if (finalEv) setFinalEval(finalEv.data || finalEv);
-      if (tops) setTopics(Array.isArray(tops.data) ? tops.data : Array.isArray(tops) ? tops : []);
+      let loadedTopics = Array.isArray(tops?.data) ? tops.data : Array.isArray(tops) ? tops : [];
+      if (loadedTopics.length === 0) {
+        // Fallback: fetch active topics without restrictive cohort filter so student never sees empty list
+        const fallbackTops = await fetchSafe(`/api/v1/logbook/topics?tenant=${slug}&studentView=true&studentId=${encodeURIComponent(studentIdentifier)}`);
+        const fallbackList = Array.isArray(fallbackTops?.data) ? fallbackTops.data : Array.isArray(fallbackTops) ? fallbackTops : [];
+        if (fallbackList.length > 0) {
+          loadedTopics = fallbackList;
+        }
+      }
+      setTopics(loadedTopics);
     } catch (e) {
       console.error('Failed to load student logbook details:', e);
     } finally {

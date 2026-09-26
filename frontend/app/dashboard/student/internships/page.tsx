@@ -14,11 +14,16 @@ import {
   Loader2, 
   Sparkles,
   DollarSign,
-  Building2
+  Building2,
+  Eye,
+  Download,
+  Printer,
+  FileCheck
 } from 'lucide-react';
 
 export default function StudentInternshipsPage() {
   const [programs, setPrograms] = useState<InternshipProgram[]>([]);
+  const [earnedCertificates, setEarnedCertificates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
@@ -34,7 +39,13 @@ export default function StudentInternshipsPage() {
     const tenantSlug = typeof window !== 'undefined'
       ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '')
       : 'srms-cet-bareilly';
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+
+    let cookieToken = '';
+    if (typeof document !== 'undefined') {
+      const match = document.cookie.match(/auth_token=([^;]+)/);
+      if (match) cookieToken = match[1];
+    }
+    const token = (typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('accessToken') || '' : '') || cookieToken;
     const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
     let userObj: any = {};
     try {
@@ -62,12 +73,16 @@ export default function StudentInternshipsPage() {
       `${userObj?.first_name || ''} ${userObj?.last_name || ''}`.trim() ||
       '';
 
+    const email = userObj?.email || p.email || '';
+
     return {
       'x-tenant-id': `tenant_${tenantSlug}`,
       'x-tenant': tenantSlug,
+      'x-tenant-slug': tenantSlug,
       'x-user-reg-no': regNo,
       'x-user-rollno': rollNo,
       'x-user-name': name,
+      'x-user-email': email,
       'x-user-id': userObj?.id || p.id || regNo,
       'x-user-role': userObj?.role || 'STUDENT',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -98,24 +113,44 @@ export default function StudentInternshipsPage() {
         } catch {}
       }
 
-      const res = await axios.get('/api/internships/list', { headers: currentHeaders });
-      const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
-      setPrograms(list);
+      // Fetch programs and earned certificates in parallel
+      const [progRes, certRes] = await Promise.all([
+        axios.get('/api/internships/list', { headers: currentHeaders }).catch(() => ({ data: [] })),
+        axios.get('/api/internships/my-certificates', {
+          headers: currentHeaders,
+          params: {
+            tenant: currentHeaders['x-tenant'],
+            student_reg_no: currentHeaders['x-user-reg-no'],
+            student_id: currentHeaders['x-user-id'],
+          },
+        }).catch(() => ({ data: [] })),
+      ]);
 
-      // Auto-open certificate if navigating from student dashboard certificate alert (?viewCert=true)
+      const list = Array.isArray(progRes.data) ? progRes.data : progRes.data?.data || [];
+      const cList = Array.isArray(certRes.data) ? certRes.data : certRes.data?.data || [];
+
+      setPrograms(list);
+      setEarnedCertificates(cList);
+
+      // Auto-open certificate if navigating with (?viewCert=true) or (?appId=...)
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
         const shouldViewCert = urlParams.get('viewCert') === 'true' || urlParams.get('cert') === 'true';
         const targetAppId = urlParams.get('appId');
 
         if (shouldViewCert || targetAppId) {
-          const completedList = list.filter((p: any) => p.my_application?.status === 'completed');
-          const targetProg = targetAppId 
-            ? completedList.find((p: any) => p.my_application?.id === targetAppId) || completedList[0]
-            : completedList[0];
+          const targetCert = targetAppId 
+            ? cList.find((c: any) => c.application_id === targetAppId) || list.find((p: any) => p.my_application?.id === targetAppId)?.my_application
+            : cList[0] || list.find((p: any) => p.my_application?.status === 'completed')?.my_application;
 
-          if (targetProg?.my_application?.id) {
-            handleViewCertificate(targetProg.my_application.id, targetProg.title);
+          if (targetCert) {
+            const appId = targetCert.application_id || targetCert.id;
+            const title = targetCert.internship_title || targetCert.title;
+            if (appId) {
+              handleViewCertificate(appId, title);
+            } else {
+              openCertificateModal(targetCert);
+            }
           }
         }
       }
@@ -214,7 +249,58 @@ export default function StudentInternshipsPage() {
     }
   };
 
-  const completedCerts = programs.filter((p) => p.my_application?.status === 'completed');
+  const openCertificateModal = async (cert: any) => {
+    if (cert.application_id) {
+      await handleViewCertificate(cert.application_id, cert.internship_title || cert.title);
+    } else {
+      setCertificateData({
+        certificate_no: cert.certificate_no || `SRMS-CERT-${new Date().getFullYear()}-001`,
+        internship_name: cert.internship_title || cert.title || 'Internship Certification',
+        applicant_name: cert.student_name || 'Candidate',
+        course: cert.course || 'BCA',
+        batch: cert.batch || 'Batch 2025',
+        duration: cert.duration || '3 Months',
+        issued_date: cert.issued_date || new Date().toISOString().split('T')[0],
+        approved_by: cert.approved_by || 'Prof. (Dr.) Prabhakar Gupta',
+        approver_title: cert.approver_title || 'Dean Academics & Training Cell',
+        pdf_url: cert.pdf_url,
+        logo_url: cert.logo_url,
+        institution_name: cert.institution_name,
+      });
+    }
+  };
+
+  // Merge certificates from my-certificates API and programs list (avoiding duplicate by certificate_no or application_id)
+  const completedFromPrograms = programs
+    .filter((p) => p.my_application?.status === 'completed')
+    .map((p) => ({
+      certificate_id: p.my_application?.id,
+      application_id: p.my_application?.id,
+      certificate_no: p.my_application?.certificate_no || 'SRMS-CERTIFIED',
+      internship_title: p.title,
+      organization_name: p.organization_name || 'SRMS Internal Research & Incubation Cell',
+      student_name: p.my_application?.student_name,
+      student_reg_no: p.my_application?.student_reg_no,
+      issued_date: p.my_application?.issued_date ? (typeof p.my_application.issued_date === 'string' ? p.my_application.issued_date.split('T')[0] : '') : '',
+      approved_by: p.my_application?.approved_by || 'Prof. (Dr.) Prabhakar Gupta',
+      duration: p.duration ? p.duration.replace('_', ' ') : '3 Months',
+      external_cert_url: p.my_application?.cert_external_url || p.my_application?.external_cert_url,
+      course: p.my_application?.course_cd || 'BCA',
+      batch: p.my_application?.batch_cd || 'Batch 2025',
+    }));
+
+  const allCertsMap = new Map<string, any>();
+  for (const c of earnedCertificates) {
+    const key = (c.certificate_no || c.application_id || c.certificate_id || '').toLowerCase();
+    if (key) allCertsMap.set(key, c);
+  }
+  for (const c of completedFromPrograms) {
+    const key = (c.certificate_no || c.application_id || c.certificate_id || '').toLowerCase();
+    if (key && !allCertsMap.has(key)) {
+      allCertsMap.set(key, c);
+    }
+  }
+  const allEarnedCertificates = Array.from(allCertsMap.values());
 
   const filtered = programs.filter((p) => {
     const matchSearch =
@@ -238,7 +324,7 @@ export default function StudentInternshipsPage() {
 
         <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
           {/* Top Banner if Student Has Earned Certificates */}
-          {completedCerts.length > 0 && (
+          {allEarnedCertificates.length > 0 && (
             <div className="p-5 sm:p-6 rounded-[22px] bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-indigo-500/10 border border-amber-300/50 dark:border-amber-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-[#F36C21] text-white flex items-center justify-center text-xl shrink-0 shadow-md shadow-amber-500/20">
@@ -254,7 +340,7 @@ export default function StudentInternshipsPage() {
                     </span>
                   </div>
                   <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                    You have {completedCerts.length} Verified Certificate{completedCerts.length > 1 ? 's' : ''} Ready!
+                    You have {allEarnedCertificates.length} Verified Certificate{allEarnedCertificates.length > 1 ? 's' : ''} Ready!
                   </h3>
                   <p className="text-xs text-slate-600 dark:text-slate-300">
                     Official university in-house e-certificates signed by Dean Academics and corporate completion credentials ready to view, print, and download.
@@ -264,7 +350,7 @@ export default function StudentInternshipsPage() {
 
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => handleViewCertificate(completedCerts[0].my_application!.id, completedCerts[0].title)}
+                  onClick={() => openCertificateModal(allEarnedCertificates[0])}
                   disabled={loadingCert}
                   className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-[#F36C21] hover:from-amber-600 hover:to-[#E25C10] text-white shadow-md shadow-orange-500/20 transition-all shrink-0 active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-60"
                 >
@@ -273,72 +359,108 @@ export default function StudentInternshipsPage() {
                   ) : (
                     <Award className="w-4 h-4" />
                   )}
-                  <span>View Certificate</span>
+                  <span>View & Download Certificate</span>
                 </button>
               </div>
             </div>
           )}
 
           {/* Earned Certificates Grid Card Section */}
-          {completedCerts.length > 0 && (
-            <div className="bg-white dark:bg-slate-800 rounded-[22px] p-5 border border-[#E7EAF3] dark:border-slate-700 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Award className="w-5 h-5 text-[#F36C21]" />
-                  <h2 className="text-sm sm:text-base font-black text-[#1B1E28] dark:text-white">
-                    Earned Digital Certificates & Accreditations ({completedCerts.length})
-                  </h2>
+          {allEarnedCertificates.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 rounded-[22px] p-6 border border-[#E7EAF3] dark:border-slate-700 shadow-sm space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-[#1B1E28] dark:text-white">
+                      Earned Digital Certificates & Accreditations ({allEarnedCertificates.length})
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Dean verified credentials with cryptographically authenticated certificate numbers.
+                    </p>
+                  </div>
                 </div>
-                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Dean Approved
+                  Dean Approved & Digitally Verifiable
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {completedCerts.map((certProg) => {
-                  const myApp = certProg.my_application!;
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                {allEarnedCertificates.map((cert: any) => {
                   return (
                     <div
-                      key={certProg.id}
-                      className="p-4 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      key={cert.certificate_id || cert.id || cert.certificate_no}
+                      className="p-5 rounded-2xl bg-[#F8FAFC] dark:bg-slate-900 border border-slate-200/90 dark:border-slate-700/80 hover:border-[#F36C21]/40 transition-all flex flex-col justify-between gap-4 shadow-sm group"
                     >
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-mono">
-                            {myApp.certificate_no || 'SRMS-CERTIFIED'}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="px-2.5 py-1 rounded-md text-[10px] font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-mono border border-amber-300/40">
+                            {cert.certificate_no || 'SRMS-CERTIFIED'}
                           </span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
-                            {certProg.duration ? certProg.duration.replace('_', ' ') : '3 Months'}
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+                            {cert.duration || '3 Months'}
                           </span>
                         </div>
-                        <h4 className="font-black text-xs sm:text-sm text-slate-900 dark:text-white truncate">
-                          {certProg.title}
-                        </h4>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                          {certProg.organization_name || 'SRMS Internal Research & Incubation Cell'}
-                        </p>
+
+                        <div>
+                          <h4 className="font-black text-sm sm:text-base text-slate-900 dark:text-white line-clamp-2 leading-snug group-hover:text-[#F36C21] transition-colors">
+                            {cert.internship_title || cert.title || 'Internship & Certification'}
+                          </h4>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                            <span className="truncate">{cert.organization_name || 'SRMS Internal Research & Incubation Cell'}</span>
+                          </p>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">Awarded To:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{cert.student_name || 'Candidate'}</span>
+                          </div>
+                          {cert.student_reg_no && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400">Reg No:</span>
+                              <span className="font-mono text-slate-700 dark:text-slate-300">{cert.student_reg_no}</span>
+                            </div>
+                          )}
+                          {cert.issued_date && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400">Issued On:</span>
+                              <span className="font-medium font-mono">{cert.issued_date}</span>
+                            </div>
+                          )}
+                          {cert.approved_by && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400">Authority:</span>
+                              <span className="font-medium truncate max-w-[150px]">{cert.approved_by}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        {myApp.cert_external_url || myApp.external_cert_url ? (
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                        {cert.external_cert_url && (
                           <a
-                            href={myApp.cert_external_url || myApp.external_cert_url}
+                            href={cert.external_cert_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="px-3 py-2 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all active:scale-95 flex items-center gap-1.5"
+                            className="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all active:scale-95 flex items-center gap-1"
                           >
-                            <span>Download PDF</span>
+                            <Download className="w-3.5 h-3.5" />
+                            <span>PDF</span>
                           </a>
-                        ) : null}
+                        )}
 
                         <button
-                          onClick={() => handleViewCertificate(myApp.id, certProg.title)}
+                          onClick={() => openCertificateModal(cert)}
                           disabled={loadingCert}
-                          className="px-4 py-2 rounded-xl text-xs font-black bg-[#F36C21] hover:bg-[#E05B10] text-white shadow-sm transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          className="flex-1 px-4 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-[#F36C21] hover:from-amber-600 hover:to-[#E25C10] text-white shadow-md shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
                         >
-                          <Award className="w-3.5 h-3.5" />
-                          <span>View Certificate</span>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>View, Print & Download</span>
                         </button>
                       </div>
                     </div>

@@ -67,6 +67,46 @@ const subjectHeaderColors = [
   'bg-[#7C3AED] text-white',
 ];
 
+const CET_COURSE_BRANCHES: Record<string, DropdownItem[]> = {
+  '1': [
+    { id: '1', code: '1', name: '(CSE)' },
+    { id: '2', code: '2', name: '(IT)' },
+    { id: '3', code: '3', name: '(ME)' },
+    { id: '4', code: '4', name: 'CSE(DATA SCIENCE)' },
+    { id: '5', code: '5', name: '(ECE)' },
+    { id: '6', code: '6', name: 'B.TECH.' },
+    { id: '7', code: '7', name: '(EN)' },
+    { id: '8', code: '8', name: 'CSE(AI & ML)' },
+  ],
+  '2': [{ id: '1', code: '1', name: 'B.PHARM. Department' }],
+  '3': [{ id: '1', code: '1', name: 'MCA Department' }],
+  '4': [{ id: '1', code: '1', name: 'MBA Department' }],
+  '5': [
+    { id: '1', code: '1', name: 'CAD/CAM' },
+    { id: '2', code: '2', name: 'SOFTWARE ENGG' },
+    { id: '3', code: '3', name: 'MICROWAVE ENGG' },
+    { id: '4', code: '4', name: 'ELECTRIC DRIVES' },
+    { id: '5', code: '5', name: 'COMPUTER SCIENCE & ENGINEERING' },
+    { id: '6', code: '6', name: 'ELECTRONICS & COMMUNICATION ENGINEERING' },
+    { id: '7', code: '7', name: 'ELECTRICAL ENGINEERING' },
+  ],
+  '6': [{ id: '1', code: '1', name: 'PHARMACEUTICS' }],
+  '7': [
+    { id: '1', code: '1', name: '(CS)' },
+    { id: '2', code: '2', name: '(IT)' },
+    { id: '3', code: '3', name: '(ME)' },
+    { id: '4', code: '4', name: '(EE)' },
+    { id: '5', code: '5', name: '(EC)' },
+    { id: '6', code: '6', name: '(EL)' },
+    { id: '7', code: '7', name: '(EN)' },
+  ],
+  '8': [{ id: '1', code: '1', name: 'B.Pharma (Lateral Entry) Department' }],
+  '9': [{ id: '1', code: '1', name: 'MCA (Lateral Entry) Department' }],
+  '11': [{ id: '1', code: '1', name: 'BA.LL.B Department' }],
+  '12': [{ id: '1', code: '1', name: 'BBA Department' }],
+  '13': [{ id: '1', code: '1', name: 'BCA Department' }],
+};
+
 export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }) {
   // Cascading Academic States
   const [collegesList, setCollegesList] = useState<DropdownItem[]>([]);
@@ -94,10 +134,10 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       try {
         const cached = JSON.parse(localStorage.getItem('user') || '{}');
         const p = cached?.profile || cached || {};
-        return String(p.course_cd || cached?.courseCd || cached?.course_cd || '4');
+        return String(p.course_cd || cached?.courseCd || cached?.course_cd || '1');
       } catch {}
     }
-    return '4';
+    return '1';
   });
   const [selectedBranch, setSelectedBranch] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -131,9 +171,19 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   });
   const [selectedSection, setSelectedSection] = useState('1'); // Section A = 1
 
-  // Date Range States
-  const [fromDate, setFromDate] = useState('2026-07-02');
-  const [toDate, setToDate] = useState('2026-08-21');
+  // Date Range States: default from start of semester through current month end
+  const [fromDate, setFromDate] = useState('2026-07-01');
+  const [toDate, setToDate] = useState(() => {
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const lastDay = new Date(year, month, 0).getDate();
+      return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } catch {
+      return '2026-09-30';
+    }
+  });
   const [syncingLive, setSyncingLive] = useState(false);
   const [alertMessage, setAlertMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -342,7 +392,11 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
   const handleCourseChange = (courseCode: string) => {
     setSelectedCourse(courseCode);
-    fetchBranchesAndBatches(selectedCollege, courseCode);
+    const instantBranches = CET_COURSE_BRANCHES[courseCode];
+    if (instantBranches && instantBranches.length > 0) {
+      setBranchesList(instantBranches);
+      setSelectedBranch(instantBranches[0].code);
+    }
   };
 
   const fetchAcademicMetadata = async () => {
@@ -395,12 +449,12 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         const j = await crsRes.json();
         const list = Array.isArray(j) ? j : j.data || [];
         const mappedCourses: DropdownItem[] = list.map((c: any) => ({
-          id: String(c.course_cd || c.code || '4'),
-          code: String(c.course_cd || c.code || '4'),
-          name: c.course_name || c.name || `Course ${c.course_cd || 4}`,
+          id: String(c.course_cd || c.code || '1'),
+          code: String(c.course_cd || c.code || '1'),
+          name: c.course_name || c.name || `Course ${c.course_cd || 1}`,
         }));
         setCoursesList(mappedCourses);
-        const crsToUse = selectedCourse || (mappedCourses[0] ? mappedCourses[0].code : '4');
+        const crsToUse = selectedCourse || (mappedCourses[0] ? mappedCourses[0].code : '1');
         fetchBranchesAndBatches(userColg, crsToUse, mappedCourses, userSlug);
       } else {
         setCoursesList([]);
@@ -417,7 +471,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     customSlug?: string
   ) => {
     const effectiveColg = colg || selectedCollege || '1';
-    const effectiveCrs = crs || selectedCourse || '4';
+    const effectiveCrs = crs || selectedCourse || '1';
     const slug = customSlug || userTenantSlug || 'srms-cet-bareilly';
     const activeCourses = (customCourses && customCourses.length > 0) ? customCourses : coursesList;
 
@@ -430,21 +484,25 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       const courseObj = activeCourses.find(
         (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
       );
-      const defaultCourseName = effectiveCrs === '4' ? 'MBA' : effectiveCrs === '13' ? 'BCA' : 'Department';
+      const defaultCourseName = effectiveCrs === '1' ? 'B.TECH.' : effectiveCrs === '4' ? 'MBA' : effectiveCrs === '13' ? 'BCA' : effectiveCrs === '3' ? 'MCA' : 'Department';
       const courseName = (courseObj?.name || defaultCourseName)
         .replace(/^\[#\d+\]\s*/, '')
         .trim();
+
+      const fallbackBranches = CET_COURSE_BRANCHES[effectiveCrs] || [
+        { id: '1', code: '1', name: `${courseName} Department` }
+      ];
 
       if (brRes && brRes.ok) {
         const j = await brRes.json();
         const list = Array.isArray(j) ? j : j.data || [];
 
-        const mapped: DropdownItem[] = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
+        const mapped: DropdownItem[] = (Array.isArray(list) && list.length > 0 ? list : fallbackBranches).map((b: any) => {
           const rawName = (b.branch_name || b.name || '').trim();
           const validName =
             rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
               ? rawName
-              : (effectiveCrs === '4' ? 'MBA Department' : effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
+              : (CET_COURSE_BRANCHES[effectiveCrs]?.[0]?.name || `${courseName} Department`);
           return {
             id: String(b.branch_cd || b.code || '1'),
             code: String(b.branch_cd || b.code || '1'),
@@ -455,18 +513,16 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         if (mapped.length > 0) {
           setBranchesList(mapped);
           setSelectedBranch((prev) => {
-            const exists = mapped.some((b) => String(b.code) === String(prev));
-            return exists ? prev : mapped[0].code;
+            const match = mapped.find((b) => String(b.code) === String(prev));
+            return match ? match.code : mapped[0].code;
           });
         } else {
-          const fallback = [{ id: '1', code: '1', name: effectiveCrs === '4' ? 'MBA Department' : effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department` }];
-          setBranchesList(fallback);
-          setSelectedBranch('1');
+          setBranchesList(fallbackBranches);
+          setSelectedBranch(fallbackBranches[0].code);
         }
       } else {
-        const fallback = [{ id: '1', code: '1', name: effectiveCrs === '4' ? 'MBA Department' : effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department` }];
-        setBranchesList(fallback);
-        setSelectedBranch('1');
+        setBranchesList(fallbackBranches);
+        setSelectedBranch(fallbackBranches[0].code);
       }
 
       if (btRes && btRes.ok) {
@@ -503,11 +559,15 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         section_cd: Number(selectedSection || 1),
         fdt: fromDate,
         tdt: toDate,
+        tenantSlug: userTenantSlug || 'srms-cet-bareilly',
       };
 
       const res = await fetch('/api/srms/student-attendance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-slug': userTenantSlug || 'srms-cet-bareilly',
+        },
         body: JSON.stringify(payload),
       });
 
@@ -748,13 +808,13 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     }
 
     if (statusFilter === 'DEFAULTER') {
-      list = list.filter((st) => parseFloat(st.TotalPresentPercentage || '0') < 75);
+      list = matrixSubjects.length === 0 ? [] : list.filter((st) => parseFloat(st.TotalPresentPercentage || '0') < 75);
     } else if (statusFilter === 'GOOD') {
-      list = list.filter((st) => parseFloat(st.TotalPresentPercentage || '0') >= 75);
+      list = matrixSubjects.length === 0 ? [] : list.filter((st) => parseFloat(st.TotalPresentPercentage || '0') >= 75);
     }
 
     return list;
-  }, [matrixStudents, matrixSearchQuery, statusFilter]);
+  }, [matrixStudents, matrixSubjects, matrixSearchQuery, statusFilter]);
 
   // Pagination Computations
   const totalPages = useMemo(() => {
@@ -774,14 +834,17 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   // Quick Counter Metrics
   const summaryMetrics = useMemo(() => {
     const total = matrixStudents.length;
+    if (matrixSubjects.length === 0) {
+      return { total, defaulters: 0, regular: 0, avgPct: '0.0' };
+    }
     const defaulters = matrixStudents.filter((st) => parseFloat(st.TotalPresentPercentage || '0') < 75).length;
     const regular = total - defaulters;
     const avgPct =
       total > 0
-        ? (matrixStudents.reduce((acc, st) => acc + parseFloat(st.TotalPresentPercentage || '0'), 0) / total).toFixed(1)
+        ? (matrixStudents.reduce((acc, st) => acc + (parseFloat(st.TotalPresentPercentage || '0') || 0), 0) / total).toFixed(1)
         : '0.0';
     return { total, defaulters, regular, avgPct };
-  }, [matrixStudents]);
+  }, [matrixStudents, matrixSubjects]);
 
   // Modal Metrics calculation
   const modalMetrics = useMemo(() => {
@@ -1317,14 +1380,16 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                         <td className="py-0.5 px-1.5 text-center border-r border-slate-200 dark:border-slate-800">
                           <span
                             className={`inline-block px-2 py-0.5 rounded font-black text-[10.5px] shadow-2xs ${
-                              parseFloat(st.TotalPresentPercentage) >= 75
+                              st.TotalPresentPercentage === '—' || matrixSubjects.length === 0
+                                ? 'bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                                : parseFloat(st.TotalPresentPercentage) >= 75
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                 : parseFloat(st.TotalPresentPercentage) >= 50
                                 ? 'bg-amber-100 text-amber-800 border border-amber-300'
                                 : 'bg-rose-100 text-rose-800 border border-rose-300'
                             }`}
                           >
-                            {st.TotalPresentPercentage}
+                            {matrixSubjects.length === 0 ? '—' : st.TotalPresentPercentage}
                           </span>
                         </td>
                       </tr>

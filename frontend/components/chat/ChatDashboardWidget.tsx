@@ -8,11 +8,13 @@ import { useChat } from '../../hooks/useChat';
 interface ChatDashboardWidgetProps {
   role?: 'FACULTY' | 'STUDENT' | 'ADMIN';
   chatUrl?: string;
+  maxRows?: number;
 }
 
 export default function ChatDashboardWidget({
   role = 'FACULTY',
   chatUrl = '/dashboard/faculty/chat',
+  maxRows = 2,
 }: ChatDashboardWidgetProps) {
   const { groups, loadingGroups, unreadTotal } = useChat(role);
 
@@ -33,7 +35,7 @@ export default function ChatDashboardWidget({
     return bTs - aTs; // newest first
   });
 
-  const topGroups = (groupsWithMessages.length > 0 ? groupsWithMessages : groups).slice(0, 3);
+  const topGroups = (groupsWithMessages.length > 0 ? groupsWithMessages : groups).slice(0, maxRows);
 
   return (
     <div className="h-full flex flex-col justify-between bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md transition-all">
@@ -72,7 +74,7 @@ export default function ChatDashboardWidget({
       {/* Widget Content List - Starts from Top without Empty Gaps */}
       <div className="flex-1 pt-3.5 space-y-2.5 flex flex-col justify-start">
         {loadingGroups ? (
-          [...Array(3)].map((_, i) => (
+          [...Array(maxRows)].map((_, i) => (
             <div key={i} className="animate-pulse flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40">
               <div className="space-y-1.5 flex-1">
                 <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-1/3"></div>

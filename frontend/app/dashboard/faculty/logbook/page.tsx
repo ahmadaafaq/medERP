@@ -102,6 +102,11 @@ export default function FacultyLogbookPage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
+  // Course Filter & Topic Scope
+  const [selectedCourse, setSelectedCourse] = useState<string>('all');
+  const [availableCourses, setAvailableCourses] = useState<{ id: string; course_cd?: string; code?: string; name: string }[]>([]);
+  const [topicScope, setTopicScope] = useState<'ALL' | 'MY'>('ALL');
+
   // Document preview state
   const [isDocPreviewOpen, setIsDocPreviewOpen] = useState(false);
   const [docPreviewTarget, setDocPreviewTarget] = useState<{
@@ -132,8 +137,28 @@ export default function FacultyLogbookPage() {
   const [reviewTarget, setReviewTarget] = useState<any | null>(null);
 
   useEffect(() => {
+    fetchCourses();
     fetchData();
   }, []);
+
+  const fetchCourses = async () => {
+    try {
+      const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+      const token = localStorage.getItem('token') || '';
+      const res = await fetch(`/api/v1/logbook/academic-structure?tenant=${slug}`, {
+        headers: { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const data = json?.data || json;
+        if (data?.courses && Array.isArray(data.courses)) {
+          setAvailableCourses(data.courses);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load courses', e);
+    }
+  };
 
   const getFacultyCohort = () => {
     if (typeof window === 'undefined') return { facultyId: '', courseCd: '', branchCd: '', batchCd: '', department: '' };
@@ -153,17 +178,10 @@ export default function FacultyLogbookPage() {
             u.department_name ||
             ''
         ).toLowerCase();
-        if (!cCd) {
-          if (dept.includes('mca') || dept.includes('master of computer applications')) cCd = '3';
-          else if (dept.includes('mba') || dept.includes('master of business administration')) cCd = '4';
-          else if (dept.includes('bca') || dept.includes('bachelor of computer applications')) cCd = '13';
-          else if (dept.includes('pharm') || dept.includes('pharmacy')) cCd = '2';
-          else if (dept.includes('b.tech') || dept.includes('btech') || dept.includes('tech') || dept.includes('engineering') || dept.includes('cse') || dept.includes('cs')) cCd = '1';
-        }
         return {
-          facultyId: String(p.id || p.faculty_id || p.emp_id || u.id || u.userId || u.emp_id || '').trim(),
+          facultyId: String(u.id || p.id || p.faculty_id || p.emp_id || u.userId || '').trim(),
           courseCd: cCd,
-          branchCd: String(p.branch_cd || p.branchId || p.branch_id || p.department_id || u.branch_cd || '').trim(),
+          branchCd: String(p.branch_cd || p.branchId || p.branch_id || u.branch_cd || '').trim(),
           batchCd: String(p.batch_cd || p.batchCd || p.batch_id || u.batch_cd || '').trim(),
           department: dept,
         };
@@ -172,15 +190,16 @@ export default function FacultyLogbookPage() {
     return { facultyId: '', courseCd: '', branchCd: '', batchCd: '', department: '' };
   };
 
-  const fetchData = async (targetProjId?: string) => {
+  const fetchData = async (targetProjId?: string, overrideCourse?: string, overrideScope?: 'ALL' | 'MY') => {
     setLoading(true);
     const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
     const token = localStorage.getItem('token') || '';
     const facCohort = getFacultyCohort();
-    const facultyParam = facCohort.facultyId ? `&facultyId=${encodeURIComponent(facCohort.facultyId)}` : '';
-    const courseParam = facCohort.courseCd ? `&courseId=${encodeURIComponent(facCohort.courseCd)}` : '';
-    const branchParam = facCohort.branchCd ? `&branchId=${encodeURIComponent(facCohort.branchCd)}` : '';
-    const batchParam = facCohort.batchCd ? `&batchId=${encodeURIComponent(facCohort.batchCd)}` : '';
+    const activeCourse = overrideCourse !== undefined ? overrideCourse : selectedCourse;
+    const activeScope = overrideScope !== undefined ? overrideScope : topicScope;
+
+    const facultyParam = activeScope === 'MY' && facCohort.facultyId ? `&facultyId=${encodeURIComponent(facCohort.facultyId)}` : '&facultyId=all';
+    const courseParam = activeCourse && activeCourse !== 'all' ? `&courseId=${encodeURIComponent(activeCourse)}` : '';
 
     const headers = {
       Authorization: `Bearer ${token}`,
@@ -189,14 +208,14 @@ export default function FacultyLogbookPage() {
 
     try {
       // 1. Fetch faculty topics
-      const topRes = await fetch(`/api/v1/logbook/topics?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
+      const topRes = await fetch(`/api/v1/logbook/topics?tenant=${slug}${facultyParam}${courseParam}`, { headers });
       if (topRes.ok) {
         const topJson = await topRes.json();
         setTopics(Array.isArray(topJson.data) ? topJson.data : Array.isArray(topJson) ? topJson : []);
       }
 
       // 2. Fetch submissions queue
-      const subRes = await fetch(`/api/v1/logbook/submissions?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
+      const subRes = await fetch(`/api/v1/logbook/submissions?tenant=${slug}${facultyParam}${courseParam}`, { headers });
       if (subRes.ok) {
         const subJson = await subRes.json();
         setSubmissions(Array.isArray(subJson.data) ? subJson.data : Array.isArray(subJson) ? subJson : []);
@@ -206,7 +225,7 @@ export default function FacultyLogbookPage() {
       let activeProjId = targetProjId || selectedProjectId;
       let projectsArray: any[] = [];
 
-      const allProjRes = await fetch(`/api/v1/logbook/mini-projects/all?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
+      const allProjRes = await fetch(`/api/v1/logbook/mini-projects/all?tenant=${slug}&facultyId=all${courseParam}`, { headers });
       if (allProjRes.ok) {
         const allProjJson = await allProjRes.json();
         const rawList = Array.isArray(allProjJson.data) ? allProjJson.data : Array.isArray(allProjJson) ? allProjJson : [];
@@ -214,7 +233,7 @@ export default function FacultyLogbookPage() {
         setMiniProjectsList(rawList);
       }
 
-      const projRes = await fetch(`/api/v1/logbook/mini-project?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
+      const projRes = await fetch(`/api/v1/logbook/mini-project?tenant=${slug}${courseParam}`, { headers });
       if (projRes.ok) {
         const projJson = await projRes.json();
         const rawProj = projJson?.data !== undefined ? projJson.data : projJson;
@@ -236,7 +255,7 @@ export default function FacultyLogbookPage() {
       }
 
       // 4. Fetch all weekly logs
-      const weekRes = await fetch(`/api/v1/logbook/weekly-logs/all?tenant=${slug}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
+      const weekRes = await fetch(`/api/v1/logbook/weekly-logs/all?tenant=${slug}${courseParam}`, { headers });
       if (weekRes.ok) {
         const weekJson = await weekRes.json();
         const rawWeek = weekJson?.data !== undefined ? weekJson.data : weekJson;
@@ -245,7 +264,7 @@ export default function FacultyLogbookPage() {
 
       // 5. Fetch enrolled applicants & tracking for selected project
       const projFilterParam = currentProj?.id ? `&projectId=${encodeURIComponent(currentProj.id)}` : '';
-      const appRes = await fetch(`/api/v1/logbook/mini-projects/applicants?tenant=${slug}${projFilterParam}${facultyParam}${courseParam}${branchParam}${batchParam}`, { headers });
+      const appRes = await fetch(`/api/v1/logbook/mini-projects/applicants?tenant=${slug}${projFilterParam}${courseParam}`, { headers });
       if (appRes.ok) {
         const appJson = await appRes.json();
         const rawApp = appJson?.data !== undefined ? appJson.data : appJson;
@@ -379,27 +398,127 @@ export default function FacultyLogbookPage() {
               </div>
             </div>
 
+            {/* Course & Scope Filter Bar */}
+            <div className="bg-white dark:bg-slate-900 rounded-[22px] p-3.5 sm:p-4 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Filter className="w-3.5 h-3.5 text-[#5B4BFF]" />
+                  <span>Course:</span>
+                </span>
+                <button
+                  onClick={() => {
+                    setSelectedCourse('all');
+                    fetchData(undefined, 'all');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    selectedCourse === 'all'
+                      ? 'bg-[#2D2575] text-white shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  All Courses
+                </button>
+                {(availableCourses.length > 0
+                  ? availableCourses
+                  : [
+                      { id: '13', course_cd: '13', name: 'BCA' },
+                      { id: '3', course_cd: '3', name: 'MCA' },
+                      { id: '1', course_cd: '1', name: 'B.TECH.' },
+                      { id: '4', course_cd: '4', name: 'MBA' },
+                    ]
+                ).map((crs) => {
+                  const cd = String(crs.course_cd || crs.code || crs.id);
+                  const isAct = selectedCourse === cd;
+                  return (
+                    <button
+                      key={crs.id || cd}
+                      onClick={() => {
+                        setSelectedCourse(cd);
+                        fetchData(undefined, cd);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        isAct
+                          ? 'bg-[#5B4BFF] text-white shadow-sm'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                      }`}
+                    >
+                      {crs.name}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Seminar Scope Filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider hidden md:inline">
+                  Seminars:
+                </span>
+                <button
+                  onClick={() => {
+                    setTopicScope('ALL');
+                    fetchData(undefined, undefined, 'ALL');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    topicScope === 'ALL'
+                      ? 'bg-[#F36C21] text-white shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  All Seminars ({topics.length})
+                </button>
+                <button
+                  onClick={() => {
+                    setTopicScope('MY');
+                    fetchData(undefined, undefined, 'MY');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    topicScope === 'MY'
+                      ? 'bg-[#5B4BFF] text-white shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  My Posted Only
+                </button>
+              </div>
+            </div>
+
             {/* 4 Summary Metric Cards */}
             <div className="grid grid-cols-4 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-4">
               <div
                 title="Assigned Project"
-                className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-[22px] p-2 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between group cursor-default"
+                onClick={() => setActiveTab('MINI_PROJECTS')}
+                className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-[22px] p-2 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between group cursor-pointer hover:border-[#5B4BFF]/50 transition-all"
               >
                 <div className="flex items-center justify-between mb-1 sm:mb-3">
                   <span className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider">
                     <span className="sm:hidden">Project</span>
-                    <span className="hidden sm:inline">Assigned Project</span>
+                    <span className="hidden sm:inline">Assigned Mini Projects</span>
                   </span>
                   <div className="p-1 sm:p-2 rounded-lg sm:rounded-xl bg-purple-50 dark:bg-purple-950/50 text-[#5B4BFF] shrink-0">
                     <FolderGit2 className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                   </div>
                 </div>
-                <div className="text-xs sm:text-lg font-bold text-slate-900 dark:text-white truncate" title={miniProject?.title || 'React Crud Operation'}>
-                  {miniProject?.title || 'React Crud Operation'}
+                <div
+                  className="text-xs sm:text-lg font-bold text-slate-900 dark:text-white truncate"
+                  title={miniProject?.title || miniProjectsList[0]?.title || 'No Project Assigned'}
+                >
+                  {miniProject?.title || miniProjectsList[0]?.title || 'No Project Assigned'}
                 </div>
-                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate">
-                  <span className="hidden sm:inline">Stack: </span>
-                  {(miniProject?.technologies || ['React', 'PostgreSQL']).slice(0, 3).join(', ')}
+                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate flex items-center justify-between">
+                  <span className="truncate">
+                    <span className="font-semibold">Course: </span>
+                    {miniProject?.course_name ||
+                      (miniProject?.course_id === '13'
+                        ? 'BCA'
+                        : miniProject?.course_id === '3'
+                        ? 'MCA'
+                        : miniProject?.course_id || 'BCA')}
+                  </span>
+                  {miniProjectsList.length > 1 && (
+                    <span className="text-[10px] font-bold text-[#F36C21] shrink-0 ml-1">
+                      +{miniProjectsList.length - 1} more
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -820,14 +939,12 @@ export default function FacultyLogbookPage() {
 
                               {/* Target Hierarchy Badges */}
                               <div className="flex flex-wrap gap-1.5 pt-1">
-                                {t.course_name && (
-                                  <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-                                    🎓 {t.course_name}
-                                  </span>
-                                )}
+                                <span className="px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/50 text-[#5B4BFF] text-[10px] font-bold">
+                                  🎓 {t.course_name || (t.course_id === '13' ? 'BCA' : t.course_id === '3' ? 'MCA' : t.course_id ? `Course ${t.course_id}` : 'All Courses')}
+                                </span>
                                 {t.batch_name && (
                                   <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-                                    👥 {t.batch_name}
+                                    👥 {t.batch_name === '2' ? 'Batch 2' : t.batch_name}
                                   </span>
                                 )}
                                 {t.submission_deadline && (
@@ -835,6 +952,9 @@ export default function FacultyLogbookPage() {
                                     <Clock className="w-3 h-3" /> Due {new Date(t.submission_deadline).toLocaleDateString()}
                                   </span>
                                 )}
+                                <span className="px-2 py-0.5 rounded-md bg-slate-50 dark:bg-slate-800/80 text-[10px] font-medium text-slate-500">
+                                  📅 Posted: {new Date(t.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </span>
                               </div>
 
                               {/* Submitted Attachment Preview Pills */}
@@ -948,6 +1068,7 @@ export default function FacultyLogbookPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {miniProjectsList.map((proj) => {
                           const isSelected = miniProject?.id === proj.id || (!miniProject && miniProjectsList[0]?.id === proj.id);
+                          const crsName = proj.course_name || (proj.course_id === '13' ? 'BCA' : proj.course_id === '3' ? 'MCA' : proj.course_id ? `Course ${proj.course_id}` : 'All Courses');
                           return (
                             <div
                               key={proj.id || proj.title}
@@ -965,15 +1086,42 @@ export default function FacultyLogbookPage() {
                                     {proj.title}
                                   </h4>
                                 </div>
-                                {isSelected && (
-                                  <span className="px-2 py-0.5 rounded-full bg-[#5B4BFF] text-white text-[10px] font-bold">
-                                    Active Card
-                                  </span>
-                                )}
+                                <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-[#5B4BFF] text-[10px] font-bold">
+                                  {crsName}
+                                </span>
                               </div>
-                              <p className="text-[11px] text-slate-500 line-clamp-2 mb-3">
+
+                              <p className="text-[11px] text-slate-500 line-clamp-2 mb-2.5">
                                 {proj.description || 'No description provided.'}
                               </p>
+
+                              {/* Tech Stack Pills */}
+                              {Array.isArray(proj.technologies) && proj.technologies.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-2.5">
+                                  {proj.technologies.slice(0, 4).map((tech: string, tIdx: number) => (
+                                    <span
+                                      key={tIdx}
+                                      className="px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[9px] font-semibold text-slate-700 dark:text-slate-300"
+                                    >
+                                      {tech}
+                                    </span>
+                                  ))}
+                                  {proj.technologies.length > 4 && (
+                                    <span className="text-[9px] text-slate-400 font-bold self-center">
+                                      +{proj.technologies.length - 4}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Student Candidate & Guide Info */}
+                              <div className="text-[10px] text-slate-600 dark:text-slate-400 mb-2 flex items-center justify-between">
+                                <span>Guide: <strong className="text-slate-800 dark:text-slate-200">{proj.guide_name || 'Faculty Guide'}</strong></span>
+                                {proj.student_name && (
+                                  <span>Student: <strong className="text-[#5B4BFF]">{proj.student_name}</strong></span>
+                                )}
+                              </div>
+
                               <div className="flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                                 <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                                   Max: {proj.max_marks || 100} Marks

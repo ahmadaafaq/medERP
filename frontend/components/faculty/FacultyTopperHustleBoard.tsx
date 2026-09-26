@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Trophy, Award, Flame, Star, FolderGit2, Rocket, Sparkles, BookOpen, FileCheck, CheckCircle2, FileText, GraduationCap, Crown, Medal } from 'lucide-react';
+import { Trophy, Award, Flame, Star, FolderGit2, Rocket, Sparkles, BookOpen, FileCheck, CheckCircle2, FileText, GraduationCap, Crown, Medal, X, Search } from 'lucide-react';
 
 interface TopperStudent {
   rank: number;
@@ -51,6 +51,13 @@ export default function FacultyTopperHustleBoard() {
   const [loading, setLoading] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const PAGE_SIZE = 10;
+
+  // Modal State for See All Toppers
+  const [showAllModal, setShowAllModal] = useState<boolean>(false);
+  const [modalFilterMode, setModalFilterMode] = useState<'all' | 'theory' | 'seminar' | 'mini_project' | 'tutorial' | 'certification' | 'incubation'>('all');
+  const [modalCurrentPage, setModalCurrentPage] = useState<number>(1);
+  const [modalSearchTerm, setModalSearchTerm] = useState<string>('');
+  const MODAL_PAGE_SIZE = 4;
 
   useEffect(() => {
     const fetchToppers = async () => {
@@ -201,12 +208,243 @@ export default function FacultyTopperHustleBoard() {
       return 0;
     });
 
-  const totalPages = Math.ceil(filteredStudents.length / PAGE_SIZE) || 1;
-  const paginatedStudents = filteredStudents.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const CARD_LIMIT = 2;
+  const cardStudents = filteredStudents.slice(0, CARD_LIMIT);
+
+  const handleOpenModal = () => {
+    setModalFilterMode(filterMode);
+    setModalSearchTerm('');
+    setModalCurrentPage(1);
+    setShowAllModal(true);
+  };
+
+  const modalFilteredStudents = students
+    .filter((st) => {
+      if (modalFilterMode === 'theory') return (st.theoryScore || 0) > 0;
+      if (modalFilterMode === 'seminar') return (st.seminarsDone || 0) > 0;
+      if (modalFilterMode === 'mini_project') return st.hasMiniProject || (st.totalMiniProjects || 0) > 0 || (st.miniProjectsDone || 0) > 0 || (st.miniProjectsInProgress || 0) > 0;
+      if (modalFilterMode === 'tutorial') return (st.tutorialsDone || 0) > 0;
+      if (modalFilterMode === 'certification') return (st.certificationsDone || 0) > 0;
+      if (modalFilterMode === 'incubation') return st.isIncubationSelected || (st.incubationStatus && st.incubationStatus !== 'Under Review');
+      return true;
+    })
+    .filter((st) => {
+      if (!modalSearchTerm) return true;
+      const q = modalSearchTerm.toLowerCase();
+      return (
+        (st.name && st.name.toLowerCase().includes(q)) ||
+        (st.rollNo && st.rollNo.toLowerCase().includes(q)) ||
+        (st.regNo && st.regNo.toLowerCase().includes(q)) ||
+        (st.course && st.course.toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => {
+      if (modalFilterMode === 'theory') return (b.theoryScore || 0) - (a.theoryScore || 0);
+      return 0;
+    });
+
+  const modalTotalPages = Math.ceil(modalFilteredStudents.length / MODAL_PAGE_SIZE) || 1;
+  const modalValidPage = Math.min(modalCurrentPage, modalTotalPages);
+  const modalStartIndex = (modalValidPage - 1) * MODAL_PAGE_SIZE;
+  const modalPaginatedStudents = modalFilteredStudents.slice(modalStartIndex, modalStartIndex + MODAL_PAGE_SIZE);
+
+  const renderTopperCard = (st: TopperStudent) => {
+    const isTop3 = st.rank <= 3;
+
+    return (
+      <div
+        key={st.id || st.regNo}
+        className={`p-4 rounded-2xl border transition-all duration-200 hover:shadow-md space-y-3 ${
+          isTop3
+            ? 'bg-gradient-to-r from-amber-500/5 via-white to-orange-500/5 dark:from-amber-950/20 dark:via-slate-900 dark:to-orange-950/20 border-amber-300/60 dark:border-amber-700/50 shadow-xs'
+            : 'bg-white dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-800 hover:border-slate-300'
+        }`}
+      >
+        {/* SECTION 1: TOP ROW (Rank + Avatar + Name & Program + Composite Score) */}
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {/* Rank Badge: High-definition Vector Medallions */}
+            {st.rank === 1 ? (
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 text-amber-950 flex flex-col items-center justify-center shadow-md shadow-amber-500/35 border-2 border-amber-200 shrink-0">
+                <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-950 fill-amber-950 stroke-[2.5]" />
+                <span className="text-[10px] sm:text-[11px] font-black leading-none mt-0.5 tracking-tight text-amber-950">#1</span>
+              </div>
+            ) : st.rank === 2 ? (
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-slate-100 via-slate-200 to-slate-400 text-slate-800 flex flex-col items-center justify-center shadow-md shadow-slate-400/25 border-2 border-white dark:border-slate-300 shrink-0">
+                <Medal className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700 fill-slate-400 stroke-[2.5]" />
+                <span className="text-[10px] sm:text-[11px] font-black leading-none mt-0.5 tracking-tight text-slate-800">#2</span>
+              </div>
+            ) : st.rank === 3 ? (
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-600 via-amber-700 to-orange-700 text-white flex flex-col items-center justify-center shadow-md shadow-amber-800/30 border-2 border-amber-300/80 shrink-0">
+                <Award className="w-4 h-4 sm:w-5 sm:h-5 text-amber-200 fill-amber-300 stroke-[2.5]" />
+                <span className="text-[10px] sm:text-[11px] font-black leading-none mt-0.5 tracking-tight text-white">#3</span>
+              </div>
+            ) : (
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-black text-xs sm:text-sm shrink-0 border border-slate-200 dark:border-slate-700 shadow-xs">
+                #{st.rank}
+              </div>
+            )}
+
+            {/* Student Avatar */}
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden flex items-center justify-center text-xs font-black text-[#5B4BFF] shrink-0 shadow-xs">
+              {st.photoUrl ? (
+                <img
+                  src={st.photoUrl}
+                  alt={st.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                st.name
+                  ? st.name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase()
+                  : 'ST'
+              )}
+            </div>
+
+            {/* Student Name, Roll No & Program */}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-sm font-black text-slate-900 dark:text-white tracking-tight leading-tight">
+                  {st.name || 'Student Scholar'}
+                </h4>
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-bold text-[10px] shrink-0 border border-slate-200/60 dark:border-slate-700/60">
+                  {st.rollNo || st.regNo}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                {st.course} <span className="text-slate-300 dark:text-slate-700">•</span> {st.batch}
+              </p>
+            </div>
+          </div>
+
+          {/* Composite Score Pill */}
+          <div className="px-3.5 py-1.5 rounded-2xl bg-gradient-to-br from-[#F36C21]/15 via-orange-500/10 to-amber-500/15 border border-[#F36C21]/30 text-center shrink-0">
+            <span className="block text-[8px] uppercase font-black tracking-wider text-[#F36C21]">Composite</span>
+            <span className="text-base sm:text-lg font-black text-[#F36C21] tracking-tight leading-none">
+              {st.compositeScore || (st.attendancePct * 0.4 + (st.theoryScore || 80) * 0.6).toFixed(1)}
+            </span>
+          </div>
+        </div>
+
+        {/* SECTION 2: MIDDLE ROW (Hustle Tag / Achievement Badge if present) */}
+        {st.hustleTag && (
+          <div className="pt-0.5">
+            <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-extrabold border border-amber-500/20 inline-flex items-center gap-1.5">
+              {st.rank === 1 ? (
+                <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 fill-amber-500/40 shrink-0" />
+              ) : st.hustleTag.includes('Seminar') ? (
+                <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              ) : st.hustleTag.includes('Certified') ? (
+                <FileCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+              ) : st.hustleTag.includes('Attendance') ? (
+                <Flame className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 fill-orange-500/40 shrink-0" />
+              ) : (
+                <Award className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+              )}
+              <span>{st.hustleTag.replace(/^[^a-zA-Z0-9\s]+/, '').trim()}</span>
+            </span>
+          </div>
+        )}
+
+        {/* SECTION 3: BOTTOM ROW (Performance Chips Grid) */}
+        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[10px] font-bold">
+          {/* Attendance */}
+          <div className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 text-center flex-1 min-w-[75px]">
+            <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-extrabold">Attendance</span>
+            <span className="font-black text-xs text-slate-800 dark:text-slate-100">
+              {st.attendancePct || 0}%
+            </span>
+          </div>
+
+          {/* Theory Exam */}
+          <div
+            title={st.examName ? `${st.examName}: ${st.theoryScore}%` : 'Latest Sessional Theory Exam'}
+            className="px-2.5 py-1.5 rounded-xl bg-violet-50/80 dark:bg-violet-950/40 border border-violet-200/60 dark:border-violet-800/40 text-center flex-1 min-w-[85px] transition-all hover:border-violet-400"
+          >
+            <span className="block text-[8px] uppercase tracking-wider text-violet-600 dark:text-violet-400 font-extrabold">Theory Exam</span>
+            <span className="font-black text-xs text-violet-700 dark:text-violet-300">
+              {st.theoryScore !== null && st.theoryScore !== undefined ? `${st.theoryScore}%` : 'N/A'}
+            </span>
+          </div>
+
+          {/* Mini Projects */}
+          <div
+            title={st.miniProjectTitle ? `Project: ${st.miniProjectTitle} (${st.miniProjectProgress || 'In Progress'})` : 'Mini Projects'}
+            className="px-2.5 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 text-center flex-1 min-w-[85px] transition-all hover:border-emerald-400"
+          >
+            <span className="block text-[8px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-extrabold">Mini-Projects</span>
+            <span className="font-black text-xs text-emerald-700 dark:text-emerald-300">
+              {(st.miniProjectsDone || 0) > 0
+                ? `${st.miniProjectsDone} Done`
+                : (st.miniProjectsInProgress || 0) > 0
+                ? 'In Progress'
+                : '0 Done'}
+            </span>
+            {st.miniProjectTitle && (
+              <span className="block text-[8px] text-emerald-800 dark:text-emerald-300 font-bold truncate max-w-[95px] mx-auto mt-0.5" title={st.miniProjectTitle}>
+                {st.miniProjectTitle}
+              </span>
+            )}
+          </div>
+
+          {/* Seminars */}
+          <div className="px-2.5 py-1.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40 text-center flex-1 min-w-[75px]">
+            <span className="block text-[8px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-extrabold">Seminars</span>
+            <span className="font-black text-xs text-blue-700 dark:text-blue-300">
+              {st.seminarsDone || 0} Done
+            </span>
+          </div>
+
+          {/* Tutorials */}
+          <div className="px-2.5 py-1.5 rounded-xl bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/40 text-center flex-1 min-w-[75px]">
+            <span className="block text-[8px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-extrabold">Tutorials</span>
+            <span className="font-black text-xs text-purple-700 dark:text-purple-300">
+              {st.tutorialsDone || 0} Done
+            </span>
+          </div>
+
+          {/* Certificates */}
+          <div className="px-2.5 py-1.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/40 text-center flex-1 min-w-[85px]">
+            <span className="block text-[8px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-extrabold">Certificates</span>
+            <span className="font-black text-xs text-amber-700 dark:text-amber-300">
+              {st.certificationsDone || 0} Done
+            </span>
+          </div>
+
+          {/* Authentic Capstone Project (only if present) */}
+          {st.projectScorePct > 0 && (
+            <div className="px-2.5 py-1.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/40 text-center flex-1 min-w-[95px]">
+              <span className="block text-[8px] uppercase tracking-wider text-indigo-500 dark:text-indigo-400 font-extrabold">Capstone</span>
+              <span className="font-black text-xs text-[#5B4BFF] dark:text-indigo-300">
+                {st.projectScorePct}% {st.projectGrade ? `(${st.projectGrade})` : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Authentic Incubation Grant (only if funded) */}
+          {st.isIncubationSelected && (st.fundingAmount || 0) > 0 && (
+            <div className="px-2.5 py-1.5 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-800/40 text-center flex-1 min-w-[85px]">
+              <span className="block text-[8px] uppercase tracking-wider text-rose-600 dark:text-rose-400 font-extrabold">Incubation</span>
+              <span className="font-black text-xs text-rose-700 dark:text-rose-300">
+                ₹{((st.fundingAmount || 0) / 1000).toFixed(0)}k Grant
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="bg-white dark:bg-slate-900/90 rounded-2.5xl p-4 sm:p-5 border border-[#E7EAF3] dark:border-slate-800 shadow-sm flex flex-col h-full overflow-hidden">
-      {/* Header with Title and Responsive Filter Tabs */}
+      {/* Header with Title, Live badge and See All button */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-[#E7EAF3] dark:border-slate-800 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#F36C21] via-orange-500 to-amber-500 text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0 border border-orange-400/30">
@@ -227,309 +465,112 @@ export default function FacultyTopperHustleBoard() {
           </div>
         </div>
 
-        {/* Filter Pills with Horizontal Scroll on Narrow Viewports */}
-        <div className="flex items-center gap-1 bg-[#F6F8FC] dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold overflow-x-auto max-w-full shrink-0">
+        <div className="flex items-center gap-2 shrink-0 self-start lg:self-center">
           <button
-            onClick={() => { setFilterMode('all'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
-              filterMode === 'all'
-                ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] dark:text-white shadow-xs font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
+            type="button"
+            onClick={handleOpenModal}
+            className="px-2.5 py-1 rounded-xl bg-[#F36C21] hover:bg-[#D95B17] text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
           >
-            All Star Toppers
-          </button>
-          <button
-            onClick={() => { setFilterMode('theory'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-              filterMode === 'theory'
-                ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-xs font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5 text-violet-500" /> Theory Exam
-          </button>
-          <button
-            onClick={() => { setFilterMode('seminar'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-              filterMode === 'seminar'
-                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 shadow-xs font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-blue-500" /> Seminars
-          </button>
-          <button
-            onClick={() => { setFilterMode('mini_project'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-              filterMode === 'mini_project'
-                ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-xs font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5 text-emerald-500" /> Mini-Projects
-          </button>
-          <button
-            onClick={() => { setFilterMode('tutorial'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-              filterMode === 'tutorial'
-                ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-300 shadow-xs font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5 text-purple-500" /> Tutorials
-          </button>
-          <button
-            onClick={() => { setFilterMode('certification'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-              filterMode === 'certification'
-                ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-300 shadow-xs font-extrabold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <FileCheck className="w-3.5 h-3.5 text-amber-500" /> Certificates
+            <span>See All</span>
+            <span className="px-1.5 py-0.2 bg-white/20 text-white text-[10px] rounded-full font-extrabold">{filteredStudents.length}</span>
           </button>
         </div>
       </div>
 
-      {/* Leaderboard Grid / List */}
-      <div className="flex-1 overflow-y-auto min-h-0 py-3 space-y-2.5 custom-scrollbar pr-1">
+      {/* Filter Pills with Horizontal Scroll on Narrow Viewports */}
+      <div className="flex items-center gap-1 bg-[#F6F8FC] dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold overflow-x-auto max-w-full shrink-0 my-3">
+        <button
+          onClick={() => { setFilterMode('all'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+            filterMode === 'all'
+              ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] dark:text-white shadow-xs font-extrabold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          All Star Toppers
+        </button>
+        <button
+          onClick={() => { setFilterMode('theory'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+            filterMode === 'theory'
+              ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-xs font-extrabold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5 text-violet-500" /> Theory Exam
+        </button>
+        <button
+          onClick={() => { setFilterMode('seminar'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+            filterMode === 'seminar'
+              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 shadow-xs font-extrabold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-blue-500" /> Seminars
+        </button>
+        <button
+          onClick={() => { setFilterMode('mini_project'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+            filterMode === 'mini_project'
+              ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-xs font-extrabold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <Award className="w-3.5 h-3.5 text-emerald-500" /> Mini-Projects
+        </button>
+        <button
+          onClick={() => { setFilterMode('tutorial'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+            filterMode === 'tutorial'
+              ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-300 shadow-xs font-extrabold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5 text-purple-500" /> Tutorials
+        </button>
+        <button
+          onClick={() => { setFilterMode('certification'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+            filterMode === 'certification'
+              ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-300 shadow-xs font-extrabold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <FileCheck className="w-3.5 h-3.5 text-amber-500" /> Certificates
+        </button>
+      </div>
+
+      {/* Leaderboard Cards (2 Records on Card) */}
+      <div className="flex-1 overflow-y-auto min-h-0 space-y-2.5 custom-scrollbar pr-1">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
             <div className="w-8 h-8 rounded-full border-2 border-[#5B4BFF] border-t-transparent animate-spin" />
             <span className="text-xs font-bold">Aggregating Campus Hustle Scores...</span>
           </div>
-        ) : paginatedStudents.length === 0 ? (
+        ) : cardStudents.length === 0 ? (
           <div className="text-center py-12 text-slate-400 text-xs font-bold">
             No students found matching this criteria.
           </div>
         ) : (
-          paginatedStudents.map((st) => {
-            const isTop3 = st.rank <= 3;
-
-            return (
-              <div
-                key={st.id || st.regNo}
-                className={`p-4 rounded-2xl border transition-all duration-200 hover:shadow-md space-y-3 ${
-                  isTop3
-                    ? 'bg-gradient-to-r from-amber-500/5 via-white to-orange-500/5 dark:from-amber-950/20 dark:via-slate-900 dark:to-orange-950/20 border-amber-300/60 dark:border-amber-700/50 shadow-xs'
-                    : 'bg-white dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-800 hover:border-slate-300'
-                }`}
-              >
-                {/* SECTION 1: TOP ROW (Rank + Avatar + Name & Program + Composite Score) */}
-                <div className="flex items-center justify-between gap-3 min-w-0">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Rank Badge: High-definition Vector Medallions */}
-                    {st.rank === 1 ? (
-                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 text-amber-950 flex flex-col items-center justify-center shadow-md shadow-amber-500/35 border-2 border-amber-200 shrink-0">
-                        <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-950 fill-amber-950 stroke-[2.5]" />
-                        <span className="text-[10px] sm:text-[11px] font-black leading-none mt-0.5 tracking-tight text-amber-950">#1</span>
-                      </div>
-                    ) : st.rank === 2 ? (
-                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-slate-100 via-slate-200 to-slate-400 text-slate-800 flex flex-col items-center justify-center shadow-md shadow-slate-400/25 border-2 border-white dark:border-slate-300 shrink-0">
-                        <Medal className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700 fill-slate-400 stroke-[2.5]" />
-                        <span className="text-[10px] sm:text-[11px] font-black leading-none mt-0.5 tracking-tight text-slate-800">#2</span>
-                      </div>
-                    ) : st.rank === 3 ? (
-                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-600 via-amber-700 to-orange-700 text-white flex flex-col items-center justify-center shadow-md shadow-amber-800/30 border-2 border-amber-300/80 shrink-0">
-                        <Award className="w-4 h-4 sm:w-5 sm:h-5 text-amber-200 fill-amber-300 stroke-[2.5]" />
-                        <span className="text-[10px] sm:text-[11px] font-black leading-none mt-0.5 tracking-tight text-white">#3</span>
-                      </div>
-                    ) : (
-                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-black text-xs sm:text-sm shrink-0 border border-slate-200 dark:border-slate-700 shadow-xs">
-                        #{st.rank}
-                      </div>
-                    )}
-
-                    {/* Student Avatar */}
-                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden flex items-center justify-center text-xs font-black text-[#5B4BFF] shrink-0 shadow-xs">
-                      {st.photoUrl ? (
-                        <img
-                          src={st.photoUrl}
-                          alt={st.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        st.name
-                          ? st.name
-                              .split(' ')
-                              .map((n) => n[0])
-                              .join('')
-                              .slice(0, 2)
-                              .toUpperCase()
-                          : 'ST'
-                      )}
-                    </div>
-
-                    {/* Student Name, Roll No & Program */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-black text-slate-900 dark:text-white tracking-tight leading-tight">
-                          {st.name || 'Student Scholar'}
-                        </h4>
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-bold text-[10px] shrink-0 border border-slate-200/60 dark:border-slate-700/60">
-                          {st.rollNo || st.regNo}
-                        </span>
-                      </div>
-                      <p className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                        {st.course} <span className="text-slate-300 dark:text-slate-700">•</span> {st.batch}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Composite Score Pill */}
-                  <div className="px-3.5 py-1.5 rounded-2xl bg-gradient-to-br from-[#F36C21]/15 via-orange-500/10 to-amber-500/15 border border-[#F36C21]/30 text-center shrink-0">
-                    <span className="block text-[8px] uppercase font-black tracking-wider text-[#F36C21]">Composite</span>
-                    <span className="text-base sm:text-lg font-black text-[#F36C21] tracking-tight leading-none">
-                      {st.compositeScore || (st.attendancePct * 0.4 + (st.theoryScore || 80) * 0.6).toFixed(1)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* SECTION 2: MIDDLE ROW (Hustle Tag / Achievement Badge if present) */}
-                {st.hustleTag && (
-                  <div className="pt-0.5">
-                    <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-extrabold border border-amber-500/20 inline-flex items-center gap-1.5">
-                      {st.rank === 1 ? (
-                        <Crown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 fill-amber-500/40 shrink-0" />
-                      ) : st.hustleTag.includes('Seminar') ? (
-                        <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                      ) : st.hustleTag.includes('Certified') ? (
-                        <FileCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      ) : st.hustleTag.includes('Attendance') ? (
-                        <Flame className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 fill-orange-500/40 shrink-0" />
-                      ) : (
-                        <Award className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      )}
-                      <span>{st.hustleTag.replace(/^[^a-zA-Z0-9\s]+/, '').trim()}</span>
-                    </span>
-                  </div>
-                )}
-
-                {/* SECTION 3: BOTTOM ROW (Performance Chips Grid) */}
-                <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[10px] font-bold">
-                  {/* Attendance */}
-                  <div className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 text-center flex-1 min-w-[75px]">
-                    <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-extrabold">Attendance</span>
-                    <span className="font-black text-xs text-slate-800 dark:text-slate-100">
-                      {st.attendancePct || 0}%
-                    </span>
-                  </div>
-
-                  {/* Theory Exam */}
-                  <div
-                    title={st.examName ? `${st.examName}: ${st.theoryScore}%` : 'Latest Sessional Theory Exam'}
-                    className="px-2.5 py-1.5 rounded-xl bg-violet-50/80 dark:bg-violet-950/40 border border-violet-200/60 dark:border-violet-800/40 text-center flex-1 min-w-[85px] transition-all hover:border-violet-400"
-                  >
-                    <span className="block text-[8px] uppercase tracking-wider text-violet-600 dark:text-violet-400 font-extrabold">Theory Exam</span>
-                    <span className="font-black text-xs text-violet-700 dark:text-violet-300">
-                      {st.theoryScore !== null && st.theoryScore !== undefined ? `${st.theoryScore}%` : 'N/A'}
-                    </span>
-                  </div>
-
-                  {/* Mini Projects */}
-                  <div
-                    title={st.miniProjectTitle ? `Project: ${st.miniProjectTitle} (${st.miniProjectProgress || 'In Progress'})` : 'Mini Projects'}
-                    className="px-2.5 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 text-center flex-1 min-w-[85px] transition-all hover:border-emerald-400"
-                  >
-                    <span className="block text-[8px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-extrabold">Mini-Projects</span>
-                    <span className="font-black text-xs text-emerald-700 dark:text-emerald-300">
-                      {(st.miniProjectsDone || 0) > 0
-                        ? `${st.miniProjectsDone} Done`
-                        : (st.miniProjectsInProgress || 0) > 0
-                        ? 'In Progress'
-                        : '0 Done'}
-                    </span>
-                    {st.miniProjectTitle && (
-                      <span className="block text-[8px] text-emerald-800 dark:text-emerald-300 font-bold truncate max-w-[95px] mx-auto mt-0.5" title={st.miniProjectTitle}>
-                        {st.miniProjectTitle}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Seminars */}
-                  <div className="px-2.5 py-1.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40 text-center flex-1 min-w-[75px]">
-                    <span className="block text-[8px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-extrabold">Seminars</span>
-                    <span className="font-black text-xs text-blue-700 dark:text-blue-300">
-                      {st.seminarsDone || 0} Done
-                    </span>
-                  </div>
-
-                  {/* Tutorials */}
-                  <div className="px-2.5 py-1.5 rounded-xl bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/40 text-center flex-1 min-w-[75px]">
-                    <span className="block text-[8px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-extrabold">Tutorials</span>
-                    <span className="font-black text-xs text-purple-700 dark:text-purple-300">
-                      {st.tutorialsDone || 0} Done
-                    </span>
-                  </div>
-
-                  {/* Certificates */}
-                  <div className="px-2.5 py-1.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/40 text-center flex-1 min-w-[85px]">
-                    <span className="block text-[8px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-extrabold">Certificates</span>
-                    <span className="font-black text-xs text-amber-700 dark:text-amber-300">
-                      {st.certificationsDone || 0} Done
-                    </span>
-                  </div>
-
-                  {/* Authentic Capstone Project (only if present) */}
-                  {st.projectScorePct > 0 && (
-                    <div className="px-2.5 py-1.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/40 text-center flex-1 min-w-[95px]">
-                      <span className="block text-[8px] uppercase tracking-wider text-indigo-500 dark:text-indigo-400 font-extrabold">Capstone</span>
-                      <span className="font-black text-xs text-[#5B4BFF] dark:text-indigo-300">
-                        {st.projectScorePct}% {st.projectGrade ? `(${st.projectGrade})` : ''}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Authentic Incubation Grant (only if funded) */}
-                  {st.isIncubationSelected && (st.fundingAmount || 0) > 0 && (
-                    <div className="px-2.5 py-1.5 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-800/40 text-center flex-1 min-w-[85px]">
-                      <span className="block text-[8px] uppercase tracking-wider text-rose-600 dark:text-rose-400 font-extrabold">Incubation</span>
-                      <span className="font-black text-xs text-rose-700 dark:text-rose-300">
-                        ₹{((st.fundingAmount || 0) / 1000).toFixed(0)}k Grant
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })
+          cardStudents.map(renderTopperCard)
         )}
       </div>
 
-      {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-500 shrink-0">
-          <span>
-            Showing {(currentPage - 1) * PAGE_SIZE + 1} to {Math.min(currentPage * PAGE_SIZE, filteredStudents.length)} of {filteredStudents.length} Toppers
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold disabled:opacity-40 transition-all"
-            >
-              Previous
-            </button>
-            <span className="px-2 py-1 text-slate-900 dark:text-white font-black">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold disabled:opacity-40 transition-all"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+      {/* See All Button Banner */}
+      {filteredStudents.length > 2 && (
+        <button
+          type="button"
+          onClick={handleOpenModal}
+          className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-[#F36C21] font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 border border-slate-200/80 dark:border-slate-700 cursor-pointer group shadow-2xs mt-2 shrink-0"
+        >
+          <span>See All {filteredStudents.length} Toppers & Scholars with Pagination</span>
+          <span className="group-hover:translate-x-1 transition-transform">➔</span>
+        </button>
       )}
 
       {/* Footer Link */}
-      <div className="pt-3.5 border-t border-[#E7EAF3] dark:border-slate-800 shrink-0 mt-auto flex items-center justify-between text-xs font-bold text-[#4E5969] dark:text-slate-400">
+      <div className="pt-3.5 border-t border-[#E7EAF3] dark:border-slate-800 shrink-0 mt-3 flex items-center justify-between text-xs font-bold text-[#4E5969] dark:text-slate-400">
         <span>🏆 Evaluated across 5 holistic competency dimensions</span>
         <Link
           href="/dashboard/faculty/repository"
@@ -539,6 +580,173 @@ export default function FacultyTopperHustleBoard() {
           <span>➔</span>
         </Link>
       </div>
+
+      {/* Modal Popup: All Toppers with Pagination */}
+      {showAllModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div
+            className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[24px] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-850/50">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#F36C21] via-orange-500 to-amber-500 text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0 border border-orange-400/30">
+                  <Trophy className="w-5 h-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-black text-[#1E293B] dark:text-white">
+                      Campus Academic & Merit Hustle Board — All Toppers
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black border border-amber-500/20">
+                      {modalFilteredStudents.length} Scholars
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#64748B] dark:text-slate-400 font-semibold truncate mt-0.5">
+                    Evaluated across attendance, theory exams, seminars, mini-projects, tutorials & capstones
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAllModal(false)}
+                className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 flex items-center justify-center transition-all cursor-pointer font-bold shrink-0"
+                title="Close Modal (Esc)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Filter Pills & Search */}
+            <div className="p-3 sm:p-4 border-b border-[#E7EAF3] dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-[#F6F8FC]/50 dark:bg-slate-800/40 shrink-0">
+              {/* Search */}
+              <div className="relative min-w-[200px] max-w-xs">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search topper by name, roll no..."
+                  value={modalSearchTerm}
+                  onChange={(e) => { setModalSearchTerm(e.target.value); setModalCurrentPage(1); }}
+                  className="w-full text-xs font-bold py-1.5 pl-8 pr-3 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#F36C21]/30"
+                />
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold overflow-x-auto max-w-full shrink-0">
+                <button
+                  onClick={() => { setModalFilterMode('all'); setModalCurrentPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg transition-all whitespace-nowrap cursor-pointer text-[11px] ${
+                    modalFilterMode === 'all'
+                      ? 'bg-[#5B4BFF] text-white shadow-xs font-extrabold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  All Star Toppers
+                </button>
+                <button
+                  onClick={() => { setModalFilterMode('theory'); setModalCurrentPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer text-[11px] ${
+                    modalFilterMode === 'theory'
+                      ? 'bg-violet-600 text-white shadow-xs font-extrabold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <FileText className="w-3 h-3" /> Theory
+                </button>
+                <button
+                  onClick={() => { setModalFilterMode('seminar'); setModalCurrentPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer text-[11px] ${
+                    modalFilterMode === 'seminar'
+                      ? 'bg-blue-600 text-white shadow-xs font-extrabold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" /> Seminars
+                </button>
+                <button
+                  onClick={() => { setModalFilterMode('mini_project'); setModalCurrentPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer text-[11px] ${
+                    modalFilterMode === 'mini_project'
+                      ? 'bg-emerald-600 text-white shadow-xs font-extrabold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Award className="w-3 h-3" /> Projects
+                </button>
+                <button
+                  onClick={() => { setModalFilterMode('tutorial'); setModalCurrentPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer text-[11px] ${
+                    modalFilterMode === 'tutorial'
+                      ? 'bg-purple-600 text-white shadow-xs font-extrabold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <BookOpen className="w-3 h-3" /> Tutorials
+                </button>
+                <button
+                  onClick={() => { setModalFilterMode('certification'); setModalCurrentPage(1); }}
+                  className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer text-[11px] ${
+                    modalFilterMode === 'certification'
+                      ? 'bg-amber-600 text-white shadow-xs font-extrabold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <FileCheck className="w-3 h-3" /> Certificates
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Scrollable Paginated Items */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-3">
+              {modalPaginatedStudents.length === 0 ? (
+                <div className="py-16 text-center text-xs text-slate-400 font-bold bg-[#F6F8FC] dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  No topper students found matching this search or filter.
+                </div>
+              ) : (
+                modalPaginatedStudents.map(renderTopperCard)
+              )}
+            </div>
+
+            {/* Modal Pagination Footer */}
+            <div className="p-3.5 sm:p-4 border-t border-[#E7EAF3] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-850 flex items-center justify-between gap-3 flex-wrap shrink-0">
+              <p className="text-xs font-bold text-[#4E5969] dark:text-slate-400">
+                Showing <strong className="text-[#1B1E28] dark:text-white">{modalStartIndex + 1}</strong> to <strong className="text-[#1B1E28] dark:text-white">{Math.min(modalStartIndex + MODAL_PAGE_SIZE, modalFilteredStudents.length)}</strong> of <strong className="text-[#1B1E28] dark:text-white">{modalFilteredStudents.length}</strong> Toppers
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={modalCurrentPage === 1}
+                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  ‹ Previous
+                </button>
+                <span className="text-xs font-black text-[#F36C21] px-2">
+                  Page {modalValidPage} of {modalTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setModalCurrentPage((p) => Math.min(modalTotalPages, p + 1))}
+                  disabled={modalCurrentPage >= modalTotalPages}
+                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  Next ›
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAllModal(false)}
+                  className="ml-2 px-3.5 py-1.5 rounded-xl bg-[#F36C21] hover:bg-[#D95B17] text-xs font-black text-white transition-all cursor-pointer shadow-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

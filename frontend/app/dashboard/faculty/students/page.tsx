@@ -175,13 +175,18 @@ function StudentAvatarItem({
   const [imgError, setImgError] = useState(false);
   const initials = getStudentInitials(student.name);
   const gradient = getAvatarGradient(student.name);
-  const hasPhoto = Boolean(student.photo_url && !imgError);
 
-  if (hasPhoto && student.photo_url) {
+  const reg = (student.registration_no || '').trim();
+  const cleanReg = reg && reg !== '—' ? reg : '';
+  const colgCd = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+  const photoUrl = student.photo_url || (cleanReg ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/${colgCd}/${cleanReg}/${cleanReg}.JPG` : '');
+  const hasPhoto = Boolean(photoUrl && !imgError);
+
+  if (hasPhoto && photoUrl) {
     return (
-      <div className={`${sizeClass} rounded-full overflow-hidden shrink-0 border border-indigo-500/30 shadow-xs relative bg-slate-100 dark:bg-slate-800`}>
+      <div className={`${sizeClass} rounded-full overflow-hidden shrink-0 border border-[#E7EAF3] dark:border-slate-700 shadow-xs relative bg-slate-100 dark:bg-slate-800`}>
         <img
-          src={student.photo_url}
+          src={photoUrl}
           alt={student.name}
           className="w-full h-full object-cover"
           loading="lazy"
@@ -194,7 +199,7 @@ function StudentAvatarItem({
   return (
     <div
       className={`${sizeClass} rounded-full flex items-center justify-center font-black text-white shrink-0 shadow-xs bg-gradient-to-br ${gradient} border border-white/20 select-none`}
-      title={`${student.name} (${student.gender || 'Student'})`}
+      title={student.name}
     >
       <span className={`${textSize} tracking-tight font-black`}>{initials}</span>
     </div>
@@ -212,10 +217,13 @@ export default function FacultyStudentsPage() {
   const [selectedCourse, setSelectedCourse] = useState<string>('ALL');
   const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
   const [selectedBatch, setSelectedBatch] = useState<string>('ALL');
+  const [selectedSem, setSelectedSem] = useState<string>('ALL');
+  const [selectedSection, setSelectedSection] = useState<string>('ALL');
 
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [allBranches, setAllBranches] = useState<BranchOption[]>([]);
   const [allBatches, setAllBatches] = useState<BatchOption[]>([]);
+  const [semestersList, setSemestersList] = useState<{ code: string; label: string }[]>([]);
 
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
@@ -265,49 +273,263 @@ export default function FacultyStudentsPage() {
     originalPdfUrl?: string;
   } | null>(null);
 
+  const getTenantSlug = () => {
+    if (typeof window !== 'undefined') {
+      const slug =
+        localStorage.getItem('tenantSlug') ||
+        localStorage.getItem('selectedTenant') ||
+        localStorage.getItem('colg_slug') ||
+        'srms-cet-bareilly';
+      return (slug || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '');
+    }
+    return 'srms-cet-bareilly';
+  };
+
+  const getColgCd = () => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+    }
+    return '1';
+  };
+
+  const getSemestersForCourse = (courseCd: string, courseName?: string) => {
+    const cName = (courseName || '').toLowerCase();
+    let maxSem = 6;
+    if (courseCd === '1' || courseCd === '2' || cName.includes('b.tech') || cName.includes('b.pharm')) {
+      maxSem = 8;
+    } else if (courseCd === '13' || cName.includes('bca')) {
+      maxSem = 6;
+    } else if (courseCd === '3' || courseCd === '4' || courseCd === '5' || courseCd === '21' || cName.includes('mca') || cName.includes('mba') || cName.includes('m.tech') || cName.includes('m.pharm')) {
+      maxSem = 4;
+    } else if (courseCd === '24' || cName.includes('pharm.d')) {
+      maxSem = 10;
+    } else {
+      maxSem = 8;
+    }
+
+    const sems: { code: string; label: string }[] = [];
+    for (let i = 1; i <= maxSem; i++) {
+      const year = Math.ceil(i / 2);
+      sems.push({ code: String(i), label: `${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Sem (Yr ${year})` });
+    }
+    return sems;
+  };
+
+  const fetchBranchesForCourse = async (cd: string, crs: string, slug: string): Promise<BranchOption[]> => {
+    try {
+      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map((b: any) => ({
+            id: String(b.branch_cd || b.code || b.id),
+            code: String(b.branch_cd || b.code),
+            name: b.branch_name && b.branch_name !== '-' && b.branch_name !== 'null' ? b.branch_name : (b.name || `Branch #${b.branch_cd || b.code}`),
+            course_cd: String(crs),
+            branch_cd: String(b.branch_cd || b.code),
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch branches from SRMS:', err);
+    }
+
+    if (crs === '1') {
+      return [
+        { id: '1', code: '1', name: '(CSE)', course_cd: '1', branch_cd: '1' },
+        { id: '2', code: '2', name: '(IT)', course_cd: '1', branch_cd: '2' },
+        { id: '3', code: '3', name: '(ME)', course_cd: '1', branch_cd: '3' },
+        { id: '5', code: '5', name: '(ECE)', course_cd: '1', branch_cd: '5' },
+        { id: '7', code: '7', name: '(EN)', course_cd: '1', branch_cd: '7' },
+        { id: '8', code: '8', name: 'CSE(AI & ML)', course_cd: '1', branch_cd: '8' },
+      ];
+    }
+    if (crs === '13') {
+      return [{ id: '1', code: '1', name: 'BCA Department', course_cd: '13', branch_cd: '1' }];
+    }
+    if (crs === '3') {
+      return [{ id: '1', code: '1', name: 'MCA Department', course_cd: '3', branch_cd: '1' }];
+    }
+    if (crs === '2') {
+      return [{ id: '1', code: '1', name: 'B.PHARM. Department', course_cd: '2', branch_cd: '1' }];
+    }
+    return [{ id: '1', code: '1', name: 'General Branch', course_cd: crs, branch_cd: '1' }];
+  };
+
+  const fetchBatchesForSelection = async (cd: string, crs: string, br: string, slug: string): Promise<BatchOption[]> => {
+    try {
+      const branchParam = br && br !== 'ALL' ? `&branchcd=${encodeURIComponent(br)}` : '';
+      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}${branchParam}&tenant=${slug}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const sorted = [...list].sort((a: any, b: any) => {
+            const yrA = Number(a.batch_name) || Number(a.batch_cd) || 0;
+            const yrB = Number(b.batch_name) || Number(b.batch_cd) || 0;
+            return yrB - yrA;
+          });
+          return sorted.map((b: any) => {
+            const bCd = String(b.batch_cd ?? b.code ?? '');
+            const bYr = String(b.batch_name || b.year || b.code || '');
+            const displayLabel = bCd && bYr
+              ? `[#${bCd}] ${bYr} Batch`
+              : (bYr ? `Batch ${bYr}` : `Batch ${bCd}`);
+            return {
+              id: bCd || bYr,
+              code: bCd || bYr,
+              name: displayLabel,
+              year: bYr,
+              course_cd: String(crs),
+            };
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch batches from SRMS:', err);
+    }
+
+    if (crs === '1') {
+      return [
+        { id: '19', code: '19', name: '[#19] 2026 Batch', year: '2026', course_cd: '1' },
+        { id: '18', code: '18', name: '[#18] 2025 Batch', year: '2025', course_cd: '1' },
+        { id: '17', code: '17', name: '[#17] 2024 Batch', year: '2024', course_cd: '1' },
+        { id: '16', code: '16', name: '[#16] 2023 Batch', year: '2023', course_cd: '1' },
+        { id: '15', code: '15', name: '[#15] 2022 Batch', year: '2022', course_cd: '1' },
+        { id: '14', code: '14', name: '[#14] 2021 Batch', year: '2021', course_cd: '1' },
+        { id: '13', code: '13', name: '[#13] 2020 Batch', year: '2020', course_cd: '1' },
+      ];
+    }
+    if (crs === '13') {
+      return [
+        { id: '3', code: '3', name: '[#3] 2026 Batch', year: '2026', course_cd: '13' },
+        { id: '2', code: '2', name: '[#2] 2025 Batch', year: '2025', course_cd: '13' },
+        { id: '1', code: '1', name: '[#1] 2024 Batch', year: '2024', course_cd: '13' },
+      ];
+    }
+    return [
+      { id: '2026', code: '2026', name: 'Batch 2026', year: '2026', course_cd: crs },
+      { id: '2025', code: '2025', name: 'Batch 2025', year: '2025', course_cd: crs },
+      { id: '2024', code: '2024', name: 'Batch 2024', year: '2024', course_cd: crs },
+      { id: '2023', code: '2023', name: 'Batch 2023', year: '2023', course_cd: crs },
+      { id: '2022', code: '2022', name: 'Batch 2022', year: '2022', course_cd: crs },
+      { id: '2021', code: '2021', name: 'Batch 2021', year: '2021', course_cd: crs },
+      { id: '2020', code: '2020', name: 'Batch 2020', year: '2020', course_cd: crs },
+    ];
+  };
+
   useEffect(() => {
     fetchFacultyContext();
     fetchAcademicFilters();
+    setSemestersList(getSemestersForCourse('1'));
   }, []);
 
   useEffect(() => {
     fetchStudents();
-  }, [page, pageSize, search, selectedCourse, selectedBranch, selectedBatch]);
+  }, [page, pageSize, search, selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSection]);
 
   // Derived branches based on selectedCourse
   const filteredBranches = (() => {
     let list = allBranches;
     if (selectedCourse !== 'ALL') {
-      list = list.filter(b => String(b.course_cd) === String(selectedCourse));
+      const courseBranches = list.filter(b => !b.course_cd || String(b.course_cd) === String(selectedCourse));
+      if (courseBranches.length > 0) list = courseBranches;
     }
-    const seenNames = new Set<string>();
+    const seenCodes = new Set<string>();
     return list.filter(b => {
-      const nm = (b.name || '').trim().toLowerCase();
-      if (!nm || seenNames.has(nm)) return false;
-      seenNames.add(nm);
+      const cd = String(b.code || b.id).trim();
+      if (!cd || seenCodes.has(cd)) return false;
+      seenCodes.add(cd);
       return true;
     });
   })();
 
-  // Derived batches based on selectedCourse
+  // Derived batches based on selectedCourse and branch
   const filteredBatches = (() => {
     let list = allBatches;
     if (selectedCourse !== 'ALL') {
-      const courseBatches = list.filter(b => String(b.course_cd) === String(selectedCourse));
+      const courseBatches = list.filter(b => !b.course_cd || String(b.course_cd) === String(selectedCourse));
       if (courseBatches.length > 0) {
         list = courseBatches;
       }
     }
     const seenCodes = new Set<string>();
     return list.filter(b => {
-      if (!b.code || seenCodes.has(b.code)) return false;
-      seenCodes.add(b.code);
+      const cd = String(b.code || b.id).trim();
+      if (!cd || seenCodes.has(cd)) return false;
+      seenCodes.add(cd);
       return true;
     });
   })();
 
+  const handleCourseChange = async (newCourseCd: string) => {
+    setSelectedCourse(newCourseCd);
+    setSelectedBranch('ALL');
+    setSelectedBatch('ALL');
+    setSelectedSem('ALL');
+    setSelectedSection('ALL');
+    setPage(1);
+
+    const cd = getColgCd();
+    const slug = getTenantSlug();
+
+    if (newCourseCd === 'ALL') {
+      setSemestersList(getSemestersForCourse('1'));
+      return;
+    }
+
+    const courseObj = courses.find((c) => String(c.code) === String(newCourseCd));
+    setSemestersList(getSemestersForCourse(newCourseCd, courseObj?.name));
+
+    const [brs, bts] = await Promise.all([
+      fetchBranchesForCourse(cd, newCourseCd, slug),
+      fetchBatchesForSelection(cd, newCourseCd, 'ALL', slug),
+    ]);
+    setAllBranches(brs);
+    setAllBatches(bts);
+  };
+
+  const handleBranchChange = async (newBranchCd: string) => {
+    setSelectedBranch(newBranchCd);
+    setSelectedBatch('ALL');
+    setSelectedSem('ALL');
+    setSelectedSection('ALL');
+    setPage(1);
+
+    if (selectedCourse !== 'ALL') {
+      const cd = getColgCd();
+      const slug = getTenantSlug();
+      const bts = await fetchBatchesForSelection(cd, selectedCourse, newBranchCd, slug);
+      setAllBatches(bts);
+    }
+  };
+
+  const handleBatchChange = (newBatchCd: string) => {
+    setSelectedBatch(newBatchCd);
+    setPage(1);
+  };
+
+  const handleSemChange = (newSemCd: string) => {
+    setSelectedSem(newSemCd);
+    setPage(1);
+  };
+
+  const handleSectionChange = (newSecCd: string) => {
+    setSelectedSection(newSecCd);
+    setPage(1);
+  };
+
+  const handleResetFilters = () => {
+    setSelectedCourse('ALL');
+    setSelectedBranch('ALL');
+    setSelectedBatch('ALL');
+    setSelectedSem('ALL');
+    setSelectedSection('ALL');
+    setSearch('');
+    setPage(1);
+  };
+
   const fetchFacultyContext = async () => {
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+    const slug = getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     if (!token) return;
 
@@ -323,7 +545,7 @@ export default function FacultyStudentsPage() {
         const json = await res.json();
         const meData = json.data || json;
         const p = meData.profile || meData;
-        const dName = p.department_name || meData.departmentName || 'Master of Computer Applications (MCA)';
+        const dName = p.department_name || meData.departmentName || 'Computer Applications & Engineering';
         setFacultyDept(dName);
       }
     } catch (err) {
@@ -332,81 +554,77 @@ export default function FacultyStudentsPage() {
   };
 
   const fetchAcademicFilters = async () => {
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+    const slug = getTenantSlug();
+    const cd = getColgCd();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/users/academic-filters?tenant=${slug}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'x-tenant-slug': slug,
-        },
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        const data = json.data || {};
-        if (Array.isArray(data.courses) && data.courses.length > 0) {
-          setCourses(data.courses.map((c: any) => ({
-            id: c.id || c.code,
+      // 1. Fetch live courses from SRMS
+      const crsRes = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${slug}`).catch(() => null);
+      if (crsRes && crsRes.ok) {
+        const list = await crsRes.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mappedCourses = list.map((c: any) => ({
+            id: String(c.course_cd || c.code),
             code: String(c.course_cd || c.code),
-            name: c.name,
+            name: c.course_name || c.name || `Course ${c.course_cd || c.code}`,
             course_cd: String(c.course_cd || c.code),
-          })));
+          }));
+          setCourses(mappedCourses);
         }
-        if (Array.isArray(data.branches) && data.branches.length > 0) {
-          setAllBranches(data.branches.map((b: any) => ({
-            id: b.id || b.code,
-            code: b.code || b.branch_cd,
-            name: b.name,
-            course_cd: String(b.course_cd || ''),
-            branch_cd: String(b.branch_cd || ''),
-          })));
-        }
-        if (Array.isArray(data.batches) && data.batches.length > 0) {
-          setAllBatches(data.batches.map((b: any) => ({
-            id: b.id || b.code,
-            code: String(b.code),
-            name: b.name || `Batch ${b.year || b.code}`,
-            year: b.year,
-            course_cd: b.course_cd ? String(b.course_cd) : undefined,
-          })));
-          return;
+      } else {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/users/academic-filters?tenant=${slug}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-tenant-slug': slug,
+          },
+        }).catch(() => null);
+
+        if (res && res.ok) {
+          const json = await res.json();
+          const data = json.data || {};
+          if (Array.isArray(data.courses) && data.courses.length > 0) {
+            setCourses(data.courses.map((c: any) => ({
+              id: c.id || c.code,
+              code: String(c.course_cd || c.code),
+              name: c.name,
+              course_cd: String(c.course_cd || c.code),
+            })));
+          }
         }
       }
     } catch (err) {
       console.error('Failed to fetch academic filters:', err);
     }
 
-    // High quality default fallback options in case network is disconnected
-    setCourses([
-      { id: '13', code: '13', name: 'BCA', course_cd: '13' },
+    // Default fallback courses
+    setCourses(prev => prev.length > 0 ? prev : [
       { id: '1', code: '1', name: 'B.TECH.', course_cd: '1' },
+      { id: '13', code: '13', name: 'BCA', course_cd: '13' },
       { id: '3', code: '3', name: 'MCA', course_cd: '3' },
-      { id: '4', code: '4', name: 'MBA', course_cd: '4' },
       { id: '2', code: '2', name: 'B.PHARM.', course_cd: '2' },
+      { id: '4', code: '4', name: 'MBA', course_cd: '4' },
       { id: '12', code: '12', name: 'BBA', course_cd: '12' },
     ]);
-    setAllBranches([
-      { id: '118aeeff-82bf-4694-8613-f9d2f14ca2ed', code: '1', name: 'BCA Department', course_cd: '13' },
-      { id: '405f1dd2-00d0-4cba-a632-aa8354b8b329', code: '3', name: 'Master of Computer Applications (MCA)', course_cd: '3' },
-      { id: 'btech-cs', code: '1', name: 'Computer Science and Engineering', course_cd: '1' },
-      { id: 'btech-it', code: '2', name: 'Information Technology', course_cd: '1' },
-      { id: 'btech-me', code: '3', name: 'Mechanical Engineering', course_cd: '1' },
-    ]);
-    setAllBatches([
-      { id: '2026', code: '2026', name: 'Batch 2026' },
-      { id: '2025', code: '2025', name: 'Batch 2025' },
-      { id: '2024', code: '2024', name: 'Batch 2024' },
-      { id: '2023', code: '2023', name: 'Batch 2023' },
-      { id: '2022', code: '2022', name: 'Batch 2022' },
-    ]);
+
+    // Preload branches and batches for initial selection
+    try {
+      const [brs, bts] = await Promise.all([
+        fetchBranchesForCourse(cd, '1', slug),
+        fetchBatchesForSelection(cd, '1', 'ALL', slug),
+      ]);
+      setAllBranches(brs);
+      setAllBatches(bts);
+    } catch (e) {
+      console.warn('Initial branch/batch preloading error:', e);
+    }
   };
 
   const fetchStudents = async () => {
     setLoading(true);
     setError('');
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+    const slug = getTenantSlug();
+    const cd = getColgCd();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
     try {
@@ -423,6 +641,51 @@ export default function FacultyStudentsPage() {
       if (selectedBatch !== 'ALL') {
         queryParams += `&batchId=${encodeURIComponent(selectedBatch)}`;
       }
+      if (selectedSem !== 'ALL') {
+        queryParams += `&semCd=${encodeURIComponent(selectedSem)}`;
+      }
+      if (selectedSection !== 'ALL') {
+        queryParams += `&section=${encodeURIComponent(selectedSection)}`;
+      }
+
+      // Also enrich with live SRMS attendance & enrolled students
+      const attMap: Record<string, number> = {};
+      const srmsLiveStudents: any[] = [];
+      try {
+        const crs = selectedCourse !== 'ALL' ? Number(selectedCourse) : 1;
+        const br = selectedBranch !== 'ALL' ? Number(selectedBranch) : 1;
+        const bat = selectedBatch !== 'ALL' ? Number(selectedBatch) : (crs === 13 ? 2 : 18);
+        const sem = selectedSem !== 'ALL' ? Number(selectedSem) : 3;
+        const sec = selectedSection !== 'ALL' ? Number(selectedSection) : 1;
+
+        const srmsAttRes = await fetch('/api/srms/student-attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            colg_cd: Number(cd),
+            course_cd: crs,
+            branch_cd: br,
+            batch_cd: bat,
+            sem_cd: sem,
+            section_cd: sec,
+            fdt: '2026-07-02',
+            tdt: '2026-08-21',
+          }),
+        });
+        if (srmsAttRes.ok) {
+          const srmsAttJson = await srmsAttRes.json();
+          if (srmsAttJson.success && Array.isArray(srmsAttJson.data)) {
+            srmsAttJson.data.forEach((st: any) => {
+              const pct = parseFloat(st.TotalPresentPercentage || '0');
+              if (st.stud_reg_no) attMap[st.stud_reg_no] = pct;
+              if (st.stud_roll_no) attMap[st.stud_roll_no] = pct;
+              srmsLiveStudents.push(st);
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load SRMS attendance for faculty student table:', e);
+      }
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/users/students?${queryParams}`, {
         headers: {
@@ -431,9 +694,12 @@ export default function FacultyStudentsPage() {
         },
       });
 
+      let rawList: any[] = [];
+      let meta: any = {};
+
       if (res.ok) {
         const json = await res.json();
-        const rawList = Array.isArray(json.data)
+        rawList = Array.isArray(json.data)
           ? json.data
           : Array.isArray(json.data?.data)
           ? json.data.data
@@ -442,39 +708,48 @@ export default function FacultyStudentsPage() {
           : Array.isArray(json)
           ? json
           : [];
-        const meta = json.meta || json.data?.meta || json.pagination || {};
+        meta = json.meta || json.data?.meta || json.pagination || {};
+      }
 
-        // Also fetch live SRMS attendance to enrich student attendance percentages
-        const attMap: Record<string, number> = {};
+      // Robust fallback to student-master if users/students returned empty
+      if (rawList.length === 0) {
         try {
-          const srmsAttRes = await fetch('/api/srms/student-attendance', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              colg_cd: 1,
-              course_cd: 13,
-              branch_cd: 1,
-              batch_cd: 2,
-              sem_cd: 3,
-              section_cd: 1,
-              fdt: '2026-07-02',
-              tdt: '2026-08-21',
-            }),
-          });
-          if (srmsAttRes.ok) {
-            const srmsAttJson = await srmsAttRes.json();
-            if (srmsAttJson.success && Array.isArray(srmsAttJson.data)) {
-              srmsAttJson.data.forEach((st: any) => {
-                const pct = parseFloat(st.TotalPresentPercentage || '0');
-                if (st.stud_reg_no) attMap[st.stud_reg_no] = pct;
-                if (st.stud_roll_no) attMap[st.stud_roll_no] = pct;
-              });
+          const smRes = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/student-master?tenant=${slug}${
+              selectedCourse !== 'ALL' ? `&courseId=${selectedCourse}` : ''
+            }${
+              selectedBranch !== 'ALL' ? `&branchId=${selectedBranch}` : ''
+            }${
+              selectedBatch !== 'ALL' ? `&batchId=${selectedBatch}` : ''
+            }${search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ''}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'x-tenant-slug': slug,
+              },
+            }
+          );
+          if (smRes.ok) {
+            const smJson = await smRes.json();
+            const smList = Array.isArray(smJson)
+              ? smJson
+              : Array.isArray(smJson.data)
+              ? smJson.data
+              : Array.isArray(smJson.items)
+              ? smJson.items
+              : [];
+            if (Array.isArray(smList) && smList.length > 0) {
+              const startIdx = (page - 1) * pageSize;
+              rawList = smList.slice(startIdx, startIdx + pageSize);
+              meta = { total: smList.length, totalItems: smList.length, page, limit: pageSize };
             }
           }
-        } catch (e) {
-          console.warn('Failed to load SRMS attendance for faculty student table:', e);
+        } catch (smErr) {
+          console.warn('Fallback to student-master failed:', smErr);
         }
+      }
 
+      if (rawList.length > 0) {
         // Deduplicate students by unique ID / Roll No / Registration No
         const seenKeys = new Set<string>();
         const uniqueRawList = rawList.filter((s: any) => {
@@ -491,8 +766,8 @@ export default function FacultyStudentsPage() {
           const roll = s.rollno || s.roll_no || '—';
           const livePct = attMap[reg] ?? attMap[roll] ?? (reg === '2025107990' ? 24.36 : undefined);
 
-          const cCode = s.course_cd || s.courseCd || '13';
-          const bCode = s.batch_cd || s.batchCd || '2025';
+          const cCode = s.course_cd || s.courseCd || s.course_code || '1';
+          const bCode = s.batch_cd || s.batchCd || s.batch_code || '2025';
 
           return {
             id: s.id,
@@ -507,7 +782,7 @@ export default function FacultyStudentsPage() {
             admission_year: s.admission_year || 2025,
             is_active: s.is_active !== undefined ? s.is_active : true,
             photo_url: s.photo_url || s.photoUrl || '',
-            department_name: s.department_name || facultyDept,
+            department_name: s.department_name || s.branch_name || facultyDept,
             guardian_name: s.guardian_name || s.parent_name || 'Not Provided',
             guardian_phone: s.guardian_phone || '+91 98765 99999',
             address: s.address || 'Bareilly, Uttar Pradesh',
@@ -520,8 +795,56 @@ export default function FacultyStudentsPage() {
           };
         });
 
+        // If specific batch is selected, perform robust batch matching
         if (selectedBatch && selectedBatch !== 'ALL') {
-          formattedList = formattedList.filter(s => (s.batch_cd || '').includes(selectedBatch));
+          const matchedBatch = allBatches.find(b => String(b.code) === String(selectedBatch) || String(b.id) === String(selectedBatch));
+          const batchYear = matchedBatch?.year || (selectedBatch.match(/20\d\d/) ? selectedBatch : (selectedBatch === '18' ? '2025' : selectedBatch === '17' ? '2024' : selectedBatch === '16' ? '2023' : selectedBatch === '15' ? '2022' : selectedBatch === '14' ? '2021' : selectedBatch === '13' ? '2020' : ''));
+          const batchCd = matchedBatch?.id || (selectedBatch === '2025' ? '18' : selectedBatch === '2024' ? '17' : selectedBatch === '2023' ? '16' : selectedBatch === '2022' ? '15' : selectedBatch === '2021' ? '14' : selectedBatch === '2020' ? '13' : selectedBatch);
+
+          formattedList = formattedList.filter(s => {
+            const sBatch = String(s.batch_cd || '').trim();
+            if (!sBatch) return true;
+            return (
+              sBatch === String(selectedBatch).trim() ||
+              (batchYear && (sBatch === batchYear || sBatch.includes(batchYear))) ||
+              (batchCd && (sBatch === batchCd || sBatch.includes(batchCd))) ||
+              (matchedBatch?.code && sBatch === matchedBatch.code) ||
+              sBatch.includes(String(selectedBatch).trim())
+            );
+          });
+        }
+
+        // If SRMS returned live enrolled students for this course/branch/batch/sem/section, merge any missing ones:
+        if (srmsLiveStudents.length > 0 && (selectedSem !== 'ALL' || selectedSection !== 'ALL')) {
+          srmsLiveStudents.forEach((st: any) => {
+            const reg = st.stud_reg_no || '';
+            const roll = st.stud_roll_no || '';
+            const exists = formattedList.some(s => (reg && s.registration_no === reg) || (roll && s.rollno === roll));
+            if (!exists && reg) {
+              const livePct = parseFloat(st.TotalPresentPercentage || '0');
+              formattedList.push({
+                id: `srms-${reg}`,
+                name: st.stud_name || 'Enrolled Student',
+                rollno: roll || reg,
+                registration_no: reg,
+                batch_cd: st.batch_name || selectedBatch,
+                course_cd: selectedCourse !== 'ALL' ? selectedCourse : '1',
+                email: `${(st.stud_name || 'student').toLowerCase().replace(/\s+/g, '.')}@srms.edu`,
+                phone: '+91 98765 43210',
+                gender: 'Male',
+                admission_year: Number(st.batch_name || 2025),
+                is_active: true,
+                photo_url: '',
+                department_name: st.branch_name || facultyDept,
+                guardian_name: 'Not Provided',
+                guardian_phone: '+91 98765 99999',
+                address: 'Bareilly, Uttar Pradesh',
+                blood_group: 'Not Specified',
+                attendance_pct: !isNaN(livePct) ? livePct : 85,
+                logbook_pct: 90,
+              });
+            }
+          });
         }
 
         setStudents(formattedList);
@@ -828,94 +1151,133 @@ export default function FacultyStudentsPage() {
           </div>
 
           {/* Filter & Search Toolbar */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-4 shadow-soft flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-              <div className="relative w-full sm:w-72">
-                <input
-                  type="text"
-                  placeholder="Search by name, roll no, reg no..."
-                  value={search}
-                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 placeholder-[#7B8794] focus:outline-none focus:border-[#5B4BFF] font-medium"
-                />
-                <span className="absolute left-3 top-2.5 text-xs text-[#7B8794]">🔍</span>
+          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-4 shadow-soft flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              
+              <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto">
+                {/* Search Bar */}
+                <div className="relative w-full sm:w-60">
+                  <input
+                    type="text"
+                    placeholder="Search by name, roll no, reg no..."
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 placeholder-[#7B8794] focus:outline-none focus:border-[#5B4BFF] font-medium"
+                  />
+                  <span className="absolute left-3 top-2.5 text-xs text-[#7B8794]">🔍</span>
+                </div>
+
+                {/* 1. Course Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold shrink-0">Course:</span>
+                  <select
+                    value={selectedCourse}
+                    onChange={(e) => handleCourseChange(e.target.value)}
+                    className="px-2.5 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-bold"
+                  >
+                    <option value="ALL">All Courses</option>
+                    {courses.map((c) => (
+                      <option key={c.id || c.code} value={c.code}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Branch Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold shrink-0">Branch:</span>
+                  <select
+                    value={selectedBranch}
+                    onChange={(e) => handleBranchChange(e.target.value)}
+                    className="px-2.5 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-bold max-w-[190px]"
+                  >
+                    <option value="ALL">All Branches</option>
+                    {filteredBranches.map((b) => (
+                      <option key={b.id || b.code} value={b.code || b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Batch Filter (Loads on behalf of course and branch) */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold shrink-0">Batch:</span>
+                  <select
+                    value={selectedBatch}
+                    onChange={(e) => handleBatchChange(e.target.value)}
+                    className="px-2.5 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-bold"
+                  >
+                    <option value="ALL">All Batches</option>
+                    {filteredBatches.map((b) => (
+                      <option key={b.id || b.code} value={b.code}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 4. Semester Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold shrink-0">Semester:</span>
+                  <select
+                    value={selectedSem}
+                    onChange={(e) => handleSemChange(e.target.value)}
+                    className="px-2.5 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-bold"
+                  >
+                    <option value="ALL">All Semesters</option>
+                    {semestersList.map((s) => (
+                      <option key={s.code} value={s.code}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 5. Section Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold shrink-0">Section:</span>
+                  <select
+                    value={selectedSection}
+                    onChange={(e) => handleSectionChange(e.target.value)}
+                    className="px-2.5 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-bold"
+                  >
+                    <option value="ALL">All Sections</option>
+                    <option value="1">[#1] Section A</option>
+                    <option value="2">[#2] Section B</option>
+                    <option value="3">[#3] Section C</option>
+                    <option value="4">[#4] Section D</option>
+                  </select>
+                </div>
+
+                {/* Reset Filters Button */}
+                {(selectedCourse !== 'ALL' || selectedBranch !== 'ALL' || selectedBatch !== 'ALL' || selectedSem !== 'ALL' || selectedSection !== 'ALL' || search) && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="px-2.5 py-1.5 rounded-xl bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 text-[#F36C21] font-bold text-xs hover:bg-orange-100 transition cursor-pointer"
+                    title="Reset all filters"
+                  >
+                    ✕ Reset
+                  </button>
+                )}
               </div>
 
-              {/* 1. Course Filter */}
-              <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold shrink-0">Course:</span>
+              {/* Rows per page */}
+              <div className="flex items-center gap-2 text-xs text-[#4E5969] dark:text-slate-400 font-bold shrink-0">
+                <span>Rows per page:</span>
                 <select
-                  value={selectedCourse}
-                  onChange={(e) => {
-                    setSelectedCourse(e.target.value);
-                    setSelectedBranch('ALL');
-                    setSelectedBatch('ALL');
-                    setPage(1);
-                  }}
-                  className="px-2.5 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-bold"
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="px-2 py-1 rounded-lg bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-black"
                 >
-                  <option value="ALL">All Courses</option>
-                  {courses.map((c) => (
-                    <option key={c.id || c.code} value={c.code}>
-                      {c.name}
-                    </option>
-                  ))}
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
                 </select>
               </div>
-
-              {/* 2. Branch Filter */}
-              <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold shrink-0">Branch:</span>
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => {
-                    setSelectedBranch(e.target.value);
-                    setPage(1);
-                  }}
-                  className="px-2.5 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-bold max-w-[190px]"
-                >
-                  <option value="ALL">All Branches</option>
-                  {filteredBranches.map((b) => (
-                    <option key={b.id || b.code} value={b.id || b.code}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 3. Batch Filter */}
-              <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold shrink-0">Batch:</span>
-                <select
-                  value={selectedBatch}
-                  onChange={(e) => {
-                    setSelectedBatch(e.target.value);
-                    setPage(1);
-                  }}
-                  className="px-2.5 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-bold"
-                >
-                  <option value="ALL">All Batches</option>
-                  {filteredBatches.map((b) => (
-                    <option key={b.id || b.code} value={b.code}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-[#4E5969] dark:text-slate-400 font-bold">
-              <span>Rows per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="px-2 py-1 rounded-lg bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:border-[#5B4BFF] font-black"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
             </div>
           </div>
 
@@ -942,9 +1304,8 @@ export default function FacultyStudentsPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-[#E7EAF3] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-800/60 text-[#1B1E28] dark:text-slate-300 uppercase font-black">
-                      <th className="py-3.5 px-4 rounded-l-xl">Roll No</th>
-                      <th className="py-3.5 px-4">Registration No</th>
-                      <th className="py-3.5 px-4">Student Name</th>
+                      <th className="py-3.5 px-4 rounded-l-xl">Student Name</th>
+                      <th className="py-3.5 px-4">Reg No &amp; Roll No</th>
                       <th className="py-3.5 px-4">Course</th>
                       <th className="py-3.5 px-4">Batch</th>
                       <th className="py-3.5 px-4">Attendance</th>
@@ -955,27 +1316,43 @@ export default function FacultyStudentsPage() {
                   <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
                     {students.map((student) => (
                       <tr key={student.id} className="hover:bg-[#F1F4F9]/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3.5 px-4 font-mono font-black text-[#5B4BFF]">{student.rollno}</td>
-                        <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300 font-mono text-[11px] font-bold">{student.registration_no}</td>
+                        {/* 1st Column: Student Name along with profile photo */}
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
-                            {renderStudentAvatar(student, 'w-8 h-8', 'text-[11px]')}
+                            {renderStudentAvatar(student, 'w-9 h-9', 'text-[11px]')}
                             <div>
-                              <span className="font-black text-[#1B1E28] dark:text-white block">{student.name}</span>
-                              <span className={`text-[9px] font-mono font-bold ${student.gender === 'Female' ? 'text-pink-600' : 'text-blue-600'}`}>
-                                {student.gender}
+                              <span className="font-extrabold text-[#1B1E28] dark:text-white text-xs block">
+                                {student.name}
                               </span>
                             </div>
                           </div>
                         </td>
+
+                        {/* 2nd Column: Reg No and Roll No */}
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-0.5">
+                            <div className="font-mono font-black text-[12px] text-[#5B4BFF]">
+                              {student.registration_no || '—'}
+                            </div>
+                            <div className="font-mono text-[11px] text-[#4E5969] dark:text-slate-400 font-bold">
+                              Roll: {student.rollno || '—'}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 3rd Column: Course */}
                         <td className="py-3.5 px-4 text-[#4E5969] dark:text-slate-300 font-bold">
                           {student.course_cd === '13' ? '13 (BCA)' : student.course_cd === '1' ? '1 (B.Tech)' : student.course_cd}
                         </td>
+
+                        {/* 4th Column: Batch */}
                         <td className="py-3.5 px-4">
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">
                             {student.batch_cd}
                           </span>
                         </td>
+
+                        {/* 5th Column: Attendance */}
                         <td className="py-3.5 px-4">
                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black ${
                             (student.attendance_pct || 0) >= 75
@@ -985,11 +1362,15 @@ export default function FacultyStudentsPage() {
                             {student.attendance_pct}%
                           </span>
                         </td>
+
+                        {/* 6th Column: Academic Portfolio */}
                         <td className="py-3.5 px-4">
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black bg-[#EEECFF] text-[#5B4BFF] border border-[#5B4BFF]/30">
                             5 Verified Deliverables
                           </span>
                         </td>
+
+                        {/* 7th Column: Action */}
                         <td className="py-3.5 px-4 text-center">
                           <button
                             onClick={() => openDetailModal(student)}
@@ -1047,15 +1428,8 @@ export default function FacultyStudentsPage() {
                   <div className="flex items-center gap-4">
                     {renderStudentAvatar(selectedStudent, 'w-16 h-16', 'text-xl')}
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-xl font-black text-[#1B1E28] dark:text-white">{selectedStudent.name}</h3>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black ${
-                          selectedStudent.gender === 'Female' ? 'bg-pink-100 text-pink-700 border border-pink-300' : 'bg-blue-100 text-blue-700 border border-blue-300'
-                        }`}>
-                          {selectedStudent.gender}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#5B4BFF] font-mono font-black">Roll No: {selectedStudent.rollno} | Reg No: {selectedStudent.registration_no}</p>
+                      <h3 className="text-xl font-black text-[#1B1E28] dark:text-white">{selectedStudent.name}</h3>
+                      <p className="text-xs text-[#5B4BFF] font-mono font-black mt-1">Roll No: {selectedStudent.rollno} | Reg No: {selectedStudent.registration_no}</p>
                       <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-bold">
                         Course: {getCourseDisplayName(selectedStudent.course_cd)} | Batch: {selectedStudent.batch_cd}
                       </p>

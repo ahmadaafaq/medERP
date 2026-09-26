@@ -28,6 +28,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
   const [enabledKeys, setEnabledKeys] = useState<string[] | null>(null);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
   const [isMedicalModule, setIsMedicalModule] = useState<boolean>(false);
+  const [currentTenantSlug, setCurrentTenantSlug] = useState<string>('srms');
 
   const loadPermissionsAndBranding = () => {
     if (typeof window === 'undefined') return;
@@ -157,22 +158,128 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
 
     setCollegeLogoUrl(logoUrl);
 
-    if (role !== 'owner') {
-      const rawSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '';
-      const cleanSlug = rawSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
-      const tenantSlug = cleanSlug || 'srms-cet-bareilly';
+    if (role !== 'owner' && role !== 'superadmin') {
+      let rawSlug =
+        localStorage.getItem('tenantSlug') ||
+        localStorage.getItem('selectedTenant') ||
+        localStorage.getItem('institutionSlug') ||
+        localStorage.getItem('tenant') ||
+        '';
 
-      // Fetch enabled keys for this firm + role
-      fetch(`/api/firms/${tenantSlug}/role-permissions?role=${(role || 'student').toUpperCase()}`)
+      try {
+        const rawUser = localStorage.getItem('user');
+        if (rawUser) {
+          const u = JSON.parse(rawUser);
+          if (u.tenantSlug) rawSlug = u.tenantSlug;
+          else if (u.firm_slug) rawSlug = u.firm_slug;
+          else if (u.firm_id) rawSlug = u.firm_id;
+        }
+      } catch {}
+
+      if (!rawSlug) {
+        const colgCd = localStorage.getItem('colg_cd');
+        if (colgCd) rawSlug = colgCd;
+      }
+
+      const cleanSlug = rawSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
+      let tenantSlug = cleanSlug;
+      if (!tenantSlug || tenantSlug === '1' || tenantSlug === 'srms' || tenantSlug === 'srms-cet' || tenantSlug === 'cet') {
+        tenantSlug = 'srms-cet-bareilly';
+      } else if (tenantSlug === '2' || tenantSlug === 'srms-cetr' || tenantSlug === 'srms-cetr-bareilly') {
+        tenantSlug = 'srms-cetr-bareilly';
+      } else if (tenantSlug === '11' || tenantSlug === 'srms-ims' || tenantSlug === 'ims') {
+        tenantSlug = 'srms-ims';
+      } else if (tenantSlug === '3' || tenantSlug === 'srms-ibs' || tenantSlug === 'srms-ibs-lucknow') {
+        tenantSlug = 'srms-ibs-lucknow';
+      } else if (tenantSlug === '4' || tenantSlug === 'srms-law' || tenantSlug === 'srms-college-of-law') {
+        tenantSlug = 'srms-college-of-law';
+      } else if (tenantSlug === '5' || tenantSlug === 'srms-nursing' || tenantSlug === 'srms-nursing-college') {
+        tenantSlug = 'srms-nursing-college';
+      } else if (tenantSlug === '6' || tenantSlug === 'srms-iahs' || tenantSlug === 'srms-iahs-bareilly') {
+        tenantSlug = 'srms-iahs-bareilly';
+      }
+
+      setCurrentTenantSlug(cleanSlug || tenantSlug || 'srms');
+
+      const targetRole = (role || 'student').toUpperCase();
+
+      // Fetch enabled keys for this firm + role from PostgreSQL database
+      fetch(`/api/firms/${tenantSlug}/role-permissions?role=${targetRole}&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      })
         .then(async (res) => {
           if (res.ok) {
             const json = await res.json();
             const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
-            const keys = list.map((item: any) => (typeof item === 'string' ? item : item.menu_key));
-            setEnabledKeys(keys);
+            const keySet = new Set<string>();
+
+            list.forEach((item: any) => {
+              if (item.is_enabled === false) return;
+              const mk = typeof item === 'string' ? item : item.menu_key;
+              if (mk) {
+                const norm = mk.toLowerCase().trim().replace(/[\/\-\.]+/g, '_');
+                keySet.add(mk);
+                keySet.add(norm);
+
+                // Handle bidirectional key aliases across versions
+                if (norm === 'admin_attendance_biometric') keySet.add('admin_biometric');
+                if (norm === 'admin_biometric') keySet.add('admin_attendance_biometric');
+                if (norm === 'admin_assessment_marks') keySet.add('admin_marks');
+                if (norm === 'admin_marks') keySet.add('admin_assessment_marks');
+                if (norm === 'faculty_attendance_biometric') keySet.add('faculty_biometric');
+                if (norm === 'faculty_biometric') keySet.add('faculty_attendance_biometric');
+                if (norm === 'student_attendance_biometric') keySet.add('student_biometric');
+                if (norm === 'student_biometric') keySet.add('student_attendance_biometric');
+                if (norm === 'clerk_attendance_biometric') keySet.add('clerk_biometric');
+                if (norm === 'clerk_biometric') keySet.add('clerk_attendance_biometric');
+                if (norm === 'faculty_assessment_marks') keySet.add('faculty_marks');
+                if (norm === 'student_assessment_marks') keySet.add('student_marks');
+                if (norm === 'admin_incubation_cell') keySet.add('admin_incubation');
+                if (norm === 'faculty_incubation_cell') keySet.add('faculty_incubation');
+                if (norm === 'student_incubation') keySet.add('student_incubation_cell');
+                if (norm === 'admin_notices_sent') keySet.add('admin_notices');
+                if (norm === 'admin_notices') keySet.add('admin_notices_sent');
+                if (norm === 'faculty_department_faculty') keySet.add('faculty_dept');
+                if (norm === 'faculty_dept') keySet.add('faculty_department_faculty');
+                if (norm === 'clerk_staff_master') keySet.add('clerk_staff');
+                if (norm === 'clerk_student_master') keySet.add('clerk_student');
+                if (norm === 'warden_mess_menu') keySet.add('warden_mess');
+                if (norm === 'warden_mess') keySet.add('warden_mess_menu');
+                if (norm === 'warden_student_master') keySet.add('warden_roster');
+                if (norm === 'admin_repository') keySet.add('clerk_repository');
+                if (norm === 'clerk_repository') keySet.add('admin_repository');
+                if (norm === 'repository') {
+                  keySet.add('admin_repository');
+                  keySet.add('faculty_repository');
+                  keySet.add('student_repository');
+                  keySet.add('clerk_repository');
+                }
+              }
+
+              // Include route_path matching variants
+              const rp = typeof item === 'object' ? item.route_path : null;
+              if (rp) {
+                const rClean = rp.toLowerCase().trim();
+                keySet.add(rClean);
+                const rStripped = rClean.replace(/^\/dashboard\/?/, '').replace(/[\/\-\.]+/g, '_');
+                keySet.add(rStripped);
+                const rBare = rClean.replace(/^\//, '').replace(/[\/\-\.]+/g, '_');
+                keySet.add(rBare);
+              }
+            });
+
+            setEnabledKeys(Array.from(keySet));
+          } else {
+            setEnabledKeys([]);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          setEnabledKeys([]);
+        });
     }
   };
 
@@ -231,27 +338,35 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
   }, [pathname]);
 
   const isAllowed = (menuKey: string, routePath?: string) => {
-    if (role === 'owner' || !enabledKeys || enabledKeys.length === 0) return true;
-    
-    // Always allow core logbook & report modules by default
-    if (
-      menuKey.includes('logbook') || (routePath && routePath.includes('logbook')) ||
-      menuKey.includes('reports') || (routePath && routePath.includes('reports'))
-    ) return true;
-    
-    // Normalize target menuKey
+    // Owner and SuperAdmin always have access to full SaaS suite
+    if (role === 'owner' || role === 'superadmin') return true;
+
+    // While permissions are still loading (null), hold off rendering to avoid flicker
+    if (enabledKeys === null) return false;
+
+    // If permissions loaded and 0 modules are assigned by superadmin, allow none
+    if (enabledKeys.length === 0) return false;
+
+    // 1. Direct match on menuKey
+    if (enabledKeys.includes(menuKey)) return true;
+
+    // 2. Normalized menuKey match (all punctuation -> underscore)
     const norm = menuKey.toLowerCase().trim().replace(/[\/\-\.]+/g, '_');
-    
-    return enabledKeys.some((k) => {
-      if (!k) return false;
-      const ek = String(k).toLowerCase().trim().replace(/[\/\-\.]+/g, '_');
-      if (ek === norm) return true;
-      if (routePath) {
-        const nrp = routePath.toLowerCase().trim().replace(/^\//, '').replace(/[\/\-\.]+/g, '_');
-        if (ek === nrp || ek === `${role}_${nrp}` || ek === `admin_${nrp}` || ek === `faculty_${nrp}` || ek === `student_${nrp}`) return true;
-      }
-      return false;
-    });
+    if (enabledKeys.includes(norm)) return true;
+
+    // 3. Match against routePath
+    if (routePath) {
+      const rp = routePath.toLowerCase().trim();
+      if (enabledKeys.includes(rp)) return true;
+
+      const stripped = rp.replace(/^\/dashboard\/?/, '').replace(/[\/\-\.]+/g, '_');
+      if (enabledKeys.includes(stripped)) return true;
+
+      const strippedAll = rp.replace(/^\//, '').replace(/[\/\-\.]+/g, '_');
+      if (enabledKeys.includes(strippedAll)) return true;
+    }
+
+    return false;
   };
 
   const isValidStaticRoute = (path?: string) => {
@@ -470,7 +585,24 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </svg>
                 <span>Owner Portal</span>
               </Link>
-            </>          ) : role === 'admin' ? (
+            </>
+          ) : enabledKeys === null ? (
+            <div className="space-y-2 py-3 animate-pulse">
+              <div className="h-10 bg-slate-100 dark:bg-slate-800/60 rounded-xl w-full" />
+              <div className="h-10 bg-slate-100 dark:bg-slate-800/60 rounded-xl w-full" />
+              <div className="h-10 bg-slate-100 dark:bg-slate-800/60 rounded-xl w-full" />
+            </div>
+          ) : enabledKeys.length === 0 ? (
+            <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 my-4 space-y-1.5">
+              <div className="w-8 h-8 mx-auto rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-500 flex items-center justify-center text-sm font-black">
+                !
+              </div>
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-200">No Modules Assigned</p>
+              <p className="text-[11px] text-[#6F7887] dark:text-slate-400">
+                SuperAdmin has not granted any active modules for this role.
+              </p>
+            </div>
+          ) : role === 'admin' ? (
             <>
               {isAllowed('admin_overview') && (
                 <Link href="/dashboard/admin" className={getLinkClass('/dashboard/admin')}>
@@ -538,22 +670,22 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('admin_timetable_design') && (
-                isMedicalModule ? (
-                  <Link href="/dashboard/admin/medical-timetable" data-active={isLinkActive('/dashboard/admin/medical-timetable') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/medical-timetable')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span>Medical Timetable</span>
-                  </Link>
-                ) : (
-                  <Link href="/dashboard/admin/timetable-design" data-active={isLinkActive('/dashboard/admin/timetable-design') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/timetable-design')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span>Design Timetable</span>
-                  </Link>
-                )
+              {isAllowed('admin_timetable_design', '/dashboard/admin/timetable-design') && (
+                <Link href="/dashboard/admin/timetable-design" data-active={isLinkActive('/dashboard/admin/timetable-design') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/timetable-design')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Design Timetable</span>
+                </Link>
+              )}
+
+              {isAllowed('admin_medical_timetable', '/dashboard/admin/medical-timetable') && (
+                <Link href="/dashboard/admin/medical-timetable" data-active={isLinkActive('/dashboard/admin/medical-timetable') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/medical-timetable')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Medical Timetable</span>
+                </Link>
               )}
 
               {isAllowed('admin_attendance_master') && (
@@ -565,21 +697,19 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('admin_biometric') && (
+              <Link href="/dashboard/admin/attendance-mark" data-active={isLinkActive('/dashboard/admin/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/attendance-mark')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Attendance Mark</span>
+              </Link>
+
+              {(isAllowed('admin_attendance_biometric', '/dashboard/admin/attendance-biometric') || isAllowed('admin_biometric', '/dashboard/admin/attendance-biometric')) && (
                 <Link href="/dashboard/admin/attendance-biometric" data-active={isLinkActive('/dashboard/admin/attendance-biometric') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/attendance-biometric')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
                   <span>Attendance — Bio-Metric/CCTV</span>
-                </Link>
-              )}
-
-              {isAllowed('admin_attendance_reports') && (
-                <Link href="/dashboard/admin/attendance-reports" data-active={isLinkActive('/dashboard/admin/attendance-reports') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/attendance-reports')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span>Attendance Reports</span>
                 </Link>
               )}
 
@@ -601,16 +731,12 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {(isAllowed('admin_logbook', '/dashboard/admin/reports/logbook') || isAllowed('logbook')) && (
-                <Link href="/dashboard/admin/reports/logbook" data-active={isLinkActive('/dashboard/admin/reports/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/reports/logbook')}>
-                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                  <span>Academic Portfolio & Merit Leaderboard</span>
-                </Link>
-              )}
-
-              {isMedicalModule && (
+              {isAllowed('admin_medical_logbook', '/dashboard/admin/medical-logbook') &&
+                (
+                  isAllowed('admin_medical_logbook_data_directory', '/dashboard/admin/medical-logbook/data-directory') ||
+                  isAllowed('admin_medical_logbook_ug_logbook', '/dashboard/admin/medical-logbook/ug-logbook') ||
+                  isAllowed('admin_medical_logbook_pg_logbook', '/dashboard/admin/medical-logbook/pg-logbook')
+                ) && (
                 <div className="space-y-1">
                   <button
                     type="button"
@@ -634,41 +760,47 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
 
                   {medicalLogbookOpen && (
                     <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-slate-200 dark:border-slate-800 ml-3">
-                      <Link
-                        href="/dashboard/admin/medical-logbook/data-directory"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
-                          pathname?.includes('/medical-logbook/data-directory')
-                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
-                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#5B4BFF]"></span>
-                        <span>1. Data Directory</span>
-                      </Link>
+                      {isAllowed('admin_medical_logbook_data_directory', '/dashboard/admin/medical-logbook/data-directory') && (
+                        <Link
+                          href="/dashboard/admin/medical-logbook/data-directory"
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                            pathname?.includes('/medical-logbook/data-directory')
+                              ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                              : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#5B4BFF]"></span>
+                          <span>1. Data Directory</span>
+                        </Link>
+                      )}
 
-                      <Link
-                        href="/dashboard/admin/medical-logbook/ug-logbook"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
-                          pathname?.includes('/medical-logbook/ug-logbook')
-                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
-                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
-                        <span>2. UG LogBook</span>
-                      </Link>
+                      {isAllowed('admin_medical_logbook_ug_logbook', '/dashboard/admin/medical-logbook/ug-logbook') && (
+                        <Link
+                          href="/dashboard/admin/medical-logbook/ug-logbook"
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                            pathname?.includes('/medical-logbook/ug-logbook')
+                              ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                              : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
+                          <span>2. UG LogBook</span>
+                        </Link>
+                      )}
 
-                      <Link
-                        href="/dashboard/admin/medical-logbook/pg-logbook"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
-                          pathname?.includes('/medical-logbook/pg-logbook')
-                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
-                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]"></span>
-                        <span>3. PG LogBook</span>
-                      </Link>
+                      {isAllowed('admin_medical_logbook_pg_logbook', '/dashboard/admin/medical-logbook/pg-logbook') && (
+                        <Link
+                          href="/dashboard/admin/medical-logbook/pg-logbook"
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                            pathname?.includes('/medical-logbook/pg-logbook')
+                              ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                              : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]"></span>
+                          <span>3. PG LogBook</span>
+                        </Link>
+                      )}
                     </div>
                   )}
                 </div>
@@ -740,14 +872,16 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
 
               {(isAllowed('admin_reports', '/dashboard/admin/reports') || 
                 isAllowed('admin_reports_attendance', '/dashboard/admin/reports/attendance') || 
+                isAllowed('admin_attendance_reports', '/dashboard/admin/attendance-reports') || 
                 isAllowed('admin_reports_theory_result', '/dashboard/admin/reports/theory-result') ||
-                isAllowed('admin_reports_logbook', '/dashboard/admin/reports/logbook')) && (
+                isAllowed('admin_reports_logbook', '/dashboard/admin/reports/logbook') ||
+                isAllowed('admin_logbook', '/dashboard/admin/reports/logbook')) && (
                 <div className="space-y-1">
                   <button
                     type="button"
                     onClick={() => setMisReportsOpen(!misReportsOpen)}
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-r-xl font-bold transition-all group ${
-                      pathname?.startsWith('/dashboard/admin/reports')
+                      pathname?.startsWith('/dashboard/admin/reports') || pathname === '/dashboard/admin/attendance-reports'
                         ? 'text-[#F36C21] bg-[#F36C21]/10 border-l-4 border-[#F36C21] shadow-xs'
                         : 'text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border-l-4 border-transparent'
                     }`}
@@ -765,11 +899,12 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
 
                   {misReportsOpen && (
                     <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-slate-200 dark:border-slate-800 ml-3">
-                      {isAllowed('admin_reports_attendance', '/dashboard/admin/reports/attendance') && (
+                      {(isAllowed('admin_reports_attendance', '/dashboard/admin/reports/attendance') || isAllowed('admin_attendance_reports', '/dashboard/admin/attendance-reports')) && (
                         <Link
-                          href="/dashboard/admin/reports/attendance"
+                          href="/dashboard/admin/attendance-reports"
+                          data-active={isLinkActive('/dashboard/admin/attendance-reports') || isLinkActive('/dashboard/admin/reports/attendance') ? 'true' : undefined}
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
-                            pathname === '/dashboard/admin/reports' || pathname === '/dashboard/admin/reports/attendance'
+                            pathname === '/dashboard/admin/reports' || pathname === '/dashboard/admin/reports/attendance' || pathname === '/dashboard/admin/attendance-reports'
                               ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
                               : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                           }`}
@@ -782,6 +917,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                       {isAllowed('admin_reports_theory_result', '/dashboard/admin/reports/theory-result') && (
                         <Link
                           href="/dashboard/admin/reports/theory-result"
+                          data-active={isLinkActive('/dashboard/admin/reports/theory-result') ? 'true' : undefined}
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
                             pathname === '/dashboard/admin/reports/theory-result' || pathname === '/dashboard/admin/reports/theory'
                               ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
@@ -793,9 +929,10 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                         </Link>
                       )}
 
-                      {isAllowed('admin_reports_logbook', '/dashboard/admin/reports/logbook') && (
+                      {(isAllowed('admin_reports_logbook', '/dashboard/admin/reports/logbook') || isAllowed('admin_logbook', '/dashboard/admin/reports/logbook')) && (
                         <Link
                           href="/dashboard/admin/reports/logbook"
+                          data-active={isLinkActive('/dashboard/admin/reports/logbook') ? 'true' : undefined}
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
                             pathname === '/dashboard/admin/reports/logbook'
                               ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
@@ -803,7 +940,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                           }`}
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-[#0E9F6E]"></span>
-                          <span>3. Academic Portfolio</span>
+                          <span>3. Academic Portfolio & Merit</span>
                         </Link>
                       )}
                     </div>
@@ -850,22 +987,22 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('faculty_schedule') && (
-                isMedicalModule ? (
-                  <Link href="/dashboard/faculty/medical-schedule" className={getLinkClass('/dashboard/faculty/medical-schedule')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span>Medical Schedule</span>
-                  </Link>
-                ) : (
-                  <Link href="/dashboard/faculty/schedule" className={getLinkClass('/dashboard/faculty/schedule')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span>Schedule</span>
-                  </Link>
-                )
+              {isAllowed('faculty_schedule', '/dashboard/faculty/schedule') && (
+                <Link href="/dashboard/faculty/schedule" className={getLinkClass('/dashboard/faculty/schedule')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Schedule</span>
+                </Link>
+              )}
+
+              {isAllowed('faculty_medical_schedule', '/dashboard/faculty/medical-schedule') && (
+                <Link href="/dashboard/faculty/medical-schedule" className={getLinkClass('/dashboard/faculty/medical-schedule')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Medical Schedule</span>
+                </Link>
               )}
 
               {isAllowed('faculty_attendance') && (
@@ -876,6 +1013,13 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                   <span>Attendance Portal Sync</span>
                 </Link>
               )}
+
+              <Link href="/dashboard/faculty/attendance-mark" data-active={isLinkActive('/dashboard/faculty/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/attendance-mark')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Attendance Mark</span>
+              </Link>
 
               {isAllowed('faculty_biometric') && (
                 <Link href="/dashboard/faculty/attendance-biometric" className={getLinkClass('/dashboard/faculty/attendance-biometric')}>
@@ -895,14 +1039,21 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              <Link href="/dashboard/faculty/logbook" data-active={isLinkActive('/dashboard/faculty/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/logbook')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>Academic Portfolio Entry &amp; Evaluation</span>
-              </Link>
+              {(isAllowed('faculty_logbook', '/dashboard/faculty/logbook') || isAllowed('faculty_reports_logbook', '/dashboard/faculty/reports/logbook')) && (
+                <Link href="/dashboard/faculty/logbook" data-active={isLinkActive('/dashboard/faculty/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/logbook')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Academic Portfolio Entry &amp; Evaluation</span>
+                </Link>
+              )}
 
-              {isMedicalModule && (
+              {isAllowed('faculty_medical_logbook', '/dashboard/faculty/medical-logbook') &&
+                (
+                  isAllowed('faculty_medical_logbook_data_directory', '/dashboard/faculty/medical-logbook/data-directory') ||
+                  isAllowed('faculty_medical_logbook_ug_logbook', '/dashboard/faculty/medical-logbook/ug-logbook') ||
+                  isAllowed('faculty_medical_logbook_pg_logbook', '/dashboard/faculty/medical-logbook/pg-logbook')
+                ) && (
                 <div className="space-y-1">
                   <button
                     type="button"
@@ -926,41 +1077,47 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
 
                   {medicalLogbookOpen && (
                     <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-slate-200 dark:border-slate-800 ml-3">
-                      <Link
-                        href="/dashboard/faculty/medical-logbook/data-directory"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
-                          pathname?.includes('/medical-logbook/data-directory')
-                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
-                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#5B4BFF]"></span>
-                        <span>1. Data Directory</span>
-                      </Link>
+                      {isAllowed('faculty_medical_logbook_data_directory', '/dashboard/faculty/medical-logbook/data-directory') && (
+                        <Link
+                          href="/dashboard/faculty/medical-logbook/data-directory"
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                            pathname?.includes('/medical-logbook/data-directory')
+                              ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                              : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#5B4BFF]"></span>
+                          <span>1. Data Directory</span>
+                        </Link>
+                      )}
 
-                      <Link
-                        href="/dashboard/faculty/medical-logbook/ug-logbook"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
-                          pathname?.includes('/medical-logbook/ug-logbook')
-                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
-                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
-                        <span>2. UG LogBook</span>
-                      </Link>
+                      {isAllowed('faculty_medical_logbook_ug_logbook', '/dashboard/faculty/medical-logbook/ug-logbook') && (
+                        <Link
+                          href="/dashboard/faculty/medical-logbook/ug-logbook"
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                            pathname?.includes('/medical-logbook/ug-logbook')
+                              ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                              : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
+                          <span>2. UG LogBook</span>
+                        </Link>
+                      )}
 
-                      <Link
-                        href="/dashboard/faculty/medical-logbook/pg-logbook"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
-                          pathname?.includes('/medical-logbook/pg-logbook')
-                            ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
-                            : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]"></span>
-                        <span>3. PG LogBook</span>
-                      </Link>
+                      {isAllowed('faculty_medical_logbook_pg_logbook', '/dashboard/faculty/medical-logbook/pg-logbook') && (
+                        <Link
+                          href="/dashboard/faculty/medical-logbook/pg-logbook"
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                            pathname?.includes('/medical-logbook/pg-logbook')
+                              ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                              : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]"></span>
+                          <span>3. PG LogBook</span>
+                        </Link>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1119,42 +1276,46 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
             </>
           ) : role === 'warden' ? (
             <>
-              {isAllowed('warden_overview') && (
-                <>
-                  <Link href="/dashboard/warden" data-active={isLinkActive('/dashboard/warden') ? 'true' : undefined} className={getLinkClass('/dashboard/warden')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                    <span>Hostel Warden Console</span>
-                  </Link>
+              {isAllowed('warden_overview', '/dashboard/warden') && (
+                <Link href="/dashboard/warden" data-active={isLinkActive('/dashboard/warden') ? 'true' : undefined} className={getLinkClass('/dashboard/warden')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  <span>Hostel Warden Console</span>
+                </Link>
+              )}
 
-                  <Link href="/dashboard/warden" data-active={isLinkActive('/dashboard/warden#mess-menu') ? 'true' : undefined} className={getLinkClass('/dashboard/warden#mess-menu')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                    <span>Hostel Mess & Food Menu</span>
-                  </Link>
+              {(isAllowed('warden_mess_menu', '/dashboard/warden#mess-menu') || isAllowed('warden_mess')) && (
+                <Link href="/dashboard/warden#mess-menu" data-active={isLinkActive('/dashboard/warden#mess-menu') ? 'true' : undefined} className={getLinkClass('/dashboard/warden#mess-menu')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Hostel Mess & Food Menu</span>
+                </Link>
+              )}
 
-                  <Link href="/dashboard/admin/student-master" data-active={isLinkActive('/dashboard/admin/student-master') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/student-master')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-                    </svg>
-                    <span>Resident Roster</span>
-                  </Link>
+              {(isAllowed('warden_student_master', '/dashboard/admin/student-master') || isAllowed('warden_roster')) && (
+                <Link href="/dashboard/admin/student-master" data-active={isLinkActive('/dashboard/admin/student-master') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/student-master')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                  </svg>
+                  <span>Resident Roster</span>
+                </Link>
+              )}
 
-                  <Link href="/dashboard/chat" data-active={isLinkActive('/dashboard/chat') ? 'true' : undefined} className={getLinkClass('/dashboard/chat')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    <span>Hostel & Staff Chat</span>
-                  </Link>
-                </>
+              {(isAllowed('warden_chat', '/dashboard/chat') || isAllowed('chat')) && (
+                <Link href="/dashboard/chat" data-active={isLinkActive('/dashboard/chat') ? 'true' : undefined} className={getLinkClass('/dashboard/chat')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <span>Hostel & Staff Chat</span>
+                </Link>
               )}
             </>
           ) : role === 'clerk' ? (
             <>
-              {isAllowed('clerk_overview') && (
+              {isAllowed('clerk_overview', '/dashboard/clerk') && (
                 <Link href="/dashboard/clerk" data-active={isLinkActive('/dashboard/clerk') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1163,21 +1324,25 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              <Link href="/dashboard/admin/staff-master" data-active={isLinkActive('/dashboard/admin/staff-master') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/staff-master')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                </svg>
-                <span>Staff & Faculty Master</span>
-              </Link>
+              {(isAllowed('clerk_staff_master', '/dashboard/admin/staff-master') || isAllowed('clerk_staff')) && (
+                <Link href="/dashboard/admin/staff-master" data-active={isLinkActive('/dashboard/admin/staff-master') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/staff-master')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                  </svg>
+                  <span>Staff & Faculty Master</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/admin/student-master" data-active={isLinkActive('/dashboard/admin/student-master') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/student-master')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
-                </svg>
-                <span>Student Roster Master</span>
-              </Link>
+              {(isAllowed('clerk_student_master', '/dashboard/admin/student-master') || isAllowed('clerk_student')) && (
+                <Link href="/dashboard/admin/student-master" data-active={isLinkActive('/dashboard/admin/student-master') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/student-master')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
+                  </svg>
+                  <span>Student Roster Master</span>
+                </Link>
+              )}
 
-              {isAllowed('clerk_attendance') && (
+              {isAllowed('clerk_attendance', '/dashboard/clerk/attendance') && (
                 <Link href="/dashboard/clerk/attendance" data-active={isLinkActive('/dashboard/clerk/attendance') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/attendance')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -1186,7 +1351,14 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('clerk_biometric') && (
+              <Link href="/dashboard/clerk/attendance-mark" data-active={isLinkActive('/dashboard/clerk/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/attendance-mark')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Attendance Mark</span>
+              </Link>
+
+              {(isAllowed('clerk_attendance_biometric', '/dashboard/clerk/attendance-biometric') || isAllowed('clerk_biometric')) && (
                 <Link href="/dashboard/clerk/attendance-biometric" data-active={isLinkActive('/dashboard/clerk/attendance-biometric') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/attendance-biometric')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -1195,7 +1367,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('clerk_assessment') && (
+              {isAllowed('clerk_assessment', '/dashboard/clerk/assessment') && (
                 <Link href="/dashboard/clerk/assessment" data-active={isLinkActive('/dashboard/clerk/assessment') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/assessment')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1204,7 +1376,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('clerk_placement') && (
+              {(isAllowed('clerk_placement', '/dashboard/clerk/placement') || isAllowed('placement')) && (
                 <Link href="/dashboard/clerk/placement" data-active={isLinkActive('/dashboard/clerk/placement') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/placement')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -1213,7 +1385,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('clerk_internships') && (
+              {isAllowed('clerk_internships', '/dashboard/clerk/internships') && (
                 <Link href="/dashboard/clerk/internships" data-active={isLinkActive('/dashboard/clerk/internships') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/internships')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
@@ -1223,7 +1395,25 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('clerk_notices') && (
+              {(isAllowed('clerk_repository', '/dashboard/admin/repository') || isAllowed('admin_repository', '/dashboard/admin/repository') || isAllowed('repository')) && (
+                <Link href="/dashboard/admin/repository" data-active={isLinkActive('/dashboard/admin/repository') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/repository')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  <span>Academic Repository 📂</span>
+                </Link>
+              )}
+
+              {isAllowed('clerk_library', '/dashboard/clerk/library') && (
+                <Link href="/dashboard/clerk/library" data-active={isLinkActive('/dashboard/clerk/library') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/library')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Digital Library</span>
+                </Link>
+              )}
+
+              {isAllowed('clerk_notices', '/dashboard/clerk/notices') && (
                 <Link href="/dashboard/clerk/notices" data-active={isLinkActive('/dashboard/clerk/notices') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/notices')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
@@ -1232,12 +1422,14 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              <Link href="/dashboard/chat" data-active={isLinkActive('/dashboard/chat') ? 'true' : undefined} className={getLinkClass('/dashboard/chat')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <span>Batch & Dept Chat</span>
-              </Link>
+              {(isAllowed('clerk_chat', '/dashboard/chat') || isAllowed('chat')) && (
+                <Link href="/dashboard/chat" data-active={isLinkActive('/dashboard/chat') ? 'true' : undefined} className={getLinkClass('/dashboard/chat')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <span>Batch & Dept Chat</span>
+                </Link>
+              )}
             </>
           ) : (
             <>
@@ -1259,22 +1451,22 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('student_timetable') && (
-                isMedicalModule ? (
-                  <Link href="/dashboard/student/medical-schedule" data-active={isLinkActive('/dashboard/student/medical-schedule') ? 'true' : undefined} className={getLinkClass('/dashboard/student/medical-schedule')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span>Medical Schedule</span>
-                  </Link>
-                ) : (
-                  <Link href="/dashboard/student/timetable" data-active={isLinkActive('/dashboard/student/timetable') ? 'true' : undefined} className={getLinkClass('/dashboard/student/timetable')}>
-                    <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span>Schedule</span>
-                  </Link>
-                )
+              {(isAllowed('student_timetable', '/dashboard/student/timetable') || isAllowed('student_schedule', '/dashboard/student/schedule')) && (
+                <Link href="/dashboard/student/timetable" data-active={isLinkActive('/dashboard/student/timetable') ? 'true' : undefined} className={getLinkClass('/dashboard/student/timetable')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Schedule</span>
+                </Link>
+              )}
+
+              {isAllowed('student_medical_schedule', '/dashboard/student/medical-schedule') && (
+                <Link href="/dashboard/student/medical-schedule" data-active={isLinkActive('/dashboard/student/medical-schedule') ? 'true' : undefined} className={getLinkClass('/dashboard/student/medical-schedule')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Medical Schedule</span>
+                </Link>
               )}
 
               {isAllowed('student_attendance') && (
@@ -1304,12 +1496,14 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              <Link href="/dashboard/student/logbook" data-active={isLinkActive('/dashboard/student/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/student/logbook')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>Academic Portfolio &amp; Submissions</span>
-              </Link>
+              {isAllowed('student_logbook', '/dashboard/student/logbook') && (
+                <Link href="/dashboard/student/logbook" data-active={isLinkActive('/dashboard/student/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/student/logbook')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Seminars &amp; Academic Portfolio</span>
+                </Link>
+              )}
 
               {isAllowed('student_lessons') && (
                 <Link href="/dashboard/student/lessons" data-active={isLinkActive('/dashboard/student/lessons') ? 'true' : undefined} className={getLinkClass('/dashboard/student/lessons')}>
@@ -1329,7 +1523,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {(isAllowed('student_incubation', '/dashboard/student') || isAllowed('incubation_cell') || isAllowed('student_repository')) && (
+              {(isAllowed('student_incubation', '/dashboard/student') || isAllowed('student_incubation_cell')) && (
                 <Link href="/dashboard/student#incubation-cell" className={getLinkClass('/dashboard/student#incubation-cell')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-purple-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -1392,7 +1586,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       <div className="pt-3 border-t border-slate-200 dark:border-white/10 text-[10px] text-[#6F7887] dark:text-gray-500 flex items-center justify-between font-mono">
         <span className="uppercase tracking-wider font-bold">Context</span>
         <span className="px-2 py-0.5 rounded-md bg-[#F36C21]/10 text-[#F36C21] border border-[#F36C21]/20 font-bold uppercase tracking-widest text-[9px]">
-          srms
+          {currentTenantSlug || 'srms'}
         </span>
       </div>
     </aside>

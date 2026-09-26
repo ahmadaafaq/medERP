@@ -1,4 +1,6 @@
-import Link from 'next/link';
+'use client';
+
+import React from 'react';
 
 export default function NotFound() {
   return (
@@ -21,12 +23,12 @@ export default function NotFound() {
         </div>
 
         <div className="pt-2">
-          <Link
+          <a
             href="/login"
             className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-[#5B4BFF] hover:bg-[#4838DF] active:scale-[0.98] text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-500/20 transition-all"
           >
             <span>Return to Login / Portal</span>
-          </Link>
+          </a>
         </div>
       </div>
     </div>

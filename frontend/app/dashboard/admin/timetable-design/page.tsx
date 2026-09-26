@@ -1780,52 +1780,57 @@ export default function TimetableDesignPage() {
       const method = isSlotUuid ? 'PUT' : 'POST';
       const token = localStorage.getItem('token') || '';
 
-      // 1. Call SRMS add-event API (if edit, remove old event first to update subject/faculty accurately)
+      const isSrmsTenant = tenantSlug ? (tenantSlug.toLowerCase().startsWith('srms') || tenantSlug.toLowerCase().includes('srms')) : false;
+
+      // 1. Call SRMS add-event API (Only if tenant is SRMS)
       let srmsSaved = false;
       let srmsEventId: string | null = null;
       let srmsErrorMsg = '';
 
-      try {
-        if (isEdit && editingSlot?.id) {
-          // Delete old slot from SRMS portal & DB first so new subject/faculty is cleanly scheduled
-          await fetch('/api/srms/delete-event', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: String(editingSlot.id), colgcd: selectedCollege || '1' }),
-          }).catch(() => null);
-
-          if (editingSlot.postgres_id && editingSlot.postgres_id !== editingSlot.id) {
+      if (isSrmsTenant) {
+        try {
+          if (isEdit && editingSlot?.id) {
+            // Delete old slot from SRMS portal & DB first so new subject/faculty is cleanly scheduled
             await fetch('/api/srms/delete-event', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: String(editingSlot.postgres_id), colgcd: selectedCollege || '1' }),
+              body: JSON.stringify({ id: String(editingSlot.id), colgcd: selectedCollege || '1' }),
             }).catch(() => null);
-          }
-        }
 
-        const sRes = await fetch('/api/srms/add-event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(srmsAddEventPayload),
-        });
-        const sJson = await sRes.json().catch(() => null);
-        if (sRes.ok && sJson?.success) {
-          srmsSaved = true;
-          // Prefer the Postgres UUID (event.id) over the SRMS numeric id for rollback DELETE
-          srmsEventId = sJson.event?.id || sJson.id || null;
-        } else {
-          srmsErrorMsg = sJson?.error || sJson?.message || 'SRMS portal event scheduling failed.';
+            if (editingSlot.postgres_id && editingSlot.postgres_id !== editingSlot.id) {
+              await fetch('/api/srms/delete-event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: String(editingSlot.postgres_id), colgcd: selectedCollege || '1' }),
+              }).catch(() => null);
+            }
+          }
+
+          const sRes = await fetch('/api/srms/add-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(srmsAddEventPayload),
+          });
+          const sJson = await sRes.json().catch(() => null);
+          if (sRes.ok && sJson?.success) {
+            srmsSaved = true;
+            // Prefer the Postgres UUID (event.id) over the SRMS numeric id for rollback DELETE
+            srmsEventId = sJson.event?.id || sJson.id || null;
+          } else {
+            srmsErrorMsg = sJson?.error || sJson?.message || 'SRMS portal event scheduling failed.';
+          }
+        } catch (sErr: any) {
+          srmsErrorMsg = sErr?.message || 'Network error communicating with SRMS API.';
         }
-      } catch (sErr: any) {
-        srmsErrorMsg = sErr?.message || 'Network error communicating with SRMS API.';
       }
 
-      // 2. Call NestJS backend PostgreSQL timetable API ONLY IF SRMS portal save was successful
+      // 2. Call NestJS backend PostgreSQL timetable API
       let pgSaved = false;
       let pgSlotId: string | null = null;
       let pgErrorMsg = '';
 
-      if (srmsSaved) {
+      // For SRMS tenants, proceed to save PG if SRMS save succeeded; for non-SRMS tenants, always save to PG!
+      if (!isSrmsTenant || srmsSaved) {
         try {
           const pRes = await fetch(url, {
             method,
@@ -1847,21 +1852,26 @@ export default function TimetableDesignPage() {
         }
       }
 
-      // 3. ATOMIC TRANSACTION EVALUATION
-      if (srmsSaved && pgSaved) {
-        // BOTH SUCCEEDED: COMMIT
-        showAlert('success', 'Timetable slot scheduled successfully and committed across Database & SRMS Portal!');
+      // 3. TRANSACTION EVALUATION
+      const transactionSuccessful = isSrmsTenant ? (srmsSaved && pgSaved) : pgSaved;
+
+      if (transactionSuccessful) {
+        showAlert('success', isSrmsTenant
+          ? 'Timetable slot scheduled successfully and committed across Database & SRMS Portal!'
+          : 'Timetable slot scheduled successfully and saved to PostgreSQL!');
         setModalError(null);
-        setIsModalOpen(false); // Only close modal on complete two-way success
+        setIsModalOpen(false);
         fetchTimetableSlots();
-        fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate);
+        if (isSrmsTenant) {
+          fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate);
+        }
       } else {
         // ROLLBACK PARTIAL WRITE TO PRESERVE CONSISTENCY
         if (srmsSaved && !pgSaved && srmsEventId) {
           console.warn('[ATOMIC ROLLBACK] Reverting SRMS event:', srmsEventId);
           await fetch(`/api/srms/add-event?id=${srmsEventId}&colgcd=${selectedCollege || '1'}`, { method: 'DELETE' }).catch(() => { });
         }
-        if (pgSaved && !srmsSaved && pgSlotId) {
+        if (pgSaved && !srmsSaved && pgSlotId && isSrmsTenant) {
           console.warn('[ATOMIC ROLLBACK] Reverting PG timetable slot:', pgSlotId);
           await fetch(`${API_BASE}/timetable/${pgSlotId}?tenant=${tenantSlug}`, {
             method: 'DELETE',
@@ -1870,13 +1880,12 @@ export default function TimetableDesignPage() {
         }
 
         // KEEP MODAL OPEN & HIGHLIGHT THE CONFLICT / ERROR
-        const finalError = srmsErrorMsg || pgErrorMsg || 'Schedule transaction rejected. Both APIs must succeed simultaneously.';
+        const finalError = srmsErrorMsg || pgErrorMsg || 'Schedule transaction rejected. Please check fields and try again.';
         showAlert('error', finalError);
         setModalError(finalError);
         if (modalScrollRef.current) {
           modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
         }
-        // Modal remains open so admin can review clash details and reschedule!
       }
     } catch (err: any) {
       const errText = err?.message || 'Network error during timetable atomic save.';
@@ -1896,28 +1905,32 @@ export default function TimetableDesignPage() {
     setLoading(true);
     try {
       const tenantSlug = getActiveTenantSlug();
+      const isSrmsTenant = tenantSlug ? (tenantSlug.toLowerCase().startsWith('srms') || tenantSlug.toLowerCase().includes('srms')) : false;
       const cleanId = String(slotId);
       const pgId = (slotObj as any)?.postgres_id || (editingSlot as any)?.postgres_id || null;
 
-      // 1. Server-side proxy call to official SRMS deleteEvent + PostgreSQL cross-table cleanup
-      const srmsDelRes = await fetch('/api/srms/delete-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: cleanId,
-          postgres_id: pgId,
-          colgcd: selectedCollege || '1',
-          day_of_week: slotObj?.day_of_week ?? editingSlot?.day_of_week,
-          start_time: slotObj?.start_time || editingSlot?.start_time,
-          end_time: slotObj?.end_time || editingSlot?.end_time,
-          course: selectedCourse,
-          branch: selectedBranch,
-          batch: selectedBatch,
-          sem: selectedSemester,
-          sec: selectedSection,
-        }),
-      });
-      const srmsDelJson = await srmsDelRes.json().catch(() => null);
+      let srmsDelJson: any = null;
+      if (isSrmsTenant) {
+        // 1. Server-side proxy call to official SRMS deleteEvent + PostgreSQL cross-table cleanup
+        const srmsDelRes = await fetch('/api/srms/delete-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: cleanId,
+            postgres_id: pgId,
+            colgcd: selectedCollege || '1',
+            day_of_week: slotObj?.day_of_week ?? editingSlot?.day_of_week,
+            start_time: slotObj?.start_time || editingSlot?.start_time,
+            end_time: slotObj?.end_time || editingSlot?.end_time,
+            course: selectedCourse,
+            branch: selectedBranch,
+            batch: selectedBatch,
+            sem: selectedSemester,
+            sec: selectedSection,
+          }),
+        });
+        srmsDelJson = await srmsDelRes.json().catch(() => null);
+      }
 
       // 2. Delete from PostgreSQL timetable_slots
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
@@ -1929,16 +1942,14 @@ export default function TimetableDesignPage() {
         }).catch(() => { });
       }
 
-      if (srmsDelJson?.srms_deleted || srmsDelJson?.success) {
-        showAlert('success', srmsDelJson?.message || 'Timetable session deleted successfully across SRMS Portal & Database!');
-      } else {
-        showAlert('warning', srmsDelJson?.d || 'Session removed from database.');
-      }
+      showAlert('success', 'Timetable session deleted successfully from database!');
       setHoveredSlotInfo(null);
       setIsModalOpen(false);
       setSlots(prev => prev.filter(s => !idsToDelete.includes(s.id) && !idsToDelete.includes((s as any).postgres_id)));
       fetchTimetableSlots();
-      fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate);
+      if (isSrmsTenant) {
+        fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate);
+      }
     } catch (err: any) {
       showAlert('error', err?.message || 'Network error while deleting slot.');
     } finally {

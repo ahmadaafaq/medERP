@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import { resolveCourseTitle, resolveDepartmentTitle } from '../../../utils/courseResolver';
 import { 
   FolderGit2, 
   Plus, 
@@ -29,9 +30,14 @@ interface Repository {
   repo_link: string;
   tech_stack: string[];
   screenshots?: string[];
+  course_cd?: string;
+  branch_cd?: string;
+  course_name?: string;
+  department_name?: string;
+  batch_cd?: string;
   status: string;
   is_placement_eligible: boolean;
-  score?: number;
+  score?: number | null;
   grade?: string;
   submitted_at: string;
 }
@@ -596,6 +602,24 @@ export default function StudentRepositoryPage() {
                     {/* Card Body */}
                     <div className="p-5 space-y-3.5 flex-1 flex flex-col justify-between">
                       <div className="space-y-2.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {repo.course_cd && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] dark:text-indigo-400 border border-[#5B4BFF]/20">
+                              {resolveCourseTitle(repo.course_cd, repo.course_name)}
+                            </span>
+                          )}
+                          {repo.branch_cd && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              {resolveDepartmentTitle(repo.course_cd, repo.department_name, repo.branch_cd)}
+                            </span>
+                          )}
+                          {repo.batch_cd && (
+                            <span className="text-[10px] font-medium text-slate-400">
+                              Batch {repo.batch_cd}
+                            </span>
+                          )}
+                        </div>
+
                         <h3 className="font-black text-base text-[#1B1E28] dark:text-white line-clamp-1 group-hover:text-[#5B4BFF] transition-colors">
                           {repo.title}
                         </h3>
@@ -629,15 +653,15 @@ export default function StudentRepositoryPage() {
                         )}
 
                         <div className="flex items-center justify-between">
-                          {repo.score !== undefined && repo.score !== null ? (
+                          {repo.score !== undefined && repo.score !== null && !isNaN(Number(repo.score)) ? (
                             <div className="flex items-center gap-1.5">
                               <Award className="w-4 h-4 text-[#5B4BFF]" />
                               <span className="text-xs font-black text-[#1B1E28] dark:text-white">
-                                Score: {repo.score}% ({repo.grade || 'A'})
+                                Score: {Number(repo.score)}% ({repo.grade || (Number(repo.score) >= 90 ? 'A+' : Number(repo.score) >= 80 ? 'A' : Number(repo.score) >= 70 ? 'B' : Number(repo.score) >= 60 ? 'C' : 'D')})
                               </span>
                             </div>
                           ) : (
-                            <span className="text-[11px] font-bold text-slate-400">Awaiting Evaluation</span>
+                            <span className="text-[11px] font-bold text-slate-400">Awaiting Faculty Evaluation</span>
                           )}
 
                           <div className="flex items-center gap-2">
