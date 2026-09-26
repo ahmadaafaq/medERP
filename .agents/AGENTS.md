@@ -11,4 +11,17 @@
   - **No Mock/Placeholder UI**: Never generate fake data or hardcoded mock records; consume backend APIs or display Skeletons / Empty States.
 - Verify backend build using `npm run build` in `backend/` before declaring completing work.
 - Never store in local storage but store in postgres.
+- **Timetable Synchronization & Isolation Rules**:
+  - **SRMS Tenants (tenant slug contains keyword `srms`)**:
+    - The live SRMS portal API (`https://myportal.srms.ac.in/timetable/master/JsonResponse.ashx`) is the **sole authoritative source of truth** for scheduled slots for any calendar week.
+    - If the SRMS API returns 0 records for a week (e.g., from 22 September onwards or upcoming months), the timetable schedule endpoint MUST return 0 records (empty grid). **Never project, repeat, or artificially backfill past timetable slots onto future weeks or upcoming months.**
+    - `GET /api/srms/timetable-schedule` is strictly a read operation: **Never auto-insert, background-sync, or duplicate fetched remote SRMS records into PostgreSQL `timetable_slots`.**
+    - Saving a slot (`add-event`) calls the official SRMS API (`srmserp/Timetbl/AddEvent`) and stores curriculum topic/unit details in PostgreSQL `srms_timetable_events`.
+    - Deleting a slot (`delete-event`) calls the official SRMS API (`designtimetable.aspx/deleteEvent` / `srmserp/Timetbl/DeleteEvent`) and removes the record from PostgreSQL.
+  - **Non-SRMS Tenants (tenant slug does NOT contain keyword `srms`)**:
+    - **Strict Portal Isolation**: Must **NEVER** call any SRMS portal endpoints (`myportal.srms.ac.in`) under any circumstances (no `JsonResponse.ashx`, no `AddEvent`, no `deleteEvent`, no `Loadsubject`).
+    - Save strictly to and fetch strictly from PostgreSQL `timetable_slots` in that tenant's schema (`tenant_${slug}`).
+    - All PostgreSQL timetable slots must enforce explicit date bounds (`effective_from` as Monday and `effective_until` as Sunday of the scheduled week) so slots never bleed or duplicate into future months.
+  - **Curriculum Topic & Unit Enrichment**:
+    - Units, topics, subtopics, and competency codes are managed in PostgreSQL to enrich live calendar slots without mutating live portal dates or creating ghost events.
 
