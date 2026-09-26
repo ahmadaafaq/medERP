@@ -50,10 +50,22 @@ export default function FacultySchedulePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null);
   const [facultyDeptName, setFacultyDeptName] = useState<string>('');
+  const [facultyName, setFacultyName] = useState<string>('');
   const [tenantSlug, setTenantSlug] = useState<string>('srms-cet-bareilly');
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const isMedical = tenantSlug.includes('ims') || tenantSlug.includes('medical') || tenantSlug.includes('med');
+
+  const getCourseName = (slot: TimetableSlot): string => {
+    const cCd = String((slot as any).course_cd || '');
+    if (cCd === '1') return 'B.Tech CSE';
+    if (cCd === '13') return 'BCA';
+    if (cCd === '3') return 'MCA';
+    if (cCd === '2') return 'B.Pharm';
+    if (cCd === '6') return 'M.Tech';
+    if (cCd === '8') return 'MBA';
+    return slot.department_name || (cCd ? `Course ${cCd}` : '');
+  };
 
   const cleanBatch = (slot: TimetableSlot) => {
     const b = (slot as any).batch_name || slot.batch_code || (slot as any).batch_year || (slot as any).batch_cd;
@@ -140,9 +152,22 @@ export default function FacultySchedulePage() {
     const token = getStorageItem('token') || '';
 
     try {
-      // 1. Fetch logged-in user profile to retrieve department_id and faculty_id
+      // 1. Fetch logged-in user profile to retrieve faculty_id, emp_id, and department
       let deptId = '';
       let facId = '';
+      let facultyEmpId = '';
+
+      // Check localStorage user first as quick fallback
+      const storedUser = getStorageItem('user');
+      if (storedUser) {
+        try {
+          const u = JSON.parse(storedUser);
+          facId = u.faculty_id || u.profile?.id || u.id || '';
+          facultyEmpId = u.emp_id || u.profile?.emp_id || '';
+          deptId = u.department_id || u.profile?.department_id || '';
+          if (u.name || u.profile?.name) setFacultyName(u.name || u.profile?.name);
+        } catch {}
+      }
 
       const meRes = await fetch(`${API_BASE}/auth/me`, {
         headers: {
@@ -155,18 +180,22 @@ export default function FacultySchedulePage() {
         const meJson = await meRes.json();
         const meData = meJson.data || meJson;
         const profile = meData.profile || {};
-        deptId = profile.department_id || meData.departmentId || '';
-        facId = profile.id || meData.id || '';
+        deptId = profile.department_id || meData.departmentId || deptId;
+        facId = profile.id || meData.id || facId;
+        facultyEmpId = profile.emp_id || meData.emp_id || facultyEmpId;
         setFacultyDeptName(profile.department_name || meData.departmentName || 'Department');
+        if (profile.name || meData.name) setFacultyName(profile.name || meData.name);
       }
 
-      // 2. Query backend timetable filtered for this faculty member's department / faculty ID
+      // 2. Query backend timetable across all linked courses and departments
+      // Note: Never restrict by single departmentId when querying a faculty member's personal schedule
       let url = `${API_BASE}/timetable?tenant=${slug}`;
-      if (deptId) {
-        url += `&departmentId=${deptId}`;
-      }
       if (facId) {
         url += `&facultyId=${facId}`;
+      } else if (facultyEmpId) {
+        url += `&facultyId=${facultyEmpId}`;
+      } else if (deptId) {
+        url += `&departmentId=${deptId}`;
       }
 
       const res = await fetch(url, {
@@ -180,7 +209,7 @@ export default function FacultySchedulePage() {
         const seen = new Set<string>();
         return raw.filter(s => {
           const normSub = (s.subject_name || s.subject_code || s.topic || '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
-          const key = `${s.day_of_week}_${s.start_time?.slice(0, 5)}_${normSub}`;
+          const key = `${s.day_of_week}_${s.start_time?.slice(0, 5)}_${s.course_cd || ''}_${s.section || ''}_${normSub}`;
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
@@ -224,19 +253,21 @@ export default function FacultySchedulePage() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Faculty Teaching Schedule & Department Timetable" />
 
-        <main className="p-6 space-y-6 flex-1 max-w-7xl mx-auto w-full">
+        <main className="p-6 space-y-6 flex-1 w-full max-w-full">
           {/* Header Banner */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30 font-mono font-black uppercase tracking-wider">
                   FACULTY SCHEDULE
                 </span>
-                <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold">Read-Only Teaching Console</span>
+                <span className="text-xs text-[#4E5969] dark:text-slate-400 font-bold">Personal Teaching Console</span>
               </div>
-              <h1 className="text-2xl font-black text-[#1B1E28] dark:text-white">Department Teaching Schedule</h1>
+              <h1 className="text-2xl font-black text-[#1B1E28] dark:text-white">
+                {facultyName ? `${facultyName} — Teaching Schedule` : 'Faculty Teaching Schedule'}
+              </h1>
               <p className="text-xs text-[#4E5969] dark:text-slate-300 font-medium">
-                Filtered strictly for <strong className="text-[#5B4BFF] font-black">{facultyDeptName || 'Your Department'}</strong>. Other department sessions are hidden.
+                Consolidated schedule across all your assigned courses (e.g. BCA, B.Tech CSE), batches, and lecture halls.
               </p>
             </div>
 
@@ -245,19 +276,19 @@ export default function FacultySchedulePage() {
               onClick={fetchFacultySchedule}
               className="px-4 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4B3BFF] text-white font-extrabold text-xs shadow-md shadow-[#5B4BFF]/20 transition-all flex items-center gap-1.5"
             >
-              🔄 Refresh Department Schedule
+              🔄 Refresh Schedule
             </button>
           </div>
 
           {/* Schedule Matrix */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-6">
+          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-6 w-full">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-base font-black text-[#1B1E28] dark:text-white tracking-tight uppercase">
-                  📅 {facultyDeptName ? `${facultyDeptName} Timetable` : 'Department Weekly Schedule'}
+                  📅 Weekly Teaching Schedule
                 </h3>
                 <p className="text-xs text-[#4E5969] dark:text-slate-400 font-medium">
-                  Select day of week to view teaching slots, assigned lecture halls, topics &amp; competencies.
+                  Select day of week to view your scheduled lectures, assigned halls, topics &amp; competencies.
                 </p>
               </div>
 
@@ -330,11 +361,9 @@ export default function FacultySchedulePage() {
                 <p className="text-[#7B8794] font-medium">Try selecting another day or delivery mode filter tab.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredSlots.map((slot, sIdx) => {
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 w-full">
+                {filteredSlots.map((slot) => {
                   const isHovered = hoveredSlotId === slot.id;
-                  const isTopOrMiddle = sIdx < Math.max(1, filteredSlots.length - 1);
-                  const popoverPosClass = isTopOrMiddle ? "top-full mt-2 left-0 z-50" : "bottom-full mb-2 left-0 z-50";
                   const compList = filterCompetenciesForSlot(slot.competencies_detail || [], slot.subject_code, slot.subject_name, slot.topic);
                   const displayCompCodes = filterCompetencyCodesString(slot.competency_codes, slot.subject_code, slot.subject_name, slot.topic);
                   const slotType = getNormalizedSlotType(slot);
@@ -358,7 +387,7 @@ export default function FacultySchedulePage() {
                       key={slot.id}
                       onMouseEnter={() => handleSlotMouseEnter(slot.id)}
                       onMouseLeave={handleSlotMouseLeave}
-                      className={`relative p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#F36C21]/60 transition-all duration-300 space-y-3 shadow-soft hover:shadow-hover hover:-translate-y-0.5 group cursor-pointer ${isHovered ? 'z-[60]' : 'z-10'
+                      className={`relative p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#F36C21]/60 transition-all duration-300 space-y-3 shadow-soft hover:shadow-hover hover:-translate-y-0.5 group cursor-pointer w-full ${isHovered ? 'z-[60]' : 'z-10'
                         }`}
                     >
                       <div className="flex items-center gap-4">
@@ -379,14 +408,24 @@ export default function FacultySchedulePage() {
                         <div className="flex-1 min-w-0 space-y-1">
                           <div className="flex items-center justify-between gap-1">
                             <h4 className="text-sm font-black text-[#1B1E28] dark:text-white group-hover:text-[#5B4BFF] transition-colors truncate">
-                              {slot.subject_name ? `[${slot.subject_code}] ${slot.subject_name}` : 'Department Subject'}
+                              {slot.subject_name ? `[${slot.subject_code || 'SUB'}] ${slot.subject_name}` : 'Teaching Slot'}
                             </h4>
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#D9530F] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/50 shadow-2xs ${typeBadgeStyles[slotType] || typeBadgeStyles.THEORY}`}>
-                              {slot.subject_code || 'BCA'} • {typeLabels[slotType] || slot.slot_type || 'Theory'}
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black font-mono shadow-2xs ${typeBadgeStyles[slotType] || typeBadgeStyles.THEORY}`}>
+                              {slot.subject_code || 'SUB'} • {typeLabels[slotType] || slot.slot_type || 'Theory'}
                             </span>
+                            {getCourseName(slot) && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] border border-indigo-200 dark:border-indigo-800">
+                                {getCourseName(slot)}
+                              </span>
+                            )}
+                            {((slot as any).semester || (slot as any).section) && (
+                              <span className="text-[10px] font-bold text-[#4E5969] dark:text-slate-400">
+                                {[(slot as any).semester ? `Sem ${(slot as any).semester}` : '', (slot as any).section ? `Sec ${(slot as any).section}` : ''].filter(Boolean).join(' • ')}
+                              </span>
+                            )}
                             {cleanBatch(slot) && (
                               <span className="text-[10px] font-bold text-[#7B8794] truncate">
                                 {cleanBatch(slot)}
@@ -415,17 +454,19 @@ export default function FacultySchedulePage() {
                         <span className="text-[#00C48C] font-black text-xs">👨‍🏫 {slot.faculty_name || 'Faculty Member'}</span>
                       </div>
 
-                      {/* HOVER TOOLTIP CARD */}
+                      {/* HOVER TOOLTIP CARD - Positioned ABOVE the schedule card */}
                       {isHovered && (
                         <div
                           onMouseEnter={() => handleSlotMouseEnter(slot.id)}
                           onMouseLeave={handleSlotMouseLeave}
-                          className="absolute top-[60%] left-1/2 -translate-x-1/2 w-[calc(100%+24px)] sm:w-[380px] rounded-[22px] bg-white dark:bg-[#0B1120] text-[#11141A] dark:text-slate-100 border-2 border-[#F36C21]/60 dark:border-[#F36C21]/60 shadow-2xl shadow-slate-900/25 dark:shadow-slate-950/90 backdrop-blur-xl z-[100] overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-3.5 space-y-2.5"
+                          className="absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 w-[calc(100%+24px)] sm:w-[380px] max-w-[90vw] rounded-[22px] bg-white dark:bg-[#0B1120] text-[#11141A] dark:text-slate-100 border-2 border-[#F36C21]/60 dark:border-[#F36C21]/60 shadow-2xl shadow-slate-900/25 dark:shadow-slate-950/90 backdrop-blur-xl z-[100] pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-3.5 space-y-2.5"
                         >
+                          {/* Downward pointer arrow toward the schedule card */}
+                          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white dark:bg-[#0B1120] border-b-2 border-r-2 border-[#F36C21]/60 rotate-45 pointer-events-none" />
                           {/* Top Header Ribbon */}
                           <div className="flex items-center justify-between gap-1.5 border-b border-[#E5E8ED] dark:border-slate-800 pb-1.5">
                             <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#FFF4EC] text-[#F36C21] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/40 shadow-xs uppercase">
-                              {slot.subject_code || 'BCA'} • {typeLabels[slotType] || slot.slot_type || 'Theory'}
+                              {slot.subject_code || 'SUB'} • {typeLabels[slotType] || slot.slot_type || 'Theory'}
                             </span>
                             <span className="font-mono text-[#475467] dark:text-indigo-200 text-[10px] font-bold">
                               🕒 {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
@@ -459,7 +500,7 @@ export default function FacultySchedulePage() {
                               </div>
 
                               {compList.length > 0 ? (
-                                <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
                                   {compList.map((c, i) => (
                                     <div key={i} className="p-1 px-1.5 rounded-lg bg-white dark:bg-slate-900 border border-[#E5E8ED] dark:border-slate-800 text-[10px] flex items-start gap-1.5">
                                       <span className="shrink-0 px-1 py-0.2 rounded bg-[#F36C21] text-white font-mono font-bold text-[9px]">

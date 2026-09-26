@@ -7,9 +7,10 @@ import NoticeDetailModal from './NoticeDetailModal';
 
 interface NoticeDashboardWidgetProps {
   role: 'student' | 'faculty' | 'admin' | 'clerk' | 'warden';
+  maxRows?: number;
 }
 
-export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetProps) {
+export default function NoticeDashboardWidget({ role, maxRows = 2 }: NoticeDashboardWidgetProps) {
   const { notices, loading, unreadCount, markAsRead, acknowledgeNotice } = useNotices();
   const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -119,7 +120,7 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
         {/* Notice List - Top Aligned without empty gap */}
         <div className="flex-1 pt-3.5 space-y-2.5 flex flex-col justify-start">
           {loading ? (
-            [...Array(3)].map((_, idx) => (
+            [...Array(maxRows)].map((_, idx) => (
               <div key={idx} className="animate-pulse p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 space-y-2">
                 <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
                 <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded w-1/2"></div>
@@ -132,7 +133,7 @@ export default function NoticeDashboardWidget({ role }: NoticeDashboardWidgetPro
               <p className="text-[11px] mt-0.5">All announcements and bulletins from administration will appear here.</p>
             </div>
           ) : (
-            sortedNotices.slice(0, 3).map((notice) => {
+            sortedNotices.slice(0, maxRows).map((notice) => {
               const isUnread = !notice.is_read;
 
               if (isUnread && notice.priority === 'urgent') {

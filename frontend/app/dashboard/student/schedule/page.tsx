@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import { filterCompetenciesForSlot, filterCompetencyCodesString, matchSlotDay } from '../../../utils/competencyFilter';
@@ -50,6 +50,22 @@ export default function StudentSchedulePage() {
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay() === 0 ? 7 : new Date().getDay());
   const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null);
   const [tenantSlug, setTenantSlug] = useState<string>('srms-cet-bareilly');
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleSlotMouseEnter = (id: string) => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setHoveredSlotId(id);
+  };
+
+  const handleSlotMouseLeave = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredSlotId(null);
+    }, 250);
+  };
 
   const isMedical = tenantSlug.includes('ims') || tenantSlug.includes('medical') || tenantSlug.includes('med');
 
@@ -253,8 +269,8 @@ export default function StudentSchedulePage() {
                   return (
                     <div
                       key={item.id}
-                      onMouseEnter={() => setHoveredSlotId(item.id)}
-                      onMouseLeave={() => setHoveredSlotId(null)}
+                      onMouseEnter={() => handleSlotMouseEnter(item.id)}
+                      onMouseLeave={handleSlotMouseLeave}
                       className={`relative group cursor-pointer ${isHovered ? 'z-[60]' : 'z-10'}`}
                     >
                       {/* Timeline Dot */}
@@ -292,13 +308,16 @@ export default function StudentSchedulePage() {
                           <span className="font-bold text-[#1B1E28] dark:text-slate-300">🏫 {item.room || 'Lecture Hall 1'}</span>
                           <span className="text-[#00C48C] font-extrabold">👨‍🏫 {item.faculty_name || 'Faculty Member'}</span>
 
-                          {/* OVERLAY CARD ON HOVER (OFFSET TOP-10 SO HALF CARD REMAINS VISIBLE) */}
+                          {/* OVERLAY CARD ON HOVER (POSITIONED ABOVE THE CARD WITH ARROW) */}
                           {isHovered && (
                             <div
-                              onMouseEnter={() => setHoveredSlotId(item.id)}
-                              onMouseLeave={() => setHoveredSlotId(null)}
-                              className="absolute top-10 -left-2 sm:-left-3 w-[calc(100%+16px)] sm:w-[400px] rounded-[22px] bg-white dark:bg-[#0B1120] border-2 border-[#F36C21]/60 dark:border-[#F36C21]/60 shadow-2xl shadow-slate-900/25 dark:shadow-slate-950/90 backdrop-blur-xl z-50 text-[#11141A] dark:text-slate-100 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 p-4 space-y-3"
+                              onMouseEnter={() => handleSlotMouseEnter(item.id)}
+                              onMouseLeave={handleSlotMouseLeave}
+                              className="absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 w-[calc(100%+24px)] sm:w-[380px] max-w-[90vw] rounded-[22px] bg-white dark:bg-[#0B1120] border-2 border-[#F36C21]/60 dark:border-[#F36C21]/60 shadow-2xl shadow-slate-900/25 dark:shadow-slate-950/90 backdrop-blur-xl z-[100] text-[#11141A] dark:text-slate-100 pointer-events-auto animate-in fade-in zoom-in-95 duration-150 p-4 space-y-3"
                             >
+                              {/* Downward pointer arrow toward the schedule card */}
+                              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white dark:bg-[#0B1120] border-b-2 border-r-2 border-[#F36C21]/60 rotate-45 pointer-events-none" />
+
                               {/* Top Header Ribbon */}
                               <div className="flex items-center justify-between text-xs pb-2 border-b border-[#E5E8ED] dark:border-slate-800">
                                 <span className="px-3 py-1 rounded-full text-xs font-black font-mono bg-[#FFF4EC] text-[#F36C21] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/40 shadow-xs uppercase">

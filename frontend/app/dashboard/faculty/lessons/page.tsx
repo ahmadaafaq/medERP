@@ -494,6 +494,25 @@ export default function FacultyLessonsPage() {
       const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
       const headers = { 'Authorization': `Bearer ${token}` };
 
+      // Helper function: Strictly check for purely numeric sub_cd (digits only, e.g. 88534, 88536)
+      // Reject any alphanumeric codes (e.g. BCS101, KCS301, CO1, UUIDs)
+      const getNumericSubCd = (s: any): string | null => {
+        if (!s) return null;
+        // Check sub_cd first if present
+        if (s.sub_cd !== undefined && s.sub_cd !== null && String(s.sub_cd).trim() !== '') {
+          const raw = String(s.sub_cd).trim();
+          if (!/^\d+$/.test(raw)) return null; // Reject alphanumeric sub_cd
+          return raw;
+        }
+        // Fallback to code if present
+        if (s.code !== undefined && s.code !== null && String(s.code).trim() !== '') {
+          const raw = String(s.code).trim();
+          if (!/^\d+$/.test(raw)) return null; // Reject alphanumeric code
+          return raw;
+        }
+        return null;
+      };
+
       // A. Fetch from Curriculum Subject Master in PostgreSQL
       const subjRes = await fetch(`${API_BASE}/admin-master/subjects?tenant=${tenant}`, { headers }).catch(() => null);
       let backendSubjects: any[] = [];
@@ -512,51 +531,68 @@ export default function FacultyLessonsPage() {
         if (liveRes.ok) {
           const liveData = await liveRes.json();
           if (Array.isArray(liveData)) {
-            liveSubjects = liveData.map((s: any) => ({
-              id: String(s.sub_cd || s.code || s.id),
-              code: String(s.sub_cd || s.code || s.id),
-              name: s.sub_name || s.name,
-              course_cd: String(selectedCourse),
-              branch_cd: String(selectedBranch),
-              batch_cd: String(selectedBatch),
-              sem_cd: String(selectedSem),
-              section: String(selectedSection),
-              mst_sub_name: s.mst_sub_name,
-            }));
+            liveSubjects = liveData
+              .filter((s: any) => getNumericSubCd(s) !== null)
+              .map((s: any) => {
+                const numCode = getNumericSubCd(s)!;
+                return {
+                  id: numCode,
+                  code: numCode,
+                  sub_cd: numCode,
+                  name: s.sub_name || s.name,
+                  course_cd: String(selectedCourse),
+                  branch_cd: String(selectedBranch),
+                  batch_cd: String(selectedBatch),
+                  sem_cd: String(selectedSem),
+                  section: String(selectedSection),
+                  mst_sub_name: s.mst_sub_name,
+                };
+              });
           }
         }
       } catch (err) {
         console.warn('Live SRMS portal subjects fetch error:', err);
       }
 
-      // C. Filter backend subjects by current academic scope (course & sem)
+      // C. Filter backend subjects by current academic scope (course & sem) and strictly numeric sub_cd
       const cleanSem = String(selectedSem).replace(/\D/g, '');
       const filteredBackend = backendSubjects.filter((s: any) => {
         const matchCourse = !selectedCourse || !s.course_cd || String(s.course_cd) === String(selectedCourse);
         const sSem = String(s.sem_cd || s.semester || '').replace(/\D/g, '');
         const matchSem = !cleanSem || !sSem || sSem === cleanSem;
-        return matchCourse && matchSem;
+        const hasNumericCode = getNumericSubCd(s) !== null;
+        return matchCourse && matchSem && hasNumericCode;
       });
 
-      // Merge and deduplicate by code
+      // Merge and deduplicate by numeric code
       const mergedMap = new Map<string, any>();
-      (filteredBackend.length > 0 ? filteredBackend : backendSubjects).forEach((s: any) => {
-        const key = String(s.code || s.id).trim().toUpperCase();
-        mergedMap.set(key, s);
-      });
+      (filteredBackend.length > 0 ? filteredBackend : backendSubjects)
+        .filter((s: any) => getNumericSubCd(s) !== null)
+        .forEach((s: any) => {
+          const numCode = getNumericSubCd(s)!;
+          mergedMap.set(numCode, { ...s, code: numCode, sub_cd: numCode });
+        });
+
       liveSubjects.forEach((s: any) => {
-        const key = String(s.code || s.id).trim().toUpperCase();
-        if (!mergedMap.has(key)) {
-          mergedMap.set(key, s);
+        const numCode = getNumericSubCd(s)!;
+        if (!mergedMap.has(numCode)) {
+          mergedMap.set(numCode, s);
         }
       });
 
-      const subjectsList = Array.from(mergedMap.values()).map((s: any) => ({
-        id: String(s.id || s.code || s.sub_cd),
-        code: String(s.code || s.sub_cd || s.id),
-        name: s.name || s.sub_name || s.mst_sub_name || `Subject #${s.code || s.id}`,
-        sem_cd: s.sem_cd || s.semester,
-      }));
+      const subjectsList = Array.from(mergedMap.values())
+        .filter((s: any) => getNumericSubCd(s) !== null)
+        .map((s: any) => {
+          const numCode = getNumericSubCd(s)!;
+          return {
+            id: numCode,
+            code: numCode,
+            sub_cd: numCode,
+            name: s.name || s.sub_name || s.mst_sub_name || `Subject #${numCode}`,
+            sem_cd: s.sem_cd || s.semester,
+          };
+        })
+        .sort((a, b) => Number(a.code) - Number(b.code));
 
       setRawSubjects(subjectsList);
       setSubjectsLoaded(true);
@@ -572,12 +608,12 @@ export default function FacultyLessonsPage() {
       if (subjectsList.length > 0) {
         setAlert({
           type: 'success',
-          message: `Loaded ${subjectsList.length} subjects for Course #${selectedCourse} • Sem ${selectedSem} • ${secLabel}. Please choose a subject below.`,
+          message: `Loaded ${subjectsList.length} numeric subjects for Course #${selectedCourse} • Sem ${selectedSem} • ${secLabel}. Please choose a subject below.`,
         });
       } else {
         setAlert({
           type: 'error',
-          message: `No curriculum subjects found for Course #${selectedCourse} • Sem ${selectedSem}.`,
+          message: `No numeric curriculum subjects found for Course #${selectedCourse} • Sem ${selectedSem}.`,
         });
       }
     } catch (err) {

@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
 import LicenseReceiptModal, { LicenseReceiptData } from '../../../components/firms/LicenseReceiptModal';
+import { MODULE_SUB_TABS, ALL_SUB_TAB_KEYS } from '../../../lib/useRolePermissions';
 
 interface Firm {
   id: string;
@@ -34,6 +35,7 @@ interface MenuItem {
   menu_label: string;
   route_path: string;
   applicable_firm_mode: string;
+  parent_menu_key?: string;
 }
 
 type TabType = 'overview' | 'firms' | 'admins' | 'licenses' | 'transactions' | 'rights' | 'theme' | 'security';
@@ -103,22 +105,32 @@ function OwnerDashboardContent() {
   const [menuRegistry, setMenuRegistry] = useState<MenuItem[]>([]);
   const [enabledKeys, setEnabledKeys] = useState<string[]>([]);
   const [rightsLoading, setRightsLoading] = useState<boolean>(false);
+  const [rightsSaving, setRightsSaving] = useState<boolean>(false);
+  const [rightsSyncing, setRightsSyncing] = useState<boolean>(false);
   const [rightsSaveSuccess, setRightsSaveSuccess] = useState<string>('');
   const [rightsSearchQuery, setRightsSearchQuery] = useState<string>('');
 
   const handleSyncMenuRegistry = async () => {
     try {
-      setRightsLoading(true);
-      const res = await fetch('/api/menu-registry/seed', { method: 'POST' });
+      setRightsSyncing(true);
+      const res = await fetch('/api/menu-registry/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
       if (res.ok) {
         await fetchMenuRegistry();
         setRightsSaveSuccess('✓ All menus and modules dynamically synchronized from codebase!');
         setTimeout(() => setRightsSaveSuccess(''), 3000);
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        alert(`Menu sync failed: ${errJson.message || 'Server error'}`);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Sync failed:', e);
+      alert(`Menu sync failed: ${e?.message || 'Network error'}`);
     } finally {
-      setRightsLoading(false);
+      setRightsSyncing(false);
     }
   };
 
@@ -253,7 +265,7 @@ function OwnerDashboardContent() {
       if (res.ok) {
         const json = await res.json();
         const perms = Array.isArray(json) ? json : json.data || [];
-        setEnabledKeys(perms.map((p: any) => p.menu_key));
+        setEnabledKeys(perms.filter((p: any) => p.is_enabled !== false).map((p: any) => p.menu_key));
       }
     } catch {
       setEnabledKeys([]);
@@ -443,9 +455,71 @@ function OwnerDashboardContent() {
     }
   };
 
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const triggerAutoSavePermissions = (newKeys: string[]) => {
+    if (!selectedFirmId) return;
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await fetch(`/api/firms/${selectedFirmId}/role-permissions`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role: selectedRole,
+            menu_keys: newKeys,
+          }),
+        });
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('permissions_updated_at', Date.now().toString());
+          window.dispatchEvent(new CustomEvent('permissionsUpdated'));
+        }
+      } catch (e) {
+        console.error('Auto-save permissions error:', e);
+      }
+    }, 350);
+  };
+
+  const getTabBadge = (route?: string, key?: string) => {
+    const r = (route || '').toLowerCase();
+    const k = (key || '').toLowerCase();
+    if (r.includes('/reports') || r.includes('attendance-reports') || k.includes('reports')) {
+      return (
+        <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+          Sub-Tab: MIS Reports
+        </span>
+      );
+    }
+    if (r.includes('notices') || k.includes('notices')) {
+      return (
+        <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200">
+          Sub-Tab: Notices
+        </span>
+      );
+    }
+    if (r.includes('biometric') || k.includes('biometric')) {
+      return (
+        <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+          Bio-Metric / CCTV Feed
+        </span>
+      );
+    }
+    return null;
+  };
+
   const handleSaveMenuRights = async () => {
     if (!selectedFirmId) return;
-    setRightsLoading(true);
+    if (enabledKeys.length === 0) {
+      const confirmZero = window.confirm(
+        `⚠️ WARNING: You currently have 0 modules selected for ${selectedRole}.\n\nSaving this will hide all navigation menus in the sidebar for all ${selectedRole} users in this institution.\n\nAre you sure you want to save with 0 modules?`
+      );
+      if (!confirmZero) return;
+    }
+    setRightsSaving(true);
     setRightsSaveSuccess('');
 
     try {
@@ -471,7 +545,7 @@ function OwnerDashboardContent() {
     } catch (err: any) {
       alert(err.message || 'Failed to save menu rights');
     } finally {
-      setRightsLoading(false);
+      setRightsSaving(false);
     }
   };
 
@@ -876,19 +950,43 @@ function OwnerDashboardContent() {
   const trialFirms = firms.filter((f) => f.status === 'TRIAL').length;
   const expiredFirms = firms.filter((f) => f.status === 'EXPIRED').length;
 
-  const currentRoleMenus = menuRegistry.filter((m) => {
-    const roleMatches = m.role === selectedRole;
-    const modeMatches =
-      !selectedFirm ||
-      m.applicable_firm_mode === 'BOTH' ||
-      m.applicable_firm_mode === selectedFirm.firm_mode;
-    const searchMatches =
-      !rightsSearchQuery ||
-      m.menu_label.toLowerCase().includes(rightsSearchQuery.toLowerCase()) ||
-      m.menu_key.toLowerCase().includes(rightsSearchQuery.toLowerCase()) ||
-      m.route_path.toLowerCase().includes(rightsSearchQuery.toLowerCase());
-    return roleMatches && modeMatches && searchMatches;
-  });
+  const currentRoleMenus = (() => {
+    const matches = menuRegistry.filter((m) => {
+      // Internal horizontal tabs should not appear as separate top-level module cards
+      if (m.parent_menu_key) return false;
+      if (ALL_SUB_TAB_KEYS.has(m.menu_key)) return false;
+
+      const roleMatches = m.role === selectedRole;
+      const modeMatches =
+        !selectedFirm ||
+        m.applicable_firm_mode === 'BOTH' ||
+        m.applicable_firm_mode === selectedFirm.firm_mode;
+
+      const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+      const subTabMatches = subTabs.some(
+        (t) =>
+          t.label.toLowerCase().includes(rightsSearchQuery.toLowerCase()) ||
+          t.key.toLowerCase().includes(rightsSearchQuery.toLowerCase())
+      );
+
+      const searchMatches =
+        !rightsSearchQuery ||
+        subTabMatches ||
+        m.menu_label.toLowerCase().includes(rightsSearchQuery.toLowerCase()) ||
+        m.menu_key.toLowerCase().includes(rightsSearchQuery.toLowerCase()) ||
+        m.route_path.toLowerCase().includes(rightsSearchQuery.toLowerCase());
+      return roleMatches && modeMatches && searchMatches;
+    });
+
+    const seenRoutes = new Set<string>();
+    return matches.filter((m) => {
+      const r = (m.route_path || '').toLowerCase().trim();
+      if (!r) return true;
+      if (seenRoutes.has(r)) return false;
+      seenRoutes.add(r);
+      return true;
+    });
+  })();
 
   return (
     <div className="flex min-h-screen bg-[#F6F8FC]">
@@ -1832,19 +1930,19 @@ function OwnerDashboardContent() {
                   <button
                     type="button"
                     onClick={handleSyncMenuRegistry}
-                    disabled={rightsLoading}
-                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-[#1B1E28] font-bold text-xs rounded-xl border border-[#E7EAF3] shadow-sm transition-all flex items-center gap-1.5"
+                    disabled={rightsSyncing || rightsSaving}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-[#1B1E28] font-bold text-xs rounded-xl border border-[#E7EAF3] shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50"
                     title="Scans codebase for newly created pages and synchronizes registry"
                   >
-                    <span>⚡ Sync Codebase Menus</span>
+                    <span>{rightsSyncing ? '⚡ Syncing...' : '⚡ Sync Codebase Menus'}</span>
                   </button>
 
                   <button
                     onClick={handleSaveMenuRights}
-                    disabled={rightsLoading || !selectedFirmId}
+                    disabled={rightsSaving || rightsLoading || !selectedFirmId}
                     className="px-5 py-2.5 bg-[#5B4BFF] hover:bg-[#4838DF] text-white font-bold text-xs rounded-xl shadow transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
                   >
-                    {rightsLoading ? 'Saving...' : '💾 Save Role Permissions'}
+                    {rightsSaving ? 'Saving...' : '💾 Save Role Permissions'}
                   </button>
                 </div>
               </div>
@@ -1917,9 +2015,13 @@ function OwnerDashboardContent() {
                   <button
                     type="button"
                     onClick={() => {
-                      const allKeys = currentRoleMenus.map((m) => m.menu_key);
+                      const allKeys = currentRoleMenus.flatMap((m) => {
+                        const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                        return [m.menu_key, ...subTabs.map((t) => t.key)];
+                      });
                       const combined = Array.from(new Set([...enabledKeys, ...allKeys]));
                       setEnabledKeys(combined);
+                      triggerAutoSavePermissions(combined);
                     }}
                     className="text-xs font-black text-[#5B4BFF] hover:underline"
                   >
@@ -1929,8 +2031,15 @@ function OwnerDashboardContent() {
                   <button
                     type="button"
                     onClick={() => {
-                      const visibleKeys = new Set(currentRoleMenus.map((m) => m.menu_key));
-                      setEnabledKeys(enabledKeys.filter((k) => !visibleKeys.has(k)));
+                      const visibleKeys = new Set(
+                        currentRoleMenus.flatMap((m) => {
+                          const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                          return [m.menu_key, ...subTabs.map((t) => t.key)];
+                        })
+                      );
+                      const remaining = enabledKeys.filter((k) => !visibleKeys.has(k));
+                      setEnabledKeys(remaining);
+                      triggerAutoSavePermissions(remaining);
                     }}
                     className="text-xs font-black text-rose-500 hover:underline"
                   >
@@ -1940,7 +2049,16 @@ function OwnerDashboardContent() {
               </div>
 
               {/* Menus Grid */}
-              {currentRoleMenus.length === 0 ? (
+              {rightsLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="animate-pulse p-4 rounded-xl border border-[#E7EAF3] bg-slate-50 space-y-2">
+                      <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                      <div className="h-3 bg-slate-100 rounded w-3/4"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : currentRoleMenus.length === 0 ? (
                 <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300">
                   <p className="text-xs font-bold text-[#4E5969]">No modules found matching the criteria.</p>
                   <button
@@ -1954,41 +2072,147 @@ function OwnerDashboardContent() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {currentRoleMenus.map((item) => {
-                    const isChecked = enabledKeys.includes(item.menu_key);
+                    const norm = item.menu_key.replace(/[\/\-\.]+/g, '_');
+                    const subTabs = MODULE_SUB_TABS[item.menu_key] || [];
+                    const hasSubTabs = subTabs.length > 0;
+                    const subTabKeys = subTabs.map((t) => t.key);
+
+                    const isChecked =
+                      enabledKeys.includes(item.menu_key) ||
+                      enabledKeys.some((k) => k.replace(/[\/\-\.]+/g, '_') === norm);
+
+                    const activeSubTabCount = subTabs.filter((t) => enabledKeys.includes(t.key)).length;
+
                     return (
-                      <label
+                      <div
                         key={item.id || item.menu_key}
-                        className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                        className={`p-4 rounded-2xl border transition-all ${
                           isChecked
-                            ? 'bg-indigo-50/50 border-indigo-200 text-[#1B1E28] shadow-sm'
+                            ? 'bg-indigo-50/40 border-indigo-200 text-[#1B1E28] shadow-xs'
                             : 'bg-white border-[#E7EAF3] text-slate-500 hover:border-slate-300'
                         }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEnabledKeys([...enabledKeys, item.menu_key]);
-                            } else {
-                              setEnabledKeys(enabledKeys.filter((k) => k !== item.menu_key));
-                            }
-                          }}
-                          className="w-4 h-4 mt-0.5 rounded text-[#5B4BFF] focus:ring-[#5B4BFF] border-slate-300"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <div className="text-xs font-bold truncate text-[#1B1E28]">{item.menu_label}</div>
-                            {item.applicable_firm_mode && item.applicable_firm_mode !== 'BOTH' && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200">
-                                {item.applicable_firm_mode}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] font-mono text-[#5B4BFF] truncate mt-0.5">{item.route_path}</div>
-                          <div className="text-[9px] font-mono text-slate-400 truncate">Key: {item.menu_key}</div>
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            id={`module_${item.menu_key}`}
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              let nextKeys: string[];
+                              if (checked) {
+                                nextKeys = Array.from(new Set(enabledKeys.concat([item.menu_key, norm, ...subTabKeys])));
+                              } else {
+                                nextKeys = enabledKeys.filter(
+                                  (k) =>
+                                    k !== item.menu_key &&
+                                    k.replace(/[\/\-\.]+/g, '_') !== norm &&
+                                    !subTabKeys.includes(k)
+                                );
+                              }
+                              setEnabledKeys(nextKeys);
+                              triggerAutoSavePermissions(nextKeys);
+                            }}
+                            className="w-4 h-4 mt-0.5 rounded text-[#5B4BFF] focus:ring-[#5B4BFF] border-slate-300 cursor-pointer"
+                          />
+                          <label htmlFor={`module_${item.menu_key}`} className="min-w-0 flex-1 cursor-pointer select-none">
+                            <div className="flex items-center justify-between gap-1 flex-wrap">
+                              <div className="text-xs font-black truncate text-[#1B1E28]">{item.menu_label}</div>
+                              <div className="flex items-center gap-1">
+                                {hasSubTabs && (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-orange-100 text-[#F36C21] border border-orange-200 flex items-center gap-1">
+                                    <span>📑</span>
+                                    <span>{subTabs.length} Horizontal Tabs</span>
+                                  </span>
+                                )}
+                                {getTabBadge(item.route_path, item.menu_key)}
+                                {item.applicable_firm_mode && item.applicable_firm_mode !== 'BOTH' && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200">
+                                    {item.applicable_firm_mode}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-[10px] font-mono text-[#5B4BFF] truncate mt-0.5">{item.route_path}</div>
+                            <div className="text-[9px] font-mono text-slate-400 truncate">Key: {item.menu_key}</div>
+                          </label>
                         </div>
-                      </label>
+
+                        {/* Internal Sub-Tabs Checklist */}
+                        {hasSubTabs && (
+                          <div className="mt-3 pt-3 border-t border-indigo-100/70 dark:border-slate-800 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                                  Tabs Permission Control:
+                                </span>
+                                <span className="px-1.5 py-0.2 rounded-md bg-indigo-50 dark:bg-slate-800 text-[9px] font-black text-[#5B4BFF] border border-indigo-100">
+                                  {activeSubTabCount} / {subTabs.length} Active
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = Array.from(new Set([...enabledKeys, item.menu_key, norm, ...subTabKeys]));
+                                    setEnabledKeys(next);
+                                    triggerAutoSavePermissions(next);
+                                  }}
+                                  className="text-[10px] font-bold text-[#5B4BFF] hover:underline"
+                                >
+                                  Select All
+                                </button>
+                                <span className="text-slate-300">•</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const setKeys = new Set(subTabKeys);
+                                    const next = enabledKeys.filter((k) => !setKeys.has(k));
+                                    setEnabledKeys(next);
+                                    triggerAutoSavePermissions(next);
+                                  }}
+                                  className="text-[10px] font-bold text-rose-500 hover:underline"
+                                >
+                                  Clear All
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 bg-slate-50/80 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                              {subTabs.map((tab) => {
+                                const isTabChecked = enabledKeys.includes(tab.key);
+                                return (
+                                  <label
+                                    key={tab.key}
+                                    className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
+                                      isTabChecked
+                                        ? 'bg-white dark:bg-slate-800 border-indigo-200 dark:border-indigo-800 text-slate-900 dark:text-white shadow-xs font-semibold'
+                                        : 'bg-transparent border-transparent text-slate-400 hover:text-slate-600 hover:bg-white/60'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isTabChecked}
+                                      onChange={(e) => {
+                                        let next: string[];
+                                        if (e.target.checked) {
+                                          next = Array.from(new Set([...enabledKeys, item.menu_key, norm, tab.key]));
+                                        } else {
+                                          next = enabledKeys.filter((k) => k !== tab.key);
+                                        }
+                                        setEnabledKeys(next);
+                                        triggerAutoSavePermissions(next);
+                                      }}
+                                      className="w-3.5 h-3.5 rounded text-[#F36C21] focus:ring-[#F36C21] border-slate-300"
+                                    />
+                                    <span className="truncate" title={tab.label}>{tab.label}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>

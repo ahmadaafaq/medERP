@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { BarChart3, Users, AlertTriangle, CheckCircle2, ChevronDown, Download, Sparkles, BookOpen, TrendingUp } from 'lucide-react';
+import { BarChart3, Users, AlertTriangle, CheckCircle2, ChevronDown, Download, Sparkles, BookOpen, TrendingUp, X, Search, Filter } from 'lucide-react';
 
 interface SubjectAttendance {
   id: string;
@@ -73,6 +73,13 @@ export default function FacultyBatchAttendanceAnalytics() {
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [filterView, setFilterView] = useState<'all' | 'critical'>('all');
+
+  // Modal State for See All Records with Pagination
+  const [showAllModal, setShowAllModal] = useState<boolean>(false);
+  const [modalPage, setModalPage] = useState<number>(1);
+  const [modalSearchTerm, setModalSearchTerm] = useState<string>('');
+  const [modalFilterView, setModalFilterView] = useState<'all' | 'critical'>('all');
+  const MODAL_PAGE_SIZE = 6;
 
   useEffect(() => {
     initAcademicHierarchy();
@@ -487,10 +494,53 @@ export default function FacultyBatchAttendanceAnalytics() {
     })
     .sort((a, b) => b.attendancePct - a.attendancePct);
 
-  const totalPages = Math.max(1, Math.ceil(studentsToDisplay.length / PAGE_SIZE));
-  const validCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (validCurrentPage - 1) * PAGE_SIZE;
-  const paginatedStudents = studentsToDisplay.slice(startIndex, startIndex + PAGE_SIZE);
+  const CARD_LIMIT = 2;
+  const cardStudents = studentsToDisplay.slice(0, CARD_LIMIT);
+  const cardSubjects = subjectsToDisplay.slice(0, CARD_LIMIT);
+
+  const handleOpenModal = () => {
+    setModalSearchTerm(searchTerm);
+    setModalFilterView(filterView);
+    setModalPage(1);
+    setShowAllModal(true);
+  };
+
+  const modalFilteredStudents = studentRecords
+    .filter((s: StudentAttendanceRecord) => {
+      if (modalFilterView === 'critical' && s.attendancePct >= 75) return false;
+      if (modalSearchTerm) {
+        const q = modalSearchTerm.toLowerCase();
+        return (
+          (s.name && s.name.toLowerCase().includes(q)) ||
+          (s.rollNo && s.rollNo.toLowerCase().includes(q)) ||
+          (s.course && s.course.toLowerCase().includes(q)) ||
+          (s.batch && s.batch.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => b.attendancePct - a.attendancePct);
+
+  const modalTotalPages = Math.max(1, Math.ceil(modalFilteredStudents.length / MODAL_PAGE_SIZE));
+  const modalValidPage = Math.min(modalPage, modalTotalPages);
+  const modalStartIndex = (modalValidPage - 1) * MODAL_PAGE_SIZE;
+  const modalPaginatedStudents = modalFilteredStudents.slice(modalStartIndex, modalStartIndex + MODAL_PAGE_SIZE);
+
+  const modalFilteredSubjects = activeBatch.subjects.filter((sub: SubjectAttendance) => {
+    if (modalSearchTerm) {
+      const q = modalSearchTerm.toLowerCase();
+      return (
+        sub.name.toLowerCase().includes(q) ||
+        sub.code.toLowerCase().includes(q) ||
+        sub.facultyName.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+  const modalSubjectTotalPages = Math.max(1, Math.ceil(modalFilteredSubjects.length / MODAL_PAGE_SIZE));
+  const modalSubjectValidPage = Math.min(modalPage, modalSubjectTotalPages);
+  const modalSubjectStartIndex = (modalSubjectValidPage - 1) * MODAL_PAGE_SIZE;
+  const modalPaginatedSubjects = modalFilteredSubjects.slice(modalSubjectStartIndex, modalSubjectStartIndex + MODAL_PAGE_SIZE);
 
   const totalCohortStudents = studentRecords.length > 0 ? studentRecords.length : activeBatch.totalStudents;
   const goodAttendanceCount = studentRecords.length > 0
@@ -708,39 +758,49 @@ export default function FacultyBatchAttendanceAnalytics() {
         </div>
       </div>
 
-      {/* Main Content: Auto-fit Full Card Height Scrollable Area with 10 records pagination */}
+      {/* Main Content: Display 2 Records on Card + See All button */}
       <div className="flex-1 min-h-0 pt-3.5 flex flex-col">
         {activeTab === 'graph' ? (
-          /* Full Cohort Attendance Curve Display List */
+          /* Cohort Attendance Curve Display (2 Records on Card) */
           <div className="p-4 rounded-2xl bg-[#F6F8FC] dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 flex flex-col flex-1 min-h-0 space-y-3">
             <div className="flex items-center justify-between shrink-0">
               <span className="text-xs font-black text-[#1B1E28] dark:text-white flex items-center gap-1.5">
                 <TrendingUp className="w-4 h-4 text-[#5B4BFF]" /> Cohort Attendance Curve ({studentsToDisplay.length} Students)
               </span>
-              <span className="text-[10px] font-bold text-rose-500 flex items-center gap-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-rose-500"></span>
-                <span>75% Target Line</span>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-rose-500 hidden sm:flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-rose-500"></span>
+                  <span>75% Target Line</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleOpenModal}
+                  className="px-2.5 py-1 rounded-xl bg-[#5B4BFF] hover:bg-[#4838EE] text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                >
+                  <span>See All</span>
+                  <span className="px-1.5 py-0.2 bg-white/20 text-white text-[10px] rounded-full font-extrabold">{studentsToDisplay.length}</span>
+                </button>
+              </div>
             </div>
 
-            {/* Dynamic Full Card List with Scrollable Area */}
-            <div className="relative flex-1 min-h-0 flex flex-col">
+            {/* Exactly 2 Records on the Card */}
+            <div className="relative flex-1 min-h-0 flex flex-col justify-center">
               {/* Vertical 75% Target Line for Visual Guidance */}
               <div
                 className="absolute top-0 bottom-0 w-0.5 border-r-2 border-dashed border-rose-500/80 z-10 pointer-events-none hidden sm:block"
                 style={{ left: '75%' }}
               />
 
-              <div className="space-y-2.5 flex-1 min-h-0 overflow-y-auto pr-2 scrollbar-thin">
-                {paginatedStudents.length === 0 ? (
-                  <div className="py-12 text-center text-xs text-slate-400 font-bold bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700">
+              <div className="space-y-2.5 pr-1">
+                {cardStudents.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-400 font-bold bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700">
                     No student records match the selected filter.
                   </div>
                 ) : (
-                  paginatedStudents.map((st, idx) => {
+                  cardStudents.map((st, idx) => {
                     const isBelow = st.attendancePct < 75;
                     const isCritical = st.attendancePct < 60;
-                    const recordNumber = startIndex + idx + 1;
+                    const recordNumber = idx + 1;
 
                     return (
                       <div
@@ -819,7 +879,7 @@ export default function FacultyBatchAttendanceAnalytics() {
                         </div>
 
                         {/* Interactive Progress Bar */}
-                        <div className="relative w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shadow-inner">
+                        <div className="relative w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shadow-inner">
                           <div
                             className={`h-full rounded-full transition-all duration-700 ${
                               isCritical
@@ -838,128 +898,112 @@ export default function FacultyBatchAttendanceAnalytics() {
               </div>
             </div>
 
-            {/* Pagination Controls for Cohort Curve */}
-            {studentsToDisplay.length > PAGE_SIZE && (
-              <div className="pt-2.5 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap shrink-0">
-                <p className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">
-                  Showing <strong className="text-[#1B1E28] dark:text-white font-extrabold">{startIndex + 1}</strong> to <strong className="text-[#1B1E28] dark:text-white font-extrabold">{Math.min(startIndex + PAGE_SIZE, studentsToDisplay.length)}</strong> of <strong className="text-[#1B1E28] dark:text-white font-extrabold">{studentsToDisplay.length}</strong> Students
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={validCurrentPage === 1}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>‹</span>
-                    <span>Prev</span>
-                  </button>
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
-                      if (
-                        totalPages > 5 &&
-                        page !== 1 &&
-                        page !== totalPages &&
-                        Math.abs(page - validCurrentPage) > 1
-                      ) {
-                        if (page === 2 || page === totalPages - 1) {
-                          return <span key={page} className="px-1 text-slate-400 text-xs">...</span>;
-                        }
-                        return null;
-                      }
-
-                      return (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`w-7 h-7 rounded-lg text-xs font-black transition-all flex items-center justify-center cursor-pointer ${
-                            validCurrentPage === page
-                              ? 'bg-[#5B4BFF] text-white shadow-xs'
-                              : 'border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={validCurrentPage === totalPages}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Next</span>
-                    <span>›</span>
-                  </button>
-                </div>
-              </div>
+            {/* See All Button Banner */}
+            {studentsToDisplay.length > 2 && (
+              <button
+                type="button"
+                onClick={handleOpenModal}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-[#5B4BFF] dark:text-indigo-400 font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 border border-slate-200/80 dark:border-slate-700 cursor-pointer group shadow-2xs mt-1"
+              >
+                <span>See All {studentsToDisplay.length} Student Records with Pagination</span>
+                <span className="group-hover:translate-x-1 transition-transform">➔</span>
+              </button>
             )}
           </div>
         ) : (
-          /* Subject-Wise Lecture Ledger Full Display */
-          <div className="space-y-2.5 flex-1 min-h-0 overflow-y-auto pr-2 scrollbar-thin">
-            {subjectsToDisplay.length === 0 ? (
-              <div className="py-12 text-center text-xs text-slate-400 font-bold bg-[#F6F8FC] dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
-                No subject records match the current filter.
-              </div>
-            ) : (
-              subjectsToDisplay.map((sub: SubjectAttendance) => {
-                const isBelowThreshold = sub.avgAttendance < 75;
-                const isCritical = sub.avgAttendance < 65;
+          /* Subject-Wise Lecture Ledger Display (2 Records on Card) */
+          <div className="p-4 rounded-2xl bg-[#F6F8FC] dark:bg-slate-800/50 border border-[#E7EAF3] dark:border-slate-800 flex flex-col flex-1 min-h-0 space-y-3">
+            <div className="flex items-center justify-between shrink-0">
+              <span className="text-xs font-black text-[#1B1E28] dark:text-white flex items-center gap-1.5">
+                <BookOpen className="w-4 h-4 text-indigo-500" /> Subject-Wise Attendance ({subjectsToDisplay.length} Subjects)
+              </span>
+              <button
+                type="button"
+                onClick={handleOpenModal}
+                className="px-2.5 py-1 rounded-xl bg-[#5B4BFF] hover:bg-[#4838EE] text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                <span>See All</span>
+                <span className="px-1.5 py-0.2 bg-white/20 text-white text-[10px] rounded-full font-extrabold">{subjectsToDisplay.length}</span>
+              </button>
+            </div>
 
-                return (
-                  <div
-                    key={sub.id}
-                    className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40 transition-all space-y-2 shadow-xs group"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-xs text-[#1B1E28] dark:text-white truncate group-hover:text-[#5B4BFF] transition-colors">
-                            {sub.name}
+            <div className="space-y-2.5 flex-1 min-h-0 pr-1">
+              {cardSubjects.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400 font-bold bg-[#F6F8FC] dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  No subject records match the current filter.
+                </div>
+              ) : (
+                cardSubjects.map((sub: SubjectAttendance) => {
+                  const isBelowThreshold = sub.avgAttendance < 75;
+                  const isCritical = sub.avgAttendance < 65;
+
+                  return (
+                    <div
+                      key={sub.id}
+                      className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40 transition-all space-y-2 shadow-xs group"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-xs text-[#1B1E28] dark:text-white truncate group-hover:text-[#5B4BFF] transition-colors">
+                              {sub.name}
+                            </span>
+                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                              #{sub.code}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-[#4E5969] dark:text-slate-400 font-semibold mt-0.5">
+                            👨‍🏫 <strong className="text-slate-700 dark:text-slate-200">{sub.facultyName}</strong> ({sub.facultyDesignation} • #{sub.facultyEmpId}) • {sub.lecturesConducted} Sessions
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span
+                            className={`text-sm font-black ${
+                              isCritical
+                                ? 'text-[#F04438]'
+                                : isBelowThreshold
+                                ? 'text-[#FFB020]'
+                                : 'text-[#00C48C]'
+                            }`}
+                          >
+                            {sub.avgAttendance}%
                           </span>
-                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                            #{sub.code}
+                          <span className="text-[9px] block font-bold text-slate-400">
+                            {isBelowThreshold ? 'Below Target' : 'Compliant'}
                           </span>
                         </div>
-                        <p className="text-[10px] text-[#4E5969] dark:text-slate-400 font-semibold mt-0.5">
-                          👨‍🏫 <strong className="text-slate-700 dark:text-slate-200">{sub.facultyName}</strong> ({sub.facultyDesignation} • #{sub.facultyEmpId}) • {sub.lecturesConducted} Sessions
-                        </p>
                       </div>
 
-                      <div className="text-right shrink-0">
-                        <span
-                          className={`text-sm font-black ${
+                      {/* Progress Track */}
+                      <div className="relative w-full h-2 rounded-full bg-slate-100 dark:bg-slate-700/60 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${
                             isCritical
-                              ? 'text-[#F04438]'
+                              ? 'bg-gradient-to-r from-rose-500 to-amber-500'
                               : isBelowThreshold
-                              ? 'text-[#FFB020]'
-                              : 'text-[#00C48C]'
+                              ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                              : 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
                           }`}
-                        >
-                          {sub.avgAttendance}%
-                        </span>
-                        <span className="text-[9px] block font-bold text-slate-400">
-                          {isBelowThreshold ? 'Below Target' : 'Compliant'}
-                        </span>
+                          style={{ width: `${Math.min(100, Math.max(10, sub.avgAttendance))}%` }}
+                        />
                       </div>
                     </div>
+                  );
+                })
+              )}
+            </div>
 
-                    {/* Progress Track */}
-                    <div className="relative w-full h-2 rounded-full bg-slate-100 dark:bg-slate-700/60 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ${
-                          isCritical
-                            ? 'bg-gradient-to-r from-rose-500 to-amber-500'
-                            : isBelowThreshold
-                            ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                            : 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
-                        }`}
-                        style={{ width: `${Math.min(100, Math.max(10, sub.avgAttendance))}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })
+            {/* See All Subjects Button Banner */}
+            {subjectsToDisplay.length > 2 && (
+              <button
+                type="button"
+                onClick={handleOpenModal}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-[#5B4BFF] dark:text-indigo-400 font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 border border-slate-200/80 dark:border-slate-700 cursor-pointer group shadow-2xs mt-1"
+              >
+                <span>See All {subjectsToDisplay.length} Subjects with Pagination</span>
+                <span className="group-hover:translate-x-1 transition-transform">➔</span>
+              </button>
             )}
           </div>
         )}
@@ -980,6 +1024,277 @@ export default function FacultyBatchAttendanceAnalytics() {
           </Link>
         </div>
       </div>
+
+      {/* Modal Popup: All Data with Pagination */}
+      {showAllModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div
+            className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[24px] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-850/50">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#5B4BFF] to-[#7867FF] flex items-center justify-center text-white text-lg shadow-md shadow-indigo-500/20 shrink-0">
+                  <BarChart3 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-black text-[#1B1E28] dark:text-white">
+                      {activeTab === 'graph' ? 'Cohort Attendance Curve — All Students' : 'Subject-Wise Attendance Ledger'}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-[#5B4BFF]/10 text-[#5B4BFF] dark:text-indigo-300 text-[10px] font-black border border-[#5B4BFF]/20">
+                      {activeTab === 'graph' ? `${modalFilteredStudents.length} Students` : `${modalFilteredSubjects.length} Subjects`}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#4E5969] dark:text-slate-400 font-semibold truncate mt-0.5">
+                    {activeBatch.courseName} • {activeBatch.batchName} • {activeBatch.semester}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAllModal(false)}
+                className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 flex items-center justify-center transition-all cursor-pointer font-bold shrink-0"
+                title="Close Modal (Esc)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Filter / Search Bar */}
+            <div className="p-3 sm:p-4 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap bg-[#F6F8FC]/50 dark:bg-slate-800/40 shrink-0">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder={activeTab === 'graph' ? "Search student by name, roll no..." : "Search subject or faculty..."}
+                  value={modalSearchTerm}
+                  onChange={(e) => { setModalSearchTerm(e.target.value); setModalPage(1); }}
+                  className="w-full text-xs font-bold py-1.5 pl-8 pr-3 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#5B4BFF]/30"
+                />
+              </div>
+
+              {activeTab === 'graph' && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => { setModalFilterView(v => v === 'critical' ? 'all' : 'critical'); setModalPage(1); }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                      modalFilterView === 'critical'
+                        ? 'bg-rose-500 text-white shadow-xs'
+                        : 'bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Filter className="w-3.5 h-3.5" />
+                    <span>{modalFilterView === 'critical' ? 'Showing Below 75%' : 'Filter Below 75%'}</span>
+                  </button>
+                  <span className="text-xs font-bold text-slate-500 hidden md:inline">
+                    75% Threshold: <strong className="text-emerald-600 font-black">{goodAttendanceCount} Pass</strong> / <strong className="text-rose-500 font-black">{defaulterCount} Critical</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Body: Scrollable Paginated Items */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-3">
+              {activeTab === 'graph' ? (
+                modalPaginatedStudents.length === 0 ? (
+                  <div className="py-16 text-center text-xs text-slate-400 font-bold bg-[#F6F8FC] dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    No student records match the search or filter.
+                  </div>
+                ) : (
+                  modalPaginatedStudents.map((st, idx) => {
+                    const isBelow = st.attendancePct < 75;
+                    const isCritical = st.attendancePct < 60;
+                    const recordNumber = modalStartIndex + idx + 1;
+
+                    return (
+                      <div
+                        key={st.id}
+                        className={`p-3.5 rounded-2xl border transition-all space-y-2 shadow-xs group ${
+                          isCritical
+                            ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40'
+                            : isBelow
+                            ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40'
+                            : 'bg-white dark:bg-slate-800/80 border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="w-7 h-7 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-black flex items-center justify-center shrink-0">
+                              #{recordNumber}
+                            </span>
+                            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-200 shrink-0">
+                              {st.photoUrl ? (
+                                <img
+                                  src={st.photoUrl}
+                                  alt={st.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                                />
+                              ) : null}
+                              <span>{st.name.charAt(0)}</span>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-black text-xs text-[#1B1E28] dark:text-white">
+                                  {st.name}
+                                </span>
+                                <span className="text-[10px] font-mono font-bold text-slate-400">
+                                  ({st.rollNo})
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold truncate">
+                                {st.course} • {st.batch}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0 flex items-center gap-2">
+                            <span
+                              className={`text-xs font-black px-2.5 py-1 rounded-xl border ${
+                                isCritical
+                                  ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20'
+                                  : isBelow
+                                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                                  : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
+                              }`}
+                            >
+                              {st.attendancePct}%
+                            </span>
+                            <span
+                              className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                                isCritical
+                                  ? 'bg-rose-500 text-white'
+                                  : isBelow
+                                  ? 'bg-amber-500 text-white'
+                                  : 'bg-emerald-600 text-white'
+                              }`}
+                            >
+                              {isCritical ? 'Critical' : isBelow ? 'Alert' : 'Compliant'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="relative w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shadow-inner">
+                          <div
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              isCritical
+                                ? 'bg-gradient-to-r from-rose-500 to-amber-500'
+                                : isBelow
+                                ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                                : 'bg-gradient-to-r from-[#5B4BFF] via-indigo-500 to-[#00C48C]'
+                            }`}
+                            style={{ width: `${Math.min(100, Math.max(8, st.attendancePct))}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )
+              ) : (
+                modalPaginatedSubjects.length === 0 ? (
+                  <div className="py-16 text-center text-xs text-slate-400 font-bold bg-[#F6F8FC] dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    No subject records match the search.
+                  </div>
+                ) : (
+                  modalPaginatedSubjects.map((sub: SubjectAttendance) => {
+                    const isBelowThreshold = sub.avgAttendance < 75;
+                    const isCritical = sub.avgAttendance < 65;
+
+                    return (
+                      <div
+                        key={sub.id}
+                        className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40 transition-all space-y-2 shadow-xs group"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-xs text-[#1B1E28] dark:text-white truncate">
+                                {sub.name}
+                              </span>
+                              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                #{sub.code}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-[#4E5969] dark:text-slate-400 font-semibold mt-0.5">
+                              👨‍🏫 <strong className="text-slate-700 dark:text-slate-200">{sub.facultyName}</strong> ({sub.facultyDesignation} • #{sub.facultyEmpId}) • {sub.lecturesConducted} Sessions
+                            </p>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span
+                              className={`text-sm font-black ${
+                                isCritical ? 'text-[#F04438]' : isBelowThreshold ? 'text-[#FFB020]' : 'text-[#00C48C]'
+                              }`}
+                            >
+                              {sub.avgAttendance}%
+                            </span>
+                            <span className="text-[9px] block font-bold text-slate-400">
+                              {isBelowThreshold ? 'Below Target' : 'Compliant'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="relative w-full h-2 rounded-full bg-slate-100 dark:bg-slate-700/60 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              isCritical
+                                ? 'bg-gradient-to-r from-rose-500 to-amber-500'
+                                : isBelowThreshold
+                                ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                                : 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
+                            }`}
+                            style={{ width: `${Math.min(100, Math.max(10, sub.avgAttendance))}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )
+              )}
+            </div>
+
+            {/* Modal Pagination Footer */}
+            <div className="p-3.5 sm:p-4 border-t border-[#E7EAF3] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-850 flex items-center justify-between gap-3 flex-wrap shrink-0">
+              <p className="text-xs font-bold text-[#4E5969] dark:text-slate-400">
+                Showing <strong className="text-[#1B1E28] dark:text-white">{activeTab === 'graph' ? modalStartIndex + 1 : modalSubjectStartIndex + 1}</strong> to <strong className="text-[#1B1E28] dark:text-white">{activeTab === 'graph' ? Math.min(modalStartIndex + MODAL_PAGE_SIZE, modalFilteredStudents.length) : Math.min(modalSubjectStartIndex + MODAL_PAGE_SIZE, modalFilteredSubjects.length)}</strong> of <strong className="text-[#1B1E28] dark:text-white">{activeTab === 'graph' ? modalFilteredStudents.length : modalFilteredSubjects.length}</strong>
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalPage(p => Math.max(1, p - 1))}
+                  disabled={modalPage === 1}
+                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  ‹ Previous
+                </button>
+                <span className="text-xs font-black text-[#5B4BFF] px-2">
+                  Page {modalPage} of {activeTab === 'graph' ? modalTotalPages : modalSubjectTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setModalPage(p => Math.min(activeTab === 'graph' ? modalTotalPages : modalSubjectTotalPages, p + 1))}
+                  disabled={modalPage >= (activeTab === 'graph' ? modalTotalPages : modalSubjectTotalPages)}
+                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  Next ›
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAllModal(false)}
+                  className="ml-2 px-3.5 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4838EE] text-xs font-black text-white transition-all cursor-pointer shadow-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

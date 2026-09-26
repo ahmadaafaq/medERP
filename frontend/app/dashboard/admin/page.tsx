@@ -15,6 +15,8 @@ import FacultyLeaveLedgerWidget from '../../../components/FacultyLeaveLedgerWidg
 import IncubationCellCard from '../../../components/incubation/IncubationCellCard';
 import FacultyBatchAttendanceAnalytics from '../../../components/faculty/FacultyBatchAttendanceAnalytics';
 import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperHustleBoard';
+import StudentAssessmentMarksCard from '../../../components/dashboard/StudentAssessmentMarksCard';
+import DepartmentTimetableCard from '../../../components/dashboard/DepartmentTimetableCard';
 
 interface CollegeKPIs {
   totalStudents: number;
@@ -102,12 +104,12 @@ export default function AdminDashboard() {
   });
 
   const [punch, setPunch] = useState<AdminPunch>({
-    date: new Date().toISOString().split('T')[0],
-    displayDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+    displayDate: new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' }),
     punchIn: '--',
     punchOut: '--',
-    status: 'Ready',
-    device: 'Campus Biometric Device',
+    status: 'Ready to Punch',
+    device: 'CET Main RCOMMON DEVICE',
   });
   const [punchHistory, setPunchHistory] = useState<any[]>([]);
   const [showPunchHistoryModal, setShowPunchHistoryModal] = useState<boolean>(false);
@@ -204,20 +206,22 @@ export default function AdminDashboard() {
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           setPunchHistory(json.data);
 
-          const todayDateStr = new Date().toISOString().split('T')[0];
-          const todayDisplayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const todayDateStr = json.todayDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+          const todayDisplayStr = new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' });
 
-          // Match exact punch record for TODAY
-          const todayRecord = json.data.find((d: any) => d.date === todayDateStr);
+          // Match exact punch record for TODAY in IST
+          const todayRecord = json.today && json.today.date === todayDateStr
+            ? json.today
+            : json.data.find((d: any) => d.date === todayDateStr) || json.today;
 
           if (todayRecord && todayRecord.hasPunches) {
             setPunch({
-              date: todayDateStr,
-              displayDate: todayDisplayStr,
+              date: todayRecord.date || todayDateStr,
+              displayDate: todayRecord.displayDate || todayDisplayStr,
               punchIn: todayRecord.punchIn !== '--' ? todayRecord.punchIn : '--',
               punchOut: todayRecord.punchOut !== '--' ? todayRecord.punchOut : '--',
-              status: todayRecord.punchOut !== '--' ? 'Shift Completed' : 'Present / On Duty',
-              device: todayRecord.device || 'SRMS CET Biometric Device (Loc 7)',
+              status: todayRecord.punchOut && todayRecord.punchOut !== '--' ? 'Shift Completed' : 'Present / On Duty',
+              device: todayRecord.device || 'CET Main RCOMMON DEVICE',
             });
           } else {
             setPunch({
@@ -226,7 +230,7 @@ export default function AdminDashboard() {
               punchIn: '--',
               punchOut: '--',
               status: 'Ready to Punch',
-              device: 'SRMS CET Biometric Device (Loc 7)',
+              device: 'CET Main RCOMMON DEVICE',
             });
           }
         }
@@ -240,9 +244,9 @@ export default function AdminDashboard() {
     setPunching(true);
     try {
       const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-      const todayStr = now.toISOString().split('T')[0];
-      const displayDateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      const timeStr = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const displayDateStr = now.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
       if (type === 'IN') {
         setPunch((prev) => ({
@@ -251,7 +255,7 @@ export default function AdminDashboard() {
           displayDate: displayDateStr,
           punchIn: timeStr,
           status: 'Present / On Duty',
-          device: 'SRMS CET Biometric Device (Loc 7)',
+          device: 'CET Main RCOMMON DEVICE',
         }));
         setPunchHistory((prev) => [
           {
@@ -263,8 +267,9 @@ export default function AdminDashboard() {
             outtime: punch.punchOut || '--',
             status: 'Present / On Duty',
             hasPunches: true,
-            device: 'SRMS CET Biometric Device (Loc 7)',
-            punchlogs: `${timeStr.slice(0, 8)}{CET}`,
+            isToday: true,
+            device: 'CET Main RCOMMON DEVICE',
+            punchlogs: `${timeStr.slice(0, 8)} {CET Main RCOMMON DEVICE}`,
           },
           ...prev.filter((p) => p.date !== todayStr),
         ]);
@@ -276,7 +281,7 @@ export default function AdminDashboard() {
           displayDate: displayDateStr,
           punchOut: timeStr,
           status: 'Shift Completed',
-          device: 'SRMS CET Biometric Device (Loc 7)',
+          device: 'CET Main RCOMMON DEVICE',
         }));
         setPunchHistory((prev) => [
           {
@@ -288,8 +293,9 @@ export default function AdminDashboard() {
             outtime: timeStr,
             status: 'Shift Completed',
             hasPunches: true,
-            device: 'SRMS CET Biometric Device (Loc 7)',
-            punchlogs: `${punch.punchIn || timeStr}{CET}, ${timeStr}{CET}`,
+            isToday: true,
+            device: 'CET Main RCOMMON DEVICE',
+            punchlogs: `${punch.punchIn || timeStr} {CET Main RCOMMON DEVICE}, ${timeStr} {CET Main RCOMMON DEVICE}`,
           },
           ...prev.filter((p) => p.date !== todayStr),
         ]);
@@ -1129,167 +1135,19 @@ export default function AdminDashboard() {
               </div>
 
               {/* 5 & 6. Mid Section: Marks Results & Department Timetable Schedule */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* 5. Marks Results Card (5 Cols) */}
-                <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-6 shadow-sm flex flex-col space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                    <div>
-                      <h2 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
-                        <span>📊</span>
-                        <span>Student Assessment & Marks Results</span>
-                      </h2>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Real-time evaluated records for {collegeInfo.name.split(',')[0]}
-                      </p>
-                    </div>
-                    <Link
-                      href="/dashboard/admin/assessment-marks"
-                      className="text-xs font-bold text-[#5B4BFF] hover:underline"
-                    >
-                      Marks Entry ➔
-                    </Link>
-                  </div>
-
-                  {/* Summary Badges */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="p-3 bg-[#F6F8FC] dark:bg-slate-800/60 rounded-xl border border-slate-200/60 dark:border-slate-700/60 text-center">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Evaluated</span>
-                      <span className="text-lg font-black text-slate-900 dark:text-white">{marksSummary.totalEvaluated}</span>
-                    </div>
-                    <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/40 rounded-xl border border-indigo-200/60 dark:border-indigo-800/60 text-center">
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase block">Avg Score</span>
-                      <span className="text-lg font-black text-[#5B4BFF]">{marksSummary.averageMarks} / {marksSummary.maxMarks}</span>
-                    </div>
-                    <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/40 rounded-xl border border-emerald-200/60 dark:border-emerald-800/60 text-center">
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase block">Pass Rate</span>
-                      <span className="text-lg font-black text-emerald-600">{marksSummary.passingRate}</span>
-                    </div>
-                  </div>
-
-                  {/* Recent Results Table */}
-                  <div className="flex-1 overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-[#F6F8FC] dark:bg-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
-                          <th className="p-2.5">Student / Roll</th>
-                          <th className="p-2.5">Marks</th>
-                          <th className="p-2.5 text-right">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                        {marksSummary.recentList.length === 0 ? (
-                          <tr>
-                            <td colSpan={3} className="p-4 text-center text-slate-400">
-                              No assessment marks submitted yet.
-                            </td>
-                          </tr>
-                        ) : (
-                          marksSummary.recentList.slice(0, 5).map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                              <td className="p-2.5">
-                                <span className="font-bold text-slate-900 dark:text-white block">{item.studentName}</span>
-                                <span className="text-[10px] font-mono text-slate-500">{item.rollNo}</span>
-                              </td>
-                              <td className="p-2.5">
-                                <span className="font-extrabold text-[#5B4BFF]">{item.marksObtained}</span>
-                                <span className="text-[10px] text-slate-400"> / {item.maxMarks}</span>
-                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 ml-1.5 font-bold">({item.percentage})</span>
-                              </td>
-                              <td className="p-2.5 text-right">
-                                <span className="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">
-                                  ✓ {item.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div className="lg:col-span-5 flex flex-col">
+                  <StudentAssessmentMarksCard
+                    role="admin"
+                    initialData={marksSummary}
+                    collegeName={collegeInfo.name.split(',')[0]}
+                  />
                 </div>
-
-                {/* 6. Current Department Timetable Schedule Card (7 Cols) */}
-                <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-6 shadow-sm flex flex-col space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
-                          <span>📅</span>
-                          <span>Current College & Department Timetable</span>
-                        </h2>
-                        <span className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">
-                          Active Schedule
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {timetable.departmentExists ? `Department: ${timetable.departmentName}` : 'Department Schedule'}
-                      </p>
-                    </div>
-                    <Link
-                      href="/dashboard/admin/timetable-design"
-                      className="px-3 py-1.5 bg-[#5B4BFF] hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
-                    >
-                      <span>See All</span>
-                      <span>➔</span>
-                    </Link>
-                  </div>
-
-                  {/* Schedule Table / List */}
-                  <div className="flex-1 overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-[#F6F8FC] dark:bg-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
-                          <th className="p-3 pl-4">Day & Time</th>
-                          <th className="p-3">Subject</th>
-                          <th className="p-3">Faculty Member</th>
-                          <th className="p-3 pr-4">Room / Lab</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                        {timetable.slots.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="p-6 text-center text-slate-400">
-                              No timetable slots scheduled for this department. Click &apos;See All&apos; to configure timetable.
-                            </td>
-                          </tr>
-                        ) : (
-                          timetable.slots
-                            .filter((slot, idx, arr) =>
-                              arr.findIndex(s =>
-                                s.dayName === slot.dayName &&
-                                s.timeRange === slot.timeRange &&
-                                s.subjectName === slot.subjectName &&
-                                s.facultyName === slot.facultyName &&
-                                s.room === slot.room
-                              ) === idx
-                            )
-                            .map((slot) => (
-                              <tr key={slot.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                <td className="p-3 pl-4 whitespace-nowrap">
-                                  <span className="font-extrabold text-slate-900 dark:text-white block">{slot.dayName}</span>
-                                  <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded border border-indigo-200/50 dark:border-indigo-800/50">
-                                    {slot.timeRange}
-                                  </span>
-                                </td>
-                                <td className="p-3">
-                                  <span className="font-bold text-slate-900 dark:text-white block">{slot.subjectName}</span>
-                                  <span className="text-[10px] font-mono text-slate-500">Code: #{slot.subjectCode}</span>
-                                </td>
-                                <td className="p-3">
-                                  <span className="font-extrabold text-slate-800 dark:text-slate-200 block">{slot.facultyName}</span>
-                                  <span className="text-[10px] text-slate-500">{slot.departmentName}</span>
-                                </td>
-                                <td className="p-3 pr-4">
-                                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold px-2 py-1 rounded-lg text-[11px] border border-slate-200 dark:border-slate-700 inline-block">
-                                    📍 {slot.room}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                <div className="lg:col-span-7 flex flex-col">
+                  <DepartmentTimetableCard
+                    role="admin"
+                    initialData={timetable}
+                  />
                 </div>
               </div>
 
@@ -1388,25 +1246,32 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 punchHistory.map((item, idx) => (
-                  <div key={idx} className="pt-3 first:pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
+                  <div key={idx} className={`pt-3 first:pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group ${item.isToday ? 'bg-emerald-50/40 dark:bg-emerald-950/20 p-2.5 rounded-xl border border-emerald-200/50 dark:border-emerald-800/40' : ''}`}>
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-black text-slate-900 dark:text-white">
                           {item.displayDate || item.date}
                         </span>
+                        {item.isToday && (
+                          <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500 text-white tracking-wider">
+                            TODAY
+                          </span>
+                        )}
                         <span
                           className={`text-[10px] font-black px-2 py-0.5 rounded-full ${item.status?.toLowerCase().includes('completed') || (item.punchOut && item.punchOut !== '--')
                               ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                               : item.status?.toLowerCase().includes('present') || (item.punchIn && item.punchIn !== '--')
                                 ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
-                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                : item.isUpcoming
+                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                             }`}
                         >
                           {item.status || (item.hasPunches ? 'Present / On Duty' : 'No Punch Marked')}
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                        Device: {item.device || 'CET Biometric Device (Loc 7)'}
+                        Device: {item.device || 'CET Main RCOMMON DEVICE'}
                       </p>
                       {item.punchlogs && (
                         <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
@@ -1418,12 +1283,12 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-4 text-xs font-mono shrink-0 bg-[#F8FAFC] dark:bg-slate-800/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
                       <div>
                         <span className="text-[9px] text-slate-400 uppercase block font-bold">Punch In</span>
-                        <span className="font-black text-[#5B4BFF]">{item.punchIn || item.intime || '--'}</span>
+                        <span className="font-black text-[#5B4BFF]">{item.punchIn || (item.intime && !item.intime.includes('NOT PROCESSED') ? item.intime : '--')}</span>
                       </div>
                       <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
                       <div>
                         <span className="text-[9px] text-slate-400 uppercase block font-bold">Punch Out</span>
-                        <span className="font-black text-slate-700 dark:text-slate-300">{item.punchOut || item.outtime || '--'}</span>
+                        <span className="font-black text-slate-700 dark:text-slate-300">{item.punchOut || (item.outtime && !item.outtime.includes('NOT PROCESSED') ? item.outtime : '--')}</span>
                       </div>
                     </div>
                   </div>

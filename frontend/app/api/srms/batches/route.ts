@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { srmsPost } from '@/lib/srms-client';
 
-const BACKEND_API = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+export const dynamic = 'force-dynamic';
+
+const BACKEND_API = (process.env.BACKEND_BASE_URL ? `${process.env.BACKEND_BASE_URL}/api/v1` : '') || (process.env.NEXT_PUBLIC_API_URL?.startsWith('http') ? process.env.NEXT_PUBLIC_API_URL : 'http://127.0.0.1:8081/api/v1');
 
 async function handleGetBatch(colgcd?: string, coursecd?: string, tenantSlug?: string, branchcd?: string) {
   const cd = colgcd || '1';
@@ -14,9 +16,19 @@ async function handleGetBatch(colgcd?: string, coursecd?: string, tenantSlug?: s
     return NextResponse.json([]);
   }
 
-  // 1. Live SRMS ERP API: https://myportal.srms.ac.in/SRMSERP/OnlineAttend/GetBatch
+  // 1. Live SRMS ERP Registration API: https://myportal.srms.ac.in/SRMSERP/Registration/GetBatch
   try {
-    const postPayload: Record<string, string> = { colgcd: cd, coursecd: crs };
+    const data = await srmsPost('Registration/GetBatch', { colgcd: String(cd), coursecd: String(crs) });
+    if (Array.isArray(data) && data.length > 0) {
+      return NextResponse.json(data);
+    }
+  } catch (regError: any) {
+    console.warn('[API /api/srms/batches] SRMS Registration/GetBatch error:', regError?.message);
+  }
+
+  // 2. Fallback to OnlineAttend/GetBatch if Registration/GetBatch is unavailable
+  try {
+    const postPayload: Record<string, string> = { colgcd: String(cd), coursecd: String(crs) };
     if (br) postPayload.branchcd = br;
 
     const data = await srmsPost('OnlineAttend/GetBatch', postPayload);
@@ -73,7 +85,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const colgcd = String(searchParams.get('colgcd') || searchParams.get('colg_cd') || '').trim();
-    const coursecd = String(searchParams.get('coursecd') || searchParams.get('course_cd') || '').trim();
+    const coursecd = String(searchParams.get('coursecd') || searchParams.get('course_cd') || searchParams.get('course') || '').trim();
     const tenant = String(searchParams.get('tenant') || searchParams.get('tenantSlug') || '').trim();
     const branchcd = String(searchParams.get('branchcd') || searchParams.get('branch_cd') || '').trim();
     return handleGetBatch(colgcd, coursecd, tenant, branchcd);

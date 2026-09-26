@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import { useRolePermissions } from '../../../../lib/useRolePermissions';
 
 // ─── Interfaces conforming strictly to RestrictAPI.md (Zero GUID Standard) ──
 interface College {
@@ -227,6 +228,25 @@ export default function AdminAssessmentMarksPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string>('');
+
+  const { isAllowed } = useRolePermissions();
+
+  const [activeMarksTab, setActiveMarksTab] = useState<'theory' | 'practical' | 'competency'>('theory');
+
+  const marksTabs = [
+    { key: 'theory' as const, label: 'Theory Evaluation', icon: '📝', permissionKey: 'admin_assessment_marks_theory' },
+    { key: 'practical' as const, label: 'Practical Evaluation', icon: '🔬', permissionKey: 'admin_assessment_marks_practical' },
+    { key: 'competency' as const, label: 'Competency Scoring', icon: '🎯', permissionKey: 'admin_assessment_marks_competency' },
+  ];
+
+  const allowedMarksTabs = marksTabs.filter((t) => isAllowed(t.permissionKey, 'admin_assessment_marks'));
+
+  // Automatically select the first allowed tab if current activeMarksTab is disallowed
+  useEffect(() => {
+    if (allowedMarksTabs.length > 0 && !allowedMarksTabs.some((t) => t.key === activeMarksTab)) {
+      setActiveMarksTab(allowedMarksTabs[0].key);
+    }
+  }, [allowedMarksTabs, activeMarksTab]);
 
   // ─── Input Refs for Automatic Enter-Key Navigation & Auto-Focus ────────────
   const markInputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -1125,6 +1145,33 @@ export default function AdminAssessmentMarksPage() {
           )}
 
           {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {/* HORIZONTAL EVALUATION TABS (Theory, Practical, Competency)           */}
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {allowedMarksTabs.length === 0 ? (
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-slate-900 border border-amber-200 dark:border-slate-800 text-amber-800 dark:text-amber-200 text-xs font-bold text-center">
+              🔒 Gradebook & Assessment Marks evaluation tabs are restricted for your role. Contact Platform SuperAdmin.
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 p-1.5 bg-white dark:bg-[#1B1E28] rounded-2xl border border-[#E7EAF3] dark:border-slate-800 shadow-sm overflow-x-auto">
+              {allowedMarksTabs.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setActiveMarksTab(t.key)}
+                  className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    activeMarksTab === t.key
+                      ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/25 ring-2 ring-[#5B4BFF]/30'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <span>{t.icon}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* STEP 1: 6-STEP HIERARCHICAL CASCADING BAR (Order: College->Course->Branch->Batch->Sem->Subj) */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
@@ -1405,19 +1452,20 @@ export default function AdminAssessmentMarksPage() {
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* STEP 3: SPLIT VIEW — ROSTER ON LEFT & SECTION-WISE QUESTION EVALUATION ON RIGHT */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          {!selectedPaperCode || !activePaper ? (
-            <div className="p-12 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-3 shadow-sm">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-[#5B4BFF]/10 text-[#5B4BFF] flex items-center justify-center text-3xl font-black">
-                📋
+          {(activeMarksTab === 'theory' || activeMarksTab === 'practical') && (
+            !selectedPaperCode || !activePaper ? (
+              <div className="p-12 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-3 shadow-sm">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-[#5B4BFF]/10 text-[#5B4BFF] flex items-center justify-center text-3xl font-black">
+                  📋
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  No Examination Paper Selected
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                  Please click on an examination paper in <strong>Step 2</strong> above. The student roster and {activeMarksTab === 'practical' ? 'practical evaluation' : 'evaluation marksheet'} will load once a paper is clicked.
+                </p>
               </div>
-              <h4 className="text-base font-black text-slate-900 dark:text-white">
-                No Examination Paper Selected
-              </h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                Please click on an examination paper in <strong>Step 2</strong> above. The student roster and evaluation marksheet will load once a paper is clicked.
-              </p>
-            </div>
-          ) : (
+            ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
             {/* Left Column: Batch Students Roster */}
@@ -1565,8 +1613,31 @@ export default function AdminAssessmentMarksPage() {
 
                   {/* Full Section-Wise Questions & Sub-parts Evaluation */}
                   <div className="space-y-5 max-h-[500px] overflow-y-auto pr-1">
-                    {activePaper?.sections?.map((sec) => {
-                      const qList = sec.selectedQuestions || sec.questions || [];
+                    {(() => {
+                      const sectionsToRender = (activePaper?.sections || []).filter((sec) => {
+                        if (activeMarksTab === 'practical') return sec.type === 'PRACTICAL';
+                        if (activeMarksTab === 'theory') return sec.type !== 'PRACTICAL';
+                        return true;
+                      });
+
+                      const effectiveSections = (activeMarksTab === 'practical' && sectionsToRender.length === 0)
+                        ? [{
+                            id: 'sec-default-practical',
+                            title: 'Practical / Lab Performance & Viva Scoring',
+                            type: 'PRACTICAL',
+                            instructions: 'Evaluate laboratory execution, viva voce, and practical logbook records.',
+                            selectedQuestions: [],
+                            practicalComponents: [
+                              { id: 'p1', name: 'Lab Experiment / Practical Execution', marks: 20 },
+                              { id: 'p2', name: 'Viva Voce / Oral Examination', marks: 10 },
+                              { id: 'p3', name: 'Practical Record Book / Logbook', marks: 5 },
+                              { id: 'p4', name: 'Continuous Internal Assessment', marks: 5 },
+                            ],
+                          }]
+                        : sectionsToRender;
+
+                      return effectiveSections.map((sec: any) => {
+                        const qList: any[] = sec.selectedQuestions || sec.questions || [];
                       return (
                         <div key={sec.id} className="p-4 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-3">
                           <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
@@ -1583,7 +1654,7 @@ export default function AdminAssessmentMarksPage() {
                                 { id: 'p2', name: 'Viva Voce / Oral Examination', marks: 10 },
                                 { id: 'p3', name: 'Practical Record Book / Logbook', marks: 5 },
                                 { id: 'p4', name: 'Continuous Internal Assessment', marks: 5 },
-                              ]).map((comp) => {
+                              ]).map((comp: any) => {
                                 const currentInputIdx = inputSeqCounter++;
                                 return (
                                   <div key={comp.id} className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-slate-950 border border-[#E7EAF3] dark:border-slate-800">
@@ -1623,7 +1694,7 @@ export default function AdminAssessmentMarksPage() {
                             </div>
                           ) : (
                             <div className="space-y-3">
-                              {qList.map((q, qIdx) => {
+                              {qList.map((q: any, qIdx: number) => {
                                 const qId = q.questionId || q.id || `q-${qIdx}`;
                                 const subQs = q.sub_questions || q.subQuestions;
                                 const maxQ = Number(q.marks || q.customMarks || q.defaultMarks || 2);
@@ -1727,7 +1798,8 @@ export default function AdminAssessmentMarksPage() {
                           )}
                         </div>
                       );
-                    })}
+                    });
+                  })()}
                   </div>
                 </div>
               ) : (
@@ -1752,12 +1824,27 @@ export default function AdminAssessmentMarksPage() {
               </div>
             </div>
           </div>
+          ))}
+
+          {/* Prompt when in competency tab with no paper selected */}
+          {activeMarksTab === 'competency' && (!selectedPaperCode || !activePaper) && (
+            <div className="p-12 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-3 shadow-sm">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-[#F36C21]/10 text-[#F36C21] flex items-center justify-center text-3xl font-black">
+                🎯
+              </div>
+              <h4 className="text-base font-black text-slate-900 dark:text-white">
+                Select an Examination Paper
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                Please click on an examination paper in <strong>Step 2</strong> above to display the live CBME Competency Performance Matrix &amp; Batch Performance Ledger.
+              </p>
+            </div>
           )}
 
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* STEP 4: CBME COMPETENCY PERFORMANCE MATRIX & BATCH SUMMARY */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          {selectedPaperCode && activePaper && filteredStudents.length > 0 && (
+          {(activeMarksTab === 'competency' || (activeMarksTab === 'theory' && isAllowed('admin_assessment_marks_competency', 'admin_assessment_marks'))) && selectedPaperCode && activePaper && filteredStudents.length > 0 && (
             <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
                 <div>

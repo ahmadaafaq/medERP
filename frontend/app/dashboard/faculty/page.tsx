@@ -11,6 +11,8 @@ import LibraryDashboardCard from '../../../components/library/LibraryDashboardCa
 import FacultyBatchAttendanceAnalytics from '../../../components/faculty/FacultyBatchAttendanceAnalytics';
 import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperHustleBoard';
 import IncubationCellCard from '../../../components/incubation/IncubationCellCard';
+import StudentAssessmentMarksCard from '../../../components/dashboard/StudentAssessmentMarksCard';
+import DepartmentTimetableCard from '../../../components/dashboard/DepartmentTimetableCard';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
@@ -524,6 +526,16 @@ export default function FacultyDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
             <FacultyBatchAttendanceAnalytics />
             <FacultyTopperHustleBoard />
+          </div>
+
+          {/* Student Assessment Marks (5 Cols) & College Timetable (7 Cols) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            <div className="lg:col-span-5 flex flex-col">
+              <StudentAssessmentMarksCard role="faculty" />
+            </div>
+            <div className="lg:col-span-7 flex flex-col">
+              <DepartmentTimetableCard role="faculty" />
+            </div>
           </div>
 
           {/* Digital Library Card with Books Count & Thumbnail Covers */}

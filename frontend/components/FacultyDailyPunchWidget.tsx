@@ -70,9 +70,21 @@ export default function FacultyDailyPunchWidget() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Pagination
+  // Pagination & Modal
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
+  const [showAllModal, setShowAllModal] = useState<boolean>(false);
+
+  // Close modal on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowAllModal(false);
+    };
+    if (showAllModal) {
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }
+  }, [showAllModal]);
 
   // Fetch Live Daily Punch Report (Triggers on punchType, selectedLocId, selectedDate change)
   const fetchPunchReport = async (loc = selectedLocId, dt = selectedDate, pType = punchType) => {
@@ -185,6 +197,106 @@ export default function FacultyDailyPunchWidget() {
     const start = (currentPage - 1) * pageSize;
     return filteredRecords.slice(start, start + pageSize);
   }, [filteredRecords, currentPage, pageSize]);
+
+  // Exactly 2 records for the main card display
+  const cardRecords = useMemo(() => {
+    return filteredRecords.slice(0, 2);
+  }, [filteredRecords]);
+
+  // Reusable row renderer
+  const renderStaffRow = (staff: StaffPunchRecord, globalIdx: number) => {
+    return (
+      <tr
+        key={staff.EmpID + globalIdx}
+        className={`hover:bg-[#F8FAFC] dark:hover:bg-slate-800/60 transition-colors ${
+          staff.isPunched
+            ? 'bg-emerald-500/[0.03] dark:bg-emerald-500/[0.05]'
+            : ''
+        }`}
+      >
+        <td className="py-3.5 px-4 text-center text-[11px] text-slate-400 font-mono">
+          {globalIdx}
+        </td>
+
+        {/* Emp Name & ID */}
+        <td className="py-3.5 px-4">
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shadow-sm flex-shrink-0 ${
+                staff.isPunched
+                  ? 'bg-gradient-to-tr from-emerald-500 to-teal-400 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              {staff.EmpName.charAt(0) || 'S'}
+            </div>
+            <div>
+              <p className="font-black text-[#1B1E28] dark:text-white text-xs leading-tight line-clamp-1">
+                {staff.EmpName}
+              </p>
+              <span className="text-[10px] font-mono text-slate-400 font-bold block mt-0.5">
+                ID: {staff.EmpID}
+              </span>
+            </div>
+          </div>
+        </td>
+
+        {/* Department */}
+        <td className="py-3.5 px-4">
+          <span className="px-2.5 py-1 rounded-lg bg-[#5B4BFF]/10 dark:bg-[#5B4BFF]/20 text-[#5B4BFF] dark:text-indigo-300 text-[11px] font-extrabold border border-[#5B4BFF]/20 inline-block max-w-[210px] truncate">
+            {staff.Department}
+          </span>
+        </td>
+
+        {/* Designation */}
+        <td className="py-3.5 px-4 text-[11px] text-[#4E5969] dark:text-slate-300 font-semibold">
+          {staff.Designation}
+        </td>
+
+        {/* Contact Number */}
+        <td className="py-3.5 px-4 font-mono text-[11px]">
+          {staff.PermanentTelNo && staff.PermanentTelNo !== '0000000000' && staff.PermanentTelNo !== '0' && staff.PermanentTelNo.trim() !== '' ? (
+            <a
+              href={`tel:${staff.PermanentTelNo}`}
+              className="text-[#4E5969] dark:text-slate-400 hover:text-[#5B4BFF] dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1.5 font-bold"
+            >
+              <Phone className="w-3.5 h-3.5 text-slate-400" />
+              <span>{staff.PermanentTelNo}</span>
+            </a>
+          ) : (
+            <span className="text-slate-300 dark:text-slate-600 font-sans">—</span>
+          )}
+        </td>
+
+        {/* Punch Time */}
+        <td className="py-3.5 px-4 text-center font-mono">
+          {staff.isPunched ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-black text-xs border border-emerald-200 dark:border-emerald-800 shadow-sm">
+              <Clock className="w-3.5 h-3.5 text-emerald-600" />
+              {staff.PUNCHTIME}
+            </span>
+          ) : (
+            <span className="text-slate-300 dark:text-slate-600 text-xs font-sans font-bold">
+              Not Recorded
+            </span>
+          )}
+        </td>
+
+        {/* Status */}
+        <td className="py-3.5 px-4 text-right">
+          {staff.isPunched ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-500/20 shadow-sm">
+              ● PUNCHED
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider border border-amber-500/20">
+              ○ PENDING
+            </span>
+          )}
+        </td>
+      </tr>
+    );
+  };
 
   // Export to CSV
   const handleExportCSV = () => {
@@ -324,6 +436,19 @@ export default function FacultyDailyPunchWidget() {
             title="Export Records to CSV"
           >
             <Download className="w-4 h-4" />
+          </button>
+
+          {/* See All Button in Header */}
+          <button
+            type="button"
+            onClick={() => setShowAllModal(true)}
+            className="px-3 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4838EE] text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+            title="View full staff biometric registry in modal popup"
+          >
+            <span>See All</span>
+            <span className="px-1.5 py-0.2 bg-white/20 text-white text-[10px] rounded-full font-extrabold">
+              {filteredRecords.length}
+            </span>
           </button>
         </div>
       </div>
@@ -573,166 +698,262 @@ export default function FacultyDailyPunchWidget() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
-                {paginatedRecords.map((staff, idx) => {
-                  const globalIdx = (currentPage - 1) * pageSize + idx + 1;
-                  return (
-                    <tr
-                      key={staff.EmpID + idx}
-                      className={`hover:bg-[#F8FAFC] dark:hover:bg-slate-800/60 transition-colors ${
-                        staff.isPunched
-                          ? 'bg-emerald-500/[0.03] dark:bg-emerald-500/[0.05]'
-                          : ''
-                      }`}
-                    >
-                      <td className="py-3.5 px-4 text-center text-[11px] text-slate-400 font-mono">
-                        {globalIdx}
-                      </td>
-
-                      {/* Emp Name & ID */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shadow-sm flex-shrink-0 ${
-                              staff.isPunched
-                                ? 'bg-gradient-to-tr from-emerald-500 to-teal-400 text-white'
-                                : 'bg-slate-100 dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 border border-slate-200 dark:border-slate-700'
-                            }`}
-                          >
-                            {staff.EmpName.charAt(0) || 'S'}
-                          </div>
-                          <div>
-                            <p className="font-black text-[#1B1E28] dark:text-white text-xs leading-tight line-clamp-1">
-                              {staff.EmpName}
-                            </p>
-                            <span className="text-[10px] font-mono text-slate-400 font-bold block mt-0.5">
-                              ID: {staff.EmpID}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Department */}
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-[#5B4BFF]/10 dark:bg-[#5B4BFF]/20 text-[#5B4BFF] dark:text-indigo-300 text-[11px] font-extrabold border border-[#5B4BFF]/20 inline-block max-w-[210px] truncate">
-                          {staff.Department}
-                        </span>
-                      </td>
-
-                      {/* Designation */}
-                      <td className="py-3.5 px-4 text-[11px] text-[#4E5969] dark:text-slate-300 font-semibold">
-                        {staff.Designation}
-                      </td>
-
-                      {/* Contact Number */}
-                      <td className="py-3.5 px-4 font-mono text-[11px]">
-                        {staff.PermanentTelNo && staff.PermanentTelNo !== '0000000000' && staff.PermanentTelNo !== '0' && staff.PermanentTelNo.trim() !== '' ? (
-                          <a
-                            href={`tel:${staff.PermanentTelNo}`}
-                            className="text-[#4E5969] dark:text-slate-400 hover:text-[#5B4BFF] dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1.5 font-bold"
-                          >
-                            <Phone className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{staff.PermanentTelNo}</span>
-                          </a>
-                        ) : (
-                          <span className="text-slate-300 dark:text-slate-600 font-sans">—</span>
-                        )}
-                      </td>
-
-                      {/* Punch Time */}
-                      <td className="py-3.5 px-4 text-center font-mono">
-                        {staff.isPunched ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-black text-xs border border-emerald-200 dark:border-emerald-800 shadow-sm">
-                            <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                            {staff.PUNCHTIME}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 dark:text-slate-600 text-xs font-sans font-bold">
-                            Not Recorded
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4 text-right">
-                        {staff.isPunched ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-500/20 shadow-sm">
-                            ● PUNCHED
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider border border-amber-500/20">
-                            ○ PENDING
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {cardRecords.map((staff, idx) => renderStaffRow(staff, idx + 1))}
               </tbody>
             </table>
           </div>
         )}
+      </div>
 
-        {/* Pagination Footer Controls */}
-        {!loading && filteredRecords.length > 0 && (
-          <div className="p-4 bg-[#F6F8FC] dark:bg-slate-800/80 border-t border-[#E7EAF3] dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3 text-[#4E5969] dark:text-slate-400 font-medium">
-              <span>
-                Showing <strong className="text-[#1B1E28] dark:text-white">{(currentPage - 1) * pageSize + 1}</strong> to{' '}
-                <strong className="text-[#1B1E28] dark:text-white">
-                  {Math.min(currentPage * pageSize, filteredRecords.length)}
-                </strong>{' '}
-                of <strong className="text-[#1B1E28] dark:text-white">{filteredRecords.length}</strong> staff entries
-              </span>
+      {/* See All Bottom Banner Button */}
+      {filteredRecords.length > 2 && (
+        <button
+          type="button"
+          onClick={() => setShowAllModal(true)}
+          className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-[#5B4BFF] dark:text-indigo-300 font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 border border-slate-200/80 dark:border-slate-700 cursor-pointer group shadow-2xs mt-2 shrink-0"
+        >
+          <span>See All {filteredRecords.length} Staff Biometric Records with Pagination</span>
+          <span className="group-hover:translate-x-1 transition-transform">➔</span>
+        </button>
+      )}
 
-              {/* Page size selector */}
-              <div className="flex items-center gap-1.5 pl-2 border-l border-slate-300 dark:border-slate-600">
-                <span className="text-[11px]">Rows:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="px-2 py-1 rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold focus:outline-none cursor-pointer"
+      {/* Modal Popup: All Biometric Records with Complete Pagination */}
+      {showAllModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div
+            className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[24px] shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between gap-3 shrink-0 bg-slate-50/60 dark:bg-slate-850/60">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#5B4BFF] to-[#7867FF] text-white flex items-center justify-center font-black text-xl shadow-md shadow-[#5B4BFF]/25 flex-shrink-0">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-black text-[#1B1E28] dark:text-white uppercase tracking-tight">
+                      Faculties & Staff Biometric Punches — Full Registry
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-[#5B4BFF]/10 text-[#5B4BFF] dark:text-indigo-300 text-[10px] font-black border border-[#5B4BFF]/20">
+                      {filteredRecords.length} Staff Entries
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#4E5969] dark:text-slate-400 font-semibold truncate mt-0.5">
+                    Loc {selectedLocId} • Date: {selectedDate} • {punchType === '1' ? 'Punch In (1)' : 'Punch Out (2)'} • {punchedCount} Punched / {noPunchCount} Pending
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  disabled={filteredRecords.length === 0}
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                  title="Export to CSV"
                 >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value={-1}>All ({filteredRecords.length})</option>
-                </select>
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Export CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAllModal(false)}
+                  className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 flex items-center justify-center transition-all cursor-pointer font-bold"
+                  title="Close Modal (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            {/* Prev / Next Buttons */}
-            {pageSize !== -1 && totalPages > 1 && (
-              <div className="flex items-center gap-1.5 self-end sm:self-auto">
+            {/* Modal Filter / Search Bar */}
+            <div className="p-3 sm:p-4 border-b border-[#E7EAF3] dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-[#F6F8FC]/50 dark:bg-slate-800/40 shrink-0">
+              {/* Status Tabs inside modal */}
+              <div className="inline-flex p-1 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 shadow-xs flex-wrap">
                 <button
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#4E5969] dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
-                  title="Previous Page"
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('ALL');
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === 'ALL'
+                      ? 'bg-[#5B4BFF] text-white shadow-xs font-extrabold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  All Staff ({records.length})
                 </button>
-
-                <span className="px-3 py-1 font-bold text-[#1B1E28] dark:text-white text-xs">
-                  Page {currentPage} of {totalPages}
-                </span>
-
                 <button
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#4E5969] dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
-                  title="Next Page"
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('PUNCHED');
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    activeTab === 'PUNCHED'
+                      ? 'bg-emerald-600 text-white shadow-xs font-extrabold'
+                      : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                  }`}
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <span>● Punched ({punchedCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('NO_PUNCH');
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    activeTab === 'NO_PUNCH'
+                      ? 'bg-amber-600 text-white shadow-xs font-extrabold'
+                      : 'text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                  }`}
+                >
+                  <span>○ Pending ({noPunchCount})</span>
                 </button>
               </div>
-            )}
+
+              {/* Department & Search inside modal */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex items-center">
+                  <Building2 className="w-3.5 h-3.5 absolute left-3 text-slate-400 pointer-events-none" />
+                  <select
+                    value={selectedDepartment}
+                    onChange={(e) => {
+                      setSelectedDepartment(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="pl-8 pr-7 py-1.5 text-xs font-bold rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#1B1E28] dark:text-white focus:outline-none max-w-[200px] truncate cursor-pointer shadow-xs"
+                  >
+                    <option value="ALL">All Depts ({departmentList.length})</option>
+                    {departmentList.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="relative min-w-[200px] max-w-xs">
+                  <Search className="w-3.5 h-3.5 absolute left-3 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search name, ID, dept..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full text-xs font-bold py-1.5 pl-8 pr-7 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#1B1E28] dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]/30 shadow-xs"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Body: Scrollable Paginated Table */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-[10px] font-black uppercase text-[#4E5969] dark:text-slate-300 tracking-wider border-b border-[#E7EAF3] dark:border-slate-700 sticky top-0 z-10">
+                  <tr>
+                    <th className="py-3 px-4 w-12 text-center">#</th>
+                    <th className="py-3 px-4">Staff Member / Emp ID</th>
+                    <th className="py-3 px-4">Department</th>
+                    <th className="py-3 px-4">Designation</th>
+                    <th className="py-3 px-4">Contact No</th>
+                    <th className="py-3 px-4 text-center">
+                      {punchType === '1' ? 'Punch In Time' : 'Punch Out Time'}
+                    </th>
+                    <th className="py-3 px-4 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
+                  {paginatedRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400 text-xs font-bold">
+                        No staff records match this search or filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedRecords.map((staff, idx) =>
+                      renderStaffRow(staff, (currentPage - 1) * pageSize + idx + 1)
+                    )
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Pagination Footer */}
+            <div className="p-3.5 sm:p-4 border-t border-[#E7EAF3] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-850 flex items-center justify-between gap-3 flex-wrap shrink-0">
+              <div className="flex items-center gap-3 text-xs font-bold text-[#4E5969] dark:text-slate-400">
+                <span>
+                  Showing <strong className="text-[#1B1E28] dark:text-white">{(currentPage - 1) * pageSize + 1}</strong> to{' '}
+                  <strong className="text-[#1B1E28] dark:text-white">
+                    {Math.min(currentPage * pageSize, filteredRecords.length)}
+                  </strong>{' '}
+                  of <strong className="text-[#1B1E28] dark:text-white">{filteredRecords.length}</strong> staff entries
+                </span>
+
+                <div className="flex items-center gap-1.5 pl-2 border-l border-slate-300 dark:border-slate-600">
+                  <span className="text-[11px]">Rows:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="px-2 py-1 rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold focus:outline-none cursor-pointer"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={-1}>All ({filteredRecords.length})</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                </button>
+                <span className="text-xs font-black text-[#5B4BFF] dark:text-indigo-300 px-2">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAllModal(false)}
+                  className="ml-2 px-3.5 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4838EE] text-xs font-black text-white transition-all cursor-pointer shadow-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* System Footer Metadata */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-[#4E5969] dark:text-slate-400 font-medium pt-1">

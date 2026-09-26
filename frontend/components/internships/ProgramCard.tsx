@@ -305,7 +305,7 @@ export default function ProgramCard({
                       className="w-full py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
                     >
                       <Award className="w-4 h-4" />
-                      View Institutional Certificate
+                      View, Print & Download Certificate
                     </button>
                   </div>
                 ) : myApp.payment_status === 'pending' ? (

@@ -10,6 +10,8 @@ import LibraryDashboardCard from '../../../components/library/LibraryDashboardCa
 import ChatDashboardWidget from '../../../components/chat/ChatDashboardWidget';
 import FacultyBatchAttendanceAnalytics from '../../../components/faculty/FacultyBatchAttendanceAnalytics';
 import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperHustleBoard';
+import StudentAssessmentMarksCard from '../../../components/dashboard/StudentAssessmentMarksCard';
+import DepartmentTimetableCard from '../../../components/dashboard/DepartmentTimetableCard';
 
 export default function ClerkDashboardPage() {
   return (
@@ -136,6 +138,16 @@ export default function ClerkDashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
             <FacultyBatchAttendanceAnalytics />
             <FacultyTopperHustleBoard />
+          </div>
+
+          {/* Student Assessment Marks (5 Cols) & College Timetable (7 Cols) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            <div className="lg:col-span-5 flex flex-col">
+              <StudentAssessmentMarksCard role="clerk" />
+            </div>
+            <div className="lg:col-span-7 flex flex-col">
+              <DepartmentTimetableCard role="clerk" />
+            </div>
           </div>
         </main>
       </div>

@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
+async function fetchAndFormatPunches(empid: string, DEVICECD: string) {
   try {
-    const body = await request.json().catch(() => ({}));
-    
-    // Extract empid and DEVICECD from request body, cookies, or default to logged-in admin
-    const empid = String(body.empid || body.emp_id || request.cookies.get('empid')?.value || request.cookies.get('emp_id')?.value || 'T/99/1203').trim();
-    const DEVICECD = String(body.DEVICECD || body.devicecd || request.cookies.get('devicecd')?.value || '30103').trim();
-
     const response = await fetch('https://myportal.srms.ac.in/ops/Home/GetEmpInOutTime', {
       method: 'POST',
       headers: {
@@ -35,6 +29,9 @@ export async function POST(request: NextRequest) {
     const rawData = await response.json();
     const list: any[] = Array.isArray(rawData) ? rawData : [];
 
+    // Current date in Indian Standard Time (IST, UTC+05:30)
+    const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
     // Parse and format attendance records
     const formatted = list.map((item: any) => {
       let timestamp = Date.now();
@@ -43,16 +40,19 @@ export async function POST(request: NextRequest) {
         if (match) timestamp = parseInt(match[0], 10);
       }
       const dateObj = new Date(timestamp);
-      const dateStr = dateObj.toISOString().split('T')[0];
+      // Format date in IST so it does not shift backward into UTC
+      const dateStr = dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       const displayDate = dateObj.toLocaleDateString('en-US', {
+        timeZone: 'Asia/Kolkata',
         weekday: 'short',
         year: 'numeric',
         month: 'short',
         day: 'numeric',
       });
+      const dayName = dateObj.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' });
 
       const punchlogsStr = String(item.punchlogs || '').trim();
-      const hasPunches = punchlogsStr && punchlogsStr.toLowerCase() !== 'no punch marked';
+      const hasPunches = Boolean(punchlogsStr && punchlogsStr.toLowerCase() !== 'no punch marked' && punchlogsStr.length > 0);
 
       let punches: Array<{ time: string; rawTime: string; device: string }> = [];
       let punchIn = '--';
@@ -92,21 +92,38 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const status = hasPunches
-        ? punches.length > 1
-          ? 'Completed Shift'
-          : 'Present / In-Campus'
-        : 'No Punch Marked';
+      const isToday = dateStr === todayIST;
+      const isUpcoming = dateStr > todayIST;
+
+      let status = 'No Punch Marked';
+      if (hasPunches) {
+        status = punches.length > 1 ? 'Shift Completed' : 'Present / On Duty';
+      } else if (isToday) {
+        status = 'Ready to Punch';
+      } else if (isUpcoming) {
+        status = 'Upcoming Cycle Day';
+      } else if (dayName === 'Sun') {
+        status = 'Weekend / Sunday';
+      } else {
+        status = item.attsts && item.attsts !== 'N.A' ? item.attsts : 'Absent / No Punch';
+      }
+
+      const rawIn = String(item.intime || '').trim();
+      const rawOut = String(item.outtime || '').trim();
+      const cleanIn = rawIn && !rawIn.toLowerCase().includes('not processed') && rawIn !== 'N.A' ? rawIn : punchIn;
+      const cleanOut = rawOut && !rawOut.toLowerCase().includes('not processed') && rawOut !== 'N.A' ? rawOut : punchOut;
 
       return {
         logdate: item.logdate,
         timestamp,
         date: dateStr,
         displayDate,
-        dayName: dateObj.toLocaleDateString('en-US', { weekday: 'short' }),
+        dayName,
+        isToday,
+        isUpcoming,
         attsts: item.attsts || 'N.A',
-        intime: item.intime?.trim() || punchIn,
-        outtime: item.outtime?.trim() || punchOut,
+        intime: cleanIn,
+        outtime: cleanOut,
         punchlogs: punchlogsStr,
         hasPunches,
         punches,
@@ -118,16 +135,22 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // Sort with latest date first
-    formatted.sort((a, b) => b.timestamp - a.timestamp);
+    // Locate today's exact record in the billing/attendance cycle
+    const todayRecord = formatted.find((d) => d.date === todayIST) || null;
+
+    // Order data so today and elapsed cycle days come first (newest to oldest), followed by upcoming cycle days
+    const pastAndToday = formatted.filter((d) => d.date <= todayIST).sort((a, b) => b.date.localeCompare(a.date));
+    const upcoming = formatted.filter((d) => d.date > todayIST).sort((a, b) => a.date.localeCompare(b.date));
+    const sortedRecords = [...pastAndToday, ...upcoming];
 
     return NextResponse.json({
       success: true,
       empid,
       devicecd: DEVICECD,
-      totalDays: formatted.length,
-      today: formatted[0] || null,
-      data: formatted,
+      todayDate: todayIST,
+      totalDays: sortedRecords.length,
+      today: todayRecord || sortedRecords[0] || null,
+      data: sortedRecords,
     });
   } catch (error: any) {
     return NextResponse.json(
@@ -139,4 +162,18 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const empid = String(searchParams.get('empid') || searchParams.get('emp_id') || request.cookies.get('empid')?.value || request.cookies.get('emp_id')?.value || 'T/99/1203').trim();
+  const DEVICECD = String(searchParams.get('DEVICECD') || searchParams.get('devicecd') || request.cookies.get('devicecd')?.value || '30103').trim();
+  return fetchAndFormatPunches(empid, DEVICECD);
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => ({}));
+  const empid = String(body.empid || body.emp_id || request.cookies.get('empid')?.value || request.cookies.get('emp_id')?.value || 'T/99/1203').trim();
+  const DEVICECD = String(body.DEVICECD || body.devicecd || request.cookies.get('devicecd')?.value || '30103').trim();
+  return fetchAndFormatPunches(empid, DEVICECD);
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import { resolveCourseTitle, resolveDepartmentTitle } from '../../../utils/courseResolver';
 import { 
   FolderGit2, 
   Search, 
@@ -27,11 +28,13 @@ interface Repository {
   student_name: string;
   course_cd: string;
   branch_cd: string;
+  course_name?: string;
+  department_name?: string;
   batch_cd: string;
   sem_cd: string;
   status: string;
   is_placement_eligible: boolean;
-  score?: number;
+  score?: number | null;
   grade?: string;
   submitted_at: string;
 }
@@ -42,6 +45,7 @@ export default function FacultyRepositoryPage() {
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
+  const [courseFilter, setCourseFilter] = useState('');
   const [search, setSearch] = useState('');
 
   // Selected Repository for Review
@@ -54,7 +58,7 @@ export default function FacultyRepositoryPage() {
 
   useEffect(() => {
     fetchRepositories();
-  }, [statusFilter]);
+  }, [statusFilter, courseFilter]);
 
   const fetchRepositories = async () => {
     setLoading(true);
@@ -64,6 +68,7 @@ export default function FacultyRepositoryPage() {
     try {
       const queryParams = new URLSearchParams();
       if (statusFilter) queryParams.append('status', statusFilter);
+      if (courseFilter) queryParams.append('course_cd', courseFilter);
       if (search) queryParams.append('search', search);
       queryParams.append('tenant', slug);
 
@@ -93,9 +98,9 @@ export default function FacultyRepositoryPage() {
 
   const handleOpenReview = (repo: Repository) => {
     setSelectedRepo(repo);
-    setScore(repo.score || 85);
+    setScore(repo.score != null && !isNaN(Number(repo.score)) ? Number(repo.score) : 85);
     setRemarks('');
-    setIsPlacementEligible(repo.is_placement_eligible || (repo.score ? repo.score >= 75 : true));
+    setIsPlacementEligible(repo.is_placement_eligible || (repo.score != null ? Number(repo.score) >= 75 : true));
     setReviewMsg('');
   };
 
@@ -202,9 +207,26 @@ export default function FacultyRepositoryPage() {
               </button>
             </div>
 
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end flex-wrap">
               <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400 flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5" /> Filter Status:
+                <Filter className="w-3.5 h-3.5" /> Program:
+              </span>
+              <select
+                value={courseFilter}
+                onChange={(e) => setCourseFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white"
+              >
+                <option value="">All Programs</option>
+                <option value="1">B.Tech</option>
+                <option value="2">B.Pharm</option>
+                <option value="3">MCA</option>
+                <option value="4">MBA</option>
+                <option value="13">BCA</option>
+                <option value="11">BA.LL.B</option>
+              </select>
+
+              <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400 flex items-center gap-1.5">
+                Status:
               </span>
               <select
                 value={statusFilter}
@@ -261,6 +283,19 @@ export default function FacultyRepositoryPage() {
                         <td className="py-3.5 px-4">
                           <div className="font-extrabold text-[#1B1E28] dark:text-slate-200">{repo.student_name}</div>
                           <div className="text-[10px] font-mono text-slate-500 font-semibold">REG: {repo.student_reg_no}</div>
+                          <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] dark:text-indigo-400 border border-[#5B4BFF]/20">
+                              {resolveCourseTitle(repo.course_cd, repo.course_name)}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              {resolveDepartmentTitle(repo.course_cd, repo.department_name, repo.branch_cd)}
+                            </span>
+                            {repo.batch_cd && (
+                              <span className="text-[10px] font-medium text-slate-400">
+                                Batch {repo.batch_cd}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="flex flex-wrap gap-1">
@@ -286,12 +321,12 @@ export default function FacultyRepositoryPage() {
                           )}
                         </td>
                         <td className="py-3.5 px-4">
-                          {repo.score !== undefined && repo.score !== null ? (
+                          {repo.score !== undefined && repo.score !== null && !isNaN(Number(repo.score)) ? (
                             <div className="space-y-1">
                               <div className="font-black text-[#5B4BFF] text-xs flex items-center gap-1.5">
-                                <span>{repo.score}%</span>
-                                <span className={`px-1.5 py-0.2 rounded text-[10px] font-black border ${calculateGrade(repo.score).color}`}>
-                                  Grade {repo.grade || calculateGrade(repo.score).grade}
+                                <span>{Number(repo.score)}%</span>
+                                <span className={`px-1.5 py-0.2 rounded text-[10px] font-black border ${calculateGrade(Number(repo.score)).color}`}>
+                                  Grade {repo.grade || calculateGrade(Number(repo.score)).grade}
                                 </span>
                               </div>
                               {repo.is_placement_eligible && (
@@ -301,7 +336,7 @@ export default function FacultyRepositoryPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-slate-400 italic">Not evaluated</span>
+                            <span className="text-slate-400 italic font-semibold">Awaiting Evaluation</span>
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-right">
@@ -309,7 +344,7 @@ export default function FacultyRepositoryPage() {
                             onClick={() => handleOpenReview(repo)}
                             className="bg-[#5B4BFF] hover:bg-indigo-600 text-white font-black text-xs px-3.5 py-1.5 rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
                           >
-                            {repo.status === 'Reviewed' ? 'Edit Score' : 'Give Score 🎯'}
+                            {repo.status === 'Reviewed' ? 'Edit Score' : 'Evaluate Project 🎯'}
                           </button>
                         </td>
                       </tr>

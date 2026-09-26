@@ -29,9 +29,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 export default function RecentLessonsWidget({
   role = 'FACULTY',
   studentInfo = null,
+  maxRows = 2,
 }: {
   role?: string;
   studentInfo?: any;
+  maxRows?: number;
 }) {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +77,7 @@ export default function RecentLessonsWidget({
 
       const params = new URLSearchParams();
       params.set('tenant', tenant);
-      params.set('limit', '5');
+      params.set('limit', '10');
       if (role === 'STUDENT') {
         if (courseCd) params.set('courseCd', String(courseCd));
         if (branchCd) params.set('branchCd', String(branchCd));
@@ -172,9 +174,12 @@ export default function RecentLessonsWidget({
       {/* Content - Top Aligned without empty space */}
       <div className="flex-1 pt-3.5 space-y-2.5 flex flex-col justify-start">
         {loading ? (
-          <div className="py-8 text-center text-xs text-[#7B8794] font-medium animate-pulse my-auto">
-            Loading recent lesson files...
-          </div>
+          [...Array(maxRows)].map((_, idx) => (
+            <div key={idx} className="animate-pulse p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 space-y-2">
+              <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-2/3"></div>
+              <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded w-1/2"></div>
+            </div>
+          ))
         ) : lessons.length === 0 ? (
           <div className="py-8 text-center text-xs text-[#7B8794] border border-dashed border-[#E7EAF3] dark:border-slate-800 rounded-2xl space-y-1 my-auto">
             <p className="font-bold text-[#1B1E28] dark:text-slate-200">
@@ -185,7 +190,7 @@ export default function RecentLessonsWidget({
             </p>
           </div>
         ) : (
-          lessons.map((item) => {
+          lessons.slice(0, maxRows).map((item) => {
             const meta = getFileMeta(item.file_type, item.file_name);
             return (
               <div

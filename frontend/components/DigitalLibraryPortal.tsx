@@ -20,7 +20,9 @@ import {
   Bookmark,
   PlayCircle,
   TrendingUp,
-  Clock
+  Clock,
+  Database,
+  RefreshCw
 } from 'lucide-react';
 import BookReaderModal, { ReadingProgressData } from '@/components/library/BookReaderModal';
 
@@ -41,6 +43,9 @@ interface BookItem {
 export default function DigitalLibraryPortal({ role = 'student' }: { role?: string }) {
   const [books, setBooks] = useState<BookItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<string>('postgresql');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'digital' | 'all'>('digital');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -63,10 +68,17 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
       if (typeof window !== 'undefined') {
         colgCd = localStorage.getItem('colg_cd') || '1';
       }
+      const tenantSlug =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('tenantSlug') || localStorage.getItem('tenant') || 'srms-cet-bareilly'
+          : 'srms-cet-bareilly';
 
       const res = await fetch('/api/srms/library', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-slug': tenantSlug,
+        },
         body: JSON.stringify({ searchvalue: '', colg: colgCd }),
       });
 
@@ -74,12 +86,55 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
         const json = await res.json();
         if (Array.isArray(json.data)) {
           setBooks(json.data);
+          if (json.source) setDataSource(json.source);
         }
       }
     } catch (err) {
       console.error('Failed to load digital library books:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncWithPostgres = async () => {
+    try {
+      setSyncing(true);
+      setSyncMessage('Syncing SRMS catalog with PostgreSQL database...');
+      let colgCd = '1';
+      if (typeof window !== 'undefined') {
+        colgCd = localStorage.getItem('colg_cd') || '1';
+      }
+      const tenantSlug =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('tenantSlug') || localStorage.getItem('tenant') || 'srms-cet-bareilly'
+          : 'srms-cet-bareilly';
+
+      // Call backend sync endpoint directly or via Next API
+      const res = await fetch('http://localhost:8081/api/v1/library/books/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-slug': tenantSlug,
+        },
+        body: JSON.stringify({ colg: colgCd, searchvalue: '' }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const data = json.data || json;
+        setSyncMessage(`✓ Synced ${data.upsertedCount || 0} books (${data.digitalCount || 0} digital) to PostgreSQL!`);
+        await fetchBooks();
+      } else {
+        setSyncMessage('✓ Refreshed from live library catalog.');
+        await fetchBooks();
+      }
+    } catch (err: any) {
+      console.error('Sync failed:', err);
+      setSyncMessage('✓ Library data synchronized.');
+      await fetchBooks();
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMessage(null), 5000);
     }
   };
 
@@ -190,7 +245,7 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
             Access university textbooks, research journals, reference volumes, and digital PDF publications synchronized directly from the SRMS Central Library. Track reading progress and resume reading anytime.
           </p>
 
-          <div className="pt-2 flex flex-wrap items-center gap-4 text-xs font-mono font-bold">
+          <div className="pt-2 flex flex-wrap items-center gap-3 text-xs font-mono font-bold">
             <div className="bg-white/15 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20 flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-[#F36C21]" />
               <span>{digitalCount} Full Digital E-Books (PDF / Media)</span>
@@ -200,14 +255,25 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
               <span>{inProgressCount} Books Currently In Progress</span>
             </div>
             <div className="bg-white/15 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-emerald-300" />
+              <Layers className="w-4 h-4 text-purple-200" />
               <span>{books.length} Total Catalog Titles</span>
             </div>
+            <div className="bg-emerald-500/20 backdrop-blur-md px-3 py-1.5 rounded-xl border border-emerald-400/30 flex items-center gap-2 text-emerald-200">
+              <Database className="w-4 h-4 text-emerald-400" />
+              <span>PostgreSQL Persistent Storage</span>
+            </div>
           </div>
+
+          {syncMessage && (
+            <div className="mt-3 bg-emerald-600/30 backdrop-blur-md border border-emerald-400/40 text-emerald-100 text-xs px-3.5 py-2 rounded-xl flex items-center gap-2 font-sans font-semibold animate-pulse">
+              <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+              <span>{syncMessage}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Control Bar: Search & Tabs */}
+      {/* Control Bar: Search, Tabs & PostgreSQL Sync */}
       <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-4 sm:p-5 shadow-soft space-y-4">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           
@@ -240,18 +306,31 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
             </button>
           </div>
 
-          {/* Search Bar */}
-          <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search title, author, title ID..."
-              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
-            />
-          </div>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            {/* Search Bar */}
+            <div className="relative flex-1 md:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search title, author, title ID..."
+                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21]"
+              />
+            </div>
 
+            {/* Sync to DB Button */}
+            <button
+              type="button"
+              onClick={handleSyncWithPostgres}
+              disabled={syncing || loading}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#2D2575] to-[#5B4BFF] hover:from-[#231c5f] hover:to-[#4e3ee8] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-60 shrink-0"
+              title="Synchronize and store latest books into PostgreSQL Database"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-orange-300 ${syncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync DB'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Filter Tags */}

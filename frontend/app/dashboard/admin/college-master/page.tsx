@@ -6,6 +6,7 @@ import Header from '../../../../components/Header';
 import LiveCollegeCourseCascadingDropdown from '../../../../components/LiveCollegeCourseCascadingDropdown';
 import Live3LevelDepartmentCascadingDropdown from '../../../../components/Live3LevelDepartmentCascadingDropdown';
 import LiveCollegeCourseBatchCascadingDropdown from '../../../../components/LiveCollegeCourseBatchCascadingDropdown';
+import { useRolePermissions } from '../../../../lib/useRolePermissions';
 
 const ActionButtons = ({ onEdit, onDelete }: { onEdit: () => void, onDelete: () => void }) => (
   <div className="flex items-center justify-end gap-1.5">
@@ -1769,17 +1770,28 @@ export default function CollegeMasterPage() {
     );
   };
 
+  const { isAllowed } = useRolePermissions();
+
   // Sub-Category Definition Tabs
-  const categories = [
-    { key: 'colleges', label: '1. College', icon: '🏢', count: colleges.length },
-    { key: 'courses', label: '2. Courses', icon: '🎓', count: courses.filter((c) => isMatchCollege(c.college_id, c.college_code, c.college_slug)).length },
-    { key: 'professionals', label: '3. Academic Year', icon: '📅', count: professionals.filter((p) => isMatchCollege(p.college_id, p.college_code, p.college_slug)).length },
-    { key: 'batches', label: '4. Batch', icon: '📅', count: batches.filter((b) => isMatchCollege(b.college_id, b.college_code, b.college_slug)).length },
-    { key: 'branches', label: '5. Departments & Specialties', icon: '🩺', count: branches.filter((br) => isMatchCollege(br.college_id, br.college_code, br.college_slug)).length },
-    { key: 'groups', label: '6. Section Groups', icon: '👥', count: groups.filter((g) => isMatchCollege(g.college_id, (g as any).college_code, (g as any).college_slug)).length },
-    { key: 'sessions', label: '7. Session', icon: '⏱️', count: sessions.filter((s) => isMatchCollege(s.college_id, (s as any).college_code, (s as any).college_slug)).length },
-    { key: 'residencies', label: '8. Residency Category', icon: '🏥', count: residencies.filter((r) => isMatchCollege(r.college_id, (r as any).college_code, (r as any).college_slug)).length },
+  const allCategories = [
+    { key: 'colleges', label: '1. College', icon: '🏢', count: colleges.length, permissionKey: 'admin_college_master_colleges' },
+    { key: 'courses', label: '2. Courses', icon: '🎓', count: courses.filter((c) => isMatchCollege(c.college_id, c.college_code, c.college_slug)).length, permissionKey: 'admin_college_master_courses' },
+    { key: 'professionals', label: '3. Academic Year', icon: '📅', count: professionals.filter((p) => isMatchCollege(p.college_id, p.college_code, p.college_slug)).length, permissionKey: 'admin_college_master_professionals' },
+    { key: 'batches', label: '4. Batch', icon: '📅', count: batches.filter((b) => isMatchCollege(b.college_id, b.college_code, b.college_slug)).length, permissionKey: 'admin_college_master_batches' },
+    { key: 'branches', label: '5. Departments & Specialties', icon: '🩺', count: branches.filter((br) => isMatchCollege(br.college_id, br.college_code, br.college_slug)).length, permissionKey: 'admin_college_master_branches' },
+    { key: 'groups', label: '6. Section Groups', icon: '👥', count: groups.filter((g) => isMatchCollege(g.college_id, (g as any).college_code, (g as any).college_slug)).length, permissionKey: 'admin_college_master_groups' },
+    { key: 'sessions', label: '7. Session', icon: '⏱️', count: sessions.filter((s) => isMatchCollege(s.college_id, (s as any).college_code, (s as any).college_slug)).length, permissionKey: 'admin_college_master_sessions' },
+    { key: 'residencies', label: '8. Residency Category', icon: '🏥', count: residencies.filter((r) => isMatchCollege(r.college_id, (r as any).college_code, (r as any).college_slug)).length, permissionKey: 'admin_college_master_residencies' },
   ];
+
+  const categories = allCategories.filter((cat) => isAllowed(cat.permissionKey, 'admin_college_master'));
+
+  // Automatically select the first allowed tab if current activeTab is disallowed
+  useEffect(() => {
+    if (categories.length > 0 && !categories.some((c) => c.key === activeTab)) {
+      setActiveTab(categories[0].key as SubCategory);
+    }
+  }, [categories, activeTab]);
 
   // Currently selected course object inside Form for dynamic rendering
   const formSelectedCourse = courses.find((c) => c.id === formData.courseId) || getCoursesForCollege(formData.collegeId || colleges[0]?.id)[0];
@@ -1793,28 +1805,34 @@ export default function CollegeMasterPage() {
         <Header title="Campus Setup & Academic Hierarchy" />
 
         <main className="p-6 space-y-6 flex-1">
-          {/* 7 Category Tabs — Clean Grid Layout (No Horizontal Scrollbar) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            {categories.map((cat) => (
-              <button
-                key={cat.key}
-                onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
-                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-between gap-1.5 text-center sm:text-left cursor-pointer ${activeTab === cat.key
-                  ? 'bg-[#F36C21] text-white shadow-md shadow-orange-500/25 ring-2 ring-orange-400/40'
-                  : 'bg-white dark:bg-[#111827] text-slate-700 dark:text-slate-200 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 shadow-sm'
-                  }`}
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <span className="text-sm shrink-0">{cat.icon}</span>
-                  <span className={`truncate text-[11px] font-bold ${activeTab === cat.key ? 'text-white' : 'text-slate-800 dark:text-slate-200'}`}>{cat.label}</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${activeTab === cat.key ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-[#F36C21] dark:text-[#F36C21] border border-[#F36C21]/20'
-                  }`}>
-                  {cat.count}
-                </span>
-              </button>
-            ))}
-          </div>
+          {/* 8 Category Tabs — Dynamic Permission Filtered */}
+          {categories.length === 0 ? (
+            <div className="p-8 text-center bg-white dark:bg-[#111827] rounded-2xl border border-dashed border-slate-300 dark:border-slate-800">
+              <p className="text-xs font-bold text-slate-500">🔒 Access to College Master tabs is currently restricted for your role. Contact Platform SuperAdmin.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-3">
+              {categories.map((cat) => (
+                <button
+                  key={cat.key}
+                  onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-between gap-1.5 text-center sm:text-left cursor-pointer ${activeTab === cat.key
+                    ? 'bg-[#F36C21] text-white shadow-md shadow-orange-500/25 ring-2 ring-orange-400/40'
+                    : 'bg-white dark:bg-[#111827] text-slate-700 dark:text-slate-200 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 shadow-sm'
+                    }`}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-sm shrink-0">{cat.icon}</span>
+                    <span className={`truncate text-[11px] font-bold ${activeTab === cat.key ? 'text-white' : 'text-slate-800 dark:text-slate-200'}`}>{cat.label}</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${activeTab === cat.key ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-[#F36C21] dark:text-[#F36C21] border border-[#F36C21]/20'
+                    }`}>
+                    {cat.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Dynamic Cascading Dropdown: 3-Level Batch on Tab 4, 3-Level Dept on Tab 5, 2-Level on other tabs */}
           {activeTab === 'batches' ? (

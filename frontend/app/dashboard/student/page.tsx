@@ -106,6 +106,7 @@ export default function StudentDashboard() {
   });
   const [incubatedProjects, setIncubatedProjects] = useState<IncubatedProjectAlert[]>([]);
   const [placementAlertDrives, setPlacementAlertDrives] = useState<any[]>([]);
+  const [assignedSeminarTopics, setAssignedSeminarTopics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -248,6 +249,7 @@ export default function StudentDashboard() {
         internshipsResult,
         incubationResult,
         placementResult,
+        topicsResult,
       ] = await Promise.allSettled([
         // 2a. Live Attendance
         fetch('/api/srms/student-individual-attendance', {
@@ -310,6 +312,17 @@ export default function StudentDashboard() {
             'x-tenant': slug,
             'x-user-reg-no': targetReg,
             'x-user-role': 'STUDENT',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null),
+
+        // 2h. Assigned Seminars & Tutorials
+        fetch(`/api/v1/logbook/topics?tenant=${slug}&studentView=true&studentId=${encodeURIComponent(targetReg || '')}`, {
+          headers: {
+            'x-tenant-slug': slug,
+            'x-user-reg-no': targetReg,
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         })
@@ -504,6 +517,16 @@ export default function StudentDashboard() {
 
         setPlacementAlertDrives(filteredDrives);
       }
+
+      // Apply Assigned Seminars & Tutorials
+      if (topicsResult.status === 'fulfilled' && topicsResult.value) {
+        const topList = Array.isArray(topicsResult.value.data)
+          ? topicsResult.value.data
+          : Array.isArray(topicsResult.value)
+            ? topicsResult.value
+            : [];
+        setAssignedSeminarTopics(topList);
+      }
     } catch {
       setExamResults([]);
       setUpcomingExamsCount(0);
@@ -616,6 +639,90 @@ export default function StudentDashboard() {
                 <span>View & Download Certificate</span>
                 <span>→</span>
               </Link>
+            </div>
+          )}
+
+          {/* 🎓 FACULTY ASSIGNED SEMINARS & TUTORIAL DELIVERABLES ALERT BANNER */}
+          {assignedSeminarTopics.length > 0 && (
+            <div className="p-5 sm:p-6 rounded-[22px] bg-gradient-to-r from-purple-900/40 via-[#2D2575]/70 to-[#1B1E28] border border-[#5B4BFF]/30 dark:border-purple-800/40 shadow-xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#5B4BFF] to-[#7867FF] text-white flex items-center justify-center text-lg shrink-0 shadow-md">
+                    🎓
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#5B4BFF] text-white font-black text-[10px] tracking-wider uppercase">
+                        FACULTY ASSIGNMENTS
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-white/90 text-xs font-mono font-bold">
+                        {assignedSeminarTopics.length} Active Task{assignedSeminarTopics.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-black text-white mt-0.5">
+                      Academic Seminars &amp; Tutorial Assignments Open For Submission
+                    </h3>
+                  </div>
+                </div>
+
+                <Link
+                  href="/dashboard/student/logbook?tab=SEMINARS"
+                  className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4737e6] text-white font-bold text-xs shadow-md shadow-[#5B4BFF]/25 flex items-center justify-center gap-1.5 transition-all self-start sm:self-auto"
+                >
+                  <span>Open Seminars Hub</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {/* Seminar Topic Cards Row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {assignedSeminarTopics.slice(0, 3).map((top: any) => {
+                  const isSem = (top.category_code || '').toUpperCase().includes('SEMINAR') || !((top.category_code || '').toUpperCase().includes('TUTORIAL'));
+                  return (
+                    <div
+                      key={top.id}
+                      className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 hover:border-[#5B4BFF] transition-all flex flex-col justify-between space-y-3"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                            isSem ? 'bg-purple-500/30 text-purple-200 border border-purple-400/30' : 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/30'
+                          }`}>
+                            {isSem ? 'Academic Seminar' : 'Unit Tutorial'}
+                          </span>
+                          <span className="text-[11px] font-mono text-white/80 font-bold">
+                            Max {top.max_marks || 20} M
+                          </span>
+                        </div>
+                        <h4 className="font-extrabold text-white text-sm line-clamp-1" title={top.title}>
+                          {top.title}
+                        </h4>
+                        {top.description && (
+                          <p className="text-xs text-white/70 line-clamp-2 leading-relaxed">
+                            {top.description}
+                          </p>
+                        )}
+                        <div className="text-[11px] text-white/60 flex items-center justify-between pt-1">
+                          <span>{top.course_name || 'BCA'} • {top.batch_name || 'Batch 2025'}</span>
+                          {top.submission_deadline && (
+                            <span className="text-amber-300 font-medium">
+                              Due {new Date(top.submission_deadline).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <Link
+                        href="/dashboard/student/logbook?tab=SEMINARS"
+                        className="w-full py-2 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] hover:from-[#4737e6] hover:to-[#6554e7] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md transition-all text-center"
+                      >
+                        <span>Submit Deliverable</span>
+                        <span>→</span>
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -996,14 +1103,10 @@ export default function StudentDashboard() {
 
           </div>
 
-          {/* Chat & Communications + Notices & Key Highlights Row (IN ONE ROW) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Chat & Communications + Notices & Lesson Materials Row (Unified 3-Column Row) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
             <ChatDashboardWidget role="STUDENT" chatUrl="/dashboard/student/chat" />
             <NoticeDashboardWidget role="student" />
-          </div>
-
-          {/* Lessons & Materials */}
-          <div className="grid grid-cols-1 gap-6">
             <RecentLessonsWidget role="STUDENT" studentInfo={studentInfo} />
           </div>
 

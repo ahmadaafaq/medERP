@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import { useRolePermissions } from '../../../../lib/useRolePermissions';
 
 const ActionButtons = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) => (
   <div className="flex items-center justify-end gap-1.5">
@@ -1591,16 +1592,27 @@ export default function AdminMasterPage() {
     }
   };
 
-  const categories = [
-    { key: 'departments', label: '1. Department Master', icon: '🩺', count: departments.filter(isMatchCollege).length },
-    { key: 'subjects', label: '2. Subject Master', icon: '📚', count: subjects.filter(isMatchCollege).length },
-    { key: 'professional-linkers', label: '3. Guidelines', icon: '📋', count: linkers.length },
-    { key: 'subject-offerings', label: '4. Subject Offerings', icon: '🎓', count: offerings.length },
-    { key: 'delivery-types', label: '5. Delivery Types', icon: '📖', count: deliveryTypes.length },
-    { key: 'units', label: '6. Unit Master', icon: '📑', count: units.length },
-    { key: 'topics', label: '7. Topic Master', icon: '📝', count: topics.length },
-    { key: 'competencies', label: '8. Sub Topics', icon: '🎯', count: competencies.length },
+  const { isAllowed } = useRolePermissions();
+
+  const allCategories = [
+    { key: 'departments', label: '1. Department Master', icon: '🩺', count: departments.filter(isMatchCollege).length, permissionKey: 'admin_admin_master_departments' },
+    { key: 'subjects', label: '2. Subject Master', icon: '📚', count: subjects.filter(isMatchCollege).length, permissionKey: 'admin_admin_master_subjects' },
+    { key: 'professional-linkers', label: '3. Guidelines', icon: '📋', count: linkers.length, permissionKey: 'admin_admin_master_guidelines' },
+    { key: 'subject-offerings', label: '4. Subject Offerings', icon: '🎓', count: offerings.length, permissionKey: 'admin_admin_master_offerings' },
+    { key: 'delivery-types', label: '5. Delivery Types', icon: '📖', count: deliveryTypes.length, permissionKey: 'admin_admin_master_delivery_types' },
+    { key: 'units', label: '6. Unit Master', icon: '📑', count: units.length, permissionKey: 'admin_admin_master_units' },
+    { key: 'topics', label: '7. Topic Master', icon: '📝', count: topics.length, permissionKey: 'admin_admin_master_topics' },
+    { key: 'competencies', label: '8. Sub Topics', icon: '🎯', count: competencies.length, permissionKey: 'admin_admin_master_competencies' },
   ];
+
+  const categories = allCategories.filter((cat) => isAllowed(cat.permissionKey, 'admin_admin_master'));
+
+  // Automatically select the first allowed tab if current activeTab is disallowed
+  useEffect(() => {
+    if (categories.length > 0 && !categories.some((c) => c.key === activeTab)) {
+      setActiveTab(categories[0].key as SubCategory);
+    }
+  }, [categories, activeTab]);
 
   const getFilteredItemsList = () => {
     switch (activeTab) {
@@ -1793,29 +1805,35 @@ export default function AdminMasterPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Curriculum & Subject Configuration" />
         <main className="p-6 space-y-6 flex-1">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-3">
-            {categories.map((cat) => (
-              <button
-                key={cat.key}
-                onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
-                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 text-left border ${activeTab === cat.key
-                  ? 'bg-[#F36C21] text-white shadow-md border-[#F36C21] relative after:absolute after:left-3 after:bottom-1 after:w-5 after:h-[2px] after:bg-white'
-                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 border-slate-200 dark:border-slate-800'
-                  }`}
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <span className="text-sm shrink-0">{cat.icon}</span>
-                  <span className="truncate text-[11px] font-bold">{cat.label.split('. ')[1]}</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 border ${activeTab === cat.key
-                  ? 'bg-white/20 text-white border-transparent'
-                  : 'bg-slate-100 dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-400 border-slate-200 dark:border-slate-700'
-                  }`}>
-                  {cat.count}
-                </span>
-              </button>
-            ))}
-          </div>
+          {categories.length === 0 ? (
+            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800">
+              <p className="text-xs font-bold text-slate-500">🔒 Access to Curriculum & Subject tabs is currently restricted for your role. Contact Platform SuperAdmin.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-3">
+              {categories.map((cat) => (
+                <button
+                  key={cat.key}
+                  onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 text-left border ${activeTab === cat.key
+                    ? 'bg-[#F36C21] text-white shadow-md border-[#F36C21] relative after:absolute after:left-3 after:bottom-1 after:w-5 after:h-[2px] after:bg-white'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 border-slate-200 dark:border-slate-800'
+                    }`}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-sm shrink-0">{cat.icon}</span>
+                    <span className="truncate text-[11px] font-bold">{cat.label.split('. ')[1]}</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 border ${activeTab === cat.key
+                    ? 'bg-white/20 text-white border-transparent'
+                    : 'bg-slate-100 dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-400 border-slate-200 dark:border-slate-700'
+                    }`}>
+                    {cat.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {syncMessage && (
             <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-between animate-fadeIn">

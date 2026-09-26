@@ -343,8 +343,8 @@ export default function StudentTimetablePage() {
                   return (
                     <div
                       key={slot.id}
-                      onMouseEnter={() => setHoveredSlotId(slot.id)}
-                      onMouseLeave={() => setHoveredSlotId(null)}
+                      onMouseEnter={() => handleSlotMouseEnter(slot.id)}
+                      onMouseLeave={handleSlotMouseLeave}
                       className={`relative p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#F36C21]/60 transition-all space-y-3 shadow-soft group cursor-pointer ${isHovered ? 'z-[60]' : 'z-10'
                         }`}
                     >
@@ -392,14 +392,17 @@ export default function StudentTimetablePage() {
                       </div>
 
                       {/* ────────────────────────────────────────────────────────── */}
-                      {/* DYNAMIC TOPIC & SUB TOPICS HOVER TOOLTIP CARD */}
+                      {/* DYNAMIC TOPIC & SUB TOPICS HOVER TOOLTIP CARD (ABOVE CARD WITH ARROW) */}
                       {/* ────────────────────────────────────────────────────────── */}
                       {isHovered && (
                         <div
                           onMouseEnter={() => handleSlotMouseEnter(slot.id)}
                           onMouseLeave={handleSlotMouseLeave}
-                          className="absolute top-10 -left-2 sm:-left-3 w-[calc(100%+16px)] sm:w-[340px] rounded-[22px] bg-white dark:bg-[#0B1120] text-[#11141A] dark:text-slate-100 border-2 border-[#F36C21]/60 dark:border-[#F36C21]/60 shadow-2xl shadow-slate-900/25 dark:shadow-slate-950/90 backdrop-blur-xl z-50 overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-3.5 space-y-2.5"
+                          className="absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 w-[calc(100%+24px)] sm:w-[380px] max-w-[90vw] rounded-[22px] bg-white dark:bg-[#0B1120] text-[#11141A] dark:text-slate-100 border-2 border-[#F36C21]/60 dark:border-[#F36C21]/60 shadow-2xl shadow-slate-900/25 dark:shadow-slate-950/90 backdrop-blur-xl z-[100] pointer-events-auto animate-in fade-in zoom-in-95 duration-150 text-[11px] p-3.5 space-y-2.5"
                         >
+                          {/* Downward pointer arrow toward the timetable card */}
+                          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white dark:bg-[#0B1120] border-b-2 border-r-2 border-[#F36C21]/60 rotate-45 pointer-events-none" />
+
                           {/* Top Header Ribbon */}
                           <div className="flex items-center justify-between gap-1.5 border-b border-[#E5E8ED] dark:border-slate-800 pb-1.5">
                             <span className="px-2 py-0.5 rounded-md text-[9px] font-black font-mono bg-[#FFF4EC] text-[#F36C21] dark:bg-orange-950/70 dark:text-[#F36C21] border border-[#F36C21]/40 shadow-xs uppercase">
@@ -423,19 +426,21 @@ export default function StudentTimetablePage() {
                           </div>
 
                           {/* 1. Unit Badge */}
-                          <div className="p-2 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40 space-y-0.5">
-                            <div className="text-[9px] font-black uppercase text-[#5B4BFF] dark:text-indigo-400 tracking-wider">
-                              🏷️ 1. Unit
+                          {slot.unit_name && (
+                            <div className="p-2 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40 space-y-0.5">
+                              <div className="text-[9px] font-black uppercase text-[#5B4BFF] dark:text-indigo-400 tracking-wider">
+                                🏷️ Unit
+                              </div>
+                              <p className="text-[11px] font-bold text-slate-900 dark:text-white leading-snug">
+                                {slot.unit_name}
+                              </p>
                             </div>
-                            <p className="text-[11px] font-bold text-slate-900 dark:text-white leading-snug">
-                              {slot.unit_name || 'Unit 1: Fundamentals'}
-                            </p>
-                          </div>
+                          )}
 
                           {/* 2. Scheduled Topic */}
                           <div className="p-2 rounded-xl bg-[#F7F8FA] dark:bg-slate-800/70 border border-[#E5E8ED] dark:border-slate-700 space-y-0.5">
                             <div className="text-[9px] font-black uppercase text-[#F36C21] tracking-wider">
-                              📖2. Scheduled Topic
+                              📖 Scheduled Topic
                             </div>
                             <p className="text-[11px] font-bold text-[#11141A] dark:text-white leading-snug">
                               {slot.topic || 'Curriculum Module / Lesson'}
@@ -445,7 +450,7 @@ export default function StudentTimetablePage() {
                           {/* Scheduled Sub Topics & Competencies */}
                           <div className="p-2 rounded-xl bg-[#F7F8FA] dark:bg-slate-800/70 border border-[#E5E8ED] dark:border-slate-700 space-y-1">
                             <div className="text-[9px] font-black uppercase text-[#475467] dark:text-indigo-200 tracking-wider flex items-center justify-between">
-                              <span>🎯3. SUB TOPICS</span>
+                              <span>🎯 {tenantSlug.includes('ims') ? 'NMC COMPETENCIES' : 'SUB TOPICS / TEACHING SYLLABUS'}</span>
                               {compList.length > 0 && (
                                 <span className="px-1.5 py-0.2 rounded-full bg-[#F36C21] text-white text-[8.5px] font-mono font-bold">
                                   {compList.length}
@@ -454,13 +459,13 @@ export default function StudentTimetablePage() {
                             </div>
 
                             {compList.length > 0 ? (
-                              <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                              <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
                                 {compList.map((c, i) => (
-                                  <div key={i} className="p-1 px-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] flex items-start gap-1.5">
-                                    <span className="shrink-0 px-1 py-0.2 rounded bg-[#5B4BFF] text-white font-mono font-bold text-[9px]">
+                                  <div key={i} className="p-1 px-1.5 rounded-lg bg-white dark:bg-slate-900 border border-[#E5E8ED] dark:border-slate-800 text-[10px] flex items-start gap-1.5">
+                                    <span className="shrink-0 px-1 py-0.2 rounded bg-[#F36C21] text-white font-mono font-bold text-[9px]">
                                       {c.code}
                                     </span>
-                                    <p className="text-slate-700 dark:text-slate-300 text-[9.5px] leading-tight font-medium self-center">{c.description}</p>
+                                    <p className="text-[#344054] dark:text-slate-200 text-[9.5px] leading-tight font-medium self-center">{c.description}</p>
                                   </div>
                                 ))}
                               </div>
@@ -469,9 +474,11 @@ export default function StudentTimetablePage() {
                                 {slot.sub_topics}
                               </p>
                             ) : displayCompCodes ? (
-                              <p className="font-mono font-black text-slate-800 dark:text-slate-200 text-[10px]">{displayCompCodes}</p>
+                              <div className="p-1 px-1.5 rounded-lg bg-white dark:bg-slate-900 border border-[#E5E8ED] dark:border-slate-800 text-[10px] space-y-0.5">
+                                <p className="font-mono font-black text-[#11141A] dark:text-white">{displayCompCodes}</p>
+                              </div>
                             ) : (
-                              <p className="text-[10px] text-slate-400 dark:text-slate-500 italic font-medium">
+                              <p className="text-[10px] text-[#667085] dark:text-indigo-200 italic font-medium">
                                 Sub topics: Scheduled per curriculum syllabus
                               </p>
                             )}

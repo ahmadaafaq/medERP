@@ -361,7 +361,8 @@ export default function StaffMasterPage() {
         if (Array.isArray(colList)) {
           if (role !== 'SUPER_ADMIN') {
             const myCol = colList.find((c: any) => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
-            loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SRMS CET, Bareilly', slug: userSlug }];
+            const institutionName = (typeof window !== 'undefined' ? (localStorage.getItem('collegeName') || localStorage.getItem('college_name') || localStorage.getItem('brand_name')) : null) || userSlug.toUpperCase();
+            loadedColleges = myCol ? [myCol] : [{ id: userColg || userSlug, code: userColg || userSlug, name: institutionName, slug: userSlug }];
           } else {
             loadedColleges = colList;
           }
@@ -1281,6 +1282,8 @@ export default function StaffMasterPage() {
       'ADMIN': 'COLLEGE_ADMIN',
       'CLERK': 'CLERK',
       'Clerk': 'CLERK',
+      'Warden': 'WARDEN',
+      'WARDEN': 'WARDEN',
       'EXECUTIVE': 'FACULTY',
       'TUTOR': 'FACULTY',
       'PG': 'FACULTY',
@@ -1293,7 +1296,7 @@ export default function StaffMasterPage() {
     }
 
     const targetCol = colleges.find(c => String(c.code) === String(formData.college_id) || String(c.id) === String(formData.college_id) || c.slug === formData.college_slug) || colleges[0];
-    const slug = targetCol?.slug || formData.college_slug || 'srms-cet-bareilly';
+    const slug = (userRole !== 'SUPER_ADMIN' && userTenantSlug) ? userTenantSlug : (targetCol?.slug || formData.college_slug || 'srms-cet-bareilly');
 
     const url = isEdit
       ? `${API_BASE}/users/faculty/${editingItem.id}?tenant=${slug}`

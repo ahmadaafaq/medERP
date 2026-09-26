@@ -27,7 +27,20 @@ export function middleware(request: NextRequest) {
   const authToken = request.cookies.get('auth_token')?.value;
   const authRole = request.cookies.get('auth_role')?.value;
 
-  // 3. If accessing dashboard routes without token -> REDIRECT TO LOGIN
+  // 3. Shorthand routes redirect (e.g. /faculty/schedule -> /dashboard/faculty/schedule)
+  if (pathname.startsWith('/faculty')) {
+    const targetPath = pathname.startsWith('/dashboard') ? pathname : pathname.replace(/^\/faculty/, '/dashboard/faculty');
+    if (!authToken) {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirect', targetPath);
+      return NextResponse.redirect(loginUrl);
+    }
+    const targetUrl = new URL(targetPath, request.url);
+    targetUrl.search = request.nextUrl.search;
+    return NextResponse.redirect(targetUrl);
+  }
+
+  // 4. If accessing dashboard routes without token -> REDIRECT TO LOGIN
   if (pathname.startsWith('/dashboard')) {
     if (!authToken) {
       // If user attempted to access owner/superadmin dashboard, redirect to superadmin portal

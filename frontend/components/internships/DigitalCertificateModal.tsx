@@ -77,7 +77,7 @@ export default function DigitalCertificateModal({
       const canvas = await html2canvas(printRef.current, {
         scale: 3, // High-DPI 300+ DPI render
         useCORS: true,
-        allowTaint: true,
+        allowTaint: false,
         backgroundColor: '#FAF9F6',
         logging: false,
         imageTimeout: 8000,
@@ -215,6 +215,7 @@ export default function DigitalCertificateModal({
               <img
                 src={displayLogo || '/images/srms-logo.png'}
                 alt="SRMS Official Logo"
+                crossOrigin="anonymous"
                 className="h-10 sm:h-12 w-auto max-w-[170px] object-contain drop-shadow-sm"
               />
             </div>

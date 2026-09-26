@@ -99,13 +99,36 @@ export default function LogbookSubmitWorkModal({
       if (rawUser) {
         try {
           const parsed = JSON.parse(rawUser);
-          studentId = parsed.student_id || parsed.id || parsed.userId || '';
+          const p = parsed?.profile || parsed;
+          studentId =
+            p.registration_no ||
+            p.reg_no ||
+            p.rollno ||
+            p.roll_no ||
+            p.id ||
+            p.student_id ||
+            parsed.registration_no ||
+            parsed.rollno ||
+            parsed.id ||
+            parsed.userId ||
+            '';
         } catch (e) {}
+      }
+      if (!studentId && typeof window !== 'undefined') {
+        studentId =
+          localStorage.getItem('studentId') ||
+          localStorage.getItem('studentUserId') ||
+          localStorage.getItem('registration_no') ||
+          localStorage.getItem('rollno') ||
+          localStorage.getItem('userId') ||
+          '';
       }
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'x-tenant-slug': slug,
+        'x-user-reg-no': studentId,
+        'x-user-id': studentId,
       };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;

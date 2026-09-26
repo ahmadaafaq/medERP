@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import { useRolePermissions } from '../../../../lib/useRolePermissions';
 
 interface College {
   id: string;
@@ -550,6 +551,23 @@ export default function AssessmentMasterPage() {
   const [publishFilterSubject, setPublishFilterSubject] = useState<string>('all');
   const [publishFilterBatch, setPublishFilterBatch] = useState<string>('all');
   const [previewPaper, setPreviewPaper] = useState<any | null>(null);
+
+  const { isAllowed } = useRolePermissions();
+
+  const assessmentTabs = [
+    { key: 'bank' as const, label: '1. Question Bank', permissionKey: 'admin_assessment_bank' },
+    { key: 'design' as const, label: `2. Question Design (${sections.length} Sections)`, permissionKey: 'admin_assessment_design' },
+    { key: 'publish' as const, label: '3. Publish', permissionKey: 'admin_assessment_publish' },
+  ];
+
+  const allowedTabs = assessmentTabs.filter((t) => isAllowed(t.permissionKey, 'admin_assessment'));
+
+  // Automatically select the first allowed tab if current activeTab is disallowed
+  useEffect(() => {
+    if (allowedTabs.length > 0 && !allowedTabs.some((t) => t.key === activeTab)) {
+      setActiveTab(allowedTabs[0].key);
+    }
+  }, [allowedTabs, activeTab]);
 
   // Utility for foolproof array deduplication by key
   const dedupeBy = <T,>(arr: T[], keyFn: (item: T) => string): T[] => {
@@ -1912,46 +1930,39 @@ export default function AssessmentMasterPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-1.5 p-1 bg-[#F6F8FC] dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold shrink-0">
-              <button
-                onClick={() => setActiveTab('bank')}
-                className={`px-4 py-2 rounded-lg transition-all ${
-                  activeTab === 'bank'
-                    ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/20 font-extrabold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                1. Question Bank
-              </button>
-
-              <button
-                onClick={() => setActiveTab('design')}
-                className={`px-4 py-2 rounded-lg transition-all ${
-                  activeTab === 'design'
-                    ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/20 font-extrabold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                2. Question Design ({sections.length} Sections)
-              </button>
-
-              <button
-                onClick={() => setActiveTab('publish')}
-                className={`px-4 py-2 rounded-lg transition-all ${
-                  activeTab === 'publish'
-                    ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/20 font-extrabold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                3. Publish
-              </button>
-            </div>
+            {allowedTabs.length === 0 ? (
+              <div className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
+                🔒 Assessment tabs restricted
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 p-1 bg-[#F6F8FC] dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold shrink-0">
+                {allowedTabs.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setActiveTab(t.key)}
+                    className={`px-4 py-2 rounded-lg transition-all ${
+                      activeTab === t.key
+                        ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/20 font-extrabold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
+          {allowedTabs.length === 0 && (
+            <div className="p-8 text-center bg-white dark:bg-[#1B1E28] rounded-2xl border border-dashed border-slate-300 dark:border-slate-800">
+              <p className="text-xs font-bold text-slate-500">🔒 Access to Assessment tabs is currently restricted for your role. Contact Platform SuperAdmin.</p>
+            </div>
+          )}
 
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
           {/* TAB 1: QUESTION BANK */}
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
-          {activeTab === 'bank' && (
+          {activeTab === 'bank' && isAllowed('admin_assessment_bank', 'admin_assessment') && (
             <div className="space-y-6">
 
               {/* ═════════════════════════════════════════════════════════════════════════ */}
@@ -2734,7 +2745,7 @@ export default function AssessmentMasterPage() {
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
           {/* TAB 2: ADVANCED QUESTION DESIGN & SECTION BUILDER */}
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
-          {activeTab === 'design' && (
+          {activeTab === 'design' && isAllowed('admin_assessment_design', 'admin_assessment') && (
             <div className="space-y-6">
 
               {/* Top Paper Metadata Header Card */}
@@ -3340,7 +3351,7 @@ export default function AssessmentMasterPage() {
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
           {/* TAB 3: PUBLISH */}
           {/* ═════════════════════════════════════════════════════════════════════════════ */}
-          {activeTab === 'publish' && (
+          {activeTab === 'publish' && isAllowed('admin_assessment_publish', 'admin_assessment') && (
             <div className="space-y-6">
               <div className="p-6 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 space-y-6 shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
                 <div className="border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
