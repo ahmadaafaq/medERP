@@ -44,3 +44,17 @@ docker-compose.override.yml
 # Backups
 backups/
 *.dump
+
+# Local utility and scratch scripts
+scripts/
+backend/inspect_*.js
+backend/seed_tab_permissions.js
+backend/scripts/test_*.js
+backend/scripts/inspect_*.js
+backend/scripts/check_*.js
+backend/scripts/find_*.js
+backend/scripts/dedup_*.js
+backend/scripts/replace_*.js
+backend/scripts/select_*.js
+backend/scripts/sync_repository_reviews.js
+backend/scripts/verify_student_attendance_api.js
