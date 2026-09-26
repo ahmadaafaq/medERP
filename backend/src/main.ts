@@ -11,6 +11,7 @@ import * as path from 'path';
 
 import { json, urlencoded } from 'express';
 
+// Application bootstrap - Local Database Mode
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule);

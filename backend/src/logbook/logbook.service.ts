@@ -513,7 +513,7 @@ export class LogbookService {
         tenantSlug,
         `SELECT p.*, f.name as guide_name
          FROM "${schema}".logbook_mini_projects p
-         LEFT JOIN "${schema}".faculty f ON f.id::text = p.faculty_id::text
+         LEFT JOIN "${schema}".faculty f ON (f.id::text = p.faculty_id::text OR f.user_id::text = p.faculty_id::text)
          WHERE p.student_id::text = $1
          ORDER BY p.updated_at DESC LIMIT 1`,
         [studentId],
@@ -526,10 +526,10 @@ export class LogbookService {
     let sql = `
       SELECT p.*, f.name as guide_name
       FROM "${schema}".logbook_mini_projects p
-      LEFT JOIN "${schema}".faculty f ON f.id::text = p.faculty_id::text
+      LEFT JOIN "${schema}".faculty f ON (f.id::text = p.faculty_id::text OR f.user_id::text = p.faculty_id::text)
       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = p.course_id::text OR cr.id::text = p.course_id::text)
       LEFT JOIN "${schema}".batches b ON (b.id::text = p.batch_id::text OR (b.batch_cd::text = p.batch_id::text AND b.course_cd::text = p.course_id::text))
-      WHERE p.student_id IS NULL
+      WHERE 1=1
     `;
 
     if (studentCourseCd && studentCourseCd !== 'all') {
@@ -1092,13 +1092,26 @@ startxref
       SELECT DISTINCT ON (COALESCE(p.id::text, p.title))
               p.*, f.name as guide_name, f.emp_id as faculty_code,
               cr.name as course_name,
+              st.name as student_name, st.rollno as student_rollno,
               (SELECT COUNT(*) FROM "${schema}".logbook_weekly_logs WHERE project_id = p.id OR (project_id IS NULL AND student_id = p.student_id)) as logs_count,
               (SELECT COUNT(DISTINCT student_id) FROM "${schema}".logbook_weekly_logs WHERE project_id = p.id OR project_id IS NULL) as students_count
        FROM "${schema}".logbook_mini_projects p
-       LEFT JOIN "${schema}".faculty f ON f.id::text = p.faculty_id::text
+       LEFT JOIN "${schema}".faculty f ON (f.id::text = p.faculty_id::text OR f.user_id::text = p.faculty_id::text)
        LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = p.course_id::text OR cr.id::text = p.course_id::text)
+       LEFT JOIN "${schema}".students st ON st.id::text = p.student_id::text
        WHERE 1=1
     `;
+
+    if (facultyId && facultyId !== 'all') {
+      params.push(facultyId);
+      const fIdx = params.length;
+      sql += ` AND (
+        p.faculty_id::text = $${fIdx}::text
+        OR f.id::text = $${fIdx}::text
+        OR f.user_id::text = $${fIdx}::text
+        OR f.emp_id::text = $${fIdx}::text
+      )`;
+    }
 
     if (queryFilters.courseId && queryFilters.courseId !== 'all') {
       params.push(queryFilters.courseId);
@@ -2097,7 +2110,7 @@ startxref
     sql += `
       FROM "${schema}".logbook_topics t
       LEFT JOIN "${schema}".logbook_categories c ON c.id = t.category_id
-      LEFT JOIN "${schema}".faculty f ON f.id::text = t.faculty_id::text
+      LEFT JOIN "${schema}".faculty f ON (f.id::text = t.faculty_id::text OR f.user_id::text = t.faculty_id::text)
       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = t.course_id::text OR cr.id::text = t.course_id::text)
       LEFT JOIN "${schema}".batches b ON (b.id::text = t.batch_id::text OR (b.batch_cd::text = t.batch_id::text AND b.course_cd::text = t.course_id::text))
       WHERE t.is_active = true
@@ -2109,28 +2122,34 @@ startxref
     }
 
     const effectiveCourseFilter = query.courseId || (effectiveStudentId ? studentCourseCd : null);
-    if (query.facultyId && effectiveCourseFilter && effectiveCourseFilter !== 'all') {
+    if (query.facultyId && query.facultyId !== 'all') {
       params.push(query.facultyId);
       const facIdx = params.length;
-      params.push(effectiveCourseFilter);
-      const crsIdx = params.length;
-      sql += ` AND (
-        t.faculty_id::text = $${facIdx}::text
-        OR (
-          (t.course_id IS NULL OR t.course_id = 'all' OR t.course_id = '' OR t.course_id::text = $${crsIdx}::text OR cr.code::text = $${crsIdx}::text OR cr.course_cd::text = $${crsIdx}::text)
-          AND (
-            CASE WHEN $${crsIdx}::text = '4' THEN cr.name ILIKE '%MBA%' OR t.course_id = '4'
-                 WHEN $${crsIdx}::text = '13' THEN cr.name ILIKE '%BCA%' OR t.course_id = '13'
-                 WHEN $${crsIdx}::text = '3' THEN cr.name ILIKE '%MCA%' OR t.course_id = '3'
-                 WHEN $${crsIdx}::text = '1' THEN cr.name ILIKE '%B.Tech%' OR cr.name ILIKE '%BTech%' OR t.course_id = '1'
-                 WHEN $${crsIdx}::text = '2' THEN cr.name ILIKE '%Pharm%' OR t.course_id = '2'
-                 ELSE true END
+      if (effectiveCourseFilter && effectiveCourseFilter !== 'all') {
+        params.push(effectiveCourseFilter);
+        const crsIdx = params.length;
+        sql += ` AND (
+          (t.faculty_id::text = $${facIdx}::text OR f.id::text = $${facIdx}::text OR f.user_id::text = $${facIdx}::text OR f.emp_id::text = $${facIdx}::text)
+          OR (
+            (t.course_id IS NULL OR t.course_id = 'all' OR t.course_id = '' OR t.course_id::text = $${crsIdx}::text OR cr.code::text = $${crsIdx}::text OR cr.course_cd::text = $${crsIdx}::text)
+            AND (
+              CASE WHEN $${crsIdx}::text = '4' THEN cr.name ILIKE '%MBA%' OR t.course_id = '4'
+                   WHEN $${crsIdx}::text = '13' THEN cr.name ILIKE '%BCA%' OR t.course_id = '13'
+                   WHEN $${crsIdx}::text = '3' THEN cr.name ILIKE '%MCA%' OR t.course_id = '3'
+                   WHEN $${crsIdx}::text = '1' THEN cr.name ILIKE '%B.Tech%' OR cr.name ILIKE '%BTech%' OR t.course_id = '1'
+                   WHEN $${crsIdx}::text = '2' THEN cr.name ILIKE '%Pharm%' OR t.course_id = '2'
+                   ELSE true END
+            )
           )
-        )
-      )`;
-    } else if (query.facultyId) {
-      params.push(query.facultyId);
-      sql += ` AND (t.faculty_id::text = $${params.length}::text)`;
+        )`;
+      } else {
+        sql += ` AND (
+          t.faculty_id::text = $${facIdx}::text
+          OR f.id::text = $${facIdx}::text
+          OR f.user_id::text = $${facIdx}::text
+          OR f.emp_id::text = $${facIdx}::text
+        )`;
+      }
     } else if (effectiveCourseFilter && effectiveCourseFilter !== 'all') {
       params.push(effectiveCourseFilter);
       const pIdx = params.length;
@@ -2424,12 +2443,27 @@ startxref
       JOIN "${schema}".logbook_topics t ON t.id = s.topic_id
       LEFT JOIN "${schema}".logbook_categories c ON c.id = t.category_id
       LEFT JOIN "${schema}".students st ON st.id::text = s.student_id::text
-      LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = st.course_cd::text)
+      LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = st.course_cd::text OR cr.id::text = st.course_cd::text OR cr.course_cd::text = t.course_id::text OR cr.id::text = t.course_id::text)
       LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR (b.batch_cd::text = st.batch_cd::text AND b.course_cd::text = st.course_cd::text))
       LEFT JOIN "${schema}".logbook_evaluations e ON e.submission_id = s.id
-      LEFT JOIN "${schema}".faculty ef ON (ef.id::text = COALESCE(e.faculty_id, e.evaluator_id)::text)
+      LEFT JOIN "${schema}".faculty ef ON (ef.id::text = COALESCE(e.faculty_id, e.evaluator_id)::text OR ef.user_id::text = COALESCE(e.faculty_id, e.evaluator_id)::text)
+      LEFT JOIN "${schema}".faculty tf ON (tf.id::text = t.faculty_id::text OR tf.user_id::text = t.faculty_id::text)
       WHERE 1=1
     `;
+
+    if (query.facultyId && query.facultyId !== 'all') {
+      params.push(query.facultyId);
+      const facIdx = params.length;
+      sql += ` AND (
+        t.faculty_id::text = $${facIdx}::text
+        OR tf.id::text = $${facIdx}::text
+        OR tf.user_id::text = $${facIdx}::text
+        OR tf.emp_id::text = $${facIdx}::text
+        OR ef.id::text = $${facIdx}::text
+        OR ef.user_id::text = $${facIdx}::text
+        OR ef.emp_id::text = $${facIdx}::text
+      )`;
+    }
 
     if (query.topicId && query.topicId !== 'all') {
       params.push(query.topicId);

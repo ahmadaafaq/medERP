@@ -179,7 +179,7 @@ export class LogbookController {
     @Query('batchId') batchId?: string,
     @Query('branchId') branchId?: string,
   ) {
-    const facultyId = queryFacultyId || user?.profile?.id || user?.userId || user?.id;
+    const facultyId = queryFacultyId === 'all' ? undefined : (queryFacultyId || user?.profile?.id || user?.userId || user?.id);
     return this.logbookService.getAllFacultyMiniProjects(tenantSlug, facultyId, { courseId, batchId, branchId });
   }
 

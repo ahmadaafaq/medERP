@@ -1,9 +1,17 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { LibraryService } from './library.service';
-import { CreateBookDto, IssueBookDto, SaveReadingProgressDto } from './dto/library.dto';
+import {
+  CreateBookDto,
+  IssueBookDto,
+  SaveReadingProgressDto,
+  BulkUpsertDigitalBooksDto,
+  SyncDigitalBooksDto,
+  QueryBooksDto,
+} from './dto/library.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Tenant } from '../common/decorators/tenant.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('library')
 @UseGuards(JwtAuthGuard)
@@ -15,9 +23,26 @@ export class LibraryController {
     return this.libraryService.createBook(tenantSlug, dto);
   }
 
+  @Public()
   @Get('books')
-  async getBooks(@Tenant() tenantSlug: string, @Query('q') search?: string) {
-    return this.libraryService.getBooks(tenantSlug, search);
+  async getBooks(@Tenant() tenantSlug: string, @Query() query: QueryBooksDto) {
+    return this.libraryService.getBooks(tenantSlug, query);
+  }
+
+  @Public()
+  @Post('books/sync')
+  async syncDigitalBooks(@Tenant() tenantSlug: string, @Body() dto: SyncDigitalBooksDto) {
+    return this.libraryService.syncFromSrms(
+      tenantSlug,
+      dto.colg || dto.colg_cd || '1',
+      dto.searchvalue || '',
+    );
+  }
+
+  @Public()
+  @Post('books/bulk')
+  async bulkUpsertBooks(@Tenant() tenantSlug: string, @Body() dto: BulkUpsertDigitalBooksDto) {
+    return this.libraryService.bulkUpsertDigitalBooks(tenantSlug, dto.books || [], dto.colg_cd || '1');
   }
 
   @Post('circulation/issue')

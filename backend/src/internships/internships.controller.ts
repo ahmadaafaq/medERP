@@ -28,11 +28,20 @@ export class InternshipsController {
   private extractUser(req: any, dto?: any): any {
     if (req.user && req.user.role) return req.user;
 
+    let token = '';
     const authHeader = req.headers?.authorization || req.headers?.Authorization;
-    let tokenUser: any = null;
     if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.headers?.cookie) {
+      const match = req.headers.cookie.match(/auth_token=([^;]+)/);
+      if (match) token = match[1];
+    } else if (req.cookies?.auth_token) {
+      token = req.cookies.auth_token;
+    }
+
+    let tokenUser: any = null;
+    if (token) {
       try {
-        const token = authHeader.split(' ')[1];
         const payloadBase64 = token.split('.')[1];
         if (payloadBase64) {
           tokenUser = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf8'));
@@ -59,6 +68,7 @@ export class InternshipsController {
 
     const role = (dto?.role || req.headers?.['x-user-role'] || tokenUser?.role || 'STUDENT').toUpperCase();
     const name = dto?.student_name || req.headers?.['x-user-name'] || tokenUser?.name || tokenUser?.first_name || '';
+    const email = req.headers?.['x-user-email'] || tokenUser?.email || '';
 
     return {
       id: userId,
@@ -67,6 +77,7 @@ export class InternshipsController {
       rollno: req.headers?.['x-user-rollno'] || tokenUser?.rollno || regNo,
       role,
       name,
+      email,
     };
   }
 
@@ -79,6 +90,26 @@ export class InternshipsController {
   ) {
     const user = this.extractUser(req, dto);
     return this.internshipsService.createProgram(tenantSlug, dto, user);
+  }
+
+  @Public()
+  @Get('my-certificates')
+  async getMyCertificates(
+    @TenantSlug() tenantSlug: string,
+    @Query('tenant') queryTenant: string,
+    @Query('student_reg_no') queryRegNo: string,
+    @Query('student_id') queryStudentId: string,
+    @Request() req: any,
+  ) {
+    const slug = queryTenant || tenantSlug;
+    const user = this.extractUser(req);
+    if (queryRegNo && !user.registration_no) {
+      user.registration_no = queryRegNo;
+    }
+    if (queryStudentId && !user.id) {
+      user.id = queryStudentId;
+    }
+    return this.internshipsService.getMyCertificates(slug, user);
   }
 
   @Public()
@@ -173,9 +204,11 @@ export class InternshipsController {
   async getCertificate(
     @TenantSlug() tenantSlug: string,
     @Param('id') applicationId: string,
+    @Query('tenant') queryTenant: string,
     @Request() req: any,
   ) {
+    const slug = queryTenant || tenantSlug;
     const user = this.extractUser(req);
-    return this.internshipsService.getCertificate(tenantSlug, applicationId, user);
+    return this.internshipsService.getCertificate(slug, applicationId, user);
   }
 }

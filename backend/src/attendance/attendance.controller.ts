@@ -79,17 +79,49 @@ export class AttendanceController {
   // ─── Find Active Session Records ───────────────────────────────────────────
   @Get('active-session')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
-  @ApiOperation({ summary: 'Find existing attendance session and marked records for a subject, batch, date and type' })
+  @ApiOperation({
+    summary: 'Find existing attendance session and marked records',
+    description: 'Accepts subjectId (UUID) OR subjectCd (numeric code like "87659" or SRMS code "BCS401") per RestrictAPI.md',
+  })
   findActiveSession(
     @TenantSlug() tenantSlug: string,
-    @Query('subjectId') subjectId: string,
-    @Query('batchId') batchId: string,
-    @Query('sessionDate') sessionDate: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('subjectCd') subjectCd?: string,      // subject_cd numeric per RestrictAPI.md
+    @Query('batchId') batchId?: string,
+    @Query('batchCd') batchCd?: string,          // batch_cd numeric per RestrictAPI.md
+    @Query('sessionDate') sessionDate?: string,
     @Query('sessionType') sessionType?: string,
     @Query('timetableSlotId') timetableSlotId?: string,
   ) {
+    // Use subject_cd if subjectId UUID not provided (RestrictAPI.md convention)
+    const resolvedSubjectId = subjectId || subjectCd || '';
+    const resolvedBatchId = batchId || batchCd || '';
     return this.attendanceService.findExistingSessionWithRecords(
-      tenantSlug, subjectId, batchId, sessionDate, sessionType || 'THEORY', timetableSlotId,
+      tenantSlug,
+      resolvedSubjectId,
+      resolvedBatchId,
+      sessionDate || '',
+      sessionType || 'THEORY',
+      timetableSlotId,
+    );
+  }
+
+
+  // ─── Get Students for a Specific Timetable Slot (by batch_id UUID) ─────────
+  @Get('students-for-slot')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK)
+  @ApiOperation({ summary: 'Get enrolled students for a timetable slot by batch UUID' })
+  async getStudentsForSlot(
+    @TenantSlug() tenantSlug: string,
+    @Query('batchId') batchId?: string,
+    @Query('timetableSlotId') timetableSlotId?: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+    @Query('semester') semester?: string,
+    @Query('section') section?: string,
+  ) {
+    return this.attendanceService.getStudentsForSlot(
+      tenantSlug, batchId, timetableSlotId, courseCd, branchCd, semester, section,
     );
   }
 

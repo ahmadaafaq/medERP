@@ -381,17 +381,38 @@ export class FirmsService {
   }
 
   /**
-   * Get role permissions for firm (supports UUID or slug)
+   * Get role permissions for firm (supports UUID, slug, numeric colg_cd, or title)
    */
-  async getFirmPermissions(firmIdOrSlug: string, role?: MenuRole) {
+  async getFirmPermissions(firmIdOrSlug: string, role?: string) {
     let firmId = firmIdOrSlug;
     const clean = firmIdOrSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
 
-    // If not UUID, look up ID by slug or title
+    // Map common aliases, slugs, and numeric college codes to canonical slugs
+    let targetSlug = clean;
+    if (targetSlug === '1' || targetSlug === 'srms' || targetSlug === 'srms-cet' || targetSlug === 'cet') {
+      targetSlug = 'srms-cet-bareilly';
+    } else if (targetSlug === '2' || targetSlug === 'srms-cetr' || targetSlug === 'srms-cetr-bareilly') {
+      targetSlug = 'srms-cetr-bareilly';
+    } else if (targetSlug === '11' || targetSlug === 'srms-ims' || targetSlug === 'ims') {
+      targetSlug = 'srms-ims';
+    } else if (targetSlug === '3' || targetSlug === 'srms-ibs' || targetSlug === 'srms-ibs-lucknow') {
+      targetSlug = 'srms-ibs-lucknow';
+    } else if (targetSlug === '4' || targetSlug === 'srms-law' || targetSlug === 'srms-college-of-law') {
+      targetSlug = 'srms-college-of-law';
+    } else if (targetSlug === '5' || targetSlug === 'srms-nursing' || targetSlug === 'srms-nursing-college') {
+      targetSlug = 'srms-nursing-college';
+    } else if (targetSlug === '6' || targetSlug === 'srms-iahs' || targetSlug === 'srms-iahs-bareilly') {
+      targetSlug = 'srms-iahs-bareilly';
+    }
+
+    // If not UUID, look up ID by canonical targetSlug, clean slug, or title
     if (!firmIdOrSlug.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
       const firm = await this.dataSource.query(
-        `SELECT id FROM public.firms WHERE LOWER(slug) = $1 OR LOWER(slug) = $2 OR LOWER(title) ILIKE $3 LIMIT 1`,
-        [clean, firmIdOrSlug.toLowerCase(), `%${clean}%`],
+        `SELECT id, firm_mode, title, slug FROM public.firms 
+         WHERE LOWER(slug) = $1 OR LOWER(slug) = $2 OR LOWER(slug) = $3 OR LOWER(title) ILIKE $4 
+         ORDER BY (CASE WHEN LOWER(slug) = $1 THEN 1 WHEN LOWER(slug) = $2 THEN 2 ELSE 3 END) ASC
+         LIMIT 1`,
+        [targetSlug, clean, firmIdOrSlug.toLowerCase(), `%${targetSlug}%`],
       );
       if (firm.length > 0) {
         firmId = firm[0].id;
@@ -400,41 +421,176 @@ export class FirmsService {
       }
     }
 
-    if (role) {
-      return await this.dataSource.query(
-        `SELECT * FROM public.firm_role_permissions WHERE firm_id = $1 AND role = $2`,
-        [firmId, role],
-      );
-    }
-    return await this.dataSource.query(
-      `SELECT * FROM public.firm_role_permissions WHERE firm_id = $1`,
+    // Check if this firm has NEVER had any permissions initialized across any role
+    const totalCountRes = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS cnt FROM public.firm_role_permissions WHERE firm_id = $1`,
       [firmId],
     );
+    const totalCount = totalCountRes[0]?.cnt || 0;
+
+    if (totalCount === 0) {
+      // First time initialization: seed defaults for this firm based on its firm_mode
+      try {
+        const firmData = await this.dataSource.query(
+          `SELECT id, firm_mode, title FROM public.firms WHERE id = $1 LIMIT 1`,
+          [firmId],
+        );
+        if (firmData.length > 0) {
+          const firmMode = firmData[0].firm_mode || 'NONMED';
+          const modeCondition = firmMode === 'MED' ? `('MED', 'BOTH')` : `('NONMED', 'BOTH')`;
+          const menuDefaults = await this.dataSource.query(
+            `SELECT role, menu_key FROM public.menu_registry 
+             WHERE applicable_firm_mode IN ${modeCondition}
+             ORDER BY sort_order ASC`,
+          );
+          for (const md of menuDefaults) {
+            await this.dataSource.query(
+              `INSERT INTO public.firm_role_permissions (firm_id, role, menu_key, is_enabled, created_at, updated_at)
+               VALUES ($1, $2, $3, true, NOW(), NOW())
+               ON CONFLICT DO NOTHING`,
+              [firmId, md.role, md.menu_key],
+            ).catch(() => {});
+          }
+          this.logger.log(`Initialized default role permissions for firm '${firmData[0].title}' (${firmMode})`);
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not auto-seed firm role permissions: ${err.message}`);
+      }
+    }
+
+    // Normalize role string if passed from client (e.g. COLLEGE_ADMIN -> ADMIN, HOD -> FACULTY)
+    let canonicalRole: string | undefined = undefined;
+    if (role) {
+      const rUpper = String(role).toUpperCase().trim();
+      if (rUpper === 'COLLEGE_ADMIN' || rUpper === 'ADMINISTRATOR' || rUpper === 'ADMIN') {
+        canonicalRole = 'ADMIN';
+      } else if (rUpper === 'HOD' || rUpper === 'STAFF' || rUpper === 'TEACHER' || rUpper === 'FACULTY') {
+        canonicalRole = 'FACULTY';
+      } else if (rUpper === 'SUPER_ADMIN' || rUpper === 'OWNER' || rUpper === 'SUPERADMIN') {
+        canonicalRole = 'SUPERADMIN';
+      } else if (rUpper === 'STUDENT' || rUpper === 'CLERK' || rUpper === 'WARDEN') {
+        canonicalRole = rUpper;
+      } else {
+        canonicalRole = rUpper;
+      }
+    }
+
+    // Query permissions joined with menu_registry for complete metadata (routes, labels, sort order)
+    let rawRows: any[] = [];
+    if (canonicalRole) {
+      rawRows = await this.dataSource.query(
+        `SELECT p.id, p.firm_id, p.role, p.menu_key, p.is_enabled,
+                COALESCE(m.menu_label, p.menu_key) AS menu_label,
+                m.route_path,
+                COALESCE(m.applicable_firm_mode, 'BOTH') AS applicable_firm_mode,
+                COALESCE(m.sort_order, 999) AS sort_order
+         FROM public.firm_role_permissions p
+         LEFT JOIN public.menu_registry m 
+           ON (m.role = p.role AND (m.menu_key = p.menu_key OR REPLACE(REPLACE(m.menu_key, '-', '_'), '.', '_') = REPLACE(REPLACE(p.menu_key, '-', '_'), '.', '_')))
+         WHERE p.firm_id = $1 AND p.role = $2
+         ORDER BY COALESCE(m.sort_order, 999) ASC, p.menu_key ASC`,
+        [firmId, canonicalRole],
+      );
+    } else {
+      rawRows = await this.dataSource.query(
+        `SELECT p.id, p.firm_id, p.role, p.menu_key, p.is_enabled,
+                COALESCE(m.menu_label, p.menu_key) AS menu_label,
+                m.route_path,
+                COALESCE(m.applicable_firm_mode, 'BOTH') AS applicable_firm_mode,
+                COALESCE(m.sort_order, 999) AS sort_order
+         FROM public.firm_role_permissions p
+         LEFT JOIN public.menu_registry m 
+           ON (m.role = p.role AND (m.menu_key = p.menu_key OR REPLACE(REPLACE(m.menu_key, '-', '_'), '.', '_') = REPLACE(REPLACE(p.menu_key, '-', '_'), '.', '_')))
+         WHERE p.firm_id = $1
+         ORDER BY p.role, COALESCE(m.sort_order, 999) ASC, p.menu_key ASC`,
+        [firmId],
+      );
+    }
+
+    // Strictly deduplicate by role and menu_key before sending to frontend
+    const seenPerms = new Set<string>();
+    const uniquePerms: any[] = [];
+    for (const r of rawRows) {
+      const uniqueKey = `${r.role}__${r.menu_key}`;
+      if (!seenPerms.has(uniqueKey)) {
+        seenPerms.add(uniqueKey);
+        uniquePerms.push(r);
+      }
+    }
+
+    return uniquePerms;
   }
 
   /**
    * Save selected menu keys for a firm role
    */
-  async updateFirmPermissions(firmId: string, dto: UpdateRolePermissionsDto) {
-    // Delete existing permissions for this firm + role
-    await this.dataSource.query(
-      `DELETE FROM public.firm_role_permissions WHERE firm_id = $1 AND role = $2`,
-      [firmId, dto.role],
-    );
+  async updateFirmPermissions(firmIdOrSlug: string, dto: UpdateRolePermissionsDto) {
+    let firmId = firmIdOrSlug;
+    if (!firmIdOrSlug.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      const clean = firmIdOrSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
+      let targetSlug = clean;
+      if (targetSlug === '1' || targetSlug === 'srms' || targetSlug === 'srms-cet' || targetSlug === 'cet') {
+        targetSlug = 'srms-cet-bareilly';
+      } else if (targetSlug === '2' || targetSlug === 'srms-cetr' || targetSlug === 'srms-cetr-bareilly') {
+        targetSlug = 'srms-cetr-bareilly';
+      } else if (targetSlug === '11' || targetSlug === 'srms-ims' || targetSlug === 'ims') {
+        targetSlug = 'srms-ims';
+      } else if (targetSlug === '3' || targetSlug === 'srms-ibs' || targetSlug === 'srms-ibs-lucknow') {
+        targetSlug = 'srms-ibs-lucknow';
+      } else if (targetSlug === '4' || targetSlug === 'srms-law' || targetSlug === 'srms-college-of-law') {
+        targetSlug = 'srms-college-of-law';
+      } else if (targetSlug === '5' || targetSlug === 'srms-nursing' || targetSlug === 'srms-nursing-college') {
+        targetSlug = 'srms-nursing-college';
+      } else if (targetSlug === '6' || targetSlug === 'srms-iahs' || targetSlug === 'srms-iahs-bareilly') {
+        targetSlug = 'srms-iahs-bareilly';
+      }
 
-    for (const key of dto.menu_keys) {
-      await this.dataSource.query(
-        `INSERT INTO public.firm_role_permissions (firm_id, role, menu_key, is_enabled, created_at, updated_at)
-         VALUES ($1, $2, $3, true, NOW(), NOW())`,
-        [firmId, dto.role, key],
+      const firm = await this.dataSource.query(
+        `SELECT id FROM public.firms 
+         WHERE LOWER(slug) = $1 OR LOWER(slug) = $2 OR LOWER(slug) = $3 OR LOWER(title) ILIKE $4 
+         ORDER BY (CASE WHEN LOWER(slug) = $1 THEN 1 WHEN LOWER(slug) = $2 THEN 2 ELSE 3 END) ASC
+         LIMIT 1`,
+        [targetSlug, clean, firmIdOrSlug.toLowerCase(), `%${targetSlug}%`],
       );
+      if (firm.length > 0) {
+        firmId = firm[0].id;
+      } else {
+        throw new NotFoundException(`Firm '${firmIdOrSlug}' not found`);
+      }
+    }
+
+    // Determine target firm IDs to update (including mirrored duplicates if any)
+    const firmIdsToUpdate = [firmId];
+    if (firmId === 'f888b64c-c336-4434-bdf8-1032c075c5fc') {
+      firmIdsToUpdate.push('b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e');
+    } else if (firmId === 'b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e') {
+      firmIdsToUpdate.push('f888b64c-c336-4434-bdf8-1032c075c5fc');
+    }
+
+    const uniqueKeys = Array.from(new Set((dto.menu_keys || []).map((k) => k.trim()).filter(Boolean)));
+
+    for (const fid of firmIdsToUpdate) {
+      // Delete existing permissions for this firm + role
+      await this.dataSource.query(
+        `DELETE FROM public.firm_role_permissions WHERE firm_id = $1 AND role = $2`,
+        [fid, dto.role],
+      );
+
+      for (const key of uniqueKeys) {
+        await this.dataSource.query(
+          `INSERT INTO public.firm_role_permissions (firm_id, role, menu_key, is_enabled, created_at, updated_at)
+           VALUES ($1, $2, $3, true, NOW(), NOW())
+           ON CONFLICT (firm_id, role, menu_key) DO UPDATE SET is_enabled = EXCLUDED.is_enabled, updated_at = NOW()`,
+          [fid, dto.role, key],
+        );
+      }
     }
 
     return {
       success: true,
       firm_id: firmId,
       role: dto.role,
-      enabled_count: dto.menu_keys.length,
+      enabled_count: uniqueKeys.length,
     };
   }
 

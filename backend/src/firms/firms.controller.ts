@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  Header,
 } from '@nestjs/common';
 import { FirmsService } from './firms.service';
 import { LicensingService } from './licensing.service';
@@ -164,10 +165,13 @@ export class FirmsController {
    * GET /api/firms/:id/role-permissions?role=STUDENT
    */
   @Get(':id/role-permissions')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
   @Public()
   async getFirmPermissions(
     @Param('id') id: string,
-    @Query('role') role?: MenuRole,
+    @Query('role') role?: string,
   ) {
     return await this.firmsService.getFirmPermissions(id, role);
   }

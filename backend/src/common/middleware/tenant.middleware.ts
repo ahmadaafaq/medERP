@@ -24,9 +24,30 @@ declare global {
 
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
+  private static tenantCache = new Map<string, { tenant: any; expiresAt: number }>();
+
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
+
+  private async safeQuery(sql: string, params: any[] = []): Promise<any[]> {
+    try {
+      return await this.dataSource.query(sql, params);
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (
+        msg.includes('Connection terminated') ||
+        msg.includes('connection') ||
+        msg.includes('timeout') ||
+        msg.includes('ECONNRESET')
+      ) {
+        // Retry once with a fresh connection from pool
+        await new Promise((r) => setTimeout(r, 200));
+        return await this.dataSource.query(sql, params);
+      }
+      throw err;
+    }
+  }
 
   async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
     // Strategy 1: Subdomain → srms.unicampus.app → slug = 'srms'
@@ -44,7 +65,7 @@ export class TenantMiddleware implements NestMiddleware {
       }
     }
 
-    // Strategy 2: X-Tenant-Slug header (for API clients / mobile app)
+    // Strategy 2: Custom Header → X-Tenant-Slug
     if (!slug) {
       slug = (req.headers['x-tenant-slug'] as string) || null;
     }
@@ -76,8 +97,21 @@ export class TenantMiddleware implements NestMiddleware {
       slug = 'srms-cetr-bareilly';
     }
 
-    // Look up tenant in the public schema by slug, code, or id
-    let result = await this.dataSource.query(
+    // Fast-path: Check in-memory cache first to avoid repetitive remote DB roundtrips
+    const cached = TenantMiddleware.tenantCache.get(slug);
+    if (cached && cached.expiresAt > Date.now()) {
+      req.tenant = {
+        id: cached.tenant.id,
+        slug: cached.tenant.slug,
+        schema: `tenant_${cached.tenant.slug}`,
+        name: cached.tenant.name,
+      };
+      next();
+      return;
+    }
+
+    // Look up tenant in the public schema by slug, code, or id with safe retry
+    let result = await this.safeQuery(
       `SELECT id, slug, name, is_active FROM public.tenants
        WHERE LOWER(slug) = $1 OR LOWER(code) = $1 OR id::text = $1
        LIMIT 1`,
@@ -86,7 +120,7 @@ export class TenantMiddleware implements NestMiddleware {
 
     if (!result.length) {
       // Fallback: check in public.firms (registered SaaS tenants)
-      const firmResult = await this.dataSource.query(
+      const firmResult = await this.safeQuery(
         `SELECT id, slug, title as name, (status != 'SUSPENDED') as is_active FROM public.firms
          WHERE LOWER(slug) = $1 OR id::text = $1
          LIMIT 1`,
@@ -97,7 +131,7 @@ export class TenantMiddleware implements NestMiddleware {
         result = firmResult;
         // Auto-sync into public.tenants
         try {
-          await this.dataSource.query(
+          await this.safeQuery(
             `INSERT INTO public.tenants (id, name, slug, code, is_active, schema_provisioned, created_at, updated_at)
              VALUES ($1, $2, $3, $3, true, true, NOW(), NOW())
              ON CONFLICT (slug) DO NOTHING`,
@@ -115,7 +149,7 @@ export class TenantMiddleware implements NestMiddleware {
     }
 
     // Strict Firm Status & License Expiry Check
-    const firmStatusCheck = await this.dataSource.query(
+    const firmStatusCheck = await this.safeQuery(
       `SELECT id, title, status, trial_ends_at FROM public.firms WHERE LOWER(slug) = $1 LIMIT 1`,
       [slug],
     );
@@ -147,6 +181,11 @@ export class TenantMiddleware implements NestMiddleware {
         throw new UnauthorizedException(`Licence Key is expired Renewal Now (Institution "${f.title}" license has expired).`);
       }
     }
+
+    TenantMiddleware.tenantCache.set(slug, {
+      tenant,
+      expiresAt: Date.now() + 60000,
+    });
 
     req.tenant = {
       id: tenant.id,

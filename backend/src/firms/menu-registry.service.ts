@@ -143,25 +143,57 @@ export class MenuRegistryService implements OnModuleInit {
       // ═══════════════════════════ ADMIN ═══════════════════════════
       { role: MenuRole.ADMIN, menu_key: 'admin_overview', menu_label: 'College KPIs', route_path: '/dashboard/admin', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_college_master', menu_label: 'College Master', route_path: '/dashboard/admin/college-master', sort_order: 20, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_colleges', menu_label: '1. College', route_path: '/dashboard/admin/college-master#colleges', parent_menu_key: 'admin_college_master', sort_order: 21, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_courses', menu_label: '2. Courses', route_path: '/dashboard/admin/college-master#courses', parent_menu_key: 'admin_college_master', sort_order: 22, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_professionals', menu_label: '3. Academic Year', route_path: '/dashboard/admin/college-master#professionals', parent_menu_key: 'admin_college_master', sort_order: 23, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_batches', menu_label: '4. Batch', route_path: '/dashboard/admin/college-master#batches', parent_menu_key: 'admin_college_master', sort_order: 24, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_branches', menu_label: '5. Departments & Specialties', route_path: '/dashboard/admin/college-master#branches', parent_menu_key: 'admin_college_master', sort_order: 25, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_groups', menu_label: '6. Section Groups', route_path: '/dashboard/admin/college-master#groups', parent_menu_key: 'admin_college_master', sort_order: 26, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_sessions', menu_label: '7. Session', route_path: '/dashboard/admin/college-master#sessions', parent_menu_key: 'admin_college_master', sort_order: 27, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_residencies', menu_label: '8. Residency Category', route_path: '/dashboard/admin/college-master#residencies', parent_menu_key: 'admin_college_master', sort_order: 28, applicable_firm_mode: ApplicableFirmMode.BOTH },
+
       { role: MenuRole.ADMIN, menu_key: 'admin_admin_master', menu_label: 'Admin Master (Units, Topics, Depts)', route_path: '/dashboard/admin/admin-master', sort_order: 30, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_departments', menu_label: '1. Department Master', route_path: '/dashboard/admin/admin-master#departments', parent_menu_key: 'admin_admin_master', sort_order: 31, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_subjects', menu_label: '2. Subject Master', route_path: '/dashboard/admin/admin-master#subjects', parent_menu_key: 'admin_admin_master', sort_order: 32, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_guidelines', menu_label: '3. Guidelines', route_path: '/dashboard/admin/admin-master#guidelines', parent_menu_key: 'admin_admin_master', sort_order: 33, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_offerings', menu_label: '4. Subject Offerings', route_path: '/dashboard/admin/admin-master#offerings', parent_menu_key: 'admin_admin_master', sort_order: 34, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_delivery_types', menu_label: '5. Delivery Types', route_path: '/dashboard/admin/admin-master#delivery-types', parent_menu_key: 'admin_admin_master', sort_order: 35, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_units', menu_label: '6. Unit Master', route_path: '/dashboard/admin/admin-master#units', parent_menu_key: 'admin_admin_master', sort_order: 36, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_topics', menu_label: '7. Topic Master', route_path: '/dashboard/admin/admin-master#topics', parent_menu_key: 'admin_admin_master', sort_order: 37, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_competencies', menu_label: '8. Sub Topics', route_path: '/dashboard/admin/admin-master#sub-topics', parent_menu_key: 'admin_admin_master', sort_order: 38, applicable_firm_mode: ApplicableFirmMode.BOTH },
+
       { role: MenuRole.ADMIN, menu_key: 'admin_student_master', menu_label: 'Student Master', route_path: '/dashboard/admin/student-master', sort_order: 40, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_staff_master', menu_label: 'Staff Master', route_path: '/dashboard/admin/staff-master', sort_order: 50, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_staff_admin', menu_label: 'Make Staff as Admin', route_path: '/dashboard/admin/staff-admin', sort_order: 55, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_subject_linker', menu_label: 'Subject Linker', route_path: '/dashboard/admin/subject-linker', sort_order: 60, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_timetable_design', menu_label: 'Design Timetable', route_path: '/dashboard/admin/timetable-design', sort_order: 70, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_attendance_master', menu_label: 'Attendance Portal Sync', route_path: '/dashboard/admin/attendance-master', sort_order: 80, applicable_firm_mode: ApplicableFirmMode.BOTH },
-      { role: MenuRole.ADMIN, menu_key: 'admin_biometric', menu_label: 'Attendance — Bio-Metric/CCTV', route_path: '/dashboard/admin/attendance-biometric', sort_order: 90, applicable_firm_mode: ApplicableFirmMode.BOTH },
-      { role: MenuRole.ADMIN, menu_key: 'admin_attendance_reports', menu_label: 'Attendance Reports / MIS', route_path: '/dashboard/admin/attendance-reports', sort_order: 100, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_attendance_biometric', menu_label: 'Attendance — Bio-Metric/CCTV', route_path: '/dashboard/admin/attendance-biometric', sort_order: 90, applicable_firm_mode: ApplicableFirmMode.BOTH },
+
       { role: MenuRole.ADMIN, menu_key: 'admin_assessment', menu_label: 'Assessment & Q-Bank', route_path: '/dashboard/admin/assessment', sort_order: 110, applicable_firm_mode: ApplicableFirmMode.BOTH },
-      { role: MenuRole.ADMIN, menu_key: 'admin_marks', menu_label: 'Assessment Marks & Upload', route_path: '/dashboard/admin/assessment-marks', sort_order: 120, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_assessment_bank', menu_label: 'Question Bank', route_path: '/dashboard/admin/assessment#bank', parent_menu_key: 'admin_assessment', sort_order: 111, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_assessment_design', menu_label: 'Paper Designer', route_path: '/dashboard/admin/assessment#design', parent_menu_key: 'admin_assessment', sort_order: 112, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_assessment_publish', menu_label: 'Published Assessments', route_path: '/dashboard/admin/assessment#publish', parent_menu_key: 'admin_assessment', sort_order: 113, applicable_firm_mode: ApplicableFirmMode.BOTH },
+
+      { role: MenuRole.ADMIN, menu_key: 'admin_assessment_marks', menu_label: 'Assessment Marks & Upload', route_path: '/dashboard/admin/assessment-marks', sort_order: 120, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_assessment_marks_theory', menu_label: 'Theory Evaluation', route_path: '/dashboard/admin/assessment-marks#theory', parent_menu_key: 'admin_assessment_marks', sort_order: 121, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_assessment_marks_practical', menu_label: 'Practical Evaluation', route_path: '/dashboard/admin/assessment-marks#practical', parent_menu_key: 'admin_assessment_marks', sort_order: 122, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_assessment_marks_competency', menu_label: 'Competency Scoring', route_path: '/dashboard/admin/assessment-marks#competency', parent_menu_key: 'admin_assessment_marks', sort_order: 123, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_placement', menu_label: 'Placement Drive', route_path: '/dashboard/admin/placement', sort_order: 130, applicable_firm_mode: ApplicableFirmMode.NONMED },
       { role: MenuRole.ADMIN, menu_key: 'admin_internships', menu_label: 'Internships & Certifications', route_path: '/dashboard/admin/internships', sort_order: 140, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_medical_logbook', menu_label: 'Medical Logbook', route_path: '/dashboard/admin/medical-logbook/data-directory', sort_order: 141, applicable_firm_mode: ApplicableFirmMode.MED },
+      { role: MenuRole.ADMIN, menu_key: 'admin_medical_logbook_data_directory', menu_label: '1. Data Directory', route_path: '/dashboard/admin/medical-logbook/data-directory', parent_menu_key: 'admin_medical_logbook', sort_order: 142, applicable_firm_mode: ApplicableFirmMode.MED },
+      { role: MenuRole.ADMIN, menu_key: 'admin_medical_logbook_ug_logbook', menu_label: '2. UG LogBook', route_path: '/dashboard/admin/medical-logbook/ug-logbook', parent_menu_key: 'admin_medical_logbook', sort_order: 143, applicable_firm_mode: ApplicableFirmMode.MED },
+      { role: MenuRole.ADMIN, menu_key: 'admin_medical_logbook_pg_logbook', menu_label: '3. PG LogBook', route_path: '/dashboard/admin/medical-logbook/pg-logbook', parent_menu_key: 'admin_medical_logbook', sort_order: 144, applicable_firm_mode: ApplicableFirmMode.MED },
       { role: MenuRole.ADMIN, menu_key: 'admin_incubation_cell', menu_label: 'Incubation Cell 🚀', route_path: '/dashboard/admin/incubation-cell', sort_order: 145, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_repository', menu_label: 'Academic Repository 📂', route_path: '/dashboard/admin/repository', sort_order: 148, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_notices', menu_label: 'Notices & Circulars', route_path: '/dashboard/admin/notices/sent', sort_order: 150, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_library', menu_label: 'Digital Library', route_path: '/dashboard/admin/library', sort_order: 160, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_chat', menu_label: 'Batch & Dept Chat', route_path: '/dashboard/admin/chat', sort_order: 170, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_reports', menu_label: 'MIS Reports Center', route_path: '/dashboard/admin/reports', sort_order: 180, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_reports_attendance', menu_label: 'Attendance Report', route_path: '/dashboard/admin/attendance-reports', parent_menu_key: 'admin_reports', sort_order: 181, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_reports_theory_result', menu_label: 'Theory Result', route_path: '/dashboard/admin/reports/theory-result', parent_menu_key: 'admin_reports', sort_order: 182, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_reports_logbook', menu_label: 'Academic Portfolio (Logbook)', route_path: '/dashboard/admin/reports/logbook', parent_menu_key: 'admin_reports', sort_order: 183, applicable_firm_mode: ApplicableFirmMode.BOTH },
 
       // ═══════════════════════════ FACULTY ═══════════════════════════
       { role: MenuRole.FACULTY, menu_key: 'faculty_overview', menu_label: 'Teaching Dashboard', route_path: '/dashboard/faculty', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },
@@ -175,6 +207,10 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.FACULTY, menu_key: 'faculty_marks', menu_label: 'Marks Entry & Grading', route_path: '/dashboard/faculty/marks', sort_order: 90, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.FACULTY, menu_key: 'faculty_lessons', menu_label: 'Lesson Uploads & Notes', route_path: '/dashboard/faculty/lessons', sort_order: 100, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.FACULTY, menu_key: 'faculty_logbook', menu_label: 'Faculty Activity Logbook', route_path: '/dashboard/faculty/logbook', sort_order: 110, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.FACULTY, menu_key: 'faculty_medical_logbook', menu_label: 'Medical Logbook', route_path: '/dashboard/faculty/medical-logbook/data-directory', sort_order: 111, applicable_firm_mode: ApplicableFirmMode.MED },
+      { role: MenuRole.FACULTY, menu_key: 'faculty_medical_logbook_data_directory', menu_label: '1. Data Directory', route_path: '/dashboard/faculty/medical-logbook/data-directory', parent_menu_key: 'faculty_medical_logbook', sort_order: 112, applicable_firm_mode: ApplicableFirmMode.MED },
+      { role: MenuRole.FACULTY, menu_key: 'faculty_medical_logbook_ug_logbook', menu_label: '2. UG LogBook', route_path: '/dashboard/faculty/medical-logbook/ug-logbook', parent_menu_key: 'faculty_medical_logbook', sort_order: 113, applicable_firm_mode: ApplicableFirmMode.MED },
+      { role: MenuRole.FACULTY, menu_key: 'faculty_medical_logbook_pg_logbook', menu_label: '3. PG LogBook', route_path: '/dashboard/faculty/medical-logbook/pg-logbook', parent_menu_key: 'faculty_medical_logbook', sort_order: 114, applicable_firm_mode: ApplicableFirmMode.MED },
       { role: MenuRole.FACULTY, menu_key: 'faculty_repository', menu_label: 'Academic Repository', route_path: '/dashboard/faculty/repository', sort_order: 120, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.FACULTY, menu_key: 'faculty_placement', menu_label: 'Placement Drive', route_path: '/dashboard/faculty/placement', sort_order: 130, applicable_firm_mode: ApplicableFirmMode.NONMED },
       { role: MenuRole.FACULTY, menu_key: 'faculty_internships', menu_label: 'Internships & Certifications', route_path: '/dashboard/faculty/internships', sort_order: 140, applicable_firm_mode: ApplicableFirmMode.BOTH },
@@ -182,6 +218,9 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.FACULTY, menu_key: 'faculty_library', menu_label: 'Digital Library', route_path: '/dashboard/faculty/library', sort_order: 160, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.FACULTY, menu_key: 'faculty_chat', menu_label: 'Batch & Dept Chat', route_path: '/dashboard/faculty/chat', sort_order: 170, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.FACULTY, menu_key: 'faculty_reports', menu_label: 'MIS Reports', route_path: '/dashboard/faculty/reports', sort_order: 180, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.FACULTY, menu_key: 'faculty_reports_attendance', menu_label: 'Attendance Report', route_path: '/dashboard/faculty/reports/attendance', parent_menu_key: 'faculty_reports', sort_order: 181, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.FACULTY, menu_key: 'faculty_reports_theory_result', menu_label: 'Theory Result', route_path: '/dashboard/faculty/reports/theory-result', parent_menu_key: 'faculty_reports', sort_order: 182, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.FACULTY, menu_key: 'faculty_reports_logbook', menu_label: 'Academic Portfolio (Logbook)', route_path: '/dashboard/faculty/reports/logbook', sort_order: 183, applicable_firm_mode: ApplicableFirmMode.BOTH },
 
       // ═══════════════════════════ STUDENT ═══════════════════════════
       { role: MenuRole.STUDENT, menu_key: 'student_overview', menu_label: 'Student Dashboard', route_path: '/dashboard/student', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },
@@ -189,12 +228,12 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.STUDENT, menu_key: 'student_timetable', menu_label: 'My Weekly Timetable', route_path: '/dashboard/student/timetable', sort_order: 30, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.STUDENT, menu_key: 'student_schedule', menu_label: 'Live Class Schedule', route_path: '/dashboard/student/schedule', sort_order: 40, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.STUDENT, menu_key: 'student_attendance', menu_label: 'Attendance Portal Sync', route_path: '/dashboard/student/attendance', sort_order: 50, applicable_firm_mode: ApplicableFirmMode.BOTH },
-      { role: MenuRole.STUDENT, menu_key: 'student_biometric', menu_label: 'Attendance — Bio-Metric/CCTV', route_path: '/dashboard/student/attendance-biometric', sort_order: 60, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.STUDENT, menu_key: 'student_attendance_biometric', menu_label: 'Attendance — Bio-Metric/CCTV', route_path: '/dashboard/student/attendance-biometric', sort_order: 60, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.STUDENT, menu_key: 'student_assessment', menu_label: 'Assessment & Tests', route_path: '/dashboard/student/assessment', sort_order: 70, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.STUDENT, menu_key: 'student_marks', menu_label: 'Theory & Practical Marks', route_path: '/dashboard/student/marks', sort_order: 80, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.STUDENT, menu_key: 'student_lessons', menu_label: 'Lessons & Study Materials', route_path: '/dashboard/student/lessons', sort_order: 90, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.STUDENT, menu_key: 'student_repository', menu_label: 'Academic Repository', route_path: '/dashboard/student/repository', sort_order: 100, applicable_firm_mode: ApplicableFirmMode.BOTH },
-      { role: MenuRole.STUDENT, menu_key: 'student_logbook', menu_label: 'Student Logbook & Records', route_path: '/dashboard/student/logbook', sort_order: 110, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.STUDENT, menu_key: 'student_logbook', menu_label: 'Academic Portfolio & Submissions', route_path: '/dashboard/student/logbook', sort_order: 110, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.STUDENT, menu_key: 'student_placement', menu_label: 'Placement Drive Portal', route_path: '/dashboard/student/placement', sort_order: 120, applicable_firm_mode: ApplicableFirmMode.NONMED },
       { role: MenuRole.STUDENT, menu_key: 'student_internships', menu_label: 'Internships & Certifications', route_path: '/dashboard/student/internships', sort_order: 130, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.STUDENT, menu_key: 'student_notices', menu_label: 'Notices & Circulars', route_path: '/dashboard/student/notices', sort_order: 140, applicable_firm_mode: ApplicableFirmMode.BOTH },
@@ -204,20 +243,28 @@ export class MenuRegistryService implements OnModuleInit {
 
       // ═══════════════════════════ CLERK ═══════════════════════════
       { role: MenuRole.CLERK, menu_key: 'clerk_overview', menu_label: 'Clerk Data Entry', route_path: '/dashboard/clerk', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.CLERK, menu_key: 'clerk_staff_master', menu_label: 'Staff & Faculty Master', route_path: '/dashboard/admin/staff-master', sort_order: 15, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.CLERK, menu_key: 'clerk_student_master', menu_label: 'Student Roster Master', route_path: '/dashboard/admin/student-master', sort_order: 18, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_attendance', menu_label: 'Attendance Portal Sync', route_path: '/dashboard/clerk/attendance', sort_order: 20, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_biometric', menu_label: 'Attendance — Bio-Metric/CCTV', route_path: '/dashboard/clerk/attendance-biometric', sort_order: 30, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_assessment', menu_label: 'Assessment & Marks Entry', route_path: '/dashboard/clerk/assessment', sort_order: 40, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_placement', menu_label: 'Placement Drive Assistance', route_path: '/dashboard/clerk/placement', sort_order: 50, applicable_firm_mode: ApplicableFirmMode.NONMED },
       { role: MenuRole.CLERK, menu_key: 'clerk_internships', menu_label: 'Internships & Certifications', route_path: '/dashboard/clerk/internships', sort_order: 60, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.CLERK, menu_key: 'clerk_library', menu_label: 'Digital Library', route_path: '/dashboard/clerk/library', sort_order: 65, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_notices', menu_label: 'Notices & Circulars', route_path: '/dashboard/clerk/notices', sort_order: 70, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_chat', menu_label: 'Batch & Dept Chat', route_path: '/dashboard/chat', sort_order: 80, applicable_firm_mode: ApplicableFirmMode.BOTH },
 
       // ═══════════════════════════ WARDEN ═══════════════════════════
       { role: MenuRole.WARDEN, menu_key: 'warden_overview', menu_label: 'Hostel Warden Console', route_path: '/dashboard/warden', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.WARDEN, menu_key: 'warden_mess_menu', menu_label: 'Hostel Mess & Food Menu', route_path: '/dashboard/warden#mess-menu', sort_order: 15, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.WARDEN, menu_key: 'warden_student_master', menu_label: 'Resident Student Roster', route_path: '/dashboard/admin/student-master', sort_order: 20, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.WARDEN, menu_key: 'warden_chat', menu_label: 'Hostel & Staff Chat', route_path: '/dashboard/chat', sort_order: 30, applicable_firm_mode: ApplicableFirmMode.BOTH },
     ];
   }
 
+  /**
+   * Automatically synchronizes all scanned & master catalog menus into public.menu_registry
+   */
   /**
    * Automatically synchronizes all scanned & master catalog menus into public.menu_registry
    */
@@ -225,22 +272,52 @@ export class MenuRegistryService implements OnModuleInit {
     const builtinItems = this.getBuiltinMasterCatalog();
     const scannedItems = this.scanFrontendDashboard();
 
-    const merged = new Map<string, MenuManifestItemDto>();
-    for (const item of builtinItems) {
-      merged.set(`${item.role}__${item.menu_key}`, item);
-    }
+    const normalizeRoute = (role: MenuRole, route: string): string => {
+      let r = (route || '').toLowerCase().trim();
+      if (role === MenuRole.ADMIN && r === '/dashboard/admin/reports/attendance') {
+        r = '/dashboard/admin/attendance-reports';
+      }
+      return r;
+    };
+
+    // Deduplicate by role and route_path so each page route appears EXACTLY once per role
+    const routeMap = new Map<string, MenuManifestItemDto>();
+
+    // 1. Register codebase routes discovered from filesystem
     for (const item of scannedItems) {
-      merged.set(`${item.role}__${item.menu_key}`, item);
+      if (item.menu_key === 'admin_attendance_reports') item.menu_key = 'admin_reports_attendance';
+      if (item.menu_key === 'student_biometric') item.menu_key = 'student_attendance_biometric';
+      const cleanRoute = normalizeRoute(item.role, item.route_path || '');
+      item.route_path = cleanRoute;
+      const routeKey = `${item.role}__${cleanRoute}`;
+      routeMap.set(routeKey, item);
     }
 
-    const itemsToUpsert = Array.from(merged.values());
+    // 2. Merge and enrich with master catalog metadata
+    for (const item of builtinItems) {
+      const cleanRoute = normalizeRoute(item.role, item.route_path || '');
+      item.route_path = cleanRoute;
+      const routeKey = `${item.role}__${cleanRoute}`;
+      if (routeMap.has(routeKey)) {
+        const existing = routeMap.get(routeKey)!;
+        routeMap.set(routeKey, {
+          ...existing,
+          menu_key: item.menu_key,
+          menu_label: item.menu_label || existing.menu_label,
+          parent_menu_key: item.parent_menu_key || existing.parent_menu_key,
+          sort_order: item.sort_order !== undefined ? item.sort_order : existing.sort_order,
+          applicable_firm_mode: item.applicable_firm_mode || existing.applicable_firm_mode,
+        });
+      } else {
+        routeMap.set(routeKey, item);
+      }
+    }
+
+    const itemsToUpsert = Array.from(routeMap.values());
     await this.seedManifest(itemsToUpsert);
   }
 
   async getRegistry(role?: MenuRole, firmMode?: ApplicableFirmMode | string) {
-    // Ensure fresh synchronization
-    await this.autoSyncMenuRegistry().catch(() => {});
-
     let query = `SELECT * FROM public.menu_registry`;
     const conditions: string[] = [];
     const params: any[] = [];
@@ -274,6 +351,11 @@ export class MenuRegistryService implements OnModuleInit {
       CREATE UNIQUE INDEX IF NOT EXISTS uq_menu_registry_role_key ON public.menu_registry (role, menu_key);
     `).catch(() => {});
 
+    // Delete any legacy dot-syntax duplicate entries and duplicate aliases
+    await this.dataSource.query(`DELETE FROM public.menu_registry WHERE menu_key LIKE '%.%'`).catch(() => {});
+    await this.dataSource.query(`DELETE FROM public.menu_registry WHERE role = 'ADMIN' AND menu_key = 'admin_attendance_reports'`).catch(() => {});
+    await this.dataSource.query(`DELETE FROM public.menu_registry WHERE role = 'STUDENT' AND menu_key = 'student_biometric'`).catch(() => {});
+
     for (const item of items) {
       const applicableMode = item.applicable_firm_mode || 'BOTH';
 
@@ -301,22 +383,22 @@ export class MenuRegistryService implements OnModuleInit {
       count++;
     }
 
-    this.logger.log(`Upserted ${count} menu items into menu_registry`);
+    // Clean up any remaining duplicates for the same role and route_path
+    await this.dataSource.query(`
+      DELETE FROM public.menu_registry a
+      USING public.menu_registry b
+      WHERE a.id < b.id
+        AND a.role = b.role
+        AND LOWER(TRIM(a.route_path)) = LOWER(TRIM(b.route_path));
+    `).catch(() => {});
+
+    this.logger.log(`Upserted and deduplicated ${count} menu items in menu_registry`);
     return { success: true, count };
   }
 
   async seedFromFile(filePath?: string) {
-    const defaultPath = path.resolve(process.cwd(), '..', 'menu-manifest.json');
-    const targetPath = filePath || defaultPath;
-
-    if (!fs.existsSync(targetPath)) {
-      await this.autoSyncMenuRegistry();
-      return { success: true, message: 'Synchronized menus from auto-scanner and master catalog.' };
-    }
-
-    const content = fs.readFileSync(targetPath, 'utf-8');
-    const items: MenuManifestItemDto[] = JSON.parse(content);
-    return await this.seedManifest(items);
+    await this.autoSyncMenuRegistry();
+    return { success: true, message: 'Synchronized unique menus dynamically from codebase and master catalog.' };
   }
 }
 

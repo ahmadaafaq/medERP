@@ -61,9 +61,12 @@ export class AttendanceService {
       await this.ds.query(`ALTER TABLE "${schema}".attendance_records ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
       await this.ds.query(`
         UPDATE "${schema}".attendance_sessions s 
-        SET faculty_id = ts.faculty_id 
+        SET faculty_id = ts.faculty_id::uuid 
         FROM "${schema}".timetable_slots ts 
-        WHERE s.timetable_slot_id = ts.id AND s.faculty_id IS NULL AND ts.faculty_id IS NOT NULL
+        WHERE s.timetable_slot_id = ts.id 
+          AND s.faculty_id IS NULL 
+          AND ts.faculty_id IS NOT NULL 
+          AND ts.faculty_id ~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
       `).catch(() => {});
     } catch (e) {
       // Ignore if columns already exist
@@ -80,12 +83,28 @@ export class AttendanceService {
     await this.ensureAttendanceColumns(schema);
 
     const isUUID = (str?: string | null) => str ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str) : false;
-    const validUserId = isUUID(markedByUserId) ? markedByUserId : null;
+
+    // Accept any non-empty userId string — not just UUIDs (fixes token user ID rejection)
+    const validUserId = (markedByUserId && String(markedByUserId).trim()) ? String(markedByUserId).trim() : null;
+    const validUserUuid = isUUID(validUserId) ? validUserId : null; // Only use for UUID-typed FK columns
+
+    const isCourseName = (val?: string | null) => {
+      if (!val) return false;
+      const v = val.trim().toLowerCase();
+      return ['b.tech', 'btech', 'b.tech.', 'bca', 'mca', 'mba', 'bba', 'b.pharm', 'bpharm', 'm.tech', 'mtech'].includes(v)
+        || v.startsWith('course');
+    };
 
     let offeringId: string | null = isUUID(dto.offeringId) ? dto.offeringId! : null;
-    let subjectId = dto.subjectId;
-    let batchId = dto.batchId;
+    let subjectId = (dto.subjectId && String(dto.subjectId).trim() !== 'null' && !isCourseName(dto.subjectId))
+      ? String(dto.subjectId).trim()
+      : (dto.subjectCd && String(dto.subjectCd).trim() !== 'null' && !isCourseName(dto.subjectCd) ? String(dto.subjectCd).trim() : null);
+    let batchId = (dto.batchId && String(dto.batchId).trim() !== 'null')
+      ? String(dto.batchId).trim()
+      : (dto.batchCd && String(dto.batchCd).trim() !== 'null' ? String(dto.batchCd).trim() : '');
     let sessionType = dto.sessionType ?? 'THEORY';
+    const hasSlotId = !!(dto.timetableSlotId && String(dto.timetableSlotId).trim());
+    const targetSlotUuid = isUUID(dto.timetableSlotId) ? dto.timetableSlotId : null;
 
     try {
       if (offeringId) {
@@ -102,22 +121,123 @@ export class AttendanceService {
         }
       }
 
-      // Validate subject + batch exist
-      const [subjectRows, batchRows] = await Promise.all([
-        this.ds.query(`SELECT id, department_id FROM "${schema}".subjects WHERE id=$1`, [subjectId]),
-        this.ds.query(`SELECT id FROM "${schema}".batches WHERE id=$1`, [batchId]),
-      ]);
-      if (!subjectRows.length) throw new NotFoundException('Subject not found');
-      if (!batchRows.length) throw new NotFoundException('Batch not found');
+      // If timetableSlotId provided, resolve subject from it if subjectId is missing or not a valid UUID
+      if ((!subjectId || !isUUID(subjectId)) && hasSlotId && targetSlotUuid) {
+        const slotRows = await this.ds.query(
+          `SELECT subject_id, topic, description, course_cd, branch_cd, batch_cd, department_id, faculty_id 
+           FROM "${schema}".timetable_slots WHERE id = $1`,
+          [targetSlotUuid],
+        );
+        if (slotRows.length && slotRows[0].subject_id && isUUID(slotRows[0].subject_id)) {
+          subjectId = slotRows[0].subject_id;
+        } else if (slotRows.length) {
+          const rawTopic = slotRows[0].topic || dto.topicCovered || '';
+          const cleanTopic = rawTopic.replace(/\([^)]*\)/g, '').trim();
+          const subMatch = await this.ds.query(
+            `SELECT id FROM "${schema}".subjects 
+             WHERE id::text = $1 OR code = $1 
+                OR LOWER(name) = LOWER($1) 
+                OR name ILIKE '%' || $1 || '%'
+                OR (LOWER($1) = 'coa' AND (name ILIKE '%Computer Organization%' OR code ILIKE '%302%' OR code = '88606' OR code = '85717'))
+                OR (LOWER($1) LIKE '%tc%' AND name ILIKE '%Technical Communication%')
+                OR (LOWER($1) LIKE '%wt%' AND name ILIKE '%Web Technology%')
+                OR (LOWER($1) LIKE '%dbms%' AND name ILIKE '%Database Management%')
+                OR (LOWER($1) LIKE '%os%' AND name ILIKE '%Operating System%')
+             LIMIT 1`,
+            [cleanTopic],
+          );
+          if (subMatch.length) {
+            subjectId = subMatch[0].id;
+            await this.ds.query(
+              `UPDATE "${schema}".timetable_slots SET subject_id = $1 WHERE id = $2`,
+              [subjectId, targetSlotUuid],
+            ).catch(() => {});
+          }
+        }
+      }
 
-      // Department & Subject Scope Enforcement for Clerks / Faculty / HODs
-      if (validUserId && markerRole && ![UserRole.SUPER_ADMIN, UserRole.ADMIN].includes(markerRole)) {
-        const userScope = await this.getUserScope(tenantSlug, validUserId, markerRole);
+      // If subjectId is still missing, attempt resolution from dto.topicCovered
+      if (!subjectId && dto.topicCovered) {
+        const cleanTopic = dto.topicCovered.replace(/\([^)]*\)/g, '').trim();
+        const subMatch = await this.ds.query(
+          `SELECT id FROM "${schema}".subjects 
+           WHERE id::text = $1 OR code = $1 
+              OR LOWER(name) = LOWER($1) 
+              OR name ILIKE '%' || $1 || '%'
+              OR (LOWER($1) = 'coa' AND (name ILIKE '%Computer Organization%' OR code ILIKE '%302%'))
+              OR (LOWER($1) LIKE '%tc%' AND name ILIKE '%Technical Communication%')
+              OR (LOWER($1) LIKE '%wt%' AND name ILIKE '%Web Technology%')
+              OR (LOWER($1) LIKE '%dbms%' AND name ILIKE '%Database Management%')
+              OR (LOWER($1) LIKE '%os%' AND name ILIKE '%Operating System%')
+           LIMIT 1`,
+          [cleanTopic],
+        );
+        if (subMatch.length) {
+          subjectId = subMatch[0].id;
+        }
+      }
+
+      // Validate subject + batch exist (allow UUID or subject_cd numeric code)
+      const isUuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      const batchIsUuid = batchId ? isUuidRegex.test(batchId) : false;
+
+      let subjectRows: any[] = [];
+      if (subjectId) {
+        const subjIsUuid = isUuidRegex.test(subjectId);
+        if (subjIsUuid) {
+          // UUID lookup
+          subjectRows = await this.ds.query(
+            `SELECT id, department_id, code AS subject_cd, name AS subject_name, sub_addinfo
+             FROM "${schema}".subjects WHERE id=$1`,
+            [subjectId],
+          );
+        } else {
+          // Per RestrictAPI.md: accept subject_cd (code field), sub_addinfo (SRMS paper code), or name
+          subjectRows = await this.ds.query(
+            `SELECT id, department_id, code AS subject_cd, name AS subject_name, sub_addinfo
+             FROM "${schema}".subjects
+             WHERE code = $1                    -- subject_cd numeric (e.g. "87659")
+                OR sub_addinfo = $1             -- SRMS paper code (e.g. "BCS401")
+                OR id::text = $1               -- UUID as text fallback
+                OR LOWER(name) = LOWER($1)     -- exact name match
+             LIMIT 1`,
+            [subjectId],
+          );
+        }
+        if (subjectRows.length) {
+          subjectId = subjectRows[0].id;
+        }
+      }
+
+
+      // Batch resolution: try UUID first, then batch_cd, code, year
+      let batchRows: any[] = [];
+      if (batchIsUuid) {
+        batchRows = await this.ds.query(`SELECT id FROM "${schema}".batches WHERE id=$1`, [batchId]);
+      }
+      if (!batchRows.length) {
+        // Always try code-based lookup as well (batch_cd like "2" or "2025")
+        batchRows = await this.ds.query(
+          `SELECT id FROM "${schema}".batches WHERE id::text=$1 OR batch_cd::text=$1 OR code::text=$1 OR year::text=$1 LIMIT 1`,
+          [batchId],
+        );
+      }
+
+      // If subject not found AND no slot reference exists — only then throw
+      if (!subjectRows.length && !hasSlotId && !offeringId) {
+        throw new NotFoundException('Subject not found — provide a valid subjectId or timetableSlotId');
+      }
+      if (!batchRows.length) throw new NotFoundException(`Batch not found for batchId: ${batchId}`);
+      batchId = batchRows[0].id;
+
+      // Department & Subject Scope Enforcement for Faculty / HODs (Admins & Clerks can mark all)
+      if (subjectRows.length > 0 && validUserUuid && markerRole && ![UserRole.SUPER_ADMIN, UserRole.COLLEGE_ADMIN, UserRole.ADMIN, UserRole.CLERK].includes(markerRole)) {
+        const userScope = await this.getUserScope(tenantSlug, validUserUuid, markerRole);
         const subjDeptId = subjectRows[0].department_id;
-        const isSubjectAssigned = userScope.assignedSubjectIds.includes(subjectId);
+        const isSubjectAssigned = subjectId ? userScope.assignedSubjectIds.includes(subjectId) : false;
         const isDeptMatched = userScope.departmentId && subjDeptId && userScope.departmentId === subjDeptId;
 
-        if (subjDeptId && !isDeptMatched && !isSubjectAssigned) {
+        if (subjDeptId && !isDeptMatched && !isSubjectAssigned && !hasSlotId) {
           throw new ForbiddenException(
             `Access Denied: As a ${markerRole} in ${userScope.departmentName || 'your department'}, you can only mark attendance for your department's subjects.`,
           );
@@ -125,7 +245,6 @@ export class AttendanceService {
       }
 
       const cleanDate = parseToLocalDateString(dto.sessionDate);
-      const targetSlotUuid = isUUID(dto.timetableSlotId) ? dto.timetableSlotId : null;
 
       // Prevent duplicate session same day + offering (or subject) + batch + timetable slot
       let dupCheck: any[] = [];
@@ -164,33 +283,60 @@ export class AttendanceService {
       if (dupCheck.length) {
         const existingSessionId = dupCheck[0].id;
 
-        if (targetSlotUuid) {
+        if (targetSlotUuid || dto.topicCovered) {
           await this.ds.query(
-            `UPDATE "${schema}".attendance_sessions SET timetable_slot_id=$1 WHERE id=$2`,
-            [targetSlotUuid, existingSessionId],
+            `UPDATE "${schema}".attendance_sessions 
+             SET timetable_slot_id = COALESCE($1, timetable_slot_id),
+                 topic_covered = COALESCE($2, topic_covered)
+             WHERE id=$3`,
+            [targetSlotUuid, dto.topicCovered || null, existingSessionId],
           );
+        }
+
+        // Resolve studentIds to UUIDs if any rollno/reg_no was sent
+        const nonUuidStudents = dto.records.filter(r => !isUUID(r.studentId));
+        if (nonUuidStudents.length > 0) {
+          const nonUuidIds = nonUuidStudents.map(r => r.studentId);
+          const resolvedStudents = await this.ds.query(
+            `SELECT id, rollno, registration_no FROM "${schema}".students 
+             WHERE rollno = ANY($1) OR registration_no = ANY($1) OR id::text = ANY($1)`,
+            [nonUuidIds]
+          ).catch(() => []);
+          const studentMap = new Map<string, string>();
+          resolvedStudents.forEach((st: any) => {
+            if (st.rollno) studentMap.set(st.rollno, st.id);
+            if (st.registration_no) studentMap.set(st.registration_no, st.id);
+            studentMap.set(String(st.id), st.id);
+          });
+          dto.records = dto.records.map(r => ({
+            ...r,
+            studentId: studentMap.get(r.studentId) || (isUUID(r.studentId) ? r.studentId : null)
+          })).filter(r => isUUID(r.studentId)) as any;
         }
 
         if (dto.records.length > 0) {
           const values = dto.records
             .map((_, idx) => {
-              const base = idx * 3;
-              return `($${base + 1},$${base + 2},$${base + 3},$${dto.records.length * 3 + 1})`;
+              const base = idx * 4;
+              return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${dto.records.length * 4 + 1})`;
             })
             .join(',');
 
           const params: any[] = [];
           dto.records.forEach(r => {
-            params.push(existingSessionId, r.studentId, r.status);
+            params.push(existingSessionId, r.studentId, r.status, r.remarks || null);
           });
-          params.push(validUserId);
+          params.push(validUserUuid);
 
           await this.ds.query(
             `INSERT INTO "${schema}".attendance_records
-               (session_id, student_id, status, marked_by)
+               (session_id, student_id, status, remarks, marked_by)
              VALUES ${values}
              ON CONFLICT (session_id, student_id) DO UPDATE
-               SET status=EXCLUDED.status, marked_by=EXCLUDED.marked_by, updated_at=NOW()`,
+               SET status=EXCLUDED.status, 
+                   remarks=COALESCE(EXCLUDED.remarks, attendance_records.remarks),
+                   marked_by=EXCLUDED.marked_by, 
+                   updated_at=NOW()`,
             params,
           );
         }
@@ -199,15 +345,45 @@ export class AttendanceService {
 
       // Get faculty_id if marker is a faculty member
       let facultyId: string | null = null;
-      if (validUserId && markerRole && [UserRole.FACULTY, UserRole.HOD].includes(markerRole)) {
+      if (validUserUuid && markerRole && [UserRole.FACULTY, UserRole.HOD].includes(markerRole)) {
         const fRows = await this.ds.query(
-          `SELECT id FROM "${schema}".faculty WHERE user_id=$1`,
-          [validUserId],
+          `SELECT id FROM "${schema}".faculty WHERE user_id::text = $1::text`,
+          [validUserUuid],
         );
         facultyId = fRows[0]?.id ?? null;
       }
+      if (!facultyId && validUserId) {
+        // Fallback: lookup faculty by any user identifier (emp_id, user_id as text)
+        const fRows = await this.ds.query(
+          `SELECT id FROM "${schema}".faculty WHERE user_id::text = $1::text OR emp_id::text = $1::text LIMIT 1`,
+          [validUserId],
+        ).catch(() => []);
+        facultyId = fRows[0]?.id ?? null;
+      }
+      if (!facultyId && targetSlotUuid) {
+        const slotFac = await this.ds.query(
+          `SELECT faculty_id FROM "${schema}".timetable_slots WHERE id = $1`,
+          [targetSlotUuid],
+        );
+        facultyId = slotFac[0]?.faculty_id ?? null;
+      }
+
+      // Ensure facultyId is a valid UUID or null
+      let safeFacultyUuid: string | null = null;
+      if (facultyId) {
+        if (isUUID(facultyId)) {
+          safeFacultyUuid = facultyId;
+        } else {
+          const fResolved = await this.ds.query(
+            `SELECT id FROM "${schema}".faculty WHERE id::text=$1 OR emp_id::text=$1 OR user_id::text=$1 LIMIT 1`,
+            [facultyId],
+          ).catch(() => []);
+          safeFacultyUuid = fResolved[0]?.id && isUUID(fResolved[0].id) ? fResolved[0].id : null;
+        }
+      }
 
       // Create the session
+      const safeSubjectUuid = (subjectId && isUUID(subjectId)) ? subjectId : null;
       const sessionRows = await this.ds.query(
         `INSERT INTO "${schema}".attendance_sessions
            (subject_id, batch_id, faculty_id, session_date, session_type,
@@ -215,11 +391,11 @@ export class AttendanceService {
          VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9)
          RETURNING id`,
         [
-          subjectId, batchId, facultyId,
+          safeSubjectUuid, batchId, safeFacultyUuid,
           cleanDate, sessionType,
           dto.topicCovered ?? null,
           isUUID(dto.timetableSlotId) ? dto.timetableSlotId : null,
-          validUserId,
+          validUserUuid,
           offeringId,
         ],
       );
@@ -227,34 +403,65 @@ export class AttendanceService {
 
       // Bulk-insert attendance records
       if (dto.records.length > 0) {
-        const values = dto.records
-          .map((_, idx) => {
-            const base = idx * 3;
-            return `($${base + 1},$${base + 2},$${base + 3},$${dto.records.length * 3 + 1})`;
-          })
-          .join(',');
+        // Resolve studentIds to UUIDs if any rollno/reg_no was sent
+        const nonUuidStudents = dto.records.filter(r => !isUUID(r.studentId));
+        if (nonUuidStudents.length > 0) {
+          const nonUuidIds = nonUuidStudents.map(r => r.studentId);
+          const resolvedStudents = await this.ds.query(
+            `SELECT id, rollno, registration_no FROM "${schema}".students 
+             WHERE rollno = ANY($1) OR registration_no = ANY($1) OR id::text = ANY($1)`,
+            [nonUuidIds]
+          ).catch(() => []);
+          const studentMap = new Map<string, string>();
+          resolvedStudents.forEach((st: any) => {
+            if (st.rollno) studentMap.set(st.rollno, st.id);
+            if (st.registration_no) studentMap.set(st.registration_no, st.id);
+            studentMap.set(String(st.id), st.id);
+          });
+          dto.records = dto.records.map(r => ({
+            ...r,
+            studentId: studentMap.get(r.studentId) || (isUUID(r.studentId) ? r.studentId : null)
+          })).filter(r => isUUID(r.studentId)) as any;
+        }
 
-        const params: any[] = [];
-        dto.records.forEach(r => {
-          params.push(sessionId, r.studentId, r.status);
-        });
-        params.push(validUserId);
+        if (dto.records.length > 0) {
+          const values = dto.records
+            .map((_, idx) => {
+              const base = idx * 4;
+              return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${dto.records.length * 4 + 1})`;
+            })
+            .join(',');
 
-        await this.ds.query(
-          `INSERT INTO "${schema}".attendance_records
-             (session_id, student_id, status, marked_by)
-           VALUES ${values}
-           ON CONFLICT (session_id, student_id) DO UPDATE
-             SET status=EXCLUDED.status, marked_by=EXCLUDED.marked_by, updated_at=NOW()`,
-          params,
-        );
+          const params: any[] = [];
+          dto.records.forEach(r => {
+            params.push(sessionId, r.studentId, r.status, r.remarks || null);
+          });
+          params.push(validUserUuid);
+
+          await this.ds.query(
+            `INSERT INTO "${schema}".attendance_records
+               (session_id, student_id, status, remarks, marked_by)
+             VALUES ${values}
+             ON CONFLICT (session_id, student_id) DO UPDATE
+               SET status=EXCLUDED.status, 
+                   remarks=COALESCE(EXCLUDED.remarks, attendance_records.remarks),
+                   marked_by=EXCLUDED.marked_by, 
+                   updated_at=NOW()`,
+            params,
+          );
+        }
       }
 
       this.logger.log(
-        `Attendance session created: ${sessionId} by ${validUserId} [${markerRole}]`,
+        `Attendance session created: ${sessionId} by ${validUserId} [${markerRole}] | ${dto.records.length} students`,
       );
 
-      return { sessionId, recordsMarked: dto.records.length };
+      return {
+        success: true,
+        sessionId,
+        recordsMarked: dto.records.length,
+        data: { id: sessionId },
+      };
     } catch (err: any) {
       this.logger.error(`Failed to create attendance session in schema ${schema}: ${err.message}`, err.stack);
       throw new BadRequestException(err.message || 'Failed to submit attendance session.');
@@ -276,25 +483,72 @@ export class AttendanceService {
     const cleanDate = typeof sessionDate === 'string' ? sessionDate.split('T')[0] : new Date(sessionDate).toISOString().split('T')[0];
     const isUUID = (str?: string | null) => str ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str) : false;
 
-    let sessionRows: any[] = [];
-    if (isUUID(timetableSlotId)) {
-      sessionRows = await this.ds.query(
-        `SELECT s.* FROM "${schema}".attendance_sessions s
-         WHERE s.timetable_slot_id = $1
-           AND s.session_date::date = $2::date
-           AND s.is_cancelled = false
-         ORDER BY s.created_at DESC
+    const isCourseName = (val?: string | null) => {
+      if (!val) return false;
+      const v = val.trim().toLowerCase();
+      return ['b.tech', 'btech', 'b.tech.', 'bca', 'mca', 'mba', 'bba', 'b.pharm', 'bpharm', 'm.tech', 'mtech'].includes(v)
+        || v.startsWith('course');
+    };
+    if (isCourseName(subjectId)) subjectId = '';
+
+    // Resolve subjectId from subject_cd (code), sub_addinfo, UUID, or name
+    if (subjectId && !isUUID(subjectId)) {
+      const resolved = await this.ds.query(
+        `SELECT id FROM "${schema}".subjects
+         WHERE code = $1 OR sub_addinfo = $1 OR id::text = $1 OR LOWER(name) = LOWER($1)
+            OR (LOWER($1) = 'coa' AND (name ILIKE '%Computer Organization%' OR code ILIKE '%302%' OR code = '88606' OR code = '85717'))
          LIMIT 1`,
-        [timetableSlotId, cleanDate],
+        [subjectId],
       );
+      if (resolved.length) subjectId = resolved[0].id;
     }
 
-    if (!sessionRows.length) {
+    // Resolve batchId from batch_cd, year, code
+    if (batchId && !isUUID(batchId)) {
+      const resolved = await this.ds.query(
+        `SELECT id FROM "${schema}".batches
+         WHERE id::text=$1 OR batch_cd::text=$1 OR code::text=$1 OR year::text=$1 LIMIT 1`,
+        [batchId],
+      );
+      if (resolved.length) batchId = resolved[0].id;
+    }
+
+    let sessionRows: any[] = [];
+
+    // Primary: lookup by timetableSlotId (most reliable — works even if subject_id is null)
+    if (timetableSlotId && timetableSlotId.trim()) {
+      const slotUuid = isUUID(timetableSlotId) ? timetableSlotId : null;
+      if (slotUuid) {
+        sessionRows = await this.ds.query(
+          `SELECT s.*,
+                  sub.code AS subject_cd, sub.name AS subject_name, sub.sub_addinfo AS subject_paper_code
+           FROM "${schema}".attendance_sessions s
+           LEFT JOIN "${schema}".subjects sub ON sub.id = s.subject_id
+           WHERE s.timetable_slot_id = $1
+             AND s.session_date::date = $2::date
+             AND s.is_cancelled = false
+           ORDER BY s.created_at DESC
+           LIMIT 1`,
+          [slotUuid, cleanDate],
+        );
+      }
+    }
+
+    // Secondary: lookup by subject_id + batch_id + date + sessionType
+    if (!sessionRows.length && subjectId && batchId) {
       sessionRows = await this.ds.query(
-        `SELECT s.* FROM "${schema}".attendance_sessions s
+        `SELECT s.*,
+                sub.code AS subject_cd, sub.name AS subject_name, sub.sub_addinfo AS subject_paper_code
+         FROM "${schema}".attendance_sessions s
+         LEFT JOIN "${schema}".subjects sub ON sub.id = s.subject_id
          WHERE s.subject_id=$1 AND s.batch_id=$2
            AND s.session_date::date = $3::date
-           AND (LOWER(s.session_type) = LOWER($4) OR $4 = 'ALL' OR $4 IS NULL OR LOWER(s.session_type) LIKE LOWER($4 || '%') OR (LOWER(s.session_type) IN ('lecture','theory') AND LOWER($4) IN ('lecture','theory')))
+           AND (
+             LOWER(s.session_type) = LOWER($4)
+             OR $4 = 'ALL' OR $4 IS NULL
+             OR LOWER(s.session_type) LIKE LOWER($4 || '%')
+             OR (LOWER(s.session_type) IN ('lecture','theory') AND LOWER($4) IN ('lecture','theory'))
+           )
            AND s.is_cancelled = false
          ORDER BY s.created_at DESC
          LIMIT 1`,
@@ -302,9 +556,13 @@ export class AttendanceService {
       );
     }
 
-    if (!sessionRows.length) {
+    // Tertiary: any session for subject + batch + date (ignore sessionType)
+    if (!sessionRows.length && subjectId && batchId) {
       sessionRows = await this.ds.query(
-        `SELECT s.* FROM "${schema}".attendance_sessions s
+        `SELECT s.*,
+                sub.code AS subject_cd, sub.name AS subject_name, sub.sub_addinfo AS subject_paper_code
+         FROM "${schema}".attendance_sessions s
+         LEFT JOIN "${schema}".subjects sub ON sub.id = s.subject_id
          WHERE s.subject_id=$1 AND s.batch_id=$2
            AND s.session_date::date = $3::date
            AND s.is_cancelled = false
@@ -320,13 +578,28 @@ export class AttendanceService {
 
     const session = sessionRows[0];
     const records = await this.ds.query(
-      `SELECT ar.student_id, ar.status, ar.remarks
+      `SELECT ar.id, ar.student_id, ar.status, ar.remarks,
+              s.registration_no, s.rollno, s.name as student_name
        FROM "${schema}".attendance_records ar
+       LEFT JOIN "${schema}".students s ON s.id = ar.student_id
        WHERE ar.session_id=$1`,
       [session.id],
     );
 
-    return { found: true, session, records };
+    return {
+      found: true,
+      session,
+      records,
+      // Expose subject_cd per RestrictAPI.md convention
+      id: session.id,
+      sessionId: session.id,
+      topic_covered: session.topic_covered,
+      topicCovered: session.topic_covered,
+      sessionType: session.session_type,
+      subject_cd: session.subject_cd,
+      subject_name: session.subject_name,
+      subject_paper_code: session.subject_paper_code,
+    };
   }
 
   // ─── Get Weekly Attendance Sessions & Lecture Conducted Counters ─────────
@@ -1063,10 +1336,119 @@ export class AttendanceService {
     return { sessionId, cancelled: true };
   }
 
+  // ─── Get Students for a Timetable Slot (by batch_id UUID) ─────────────────
+  async getStudentsForSlot(
+    tenantSlug: string,
+    batchId?: string,
+    timetableSlotId?: string,
+    courseCd?: string,
+    branchCd?: string,
+    semester?: string,
+    section?: string,
+  ) {
+    const schema = this.getSchema(tenantSlug);
+    const isUUID = (s?: string | null) =>
+      s ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(s) : false;
+
+    // Step 1: if we have a timetableSlotId, resolve the batch_id from the slot
+    let resolvedBatchId = isUUID(batchId) ? batchId : null;
+
+    if (!resolvedBatchId && isUUID(timetableSlotId)) {
+      try {
+        const slotRows = await this.ds.query(
+          `SELECT batch_id, course_cd, branch_cd, semester, section FROM "${schema}".timetable_slots WHERE id = $1`,
+          [timetableSlotId],
+        );
+        if (slotRows.length) {
+          resolvedBatchId = slotRows[0].batch_id || null;
+          if (!courseCd) courseCd = slotRows[0].course_cd;
+          if (!branchCd) branchCd = slotRows[0].branch_cd;
+          if (!semester) semester = slotRows[0].semester;
+          if (!section) section = slotRows[0].section;
+        }
+      } catch (e) {
+        this.logger.warn(`Failed to resolve batch from slot ${timetableSlotId}: ${e.message}`);
+      }
+    }
+
+    // Step 2: Try to resolve batch UUID from numeric/code batchId
+    if (!resolvedBatchId && batchId) {
+      try {
+        const bRows = await this.ds.query(
+          `SELECT id FROM "${schema}".batches WHERE id::text = $1 OR batch_cd::text = $1 OR code::text = $1 OR year::text = $1 LIMIT 1`,
+          [batchId],
+        );
+        if (bRows.length) resolvedBatchId = bRows[0].id;
+      } catch (e) {}
+    }
+
+    // Step 3: Build the student query
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let i = 1;
+
+    // Primary batch filter via student_admissions
+    if (resolvedBatchId) {
+      conditions.push(`(
+        sa.batch_id::text = $${i}::text
+        OR s.batch_id::text = $${i}::text
+        OR sa.batch_code ILIKE (SELECT code FROM "${schema}".batches WHERE id::text = $${i}::text LIMIT 1)
+      )`);
+      params.push(resolvedBatchId);
+      i++;
+    }
+
+    // Fallback filters from timetable slot metadata
+    if (courseCd) {
+      conditions.push(`(sa.course_code ILIKE $${i}::text OR sa.course_cd::text = $${i}::text)`);
+      params.push(courseCd);
+      i++;
+    }
+    if (semester) {
+      conditions.push(`(sa.semester::text = $${i}::text OR sa.current_semester::text = $${i}::text)`);
+      params.push(semester);
+      i++;
+    }
+    if (section) {
+      conditions.push(`(sa.section ILIKE $${i}::text OR s.section ILIKE $${i}::text)`);
+      params.push(section);
+      i++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    try {
+      const rows = await this.ds.query(
+        `SELECT DISTINCT
+            s.id,
+            COALESCE(s.name, 'Student') AS name,
+            COALESCE(s.rollno, s.registration_no, '') AS rollno,
+            COALESCE(s.registration_no, s.rollno, '') AS registration_no,
+            COALESCE(sa.batch_id::text, s.batch_id::text) AS batch_id,
+            COALESCE(sa.batch_code, '') AS batch_code,
+            COALESCE(sa.course_code, '') AS course_code,
+            COALESCE(sa.semester::text, '') AS semester,
+            COALESCE(sa.section, '') AS section
+         FROM "${schema}".students s
+         LEFT JOIN "${schema}".student_admissions sa ON sa.student_id = s.id
+         ${whereClause}
+         ORDER BY s.rollno ASC, s.name ASC
+         LIMIT 300`,
+        params,
+      );
+
+      this.logger.log(`getStudentsForSlot: batchId=${resolvedBatchId}, count=${rows.length}`);
+      return { students: rows, batchId: resolvedBatchId, count: rows.length };
+    } catch (e) {
+      this.logger.error(`getStudentsForSlot error: ${e.message}`);
+      return { students: [], batchId: resolvedBatchId, count: 0, error: e.message };
+    }
+  }
+
   // ─── Get User Role & Department Scope ─────────────────────────────────────
   async getUserScope(tenantSlug: string, userId: string, role: UserRole) {
     const schema = this.getSchema(tenantSlug);
-    const isAdmin = [UserRole.SUPER_ADMIN, UserRole.ADMIN].includes(role);
+    const isAdmin = [UserRole.SUPER_ADMIN, UserRole.COLLEGE_ADMIN, UserRole.ADMIN, UserRole.CLERK].includes(role);
 
     if (isAdmin) {
       return {
@@ -1083,8 +1465,8 @@ export class AttendanceService {
       `SELECT f.id AS faculty_id, f.department_id, f.subject_id,
               d.name AS department_name, d.code AS department_code
        FROM "${schema}".faculty f
-       LEFT JOIN "${schema}".departments d ON d.id = f.department_id
-       WHERE f.user_id = $1`,
+       LEFT JOIN "${schema}".departments d ON d.id::text = f.department_id::text
+       WHERE f.user_id::text = $1::text`,
       [userId],
     );
 
@@ -1095,7 +1477,7 @@ export class AttendanceService {
 
     if (!departmentId) {
       const dRows = await this.ds.query(
-        `SELECT id, name, code FROM "${schema}".departments WHERE hod_user_id = $1 LIMIT 1`,
+        `SELECT id, name, code FROM "${schema}".departments WHERE hod_user_id::text = $1::text LIMIT 1`,
         [userId],
       );
       if (dRows.length) {
@@ -1112,7 +1494,7 @@ export class AttendanceService {
 
     if (facultyId) {
       const fsRows = await this.ds.query(
-        `SELECT subject_id FROM "${schema}".faculty_subjects WHERE faculty_id = $1 AND is_active = true`,
+        `SELECT subject_id FROM "${schema}".faculty_subjects WHERE faculty_id::text = $1::text AND is_active = true`,
         [facultyId],
       );
       fsRows.forEach((r: any) => {

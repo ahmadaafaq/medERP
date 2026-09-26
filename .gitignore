@@ -14,6 +14,8 @@ out/
 # Environment variables (local overrides — never commit)
 .env.local
 **/.env.local
+.env.backup*
+**/.env.backup*
 
 # Uploads - backend uploads tracked for deployment
 # uploads/
@@ -38,3 +40,7 @@ lerna-debug.log*
 
 # Docker
 docker-compose.override.yml
+
+# Backups
+backups/
+*.dump

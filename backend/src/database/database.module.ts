@@ -22,10 +22,12 @@ import { TenantSchemaService } from './tenant-schema.service';
         // Connection pool
         extra: {
           max: 25,
-          min: 2,
+          min: 1,
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 30000,
           statement_timeout: 45000,
+          keepAlive: true,
+          keepAliveInitialDelayMillis: 10000,
         },
         // Search path defaults to public; per-request schema is set via SET search_path
         schema: 'public',

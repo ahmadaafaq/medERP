@@ -44,7 +44,8 @@ export class MenuManifestItemDto {
 
 export class SeedMenuRegistryDto {
   @IsArray()
+  @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => MenuManifestItemDto)
-  items: MenuManifestItemDto[];
+  items?: MenuManifestItemDto[];
 }

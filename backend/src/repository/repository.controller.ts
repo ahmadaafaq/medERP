@@ -44,9 +44,9 @@ export class RepositoryController {
       tokenUser?.registration_no ||
       tokenUser?.username ||
       tokenUser?.rollno ||
-      '2025107990';
-    const role = (req.headers?.['x-user-role'] || tokenUser?.role || 'STUDENT').toUpperCase();
-    const name = req.headers?.['x-user-name'] || tokenUser?.name || 'AAFREEN KHAN';
+      '';
+    const role = (req.headers?.['x-user-role'] || tokenUser?.role || (regNo ? 'STUDENT' : 'ADMIN')).toUpperCase();
+    const name = req.headers?.['x-user-name'] || tokenUser?.name || tokenUser?.username || '';
 
     return {
       id: tokenUser?.id || tokenUser?.sub,

@@ -278,6 +278,8 @@ export class AuthService {
          LEFT JOIN "${schema}".students s ON s.user_id::text = u.id::text
          LEFT JOIN "${schema}".faculty f ON f.user_id::text = u.id::text
          WHERE LOWER(u.email) = $1
+            OR LOWER(COALESCE(u.username, '')) = $1
+            OR u.id::text = $1
             OR LOWER(COALESCE(u.emp_id, '')) = $1
             OR LOWER(COALESCE(s.registration_no, '')) = $1
             OR LOWER(COALESCE(s.rollno, '')) = $1
@@ -297,6 +299,51 @@ export class AuthService {
         [searchIdentifier],
       );
       user = rows[0];
+
+      // Auto-recovery: If user is not found in the initial schema (e.g. user selected wrong college dropdown on login)
+      if (!user) {
+        try {
+          const schemaRows = await this.ds.query(
+            `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%' AND schema_name != $1 ORDER BY schema_name ASC`,
+            [schema],
+          );
+          for (const sr of schemaRows) {
+            const sName = sr.schema_name;
+            const userMatch = await this.ds.query(
+              `SELECT u.id, u.email, u.password_hash, u.role, u.is_active, u.must_change_password,
+                      u.failed_login_count, u.locked_until, u.last_login_at, u.usr_id, u.devicecd, u.loc_cd, u.department,
+                      s.name AS student_name, s.registration_no, s.rollno,
+                      s.course_cd, s.batch_cd, s.department_id AS student_department_id,
+                      COALESCE(s.photo_url, f.photo_url) AS photo_url,
+                      f.id AS faculty_id, f.name AS faculty_name, f.emp_id, f.designation, f.specialization,
+                      f.qualification, f.phone, f.gender, f.experience, f.joining_date, f.staff_type,
+                      f.department_id, f.subject_id
+               FROM "${sName}".users u
+               LEFT JOIN "${sName}".students s ON s.user_id::text = u.id::text
+               LEFT JOIN "${sName}".faculty f ON f.user_id::text = u.id::text
+               WHERE LOWER(u.email) = $1
+                  OR LOWER(COALESCE(u.username, '')) = $1
+                  OR u.id::text = $1
+                  OR LOWER(COALESCE(u.emp_id, '')) = $1
+                  OR LOWER(COALESCE(s.registration_no, '')) = $1
+                  OR LOWER(COALESCE(s.rollno, '')) = $1
+                  OR LOWER(COALESCE(f.emp_id, '')) = $1
+                  OR LOWER(COALESCE(u.usr_id, '')) = $1
+               LIMIT 1`,
+              [searchIdentifier],
+            ).catch(() => []);
+            if (userMatch.length > 0) {
+              user = userMatch[0];
+              schema = sName;
+              resolvedSlug = sName.replace(/^tenant_/, '');
+              this.logger.log(`Auto-recovered user ${searchIdentifier} to authentic tenant schema '${schema}'`);
+              break;
+            }
+          }
+        } catch (err: any) {
+          this.logger.warn(`Error scanning schemas for user recovery: ${err?.message}`);
+        }
+      }
     } else {
       // Super-admin login (public schema)
       const rows = await this.ds.query(
@@ -313,7 +360,7 @@ export class AuthService {
 
     let isValid = false;
 
-    // ── 1. Live SRMS Portal Remote Credential Verification (FACULTY ONLY - BYPASS FOR STUDENTS) ──
+    // ── 1. Live SRMS Portal Remote Credential Verification (SRMS TENANTS ONLY - BYPASS FOR STUDENTS & OTHER FIRMS) ──
     const isStudent =
       dto.role?.toUpperCase() === 'STUDENT' ||
       user?.role === UserRole.STUDENT ||
@@ -322,8 +369,13 @@ export class AuthService {
       !!user?.rollno ||
       /^\d{10,}$/.test(rawInput.trim());
 
+    const isSrmsTenant = resolvedSlug ? (
+      resolvedSlug.toLowerCase().startsWith('srms') ||
+      resolvedSlug.toLowerCase().includes('srms')
+    ) : false;
+
     let srmsRecord: any = null;
-    if (!isStudent) {
+    if (isSrmsTenant && !isStudent) {
       srmsRecord = await this.verifyRemoteSrmsCredential(rawInput, dto.password);
     }
 
@@ -591,7 +643,16 @@ export class AuthService {
         }
       }
 
-      // 4. ADMIN PRIVILEGE: Admin can login faculty and admin both!
+      // 4. WARDEN RESTRICTION: Warden only access warden
+      if (userRole === 'WARDEN' || userRole === UserRole.WARDEN) {
+        if (['ADMIN', 'COLLEGE_ADMIN', 'SUPER_ADMIN', 'FACULTY', 'CLERK', 'STUDENT'].includes(requestedRole)) {
+          throw new ForbiddenException(
+            'Access Denied: Warden accounts can only access the Warden Portal.',
+          );
+        }
+      }
+
+      // 5. ADMIN PRIVILEGE: Admin can login faculty and admin both!
       if (['ADMIN', 'COLLEGE_ADMIN', 'SUPER_ADMIN'].includes(userRole)) {
         if (requestedRole === 'FACULTY') {
           user.role = UserRole.FACULTY;
@@ -622,6 +683,16 @@ export class AuthService {
         tenantId = rows[0].id;
         tenantName = rows[0].name;
         colgCd = rows[0].code ? String(rows[0].code) : '1';
+      } else {
+        const firmRows = await this.ds.query(
+          `SELECT id, title, slug, code FROM public.firms WHERE slug=$1 OR slug=$2 LIMIT 1`,
+          [resolvedSlug, tenantSlug],
+        ).catch(() => []);
+        if (firmRows[0]) {
+          tenantId = firmRows[0].id;
+          tenantName = firmRows[0].title;
+          colgCd = firmRows[0].code ? String(firmRows[0].code) : resolvedSlug;
+        }
       }
     }
 
@@ -641,7 +712,7 @@ export class AuthService {
     };
 
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: this.config.get<string>('jwt.accessExpires') || '15m',
+      expiresIn: this.config.get<string>('jwt.accessExpires') || '30d',
     });
 
     const refreshToken = this.jwtService.sign(

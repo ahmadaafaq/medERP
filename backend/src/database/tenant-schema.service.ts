@@ -2040,19 +2040,59 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".library_books (
         id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        title             VARCHAR(300) NOT NULL,
-        author            VARCHAR(200),
-        isbn              VARCHAR(20)  UNIQUE,
-        category          VARCHAR(100),
-        publisher         VARCHAR(200),
+        title             TEXT        NOT NULL,
+        author            TEXT,
+        isbn              VARCHAR(100),
+        category          VARCHAR(200),
+        publisher         TEXT,
         copies_total      INT          DEFAULT 1,
         copies_available  INT          DEFAULT 1,
         cover_url         TEXT,
         is_ebook          BOOLEAN      DEFAULT false,
         ebook_s3_key      TEXT,
-        is_active         BOOLEAN      DEFAULT true
+        is_active         BOOLEAN      DEFAULT true,
+        ttl_id            VARCHAR(100),
+        titleid           VARCHAR(100),
+        pdf_url           TEXT,
+        external_link     TEXT,
+        raw_cover         TEXT,
+        raw_pdf           TEXT,
+        raw_link          TEXT,
+        colg_cd           VARCHAR(20)  DEFAULT '1',
+        has_digital_media BOOLEAN      DEFAULT false,
+        created_at        TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ  DEFAULT NOW()
       )
     `);
+    await runner.query(`
+      ALTER TABLE "${schema}".library_books ALTER COLUMN title TYPE TEXT;
+      ALTER TABLE "${schema}".library_books ALTER COLUMN author TYPE TEXT;
+      ALTER TABLE "${schema}".library_books ALTER COLUMN publisher TYPE TEXT;
+      ALTER TABLE "${schema}".library_books ALTER COLUMN isbn TYPE VARCHAR(100);
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS ttl_id VARCHAR(100);
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS titleid VARCHAR(100);
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS pdf_url TEXT;
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS external_link TEXT;
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS raw_cover TEXT;
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS raw_pdf TEXT;
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS raw_link TEXT;
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(20) DEFAULT '1';
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS has_digital_media BOOLEAN DEFAULT false;
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE "${schema}".library_books ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint 
+          WHERE conname = 'uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_library_books_ttl_id'
+            AND connamespace = '${schema}'::regnamespace
+        ) THEN
+          ALTER TABLE "${schema}".library_books 
+          ADD CONSTRAINT "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_library_books_ttl_id" UNIQUE (ttl_id);
+        END IF;
+      END $$;
+      CREATE INDEX IF NOT EXISTS "idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_library_books_digital"
+        ON "${schema}".library_books (has_digital_media, is_active);
+    `).catch(() => { });
 
     // ── Library Circulation ────────────────────────────────────────────────
     await runner.query(`

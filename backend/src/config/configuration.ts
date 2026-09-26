@@ -18,8 +18,8 @@ export default () => ({
   },
   jwt: {
     secret: process.env.JWT_SECRET,
-    accessExpires: process.env.JWT_ACCESS_EXPIRES || '15m',
-    refreshExpires: process.env.JWT_REFRESH_EXPIRES || '7d',
+    accessExpires: process.env.JWT_ACCESS_EXPIRES || '30d',
+    refreshExpires: process.env.JWT_REFRESH_EXPIRES || '30d',
   },
   aws: {
     region: process.env.AWS_REGION || 'ap-south-1',

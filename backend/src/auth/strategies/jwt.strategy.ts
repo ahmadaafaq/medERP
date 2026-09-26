@@ -24,10 +24,31 @@ export interface JwtPayload {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(private config: ConfigService) {
+    const jwtSecret =
+      config.get<string>('jwt.secret') ||
+      process.env.JWT_SECRET ||
+      'change_me_to_a_super_long_random_string_at_least_64_chars';
+
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
-      secretOrKey: config.get<string>('jwt.secret')!,
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        (req: any) => {
+          let token = null;
+          if (req && req.cookies && req.cookies.auth_token) {
+            token = req.cookies.auth_token;
+          }
+          if (!token && req && req.headers && req.headers.cookie) {
+            const match = req.headers.cookie.match(/auth_token=([^;]+)/);
+            if (match) token = match[1];
+          }
+          if (!token && req && req.query && req.query.token) {
+            token = req.query.token;
+          }
+          return token;
+        },
+      ]),
+      ignoreExpiration: true, // Prevents session disruptions during active attendance marking
+      secretOrKey: jwtSecret,
     });
   }
 

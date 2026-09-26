@@ -24,37 +24,46 @@ export class RepositoryService {
     const slug = this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${slug}`;
 
-    let regNo = dto.student_reg_no || user?.registration_no || user?.username || user?.rollno || '2025107990';
-    let studentName = dto.student_name || user?.name || user?.username || 'AAFREEN KHAN';
-    let courseCd = dto.course_cd || '13'; // BCA default
-    let branchCd = dto.branch_cd || '1301';
-    let batchCd = dto.batch_cd || '2025';
+    let regNo = dto.student_reg_no || user?.registration_no || user?.username || user?.rollno || '';
+    let studentName = dto.student_name || user?.name || user?.username || '';
+    let courseCd = dto.course_cd || '';
+    let branchCd = dto.branch_cd || '';
+    let batchCd = dto.batch_cd || '';
     let semCd = dto.sem_cd || '1';
     let colgCd = dto.colg_cd || '1';
 
     // Lookup student enrollment from student_admissions / students table if available
-    try {
-      const studentRows = await this.tenantSchemaService.queryInTenant(
-        slug,
-        `SELECT s.registration_no, s.name, s.course_cd, s.batch_cd, sa.branch_code, sa.branch_id, sa.professional_phase
-         FROM "${schema}".students s
-         LEFT JOIN "${schema}".student_admissions sa ON s.id = sa.student_id
-         WHERE s.registration_no = $1 OR s.rollno = $1 OR s.user_id::text = $2
-         LIMIT 1`,
-        [regNo, user?.id ? String(user.id) : '00000000-0000-0000-0000-000000000000'],
-      );
+    if (regNo || user?.id) {
+      try {
+        const studentRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT s.registration_no, s.name, s.course_cd, s.batch_cd, sa.branch_code, sa.branch_id, sa.professional_phase
+           FROM "${schema}".students s
+           LEFT JOIN "${schema}".student_admissions sa ON s.id = sa.student_id
+           WHERE s.registration_no = $1 OR s.rollno = $1 OR s.user_id::text = $2
+           LIMIT 1`,
+          [regNo || '', user?.id ? String(user.id) : '00000000-0000-0000-0000-000000000000'],
+        );
 
-      if (studentRows && studentRows.length > 0) {
-        const s = studentRows[0];
-        regNo = dto.student_reg_no || s.registration_no || regNo;
-        studentName = dto.student_name || s.name || studentName;
-        courseCd = dto.course_cd || s.course_cd || courseCd;
-        batchCd = dto.batch_cd || s.batch_cd || batchCd;
-        branchCd = dto.branch_cd || s.branch_code || branchCd;
+        if (studentRows && studentRows.length > 0) {
+          const s = studentRows[0];
+          regNo = regNo || s.registration_no;
+          studentName = studentName || s.name;
+          courseCd = courseCd || s.course_cd;
+          batchCd = batchCd || s.batch_cd;
+          branchCd = branchCd || s.branch_code;
+        }
+      } catch (e) {
+        this.logger.warn(`Student resolution fallback used for ${regNo}`);
       }
-    } catch (e) {
-      this.logger.warn(`Student resolution fallback used for ${regNo}`);
     }
+
+    // Default fallbacks only if unresolvable
+    regNo = regNo || '2025100001';
+    studentName = studentName || 'Student';
+    courseCd = courseCd || '1';
+    branchCd = branchCd || '1';
+    batchCd = batchCd || '2025';
 
     const techStackJson = Array.isArray(dto.tech_stack)
       ? JSON.stringify(dto.tech_stack)
@@ -167,19 +176,45 @@ export class RepositoryService {
       SELECT DISTINCT ON (r.repo_id) r.*,
              COALESCE(stu.photo_url, '') AS student_photo,
              COALESCE(stu.rollno, r.student_reg_no) AS rollno,
-             COALESCE(crs.crs_name, r.course_cd, 'B.Tech.') AS course_name,
-             COALESCE(dep.dep_name, r.branch_cd, 'Computer Science & Engineering') AS branch_name,
-             COALESCE(bth.bth_name, r.batch_cd, 'Batch 2022-26') AS batch_name,
-             rev.faculty_name,
+             COALESCE(crs.crs_name, 
+               CASE 
+                 WHEN r.course_cd = '1' THEN 'B.Tech.'
+                 WHEN r.course_cd = '2' THEN 'B.Pharm.'
+                 WHEN r.course_cd = '3' THEN 'MCA'
+                 WHEN r.course_cd = '4' THEN 'MBA'
+                 WHEN r.course_cd = '11' THEN 'BA.LL.B'
+                 WHEN r.course_cd = '12' THEN 'BBA'
+                 WHEN r.course_cd = '13' THEN 'BCA'
+                 ELSE r.course_cd 
+               END
+             ) AS course_name,
+             COALESCE(dep.dep_name,
+               CASE 
+                 WHEN r.course_cd = '1' AND r.branch_cd = '2' THEN '(IT)'
+                 WHEN r.course_cd = '1' THEN '(CSE)'
+                 WHEN r.course_cd = '2' THEN 'B.PHARM. Department'
+                 WHEN r.course_cd = '3' THEN 'MCA Department'
+                 WHEN r.course_cd = '4' THEN 'MBA Department'
+                 WHEN r.course_cd = '13' THEN 'BCA Department'
+                 ELSE r.branch_cd 
+               END
+             ) AS branch_name,
+             COALESCE(bth.bth_name, 
+               CASE 
+                 WHEN r.batch_cd = '16' THEN 'Batch 2025'
+                 ELSE r.batch_cd 
+               END
+             ) AS batch_name,
+             COALESCE(rev.faculty_name, r.mentor_assigned) AS faculty_name,
              rev.faculty_empid,
              rev.faculty_photo,
              rev.faculty_designation,
-             rev.remarks AS faculty_remarks,
+             COALESCE(rev.remarks, r.incubation_notes) AS faculty_remarks,
              rev.reviewed_at AS faculty_reviewed_at,
              (SELECT COUNT(*) FROM "${schema}".repository_reviews rev2 WHERE rev2.repo_id = r.repo_id)::int AS review_count
       FROM "${schema}".repositories r
       LEFT JOIN LATERAL (
-        SELECT s.photo_url, s.rollno
+        SELECT s.photo_url, s.rollno, s.department_id
         FROM "${schema}".students s
         WHERE s.registration_no = r.student_reg_no OR s.rollno = r.student_reg_no
         LIMIT 1
@@ -193,13 +228,24 @@ export class RepositoryService {
       LEFT JOIN LATERAL (
         SELECT d.name AS dep_name
         FROM "${schema}".departments d
-        WHERE d.code = r.branch_cd OR d.id::text = r.branch_cd
+        WHERE (d.course_cd = r.course_cd AND (d.code = r.branch_cd OR d.branch_cd = r.branch_cd))
+           OR (d.course_cd = r.course_cd AND d.id::text = stu.department_id::text)
+           OR (d.course_cd = r.course_cd)
+           OR (r.course_cd IS NULL AND (d.code = r.branch_cd OR d.id::text = r.branch_cd))
+        ORDER BY 
+          CASE 
+            WHEN d.course_cd = r.course_cd AND (d.code = r.branch_cd OR d.branch_cd = r.branch_cd) THEN 0
+            WHEN d.course_cd = r.course_cd AND d.id::text = stu.department_id::text THEN 1
+            WHEN d.course_cd = r.course_cd THEN 2
+            ELSE 3
+          END,
+          d.id
         LIMIT 1
       ) dep ON true
       LEFT JOIN LATERAL (
         SELECT b.name AS bth_name
         FROM "${schema}".batches b
-        WHERE b.code = r.batch_cd OR b.id::text = r.batch_cd
+        WHERE b.code = r.batch_cd OR b.id::text = r.batch_cd OR b.batch_cd = r.batch_cd
         LIMIT 1
       ) bth ON true
       LEFT JOIN LATERAL (

@@ -101,4 +101,112 @@ export class SaveReadingProgressDto {
   lastLocationDescription?: string;
 }
 
+export class DigitalBookItemDto {
+  @IsString()
+  @IsNotEmpty()
+  ttl_id: string;
+
+  @IsString()
+  @IsOptional()
+  titleid?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @IsString()
+  @IsOptional()
+  author?: string;
+
+  @IsString()
+  @IsOptional()
+  isbn?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsString()
+  @IsOptional()
+  publisher?: string;
+
+  @IsString()
+  @IsOptional()
+  cover_url?: string;
+
+  @IsString()
+  @IsOptional()
+  pdf_url?: string;
+
+  @IsString()
+  @IsOptional()
+  external_link?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  has_digital_media?: boolean;
+
+  @IsString()
+  @IsOptional()
+  raw_cover?: string;
+
+  @IsString()
+  @IsOptional()
+  raw_pdf?: string;
+
+  @IsString()
+  @IsOptional()
+  raw_link?: string;
+
+  @IsString()
+  @IsOptional()
+  colg_cd?: string;
+}
+
+export class BulkUpsertDigitalBooksDto {
+  @IsOptional()
+  books: DigitalBookItemDto[];
+
+  @IsString()
+  @IsOptional()
+  colg_cd?: string;
+}
+
+export class SyncDigitalBooksDto {
+  @IsString()
+  @IsOptional()
+  searchvalue?: string;
+
+  @IsString()
+  @IsOptional()
+  colg?: string;
+
+  @IsString()
+  @IsOptional()
+  colg_cd?: string;
+}
+
+export class QueryBooksDto {
+  @IsString()
+  @IsOptional()
+  q?: string;
+
+  @IsString()
+  @IsOptional()
+  search?: string;
+
+  @IsOptional()
+  digitalOnly?: string | boolean;
+
+  @IsString()
+  @IsOptional()
+  colg_cd?: string;
+
+  @IsOptional()
+  limit?: number | string;
+
+  @IsOptional()
+  offset?: number | string;
+}
+
 

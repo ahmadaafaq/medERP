@@ -83,28 +83,39 @@ export class UsersService {
       i++;
     }
     if (filters.batchId && filters.batchId !== 'all' && filters.batchId !== 'ALL') {
-      conditions.push(`(s.batch_id::text = $${i} OR s.batch_cd = $${i})`);
+      conditions.push(`(
+        s.batch_id::text = $${i} 
+        OR s.batch_cd = $${i}
+        OR s.admission_year::text = $${i}
+        OR s.batch_cd IN (SELECT year::text FROM "${schema}".batches WHERE code = $${i} OR id::text = $${i} OR year::text = $${i} OR batch_cd = $${i})
+        OR s.batch_cd IN (SELECT code FROM "${schema}".batches WHERE code = $${i} OR id::text = $${i} OR year::text = $${i} OR batch_cd = $${i})
+        OR s.batch_cd IN (SELECT batch_cd FROM "${schema}".batches WHERE code = $${i} OR id::text = $${i} OR year::text = $${i} OR batch_cd = $${i})
+      )`);
       params.push(filters.batchId);
       i++;
     }
     if (filters.departmentId && filters.departmentId !== 'all' && filters.departmentId !== 'ALL') {
-      conditions.push(`(s.department_id::text = $${i} OR s.branch_id = $${i} OR d.code = $${i})`);
+      conditions.push(`(
+        s.department_id::text = $${i} 
+        OR s.branch_id = $${i} 
+        OR d.id::text = $${i} 
+        OR d.code = $${i}
+        OR s.branch_id IN (SELECT code FROM "${schema}".departments WHERE id::text = $${i} OR code = $${i})
+        OR s.department_id::text IN (SELECT id::text FROM "${schema}".departments WHERE id::text = $${i} OR code = $${i})
+      )`);
       params.push(filters.departmentId);
       i++;
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const needsDeptJoin = !!(filters.departmentId && filters.departmentId !== 'all' && filters.departmentId !== 'ALL');
-    const countSql = needsDeptJoin
-      ? `SELECT COUNT(s.id) as count FROM "${schema}".students s
+    const countSql = `SELECT COUNT(s.id) as count FROM "${schema}".students s
          LEFT JOIN LATERAL (
-           SELECT code FROM "${schema}".departments
+           SELECT id, name, code FROM "${schema}".departments
            WHERE (id::text = s.department_id::text OR code = s.branch_id OR code = s.department_id::text)
            LIMIT 1
          ) d ON true
-         ${where}`
-      : `SELECT COUNT(s.id) as count FROM "${schema}".students s ${where}`;
+         ${where}`;
 
     const [rows, countRows] = await Promise.all([
       this.ds.query(
@@ -118,7 +129,7 @@ export class UsersService {
          LEFT JOIN "${schema}".users u ON u.id::text = s.user_id::text
          LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
          LEFT JOIN LATERAL (
-           SELECT name, code FROM "${schema}".departments
+           SELECT id, name, code FROM "${schema}".departments
            WHERE (id::text = s.department_id::text OR code = s.branch_id OR code = s.department_id::text)
            LIMIT 1
          ) d ON true
@@ -588,8 +599,13 @@ export class UsersService {
   }
 
   async createFaculty(tenantSlug: string, dto: CreateFacultyDto) {
-    const resolvedSlug = await this.resolveTenantSlug(dto.college_slug || dto.college_id || tenantSlug);
+    const targetSlug = (tenantSlug && tenantSlug !== 'all') ? tenantSlug : (dto.college_slug || dto.college_id || 'srms-cet-bareilly');
+    const resolvedSlug = await this.resolveTenantSlug(targetSlug);
     const schema = `tenant_${resolvedSlug}`;
+
+    await this.ds.query(`ALTER TABLE "${schema}".users ADD COLUMN IF NOT EXISTS username VARCHAR(150)`).catch(() => {});
+    await this.ds.query(`ALTER TABLE "${schema}".users ADD COLUMN IF NOT EXISTS name VARCHAR(255)`).catch(() => {});
+    await this.ds.query(`ALTER TABLE "${schema}".users ADD COLUMN IF NOT EXISTS emp_id VARCHAR(100)`).catch(() => {});
 
     // 1. Check if employee already exists by emp_id in this tenant schema
     const empCheck = await this.ds.query(
@@ -603,7 +619,8 @@ export class UsersService {
       return await this.updateFaculty(resolvedSlug, fId, dto);
     }
 
-    const emailStr = (dto.email || `${dto.empId.toLowerCase()}@srms.ac.in`).toLowerCase().trim();
+    const defaultDomain = resolvedSlug.startsWith('srms') ? 'srms.ac.in' : `${resolvedSlug.replace(/[^a-zA-Z0-9]/g, '')}.edu`;
+    const emailStr = (dto.email || `${dto.empId.toLowerCase()}@${defaultDomain}`).toLowerCase().trim();
     const plainPassword = dto.password || 'Temp@1234';
     const hash = await bcrypt.hash(plainPassword, BCRYPT_ROUNDS);
 
@@ -613,11 +630,14 @@ export class UsersService {
       const r = String(dto.role).toUpperCase().trim();
       if (r === 'HOD') role = UserRole.HOD;
       else if (r === 'CLERK') role = UserRole.CLERK;
+      else if (r === 'WARDEN') role = UserRole.WARDEN;
       else if (r === 'ADMIN' || r === 'COLLEGE_ADMIN') role = UserRole.COLLEGE_ADMIN;
       else if (r === 'STAFF') role = UserRole.STAFF;
       else role = UserRole.FACULTY;
-    } else if (dto.staffType && (dto.staffType.toUpperCase().includes('CLERK') || dto.staffType.toUpperCase().includes('ADMIN'))) {
-      role = dto.staffType.toUpperCase().includes('CLERK') ? UserRole.CLERK : UserRole.FACULTY;
+    } else if (dto.staffType && (dto.staffType.toUpperCase().includes('CLERK') || dto.staffType.toUpperCase().includes('WARDEN') || dto.staffType.toUpperCase().includes('ADMIN'))) {
+      if (dto.staffType.toUpperCase().includes('WARDEN')) role = UserRole.WARDEN;
+      else if (dto.staffType.toUpperCase().includes('CLERK')) role = UserRole.CLERK;
+      else role = UserRole.FACULTY;
     }
 
     // 2. Check if email already exists in users table
@@ -633,23 +653,23 @@ export class UsersService {
       if (dto.password) {
         await this.ds.query(
           `UPDATE "${schema}".users 
-           SET role = $1, is_active = COALESCE($2, true), password_hash = $3, emp_id = COALESCE($4, emp_id), updated_at = NOW() 
-           WHERE id = $5`,
-          [role, dto.isActive ?? true, hash, dto.empId || null, userId],
+           SET role = $1, is_active = COALESCE($2, true), password_hash = $3, emp_id = COALESCE($4, emp_id), username = COALESCE($5, username), name = COALESCE($6, name), updated_at = NOW() 
+           WHERE id = $7`,
+          [role, dto.isActive ?? true, hash, dto.empId || null, dto.empId || null, dto.name, userId],
         ).catch(() => { });
       } else {
         await this.ds.query(
           `UPDATE "${schema}".users 
-           SET role = $1, is_active = COALESCE($2, true), emp_id = COALESCE($3, emp_id), updated_at = NOW() 
-           WHERE id = $4`,
-          [role, dto.isActive ?? true, dto.empId || null, userId],
+           SET role = $1, is_active = COALESCE($2, true), emp_id = COALESCE($3, emp_id), username = COALESCE($4, username), name = COALESCE($5, name), updated_at = NOW() 
+           WHERE id = $6`,
+          [role, dto.isActive ?? true, dto.empId || null, dto.empId || null, dto.name, userId],
         ).catch(() => { });
       }
     } else {
       const userRows = await this.ds.query(
-        `INSERT INTO "${schema}".users (email, password_hash, role, emp_id, must_change_password, is_active)
-         VALUES ($1,$2,$3,$4,true,COALESCE($5, true)) RETURNING id`,
-        [emailStr, hash, role, dto.empId || null, dto.isActive ?? true],
+        `INSERT INTO "${schema}".users (email, username, name, password_hash, role, emp_id, must_change_password, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,false,COALESCE($7, true)) RETURNING id`,
+        [emailStr, dto.empId || emailStr.split('@')[0], dto.name, hash, role, dto.empId || null, dto.isActive ?? true],
       );
       userId = userRows[0].id;
     }
@@ -741,7 +761,7 @@ export class UsersService {
     const schema = `tenant_${resolvedSlug}`;
 
     // Update user record if email, role or password provided
-    if (dto.email || dto.role) {
+    if (dto.email || dto.role || dto.password) {
       const userUpdates: string[] = [];
       const userParams: any[] = [];
       let uIdx = 1;
@@ -755,6 +775,11 @@ export class UsersService {
         if (roleVal === 'ADMIN') roleVal = UserRole.COLLEGE_ADMIN;
         userUpdates.push(`role = $${uIdx++}`);
         userParams.push(roleVal);
+      }
+      if (dto.password) {
+        const hash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+        userUpdates.push(`password_hash = $${uIdx++}`);
+        userParams.push(hash);
       }
 
       if (userUpdates.length && faculty.user_id) {

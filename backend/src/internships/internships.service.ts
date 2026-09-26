@@ -296,35 +296,51 @@ export class InternshipsService {
     if (user?.rollno) candidateIdentifiers.add(String(user.rollno).trim());
     if (user?.username) candidateIdentifiers.add(String(user.username).trim());
     if (user?.id) candidateIdentifiers.add(String(user.id).trim());
+    if (user?.email) candidateIdentifiers.add(String(user.email).trim());
 
-    if (user?.id || user?.registration_no || user?.rollno) {
+    if (user?.id || user?.registration_no || user?.rollno || user?.email || user?.name) {
       try {
         const sRows = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT id, registration_no, rollno, user_id FROM "${schema}".students 
-           WHERE user_id::text = $1 OR id::text = $1 OR registration_no = $2 OR rollno = $2 LIMIT 1`,
-          [user?.id ? String(user.id) : '', user?.registration_no || user?.rollno || ''],
+          `SELECT s.id, s.registration_no, s.rollno, s.user_id, s.name, u.email, u.username 
+           FROM "${schema}".students s 
+           LEFT JOIN "${schema}".users u ON s.user_id::text = u.id::text
+           WHERE u.id::text = $1 
+              OR s.user_id::text = $1 
+              OR s.id::text = $1 
+              OR s.registration_no = $2 
+              OR s.rollno = $2 
+              OR u.username = $2
+              OR (u.email IS NOT NULL AND LOWER(u.email) = LOWER($3))
+              OR (s.name IS NOT NULL AND LOWER(s.name) = LOWER($4))
+           LIMIT 5`,
+          [
+            user?.id ? String(user.id) : '',
+            user?.registration_no || user?.rollno || user?.username || '',
+            user?.email ? String(user.email).trim() : '',
+            user?.name ? String(user.name).trim() : '',
+          ],
         );
-        if (sRows[0]) {
-          if (sRows[0].registration_no) candidateIdentifiers.add(String(sRows[0].registration_no).trim());
-          if (sRows[0].rollno) candidateIdentifiers.add(String(sRows[0].rollno).trim());
-          if (sRows[0].id) candidateIdentifiers.add(String(sRows[0].id).trim());
-          if (sRows[0].user_id) candidateIdentifiers.add(String(sRows[0].user_id).trim());
+        for (const s of sRows) {
+          if (s.registration_no) candidateIdentifiers.add(String(s.registration_no).trim());
+          if (s.rollno) candidateIdentifiers.add(String(s.rollno).trim());
+          if (s.id) candidateIdentifiers.add(String(s.id).trim());
+          if (s.user_id) candidateIdentifiers.add(String(s.user_id).trim());
+          if (s.username) candidateIdentifiers.add(String(s.username).trim());
         }
       } catch {}
     }
 
     const idsArray = Array.from(candidateIdentifiers).filter(Boolean);
-    if (idsArray.length > 0) {
+    if (idsArray.length > 0 || user?.name) {
       const myApps = await this.tenantSchemaService.queryInTenant(
         slug,
         `SELECT a.*, c.certificate_no, c.issued_date, c.approved_by, c.external_cert_url AS cert_external_url, c.cert_source AS certificate_source
          FROM "${schema}".internship_applications a
          LEFT JOIN "${schema}".certificates c ON a.id::text = c.application_id::text
-         WHERE a.student_reg_no = ANY($1) 
-            OR a.student_id::text = ANY($1)
-            OR ($2 != '' AND LOWER(a.student_name) = LOWER($2))`,
-        [idsArray, user?.name || ''],
+         WHERE (${idsArray.length > 0 ? `a.student_reg_no = ANY($1) OR a.student_id::text = ANY($1)` : '1=0'}
+            OR ($2 != '' AND LOWER(a.student_name) = LOWER($2)))`,
+        [idsArray.length > 0 ? idsArray : ['__NONE__'], user?.name || ''],
       );
 
       const appMap = new Map(myApps.map((a: any) => [String(a.program_id).toLowerCase(), a]));
@@ -336,6 +352,150 @@ export class InternshipsService {
     }
 
     return programs;
+  }
+
+  /**
+   * Student: Get all earned certificates and accreditations
+   */
+  async getMyCertificates(tenantSlug: string, user: any) {
+    const slug = await this.ensureTables(tenantSlug);
+    const schema = `tenant_${slug}`;
+
+    const candidateIdentifiers = new Set<string>();
+    if (user?.registration_no) candidateIdentifiers.add(String(user.registration_no).trim());
+    if (user?.rollno) candidateIdentifiers.add(String(user.rollno).trim());
+    if (user?.username) candidateIdentifiers.add(String(user.username).trim());
+    if (user?.id) candidateIdentifiers.add(String(user.id).trim());
+    if (user?.email) candidateIdentifiers.add(String(user.email).trim());
+
+    let resolvedStudentName = user?.name || '';
+
+    if (user?.id || user?.registration_no || user?.rollno || user?.email || user?.name) {
+      try {
+        const sRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT s.id, s.registration_no, s.rollno, s.user_id, s.name, u.email, u.username
+           FROM "${schema}".students s 
+           LEFT JOIN "${schema}".users u ON s.user_id::text = u.id::text
+           WHERE u.id::text = $1 
+              OR s.user_id::text = $1 
+              OR s.id::text = $1 
+              OR s.registration_no = $2 
+              OR s.rollno = $2 
+              OR u.username = $2
+              OR (u.email IS NOT NULL AND LOWER(u.email) = LOWER($3))
+              OR (s.name IS NOT NULL AND LOWER(s.name) = LOWER($4))
+           LIMIT 5`,
+          [
+            user?.id ? String(user.id) : '',
+            user?.registration_no || user?.rollno || user?.username || '',
+            user?.email ? String(user.email).trim() : '',
+            user?.name ? String(user.name).trim() : '',
+          ],
+        );
+        for (const s of sRows) {
+          if (s.registration_no) candidateIdentifiers.add(String(s.registration_no).trim());
+          if (s.rollno) candidateIdentifiers.add(String(s.rollno).trim());
+          if (s.id) candidateIdentifiers.add(String(s.id).trim());
+          if (s.user_id) candidateIdentifiers.add(String(s.user_id).trim());
+          if (s.username) candidateIdentifiers.add(String(s.username).trim());
+          if (s.name && !resolvedStudentName) resolvedStudentName = s.name;
+        }
+      } catch {}
+    }
+
+    const idsArray = Array.from(candidateIdentifiers).filter(Boolean);
+
+    const sql = `
+      SELECT 
+        c.id AS certificate_id,
+        c.certificate_no,
+        c.application_id,
+        c.issued_date,
+        c.approved_by,
+        c.pdf_url,
+        c.external_cert_url,
+        c.cert_source,
+        COALESCE(c.applicant_name, a.student_name, s.name, 'Student') AS student_name,
+        COALESCE(c.student_reg_no, a.student_reg_no, s.registration_no) AS student_reg_no,
+        COALESCE(c.internship_name, p.title, 'Internship Certification') AS internship_title,
+        COALESCE(c.organization_name, p.organization_name, 'SRMS Institutions') AS organization_name,
+        COALESCE(c.course, crs.name, s.course_cd, 'General Program') AS course,
+        COALESCE(c.batch, bth.name, s.batch_cd, '2022-2026') AS batch,
+        COALESCE(c.duration, p.duration, '3_MONTH') AS duration,
+        p.category,
+        p.campus_type,
+        p.fee_type,
+        a.id AS application_id,
+        a.status AS application_status,
+        a.completed_at
+      FROM "${schema}".certificates c
+      LEFT JOIN "${schema}".internship_applications a ON c.application_id::text = a.id::text
+      LEFT JOIN "${schema}".internship_programs p ON a.program_id::text = p.id::text
+      LEFT JOIN "${schema}".students s ON (
+        a.student_reg_no = s.registration_no 
+        OR a.student_reg_no = s.rollno 
+        OR a.student_id::text = s.id::text 
+        OR c.student_reg_no = s.registration_no
+      )
+      LEFT JOIN "${schema}".courses crs ON (s.course_cd = crs.code OR s.course_cd = crs.course_cd)
+      LEFT JOIN "${schema}".batches bth ON (s.batch_cd = bth.batch_cd OR s.batch_cd = bth.code)
+      WHERE (
+        ${idsArray.length > 0 ? `
+          a.student_reg_no = ANY($1)
+          OR a.student_id::text = ANY($1)
+          OR c.student_reg_no = ANY($1)
+          OR s.registration_no = ANY($1)
+          OR s.rollno = ANY($1)
+          OR s.user_id::text = ANY($1)
+        ` : '1=0'}
+        OR ($2 != '' AND (
+          LOWER(c.applicant_name) = LOWER($2) 
+          OR LOWER(a.student_name) = LOWER($2) 
+          OR LOWER(s.name) = LOWER($2)
+        ))
+      )
+      ORDER BY c.created_at DESC
+    `;
+
+    const certRows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      sql,
+      [idsArray.length > 0 ? idsArray : ['__NONE__'], resolvedStudentName || ''],
+    );
+
+    // Load institution branding
+    let firmLogoUrl: string | null = null;
+    let firmTitle: string | null = null;
+    try {
+      const resolvedSlug = this.resolveTenantSlug(tenantSlug);
+      const firmRows = await this.dataSource.query(
+        `SELECT logo_url, title, tenant_name FROM public.firms 
+         WHERE (LOWER(slug) = $1 OR LOWER(slug) = $2 OR LOWER(slug) = $3 OR LOWER(slug) LIKE '%cet%')
+           AND logo_url IS NOT NULL AND logo_url != ''
+         ORDER BY updated_at DESC LIMIT 1`,
+        [slug.toLowerCase(), `tenant_${slug.toLowerCase()}`, resolvedSlug.toLowerCase()],
+      );
+      if (firmRows[0] && firmRows[0].logo_url) {
+        firmLogoUrl = firmRows[0].logo_url;
+        firmTitle = firmRows[0].title || firmRows[0].tenant_name || null;
+      }
+    } catch {}
+
+    const officialInstitutionName = 
+      firmTitle === 'SRMS CET,BAREILLY' || !firmTitle 
+        ? 'SHRI RAM MURTI SMARAK COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY' 
+        : firmTitle;
+
+    return certRows.map((r: any) => ({
+      ...r,
+      logo_url: firmLogoUrl,
+      institution_name: officialInstitutionName,
+      issued_date: r.issued_date 
+        ? (typeof r.issued_date === 'string' ? r.issued_date.split('T')[0] : new Date(r.issued_date).toISOString().split('T')[0]) 
+        : null,
+      duration: r.duration ? r.duration.replace('_', ' ') : '3 Months',
+    }));
   }
 
   /**
@@ -783,15 +943,26 @@ export class InternshipsService {
     if (user?.role === 'STUDENT') {
       const isOwner =
         (regNo && (app.student_reg_no === regNo || app.student_id === regNo)) ||
-        (userId && (app.student_id === userId || app.student_reg_no === userId));
+        (userId && (app.student_id === userId || app.student_reg_no === userId)) ||
+        (user?.name && (
+          app.student_name?.toLowerCase() === String(user.name).toLowerCase() ||
+          app.cert_applicant_name?.toLowerCase() === String(user.name).toLowerCase()
+        ));
 
       if (!isOwner) {
         const stRows = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT id, registration_no, rollno, user_id FROM "${schema}".students
-           WHERE user_id::text = $1 OR id::text = $1 OR registration_no = $2 OR rollno = $2
+          `SELECT s.id, s.registration_no, s.rollno, s.user_id, s.name FROM "${schema}".students s
+           LEFT JOIN "${schema}".users u ON s.user_id::text = u.id::text
+           WHERE u.id::text = $1 
+              OR s.user_id::text = $1 
+              OR s.id::text = $1 
+              OR s.registration_no = $2 
+              OR s.rollno = $2
+              OR (u.email IS NOT NULL AND LOWER(u.email) = LOWER($3))
+              OR (s.name IS NOT NULL AND LOWER(s.name) = LOWER($4))
            LIMIT 1`,
-          [userId || '', regNo || ''],
+          [userId || '', regNo || '', user?.email ? String(user.email).trim() : '', user?.name ? String(user.name).trim() : ''],
         ).catch(() => []);
 
         if (stRows[0]) {
@@ -802,12 +973,11 @@ export class InternshipsService {
             app.student_id === st.registration_no ||
             app.student_id === st.rollno ||
             app.student_id === String(st.id) ||
-            app.student_id === String(st.user_id);
-          if (!matchesStudent) {
+            app.student_id === String(st.user_id) ||
+            (st.name && app.student_name && st.name.toLowerCase() === app.student_name.toLowerCase());
+          if (!matchesStudent && user?.role === 'STUDENT') {
             throw new ForbiddenException("You are not authorized to view another student's certificate.");
           }
-        } else if (regNo && app.student_reg_no !== regNo && app.student_id !== regNo) {
-          throw new ForbiddenException("You are not authorized to view another student's certificate.");
         }
       }
     }

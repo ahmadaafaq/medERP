@@ -36,8 +36,41 @@ export class TimetableService implements OnModuleInit {
             ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS section VARCHAR(50);
             ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS description TEXT;
           `);
+
+          // Auto-link timetable slots that have null subject_id to their respective subjects if table exists
+          try {
+            const hasSubjects = await this.dataSource.query(
+              `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'subjects'`,
+              [schemaName],
+            );
+            if (hasSubjects.length > 0) {
+              await this.dataSource.query(`
+                UPDATE "${schemaName}".timetable_slots ts
+                SET subject_id = s.id
+                FROM "${schemaName}".subjects s
+                WHERE ts.subject_id IS NULL
+                  AND (
+                    s.id::text = ts.topic
+                    OR s.code = ts.topic
+                    OR LOWER(s.name) = LOWER(ts.topic)
+                    OR (LOWER(ts.topic) = 'coa' AND (s.name ILIKE '%Computer Organization%' OR s.code ILIKE '%302%'))
+                    OR (LOWER(ts.topic) LIKE '%tc%' AND s.name ILIKE '%Technical Communication%')
+                    OR (LOWER(ts.topic) LIKE '%web technology lab%' AND s.name ILIKE '%Web Technology Lab%')
+                    OR (LOWER(ts.topic) LIKE '%web technology%' AND s.name ILIKE '%Web Technology%')
+                    OR (LOWER(ts.topic) LIKE '%business communication%' AND s.name ILIKE '%Business Communication%')
+                    OR (LOWER(ts.topic) LIKE '%object oriented programming%' AND s.name ILIKE '%Object Oriented Programming in C++%')
+                    OR (LOWER(ts.topic) LIKE '%front end development%' AND s.name ILIKE '%Front End Development%')
+                    OR (LOWER(ts.topic) = 'wt' AND s.name ILIKE '%Web Technology%')
+                    OR (LOWER(ts.topic) = 'dbms' AND s.name ILIKE '%Database Management%')
+                    OR (LOWER(ts.topic) = 'os' AND s.name ILIKE '%Operating System%')
+                  )
+              `);
+            }
+          } catch (e) {
+            // Ignore
+          }
         }
-        this.logger.log('Auto-migrated timetable_slots columns across all tenant schemas.');
+        this.logger.log('Auto-migrated timetable_slots columns and linked subjects across all tenant schemas.');
       }
     } catch (err) {
       this.logger.error('Error auto-migrating timetable_slots columns:', err);
@@ -73,42 +106,81 @@ export class TimetableService implements OnModuleInit {
              ts.unit_name, ts.unit_id, ts.sub_topics, ts.colg_cd, ts.course_cd, ts.branch_cd, ts.batch_cd,
              ts.semester, ts.section, ts.description,
              COALESCE(f.name, '') AS faculty_name, f.emp_id AS faculty_code,
-             COALESCE(s.name, '') AS subject_name, COALESCE(s.code, '') AS subject_code, COALESCE(s.type, '') AS subject_type,
+             COALESCE(s.name, '') AS subject_name, COALESCE(s.code, '') AS subject_code, COALESCE(s.code, '') AS subject_cd, COALESCE(s.sub_addinfo, '') AS subject_paper_code, COALESCE(s.type, '') AS subject_type,
              COALESCE(d.name, '') AS department_name, d.code AS department_code,
+             COALESCE(ts.batch_id::text, b.id::text) AS batch_id,
              COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, ts.batch_cd, b.code) AS batch_code,
              COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, ts.batch_cd, b.code) AS batch_name,
-             b.year AS batch_year, b.batch_cd AS batch_numeric_cd
+             COALESCE(b.year::text, ts.batch_cd) AS batch_year,
+             COALESCE(ts.batch_cd, b.batch_cd) AS batch_numeric_cd
       FROM timetable_slots ts
       LEFT JOIN faculty f ON f.id::text = ts.faculty_id::text
       LEFT JOIN subjects s ON s.id::text = ts.subject_id::text
       LEFT JOIN departments d ON d.id::text = ts.department_id::text
-      LEFT JOIN batches b ON b.id::text = ts.batch_id::text
+      LEFT JOIN batches b ON (CASE WHEN ts.batch_id IS NOT NULL THEN b.id::text = ts.batch_id::text ELSE (b.batch_cd = ts.batch_cd AND (b.course_cd = ts.course_cd OR ts.course_cd IS NULL)) END)
       WHERE 1=1
     `;
 
+    let facultyRecord: any = null;
+    if (query.facultyId && query.facultyId !== 'all') {
+      try {
+        const facRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, emp_id, name, department_id FROM faculty 
+           WHERE id::text = $1 OR emp_id::text = $1 OR user_id::text = $1 
+              OR LOWER(name) = LOWER($1) 
+              OR regexp_replace(name, '\\s+', ' ', 'g') ILIKE '%' || regexp_replace($1, '\\s+', ' ', 'g') || '%'
+           LIMIT 1`,
+          [query.facultyId],
+        );
+        facultyRecord = facRows?.[0] || null;
+      } catch (e) {
+        // Continue gracefully
+      }
+    }
+
     if (query.departmentId && query.departmentId !== 'all') {
-      params.push(query.departmentId);
-      const pIdx = params.length;
-      if (this.isUUID(query.departmentId)) {
-        sql += ` AND (ts.department_id::text = $${pIdx}::text OR f.department_id::text = $${pIdx}::text OR s.department_id::text = $${pIdx}::text)`;
-      } else {
-        sql += ` AND (
-          d.code = $${pIdx} OR d.branch_cd = $${pIdx} OR d.id::text = $${pIdx} OR d.name ILIKE '%' || $${pIdx} || '%'
-          OR ts.department_id IN (SELECT id FROM departments WHERE code = $${pIdx} OR branch_cd = $${pIdx} OR name ILIKE '%' || $${pIdx} || '%')
-          OR f.department_id IN (SELECT id FROM departments WHERE code = $${pIdx} OR branch_cd = $${pIdx} OR name ILIKE '%' || $${pIdx} || '%')
-          OR s.department_id IN (SELECT id FROM departments WHERE code = $${pIdx} OR branch_cd = $${pIdx} OR name ILIKE '%' || $${pIdx} || '%')
-        )`;
+      // If a faculty is querying for their own schedule across multiple courses/departments, don't restrict by department
+      if (!query.facultyId || query.facultyId === 'all') {
+        params.push(query.departmentId);
+        const pIdx = params.length;
+        if (this.isUUID(query.departmentId)) {
+          sql += ` AND (ts.department_id::text = $${pIdx}::text OR f.department_id::text = $${pIdx}::text OR s.department_id::text = $${pIdx}::text)`;
+        } else {
+          sql += ` AND (
+            d.code = $${pIdx} OR d.branch_cd = $${pIdx} OR d.id::text = $${pIdx} OR d.name ILIKE '%' || $${pIdx} || '%'
+            OR ts.department_id IN (SELECT id FROM departments WHERE code = $${pIdx} OR branch_cd = $${pIdx} OR name ILIKE '%' || $${pIdx} || '%')
+            OR f.department_id IN (SELECT id FROM departments WHERE code = $${pIdx} OR branch_cd = $${pIdx} OR name ILIKE '%' || $${pIdx} || '%')
+            OR s.department_id IN (SELECT id FROM departments WHERE code = $${pIdx} OR branch_cd = $${pIdx} OR name ILIKE '%' || $${pIdx} || '%')
+          )`;
+        }
       }
     }
 
     if (query.facultyId && query.facultyId !== 'all') {
-      params.push(query.facultyId);
-      const pIdx = params.length;
-      if (this.isUUID(query.facultyId)) {
-        sql += ` AND (ts.faculty_id::text = $${pIdx}::text OR f.id::text = $${pIdx}::text OR f.emp_id::text = $${pIdx}::text)`;
-      } else {
-        sql += ` AND (f.emp_id::text = $${pIdx}::text OR f.id::text = $${pIdx}::text OR f.name ILIKE '%' || $${pIdx} || '%')`;
+      const facIds: string[] = [query.facultyId];
+      if (facultyRecord?.id && !facIds.includes(String(facultyRecord.id))) facIds.push(String(facultyRecord.id));
+      if (facultyRecord?.emp_id && !facIds.includes(String(facultyRecord.emp_id))) facIds.push(String(facultyRecord.emp_id));
+
+      params.push(facIds);
+      const facArrIdx = params.length;
+
+      const searchName = (facultyRecord?.name || query.facultyId).trim();
+      const words = searchName.split(/\s+/).filter(Boolean);
+
+      let facMatchSql = `(ts.faculty_id::text = ANY($${facArrIdx}::text[]) OR f.id::text = ANY($${facArrIdx}::text[]) OR f.emp_id::text = ANY($${facArrIdx}::text[])`;
+
+      if (words.length > 0) {
+        const wordConditions: string[] = [];
+        for (const w of words) {
+          params.push(`%${w}%`);
+          const wIdx = params.length;
+          wordConditions.push(`(ts.description ILIKE $${wIdx} OR f.name ILIKE $${wIdx})`);
+        }
+        facMatchSql += ` OR (${wordConditions.join(' AND ')})`;
       }
+      facMatchSql += `)`;
+      sql += ` AND ${facMatchSql}`;
     }
 
     if (query.subjectId && query.subjectId !== 'all') {
@@ -117,7 +189,7 @@ export class TimetableService implements OnModuleInit {
       if (this.isUUID(query.subjectId)) {
         sql += ` AND (ts.subject_id::text = $${pIdx}::text OR s.id::text = $${pIdx}::text)`;
       } else {
-        sql += ` AND (s.code::text = $${pIdx}::text OR s.id::text = $${pIdx}::text OR s.name ILIKE '%' || $${pIdx} || '%')`;
+        sql += ` AND (s.code::text = $${pIdx}::text OR s.sub_addinfo::text = $${pIdx}::text OR ts.subject_id::text = $${pIdx}::text OR s.id::text = $${pIdx}::text OR s.name ILIKE '%' || $${pIdx} || '%')`;
       }
     }
 
@@ -174,7 +246,7 @@ export class TimetableService implements OnModuleInit {
     if (query.section && query.section !== 'all') {
       params.push(String(query.section));
       const pIdx = params.length;
-      sql += ` AND (ts.section = $${pIdx} OR ts.section IS NULL OR ts.section = 'All' OR ts.section = '1' OR ts.section = 'A')`;
+      sql += ` AND (ts.section = $${pIdx} OR ts.section IS NULL OR ts.section = 'All')`;
     }
 
     if (query.dayOfWeek !== undefined && !isNaN(Number(query.dayOfWeek))) {
@@ -215,22 +287,43 @@ export class TimetableService implements OnModuleInit {
       srmsWhere.push(`(sem_cd = $${srmsParams.length} OR sem_cd IS NULL)`);
     }
     if (query.facultyId && query.facultyId !== 'all') {
-      srmsParams.push(query.facultyId);
-      srmsWhere.push(`(empid = $${srmsParams.length} OR empid ILIKE '%' || $${srmsParams.length} || '%')`);
+      const matchIds: string[] = [query.facultyId];
+      if (facultyRecord?.emp_id && !matchIds.includes(String(facultyRecord.emp_id))) matchIds.push(String(facultyRecord.emp_id));
+      if (facultyRecord?.id && !matchIds.includes(String(facultyRecord.id))) matchIds.push(String(facultyRecord.id));
+
+      const orClauses: string[] = [];
+      for (const mId of matchIds) {
+        srmsParams.push(mId);
+        const idx = srmsParams.length;
+        orClauses.push(`empid = $${idx} OR empid ILIKE '%' || $${idx} || '%'`);
+      }
+      if (facultyRecord?.name) {
+        srmsParams.push(facultyRecord.name);
+        const idx = srmsParams.length;
+        orClauses.push(`title ILIKE '%' || $${idx} || '%' OR description ILIKE '%' || $${idx} || '%'`);
+      }
+      srmsWhere.push(`(${orClauses.join(' OR ')})`);
     }
 
     let srmsEvents: any[] = [];
+    let tenantSubjects: any[] = [];
     try {
-      srmsEvents = await this.tenantSchemaService.queryInTenant(
-        slug,
-        `SELECT id, title, description, start_time, end_time, start_str, end_str, day_of_week,
-                linkcd, empid, colg_cd, course_cd, branch_cd, batch_cd, sem_cd, camera_link,
-                unit_name, unit_id, topic, sub_topics, competency_codes
-         FROM srms_timetable_events
-         WHERE ${srmsWhere.join(' AND ')}
-         ORDER BY start_time ASC`,
-        srmsParams,
-      );
+      [srmsEvents, tenantSubjects] = await Promise.all([
+        this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, title, description, start_time, end_time, start_str, end_str, day_of_week,
+                  linkcd, empid, colg_cd, course_cd, branch_cd, batch_cd, sem_cd, camera_link,
+                  unit_name, unit_id, topic, sub_topics, competency_codes
+           FROM srms_timetable_events
+           WHERE ${srmsWhere.join(' AND ')}
+           ORDER BY start_time ASC`,
+          srmsParams,
+        ),
+        this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code, name, sub_addinfo, course_cd FROM subjects`,
+        ).catch(() => []),
+      ]);
     } catch (e) {
       // Graceful fallback
     }
@@ -245,52 +338,98 @@ export class TimetableService implements OnModuleInit {
       const dayVal = ev.day_of_week || 1;
       const sTimePrefix = (sTime || '').slice(0, 5);
 
-      // Check if a slot already exists for this exact day and start time
+      const rawTitle = String(ev.title || ev.description || '');
+      const cleanName = rawTitle.replace(/\([^)]*\)/g, '').trim();
+      const teacher = (rawTitle.match(/\(([^)]+)\)/)?.[1] || 'Faculty Incharge').trim();
+      const isLab = rawTitle.toLowerCase().includes('lab') || rawTitle.toLowerCase().includes('practical');
+
+      // Resolve real subject_id and subject_code from tenant subjects (never use course names like B.Tech/BCA)
+      let resolvedSubCode = ev.linkcd || '';
+      let resolvedSubId: string | null = null;
+      let resolvedSubName = cleanName || rawTitle;
+
+      const matchedSubject = tenantSubjects.find((sub: any) => {
+        if (ev.linkcd && String(sub.code).trim() === String(ev.linkcd).trim()) return true;
+        const normSub = String(sub.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normClean = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normClean && normSub && (normSub.includes(normClean) || normClean.includes(normSub))) return true;
+        if (cleanName.toLowerCase() === 'coa' && (sub.code === '85717' || sub.code === '88606' || sub.code === 'KCS-302' || String(sub.name).toLowerCase().includes('computer organization'))) return true;
+        return false;
+      });
+
+      if (matchedSubject) {
+        resolvedSubId = matchedSubject.id;
+        resolvedSubCode = matchedSubject.code || resolvedSubCode;
+        resolvedSubName = matchedSubject.name || resolvedSubName;
+      }
+
+      // Check if a slot already exists for this exact day, start time, course, and section
       let matchingSlotKey: string | null = null;
       for (const [key, slot] of slotMap.entries()) {
-        if (Number(slot.day_of_week) === Number(dayVal) && String(slot.start_time || '').slice(0, 5) === sTimePrefix) {
+        const sameDay = Number(slot.day_of_week) === Number(dayVal);
+        const sameTime = String(slot.start_time || '').slice(0, 5) === sTimePrefix;
+        const sameCourse = !ev.course_cd || !slot.course_cd || String(ev.course_cd) === String(slot.course_cd);
+        const sameSec = !ev.txt_sec || !slot.section || String(ev.txt_sec) === String(slot.section);
+        if (sameDay && sameTime && sameCourse && sameSec) {
           matchingSlotKey = key;
           break;
         }
       }
 
-      const rawTitle = String(ev.title || ev.description || '');
-      const cleanName = rawTitle.replace(/\([^)]*\)/g, '').trim();
-      const teacher = (rawTitle.match(/\(([^)]+)\)/)?.[1] || 'Faculty Incharge').trim();
+      const isCourseTitle = (code: any) => {
+        if (!code) return false;
+        const s = String(code).toLowerCase().trim();
+        return s === 'b.tech' || s === 'b.tech.' || s === 'bca' || s === 'mba' || s === 'mca' || s === 'b.pharma';
+      };
 
       if (matchingSlotKey) {
         // Merge metadata into existing rich slot
         const existing = slotMap.get(matchingSlotKey);
+        const validCode = !isCourseTitle(existing.subject_code) ? (existing.subject_code || resolvedSubCode) : resolvedSubCode;
         slotMap.set(matchingSlotKey, {
           ...existing,
+          subject_id: existing.subject_id || resolvedSubId,
+          subject_code: validCode,
+          subject_cd: validCode,
           topic: existing.topic || ev.topic || cleanName || rawTitle,
           unit_name: existing.unit_name || ev.unit_name,
           unit_id: existing.unit_id || ev.unit_id,
           sub_topics: existing.sub_topics || ev.sub_topics,
           competency_codes: existing.competency_codes || ev.competency_codes,
           room: existing.room || (ev.camera_link ? `Room 204 (Cam #${ev.camera_link})` : 'Room 204'),
+          course_cd: existing.course_cd || ev.course_cd,
+          branch_cd: existing.branch_cd || ev.branch_cd,
+          semester: existing.semester || ev.sem_cd,
+          section: existing.section || ev.txt_sec,
         });
       } else if (!slotMap.has(ev.id)) {
         slotMap.set(ev.id, {
           id: ev.id,
+          subject_id: resolvedSubId,
           day_of_week: dayVal,
           start_time: sTime || '09:30:00',
           end_time: eTime || '10:30:00',
-          room: ev.camera_link ? `Room 204 (Cam #${ev.camera_link})` : 'Room 204',
-          slot_type: 'Lecture',
+          room: ev.camera_link ? `Room 204 (Cam #${ev.camera_link})` : (isLab ? 'Comp Lab 2' : 'Room 204'),
+          slot_type: isLab ? 'Practical' : 'Lecture',
           topic: ev.topic || cleanName || rawTitle,
           unit_name: ev.unit_name,
           unit_id: ev.unit_id,
           sub_topics: ev.sub_topics,
           competency_codes: ev.competency_codes,
-          subject_name: cleanName || rawTitle,
-          subject_code: ev.linkcd || 'BCA',
+          subject_name: resolvedSubName,
+          subject_code: resolvedSubCode,
+          subject_cd: resolvedSubCode,
           faculty_name: teacher,
           faculty_code: ev.empid,
-          department_name: 'Department of Computer Applications',
+          department_name: ev.course_cd === '1' ? 'Computer Science and Engineering' : (ev.course_cd === '13' ? 'BCA Department' : 'Academic Department'),
           batch_code: ev.batch_cd ? `Batch ${ev.batch_cd}` : 'Batch 2025',
           batch_name: ev.batch_cd ? `Batch ${ev.batch_cd}` : 'Batch 2025',
           batch_year: 2025,
+          course_cd: ev.course_cd,
+          branch_cd: ev.branch_cd,
+          semester: ev.sem_cd,
+          section: ev.txt_sec,
+          description: rawTitle,
         });
       }
     }
@@ -360,7 +499,31 @@ export class TimetableService implements OnModuleInit {
       }
     }
 
-    return mergedSlots.map((slot: any) => {
+    // Deduplicate slots that share the same day, time window, course, semester, section, and subject/faculty
+    const seenSlots = new Map<string, any>();
+    for (const slot of mergedSlots) {
+      const sTime = String(slot.start_time || '').slice(0, 5);
+      const eTime = String(slot.end_time || '').slice(0, 5);
+      const cleanSubj = String(slot.subject_code || slot.subject_name || slot.topic || slot.description || '')
+        .replace(/\([^)]*\)/g, '')
+        .toLowerCase()
+        .trim();
+      const facKey = String(slot.faculty_id || slot.faculty_name || '').toLowerCase().trim();
+      const dedupKey = `${slot.day_of_week}_${sTime}_${eTime}_${slot.course_cd || ''}_${slot.semester || ''}_${slot.section || ''}_${cleanSubj}_${facKey}`;
+
+      if (seenSlots.has(dedupKey)) {
+        const existing = seenSlots.get(dedupKey);
+        if (!existing.batch_id && slot.batch_id) existing.batch_id = slot.batch_id;
+        if (!existing.subject_id && slot.subject_id) existing.subject_id = slot.subject_id;
+        if (slot.room && (!existing.room || existing.room === 'Web Cam')) existing.room = slot.room;
+        seenSlots.set(dedupKey, existing);
+      } else {
+        seenSlots.set(dedupKey, { ...slot });
+      }
+    }
+    const finalSlots = Array.from(seenSlots.values());
+
+    return finalSlots.map((slot: any) => {
       const relatedComps = compMap[slot.subject_id] || [];
       let matchedComps = relatedComps;
       if (slot.competency_codes || slot.topic) {
@@ -372,8 +535,18 @@ export class TimetableService implements OnModuleInit {
         );
         if (filtered.length > 0) matchedComps = filtered;
       }
+      const cleanDesc = String(slot.description || '').replace(/\([^)]*\)/g, '').trim();
+      const effectiveSubjectName = (slot.subject_name && slot.subject_name.trim())
+        ? slot.subject_name
+        : (slot.topic || cleanDesc || 'Subject');
+      const effectiveSubjectCode = (slot.subject_code && slot.subject_code.trim())
+        ? slot.subject_code
+        : (slot.topic || (slot.course_cd === '1' ? 'B.Tech' : (slot.course_cd === '13' ? 'BCA' : '')));
+
       return {
         ...slot,
+        subject_name: effectiveSubjectName,
+        subject_code: effectiveSubjectCode,
         competencies_detail: matchedComps,
       };
     });
