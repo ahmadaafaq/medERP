@@ -353,8 +353,9 @@ export async function POST(req: NextRequest) {
           const dayName = days[startMeta.dayOfWeek] || `Day ${startMeta.dayOfWeek}`;
           const facName = (existingEvents[0]?.faculty_name || existingSlots[0]?.faculty_name || description || title || 'Faculty Member').split('(')[0].trim();
 
-          // Collect all engagements for this faculty on this day
+          // Collect all unique engagements for this faculty on this day
           const engagements: string[] = [];
+          const seenEngagements = new Set<string>();
 
           for (const ev of existingEvents) {
             // Use course_name from JOIN (dynamic) — fallback to raw code only if table missing
@@ -364,8 +365,18 @@ export async function POST(req: NextRequest) {
             const secRaw = String(ev.txt_sec || '1');
             const secLetter = secRaw === '1' ? 'A' : secRaw === '2' ? 'B' : secRaw === '3' ? 'C' : secRaw === '4' ? 'D' : secRaw;
             const subName = ev.subject_name || (ev.title || '').replace(/\s*\([^)]*\)/, '').trim() || 'Subject';
-            const timeInfo = ev.start_str ? ev.start_str.trim().slice(0, 5) : '';
-            engagements.push(`${cName} › ${bName} › ${semName} › Sec-${secLetter} (${subName}${timeInfo ? ' @ ' + timeInfo : ''})`);
+            
+            // Extract HH:mm safely from ISO or date string (e.g. '2026-09-28 10:10:00' -> '10:10')
+            let timeInfo = '';
+            if (ev.start_str) {
+              const timeMatch = ev.start_str.match(/(?:T|\s|^)(\d{1,2}:\d{2})/);
+              if (timeMatch) timeInfo = timeMatch[1];
+            }
+            const line = `${cName} › ${bName} › ${semName} › Sec-${secLetter} (${subName}${timeInfo ? ' @ ' + timeInfo : ''})`;
+            if (!seenEngagements.has(line)) {
+              seenEngagements.add(line);
+              engagements.push(line);
+            }
           }
 
           for (const sl of existingSlots) {
@@ -377,8 +388,17 @@ export async function POST(req: NextRequest) {
             const secRaw = String(sl.section || '1');
             const secLetter = secRaw === '1' ? 'A' : secRaw === '2' ? 'B' : secRaw === '3' ? 'C' : secRaw === '4' ? 'D' : secRaw;
             const subName = sl.subject_name || sl.topic || 'Subject';
-            const timeInfo = sl.start_time ? String(sl.start_time).slice(0, 5) : '';
-            engagements.push(`${cName} › ${bName} › ${semName} › Sec-${secLetter} (${subName}${timeInfo ? ' @ ' + timeInfo : ''})`);
+            
+            let timeInfo = '';
+            if (sl.start_time) {
+              const timeMatch = String(sl.start_time).match(/(?:T|\s|^)(\d{1,2}:\d{2})/);
+              if (timeMatch) timeInfo = timeMatch[1];
+            }
+            const line = `${cName} › ${bName} › ${semName} › Sec-${secLetter} (${subName}${timeInfo ? ' @ ' + timeInfo : ''})`;
+            if (!seenEngagements.has(line)) {
+              seenEngagements.add(line);
+              engagements.push(line);
+            }
           }
 
           let conflictMsg: string;

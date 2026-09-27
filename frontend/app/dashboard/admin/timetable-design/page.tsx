@@ -53,6 +53,11 @@ interface TopicMasterItem {
   name: string;
   subject_name?: string;
   subject_code?: string;
+  unit_id?: string;
+  unit_code?: string;
+  unit_name?: string;
+  description?: string;
+  [key: string]: any;
 }
 
 interface CompetencyMasterItem {
@@ -61,10 +66,14 @@ interface CompetencyMasterItem {
   topic_id?: string;
   code: string;
   description: string;
+  name?: string;
   subject_name?: string;
   subject_code?: string;
   topic_name?: string;
   topic_code?: string;
+  unit_id?: string;
+  unit_code?: string;
+  [key: string]: any;
 }
 
 interface UnitMasterItem {
@@ -180,6 +189,212 @@ const DAYS_OF_WEEK = [
   { value: 5, name: 'FRIDAY' },
   { value: 6, name: 'SATURDAY' },
 ];
+
+interface SearchableDropdownOption {
+  value: string;
+  label: string;
+  sublabel?: string;
+  badge?: string;
+}
+
+interface SearchableDropdownProps {
+  options: SearchableDropdownOption[];
+  value: string;
+  onChange: (val: string, opt?: SearchableDropdownOption) => void;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  allowCustom?: boolean;
+  disabled?: boolean;
+  required?: boolean;
+  className?: string;
+  error?: boolean;
+}
+
+function SearchableDropdown({
+  options,
+  value,
+  onChange,
+  placeholder = '-- Select --',
+  searchPlaceholder = 'Type to search...',
+  allowCustom = false,
+  disabled = false,
+  required = false,
+  className = '',
+  error = false,
+}: SearchableDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSearchTerm('');
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [isOpen]);
+
+  const selectedOption = useMemo(() => {
+    return options.find(o => String(o.value) === String(value) || o.label === value);
+  }, [options, value]);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm.trim()) return options;
+    const term = searchTerm.toLowerCase();
+    return options.filter(o =>
+      (o.label && o.label.toLowerCase().includes(term)) ||
+      (o.sublabel && o.sublabel.toLowerCase().includes(term)) ||
+      (o.badge && o.badge.toLowerCase().includes(term)) ||
+      (o.value && String(o.value).toLowerCase().includes(term))
+    );
+  }, [options, searchTerm]);
+
+  return (
+    <div ref={wrapperRef} className={`relative w-full ${className}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full flex items-center justify-between gap-2 p-2.5 rounded-xl border text-left font-bold text-xs transition-all outline-none ${
+          error
+            ? 'border-2 border-rose-500 bg-rose-50/20 text-rose-900 dark:text-rose-100 ring-4 ring-rose-500/10'
+            : isOpen
+            ? 'border-[#5B4BFF] ring-2 ring-[#5B4BFF]/20 bg-white dark:bg-slate-800 text-slate-900 dark:text-white'
+            : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-slate-400'
+        } ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+      >
+        <span className="truncate flex items-center gap-1.5 flex-1">
+          {selectedOption ? (
+            <>
+              {selectedOption.badge && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 shrink-0 font-bold">
+                  {selectedOption.badge}
+                </span>
+              )}
+              <span className="truncate">{selectedOption.label}</span>
+              {selectedOption.sublabel && (
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate">
+                  {selectedOption.sublabel}
+                </span>
+              )}
+            </>
+          ) : value ? (
+            <span className="truncate text-slate-800 dark:text-slate-200">{value}</span>
+          ) : (
+            <span className="text-slate-400 dark:text-slate-500 font-normal">{placeholder}</span>
+          )}
+        </span>
+        <span className="text-slate-400 shrink-0 text-[10px] transition-transform duration-200">
+          {isOpen ? '▲' : '▼'}
+        </span>
+      </button>
+
+      {required && (
+        <input
+          tabIndex={-1}
+          autoComplete="off"
+          style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+          value={value || ''}
+          onChange={() => {}}
+          required={required}
+        />
+      )}
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden max-h-60 flex flex-col animate-in fade-in-50 zoom-in-95 duration-150">
+          <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/80 sticky top-0 flex items-center gap-1.5">
+            <span className="text-slate-400 text-xs pl-1">🔍</span>
+            <input
+              ref={inputRef}
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 outline-none placeholder:text-slate-400 placeholder:font-normal"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="text-slate-400 hover:text-slate-600 text-xs pr-1"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="overflow-y-auto flex-1 divide-y divide-slate-100 dark:divide-slate-800/60">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt) => {
+                const isSelected = String(opt.value) === String(value) || opt.label === value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt.value, opt);
+                      setIsOpen(false);
+                    }}
+                    className={`w-full text-left p-2.5 text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] font-bold'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 truncate flex-1">
+                      {opt.badge && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0 font-bold">
+                          {opt.badge}
+                        </span>
+                      )}
+                      <span className="truncate">{opt.label}</span>
+                      {opt.sublabel && (
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal truncate">
+                          {opt.sublabel}
+                        </span>
+                      )}
+                    </div>
+                    {isSelected && <span className="text-[#5B4BFF] text-sm shrink-0 font-black">✓</span>}
+                  </button>
+                );
+              })
+            ) : allowCustom && searchTerm.trim() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(searchTerm.trim());
+                  setIsOpen(false);
+                }}
+                className="w-full text-left p-3 text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold hover:bg-indigo-100 cursor-pointer flex items-center gap-2"
+              >
+                <span>➕</span>
+                <span>Use custom: &ldquo;{searchTerm.trim()}&rdquo;</span>
+              </button>
+            ) : (
+              <div className="p-4 text-center text-xs text-slate-400">
+                No matching options found
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function extractArray<T = any>(json: any): T[] {
   if (!json) return [];
@@ -631,157 +846,392 @@ export default function TimetableDesignPage() {
     const matched = availableFormSubjects.find(s => String(s.id) === subVal || String(s.code) === subVal || String(s.linkcd) === subVal);
     const subCode = matched?.code || formData.subjectCode || '';
     const subId = matched?.id || formData.subjectId || '';
+    const subName = (matched?.name || matched?.raw_name || '').toLowerCase();
 
-    // Search in allDbUnits
+    // 1. Search in allDbUnits by subject_id or subject_code or subject_name
     const filtered = (allDbUnits || []).filter(u => {
       if (!u) return false;
       return (
         (subId && String(u.subject_id) === String(subId)) ||
-        (subCode && String(u.subject_code) === String(subCode))
+        (subCode && String(u.subject_code) === String(subCode)) ||
+        (subName && u.subject_name && u.subject_name.toLowerCase().includes(subName))
       );
     });
 
     if (filtered.length > 0) {
-      return filtered.map(u => ({
-        id: u.id,
-        code: u.code || u.unit_code || 'UNIT-1',
-        name: u.name || u.unit_name || u.code || 'Unit 1',
+      return filtered.map((u, i) => ({
+        id: String(u.id || u.code || `unit_${i + 1}`),
+        code: u.code || u.unit_code || `UNIT-${i + 1}`,
+        name: u.name || u.unit_name || u.code || `Unit ${i + 1}`,
+        description: u.description || '',
       }));
     }
 
     // Default Academic Syllabus Units (1 through 5) based on Subject Name
-    const subName = matched?.name || matched?.raw_name || 'Subject';
+    const sName = matched?.name || matched?.raw_name || 'Subject';
     return [
-      { id: 'unit_1', code: 'UNIT-1', name: `Unit 1: Fundamentals & Concepts of ${subName}` },
-      { id: 'unit_2', code: 'UNIT-2', name: `Unit 2: Core Architecture & Methods` },
-      { id: 'unit_3', code: 'UNIT-3', name: `Unit 3: Advanced Implementation & Features` },
-      { id: 'unit_4', code: 'UNIT-4', name: `Unit 4: Systems, Libraries & Frameworks` },
-      { id: 'unit_5', code: 'UNIT-5', name: `Unit 5: Applications, Optimization & Case Studies` },
+      { id: 'unit_1', code: 'UNIT-1', name: `Unit 1: Fundamentals & Concepts of ${sName}`, description: `Foundations and Core Principles` },
+      { id: 'unit_2', code: 'UNIT-2', name: `Unit 2: Core Architecture & Methods`, description: `Structural Breakdown and Methodologies` },
+      { id: 'unit_3', code: 'UNIT-3', name: `Unit 3: Advanced Implementation & Features`, description: `Practical Execution and Standards` },
+      { id: 'unit_4', code: 'UNIT-4', name: `Unit 4: Systems, Libraries & Frameworks`, description: `Systems, Frameworks and Protocols` },
+      { id: 'unit_5', code: 'UNIT-5', name: `Unit 5: Applications, Optimization & Case Studies`, description: `Performance Evaluation and Case Analysis` },
     ];
   }, [formData.subjectId, formData.subjectCode, availableFormSubjects, allDbUnits]);
 
   // Dynamically compute Available Topics based on Selected Subject & Unit
   const availableSubjectTopics = useMemo(() => {
     const subVal = formData.subjectId || formData.subjectCode;
-    const matched = availableFormSubjects.find(s => String(s.id) === subVal || String(s.code) === subVal || String(s.linkcd) === subVal);
-    const subCode = matched?.code || formData.subjectCode || '';
-    const subId = matched?.id || formData.subjectId || '';
-    const subName = (matched?.name || '').toLowerCase();
+    const matchedSub = availableFormSubjects.find(s => String(s.id) === subVal || String(s.code) === subVal || String(s.linkcd) === subVal);
+    const subCode = matchedSub?.code || formData.subjectCode || '';
+    const subId = matchedSub?.id || formData.subjectId || '';
+    const subName = (matchedSub?.name || matchedSub?.raw_name || '').toLowerCase();
 
-    const filtered = (allDbTopics || []).filter(t => {
+    const selectedUnitObj = availableSubjectUnits.find(u =>
+      String(u.id) === String(formData.unitId) ||
+      u.name === formData.unitName ||
+      u.code === formData.unitName
+    );
+    const unitId = selectedUnitObj?.id || formData.unitId || '';
+    const unitCode = selectedUnitObj?.code || '';
+    const unitName = (selectedUnitObj?.name || formData.unitName || '').toLowerCase();
+
+    // 1. Filter allDbTopics by subject AND unit
+    const filteredByUnit = (allDbTopics || []).filter(t => {
+      if (!t) return false;
+      const matchSub = (subId && String(t.subject_id) === String(subId)) ||
+                       (subCode && String(t.subject_code) === String(subCode)) ||
+                       (subName && t.subject_name && t.subject_name.toLowerCase().includes(subName));
+      if (!matchSub) return false;
+
+      // Check unit match
+      const matchUnit = (unitId && (String(t.unit_id) === String(unitId) || String(t.unit_id) === String(unitCode))) ||
+                        (unitCode && (t.unit_code === unitCode || t.code?.includes(unitCode))) ||
+                        (unitName && t.unit_name && t.unit_name.toLowerCase().includes(unitName));
+      return matchUnit;
+    });
+
+    if (filteredByUnit.length > 0) {
+      return filteredByUnit.map(t => ({
+        id: String(t.id || t.code),
+        code: t.code || 'TOPIC',
+        name: t.name || t.code,
+        description: t.description || '',
+      }));
+    }
+
+    // If DB topics exist for this subject and no unit-specific topics found
+    const filteredBySub = (allDbTopics || []).filter(t => {
       if (!t) return false;
       return (
         (subId && String(t.subject_id) === String(subId)) ||
-        (subCode && String(t.subject_code) === String(subCode)) ||
-        (subName && t.subject_name && t.subject_name.toLowerCase().includes(subName))
+        (subCode && String(t.subject_code) === String(subCode))
       );
     });
 
-    if (filtered.length > 0) {
-      return filtered.map(t => ({
-        id: t.id,
-        code: t.code,
-        name: t.name,
+    if (filteredBySub.length > 0 && (!unitCode || unitCode === 'UNIT-1' || unitName.includes('unit 1') || unitName.includes('co1'))) {
+      return filteredBySub.map(t => ({
+        id: String(t.id || t.code),
+        code: t.code || 'TOPIC',
+        name: t.name || t.code,
+        description: t.description || '',
       }));
     }
 
-    // Default relevant curriculum topics by subject category
-    if (subName.includes('c++') || subName.includes('object oriented')) {
-      return [
-        { id: 't_oop_1', code: 'T1', name: 'Principles of OOP, Classes & Object Abstraction' },
-        { id: 't_oop_2', code: 'T2', name: 'Constructors, Destructors & Operator Overloading' },
-        { id: 't_oop_3', code: 'T3', name: 'Inheritance: Single, Multiple & Polymorphism' },
-        { id: 't_oop_4', code: 'T4', name: 'Virtual Functions, Abstract Classes & Streams' },
-        { id: 't_oop_5', code: 'T5', name: 'Templates, Exception Handling & STL Containers' },
-      ];
-    } else if (subName.includes('web tech')) {
-      return [
-        { id: 't_wt_1', code: 'T1', name: 'HTML5 Semantic Elements, Forms & CSS3 Styling' },
-        { id: 't_wt_2', code: 'T2', name: 'JavaScript DOM Manipulation & Event Handling' },
-        { id: 't_wt_3', code: 'T3', name: 'Asynchronous JS, Fetch API & JSON Processing' },
-        { id: 't_wt_4', code: 'T4', name: 'Server-side Scripting & RESTful Architecture' },
-        { id: 't_wt_5', code: 'T5', name: 'Web Security, Sessions & Storage Mechanisms' },
-      ];
-    } else if (subName.includes('communication')) {
-      return [
-        { id: 't_bc_1', code: 'T1', name: 'Effective Business Communication & Barriers' },
-        { id: 't_bc_2', code: 'T2', name: 'Technical Writing, Reports & Proposal Drafting' },
-        { id: 't_bc_3', code: 'T3', name: 'Presentation Skills, Non-Verbal Communication' },
-        { id: 't_bc_4', code: 'T4', name: 'Interviews, Group Discussions & Etiquette' },
-      ];
-    } else if (subName.includes('computer organization') || subName.includes('computer org')) {
-      return [
-        { id: 't_co_1', code: 'T1', name: 'Register Transfer Language & Bus Architecture' },
-        { id: 't_co_2', code: 'T2', name: 'Instruction Set Design & Addressing Modes' },
-        { id: 't_co_3', code: 'T3', name: 'Arithmetic Logic Unit & Pipeline Processing' },
-        { id: 't_co_4', code: 'T4', name: 'Memory Hierarchy: Cache, Virtual Memory & I/O' },
-      ];
-    } else if (subName.includes('values') || subName.includes('ethics')) {
-      return [
-        { id: 't_uhv_1', code: 'T1', name: 'Human Values, Self Exploration & Harmony in Self' },
-        { id: 't_uhv_2', code: 'T2', name: 'Harmony in Family and Society: Trust & Respect' },
-        { id: 't_uhv_3', code: 'T3', name: 'Harmony in Nature and Universal Cosmic Order' },
-        { id: 't_uhv_4', code: 'T4', name: 'Professional Ethics & Holistic Vision' },
-      ];
+    // 2. Dynamic curriculum topics based on unit number / name and subject category
+    let unitNum = 1;
+    if (unitCode.includes('2') || unitName.includes('unit 2') || unitName.includes('co2')) unitNum = 2;
+    else if (unitCode.includes('3') || unitName.includes('unit 3') || unitName.includes('co3')) unitNum = 3;
+    else if (unitCode.includes('4') || unitName.includes('unit 4') || unitName.includes('co4')) unitNum = 4;
+    else if (unitCode.includes('5') || unitName.includes('unit 5') || unitName.includes('co5')) unitNum = 5;
+
+    if (subName.includes('c++') || subName.includes('object oriented') || subName.includes('oop')) {
+      const oopTopicsByUnit: Record<number, { code: string; name: string }[]> = {
+        1: [
+          { code: 'T1.1', name: 'Principles of OOP: Abstraction, Encapsulation, Modularity' },
+          { code: 'T1.2', name: 'Classes and Objects Definition, Access Specifiers' },
+          { code: 'T1.3', name: 'Scope Resolution Operator & Inline Functions' },
+          { code: 'T1.4', name: 'Static Data Members and Static Member Functions' },
+        ],
+        2: [
+          { code: 'T2.1', name: 'Default, Parameterized & Copy Constructors' },
+          { code: 'T2.2', name: 'Destructors and Dynamic Memory Allocation with new/delete' },
+          { code: 'T2.3', name: 'Operator Overloading: Unary and Binary Operators' },
+          { code: 'T2.4', name: 'Friend Functions and Friend Classes' },
+        ],
+        3: [
+          { code: 'T3.1', name: 'Inheritance: Single, Multilevel, Multiple and Hierarchical' },
+          { code: 'T3.2', name: 'Virtual Base Classes & Diamond Problem Resolution' },
+          { code: 'T3.3', name: 'Pointers to Derived Classes and Base Class Pointers' },
+          { code: 'T3.4', name: 'Virtual Functions, Pure Virtual Functions & Abstract Classes' },
+        ],
+        4: [
+          { code: 'T4.1', name: 'C++ Stream Classes, Console I/O Operations' },
+          { code: 'T4.2', name: 'File Handling: ifstream, ofstream, fstream & File Pointers' },
+          { code: 'T4.3', name: 'Function Templates and Class Templates with Multiple Parameters' },
+          { code: 'T4.4', name: 'Exception Handling: try, catch, throw and Standard Exceptions' },
+        ],
+        5: [
+          { code: 'T5.1', name: 'Standard Template Library (STL): Containers (vector, list, map)' },
+          { code: 'T5.2', name: 'STL Iterators and Iterator Categories' },
+          { code: 'T5.3', name: 'STL Algorithms: Sorting, Searching, Transforming' },
+          { code: 'T5.4', name: 'Object-Oriented Design Case Study & Mini Project Implementation' },
+        ],
+      };
+      return (oopTopicsByUnit[unitNum] || oopTopicsByUnit[1]).map(t => ({ id: `t_oop_${unitNum}_${t.code}`, ...t }));
     }
 
-    return [
-      { id: 't_gen_1', code: 'T1', name: `Introduction to ${matched?.name || 'Subject'}` },
-      { id: 't_gen_2', code: 'T2', name: 'Fundamental Concepts and Methodologies' },
-      { id: 't_gen_3', code: 'T3', name: 'Practical Applications & Problem Solving' },
-    ];
-  }, [formData.subjectId, formData.subjectCode, availableFormSubjects, allDbTopics]);
+    if (subName.includes('python')) {
+      const pythonTopicsByUnit: Record<number, { code: string; name: string }[]> = {
+        1: [
+          { code: 'T1.1', name: 'Python Basics, Variables, Expressions and Data Types' },
+          { code: 'T1.2', name: 'Conditional Branching (if-elif-else) and Loops (for, while)' },
+          { code: 'T1.3', name: 'Functions, Default Arguments and Scope Rules' },
+          { code: 'T1.4', name: 'String Operations, Slicing and Formatting' },
+        ],
+        2: [
+          { code: 'T2.1', name: 'Lists, Tuples, Dictionaries and Sets Operations' },
+          { code: 'T2.2', name: 'List Comprehensions and Generator Expressions' },
+          { code: 'T2.3', name: 'File I/O: Reading and Writing Text and CSV Files' },
+          { code: 'T2.4', name: 'Exception Handling and Custom Exceptions in Python' },
+        ],
+        3: [
+          { code: 'T3.1', name: 'Object-Oriented Python: Classes, Objects and __init__' },
+          { code: 'T3.2', name: 'Inheritance, Method Overriding and super()' },
+          { code: 'T3.3', name: 'Encapsulation, Name Mangling and Property Decorators' },
+          { code: 'T3.4', name: 'Magic Methods and Operator Overloading' },
+        ],
+        4: [
+          { code: 'T4.1', name: 'Python Standard Library: math, os, sys, datetime' },
+          { code: 'T4.2', name: 'Regular Expressions (re module) and Pattern Matching' },
+          { code: 'T4.3', name: 'GUI Programming with Tkinter: Widgets and Events' },
+          { code: 'T4.4', name: 'Database Connectivity with SQLite and PostgreSQL in Python' },
+        ],
+        5: [
+          { code: 'T5.1', name: 'NumPy Arrays, Indexing and Mathematical Operations' },
+          { code: 'T5.2', name: 'Pandas DataFrames, Series and Data Cleaning' },
+          { code: 'T5.3', name: 'Data Visualization with Matplotlib and Seaborn' },
+          { code: 'T5.4', name: 'Capstone Project: Python Application Development' },
+        ],
+      };
+      return (pythonTopicsByUnit[unitNum] || pythonTopicsByUnit[1]).map(t => ({ id: `t_py_${unitNum}_${t.code}`, ...t }));
+    }
 
-  // Dynamically compute Available Sub Topics / Competencies
+    if (subName.includes('web tech') || subName.includes('web') || subName.includes('internet')) {
+      const wtTopicsByUnit: Record<number, { code: string; name: string }[]> = {
+        1: [
+          { code: 'T1.1', name: 'HTML5 Semantic Elements, Forms and Multimedia' },
+          { code: 'T1.2', name: 'CSS3 Selectors, Box Model and Typography' },
+          { code: 'T1.3', name: 'CSS Flexbox and CSS Grid Responsive Layouts' },
+          { code: 'T1.4', name: 'Web Standards, Accessibility (a11y) and SEO Principles' },
+        ],
+        2: [
+          { code: 'T2.1', name: 'JavaScript Fundamentals: Data Types, Operators and Functions' },
+          { code: 'T2.2', name: 'DOM Tree Manipulation, Traversal and Node Selection' },
+          { code: 'T2.3', name: 'Event Handling, Bubbling, Capturing and Delegation' },
+          { code: 'T2.4', name: 'Client-Side Form Validation with Regex' },
+        ],
+        3: [
+          { code: 'T3.1', name: 'Asynchronous JavaScript: Callbacks, Promises and Async/Await' },
+          { code: 'T3.2', name: 'Fetch API, AJAX and JSON Data Parsing' },
+          { code: 'T3.3', name: 'Client Storage: LocalStorage, SessionStorage and Cookies' },
+          { code: 'T3.4', name: 'Modern ES6+ Features: Destructuring, Modules, Spread' },
+        ],
+        4: [
+          { code: 'T4.1', name: 'Server-side Web Architecture & RESTful API Principles' },
+          { code: 'T4.2', name: 'Node.js & Express Fundamentals: Routes and Middlewares' },
+          { code: 'T4.3', name: 'Database Integration and CRUD Operations' },
+          { code: 'T4.4', name: 'Web Security: CORS, CSRF, XSS Prevention and HTTPS' },
+        ],
+        5: [
+          { code: 'T5.1', name: 'Single Page Applications (SPA) Architecture' },
+          { code: 'T5.2', name: 'Frontend Framework Introduction (React/Next.js)' },
+          { code: 'T5.3', name: 'State Management and Component Lifecycle' },
+          { code: 'T5.4', name: 'Full-Stack Web Application Deployment and CI/CD' },
+        ],
+      };
+      return (wtTopicsByUnit[unitNum] || wtTopicsByUnit[1]).map(t => ({ id: `t_wt_${unitNum}_${t.code}`, ...t }));
+    }
+
+    if (subName.includes('computer org') || subName.includes('architecture') || subName.includes('coa')) {
+      const coaTopicsByUnit: Record<number, { code: string; name: string }[]> = {
+        1: [
+          { code: 'T1.1', name: 'Digital Logic Gates, Combinational and Sequential Circuits' },
+          { code: 'T1.2', name: 'Register Transfer Language (RTL) and Bus Architecture' },
+          { code: 'T1.3', name: 'Arithmetic, Logic and Shift Micro-operations' },
+          { code: 'T1.4', name: 'Basic Computer Organization, Instruction Codes & Cycle' },
+        ],
+        2: [
+          { code: 'T2.1', name: 'Instruction Formats (Zero, One, Two, Three Address)' },
+          { code: 'T2.2', name: 'Addressing Modes: Immediate, Direct, Indirect, Relative' },
+          { code: 'T2.3', name: 'Central Processing Unit: General Register Organization' },
+          { code: 'T2.4', name: 'Stack Organization and Microprogrammed Control Unit' },
+        ],
+        3: [
+          { code: 'T3.1', name: 'Computer Arithmetic: Addition and Subtraction Hardware' },
+          { code: 'T3.2', name: 'Multiplication Algorithms: Booth Multiplication' },
+          { code: 'T3.3', name: 'Division Algorithms: Restoring and Non-Restoring' },
+          { code: 'T3.4', name: 'Floating-Point Arithmetic Operations (IEEE 754)' },
+        ],
+        4: [
+          { code: 'T4.1', name: 'Memory Hierarchy: Cache, Main Memory and Secondary Storage' },
+          { code: 'T4.2', name: 'Cache Memory Mapping: Direct, Associative and Set-Associative' },
+          { code: 'T4.3', name: 'Virtual Memory, Paging, Segmentation and Page Replacement' },
+          { code: 'T4.4', name: 'Memory Management Hardware and Write Policies' },
+        ],
+        5: [
+          { code: 'T5.1', name: 'Input-Output Organization: Peripheral Devices and Interfaces' },
+          { code: 'T5.2', name: 'Asynchronous Data Transfer: Strobe Control & Handshaking' },
+          { code: 'T5.3', name: 'Modes of Transfer: Programmed I/O, Interrupt-Driven, DMA' },
+          { code: 'T5.4', name: 'Pipelining, Instruction Hazards and Parallel Processing' },
+        ],
+      };
+      return (coaTopicsByUnit[unitNum] || coaTopicsByUnit[1]).map(t => ({ id: `t_coa_${unitNum}_${t.code}`, ...t }));
+    }
+
+    // Generic dynamic unit topics for any academic subject
+    const subjectDisplayName = matchedSub?.name || 'Subject';
+    return [
+      { id: `t_gen_${unitNum}_1`, code: `T${unitNum}.1`, name: `Unit ${unitNum}: Foundational Principles & Core Concepts of ${subjectDisplayName}` },
+      { id: `t_gen_${unitNum}_2`, code: `T${unitNum}.2`, name: `Unit ${unitNum}: Methodological Framework & Analytical Models` },
+      { id: `t_gen_${unitNum}_3`, code: `T${unitNum}.3`, name: `Unit ${unitNum}: Implementation Procedures & Case Applications` },
+      { id: `t_gen_${unitNum}_4`, code: `T${unitNum}.4`, name: `Unit ${unitNum}: Evaluation, Standards & Advanced Problem Solving` },
+    ];
+  }, [formData.subjectId, formData.subjectCode, formData.unitId, formData.unitName, availableFormSubjects, availableSubjectUnits, allDbTopics]);
+
+  // Dynamically compute Available Sub Topics / Competencies based on Selected Topic
   const availableSubjectSubTopics = useMemo(() => {
     const subVal = formData.subjectId || formData.subjectCode;
-    const matched = availableFormSubjects.find(s => String(s.id) === subVal || String(s.code) === subVal || String(s.linkcd) === subVal);
-    const subCode = matched?.code || formData.subjectCode || '';
-    const subId = matched?.id || formData.subjectId || '';
-    const subName = (matched?.name || '').toLowerCase();
+    const matchedSub = availableFormSubjects.find(s => String(s.id) === subVal || String(s.code) === subVal || String(s.linkcd) === subVal);
+    const subCode = matchedSub?.code || formData.subjectCode || '';
+    const subId = matchedSub?.id || formData.subjectId || '';
 
-    const filtered = (allDbCompetencies || []).filter(c => {
+    const currentTopic = formData.topic || '';
+    const currentTopicLower = currentTopic.toLowerCase();
+
+    // 1. Search in allDbCompetencies by topic match
+    const filteredByTopic = (allDbCompetencies || []).filter(c => {
       if (!c) return false;
-      return (
-        (subId && String(c.subject_id) === String(subId)) ||
-        (subCode && String(c.subject_code) === String(subCode)) ||
-        (subName && c.subject_name && c.subject_name.toLowerCase().includes(subName))
-      );
+      const matchSub = (subId && String(c.subject_id) === String(subId)) ||
+                       (subCode && String(c.subject_code) === String(subCode));
+      if (!matchSub) return false;
+
+      const matchTopic = (currentTopic && (
+        (c.topic_code && currentTopic.includes(c.topic_code)) ||
+        (c.topic_name && currentTopicLower.includes(c.topic_name.toLowerCase())) ||
+        (c.topic_id && currentTopic.includes(String(c.topic_id))) ||
+        (c.name && currentTopicLower.includes(c.name.toLowerCase()))
+      ));
+      return matchTopic;
     });
 
-    if (filtered.length > 0) {
-      return filtered.map(c => ({
-        id: c.id,
-        code: c.code,
-        name: c.description || c.code,
+    if (filteredByTopic.length > 0) {
+      return filteredByTopic.map(c => ({
+        id: String(c.id || c.code),
+        code: c.code || 'ST',
+        name: c.description || c.name || c.code,
       }));
     }
 
-    // Default detailed subtopics based on current topic
-    const currentTopicName = (formData.topic || '').toLowerCase();
-    if (currentTopicName.includes('class') || currentTopicName.includes('oop') || currentTopicName.includes('object')) {
+    // 2. Generate granular sub-topics based on current topic keywords
+    if (currentTopicLower.includes('construct') || currentTopicLower.includes('destruct')) {
       return [
-        { id: 'st_1', code: 'CS3.1', name: 'Classes, Data Hiding & Access Specifiers' },
-        { id: 'st_2', code: 'CS3.2', name: 'Dynamic Memory Allocation with new/delete' },
-        { id: 'st_3', code: 'CS3.3', name: 'Parameterized & Copy Constructors' },
-        { id: 'st_4', code: 'CS3.4', name: 'Single & Multi-level Inheritance' },
-        { id: 'st_5', code: 'CS3.5', name: 'Virtual Functions & Runtime Binding' },
+        { id: 'st_c1', code: 'ST1', name: 'Default Constructors and Compiler Synthesis' },
+        { id: 'st_c2', code: 'ST2', name: 'Parameterized Constructors & Member Initializer Lists' },
+        { id: 'st_c3', code: 'ST3', name: 'Copy Constructors & Deep vs Shallow Copy' },
+        { id: 'st_c4', code: 'ST4', name: 'Destructors and Resource Acquisition (RAII)' },
+        { id: 'st_c5', code: 'ST5', name: 'Dynamic Memory Management with new and delete' },
       ];
-    } else if (currentTopicName.includes('dom') || currentTopicName.includes('web') || currentTopicName.includes('html')) {
+    } else if (currentTopicLower.includes('inherit') || currentTopicLower.includes('poly')) {
       return [
-        { id: 'st_wt_1', code: 'WT3.1', name: 'DOM Tree Traversal & Query Selectors' },
-        { id: 'st_wt_2', code: 'WT3.2', name: 'Event Listeners & Bubbling/Capturing' },
-        { id: 'st_wt_3', code: 'WT3.3', name: 'Form Validation & Regular Expressions' },
-        { id: 'st_wt_4', code: 'WT3.4', name: 'Fetch API, Promises & Async/Await' },
+        { id: 'st_i1', code: 'ST1', name: 'Access Controls: Public, Protected and Private Inheritance' },
+        { id: 'st_i2', code: 'ST2', name: 'Method Overriding and Virtual Function Table (vtable)' },
+        { id: 'st_i3', code: 'ST3', name: 'Virtual Base Classes & Solving the Diamond Problem' },
+        { id: 'st_i4', code: 'ST4', name: 'Pure Virtual Functions and Abstract Interfaces' },
+        { id: 'st_i5', code: 'ST5', name: 'Runtime Type Information (RTTI) and dynamic_cast' },
+      ];
+    } else if (currentTopicLower.includes('dom') || currentTopicLower.includes('event')) {
+      return [
+        { id: 'st_d1', code: 'ST1', name: 'DOM Tree Structure & Node Selection (querySelector)' },
+        { id: 'st_d2', code: 'ST2', name: 'Event Listeners, Event Object & Target Properties' },
+        { id: 'st_d3', code: 'ST3', name: 'Event Bubbling, Capturing and Event Delegation' },
+        { id: 'st_d4', code: 'ST4', name: 'Dynamic Element Creation, Mutation and Removal' },
+        { id: 'st_d5', code: 'ST5', name: 'Custom Events and Event Dispatching' },
+      ];
+    } else if (currentTopicLower.includes('async') || currentTopicLower.includes('promise') || currentTopicLower.includes('fetch')) {
+      return [
+        { id: 'st_a1', code: 'ST1', name: 'JavaScript Event Loop, Call Stack and Microtask Queue' },
+        { id: 'st_a2', code: 'ST2', name: 'Promise States: Pending, Fulfilled and Rejected' },
+        { id: 'st_a3', code: 'ST3', name: 'Chaining Promises with .then(), .catch() and .finally()' },
+        { id: 'st_a4', code: 'ST4', name: 'Async / Await Syntax, Error Handling with try-catch' },
+        { id: 'st_a5', code: 'ST5', name: 'Fetch API: Headers, HTTP Methods and JSON Parsing' },
+      ];
+    } else if (currentTopicLower.includes('addressing') || currentTopicLower.includes('instruction')) {
+      return [
+        { id: 'st_coa1', code: 'ST1', name: 'Immediate and Direct Addressing Modes' },
+        { id: 'st_coa2', code: 'ST2', name: 'Indirect, Register and Register Indirect Modes' },
+        { id: 'st_coa3', code: 'ST3', name: 'Relative and Indexed Addressing Computations' },
+        { id: 'st_coa4', code: 'ST4', name: 'Instruction Word Length & Field Partitioning' },
+        { id: 'st_coa5', code: 'ST5', name: 'Effective Address Calculation & Cycle Timing' },
+      ];
+    } else if (currentTopicLower.includes('cache') || currentTopicLower.includes('memory')) {
+      return [
+        { id: 'st_m1', code: 'ST1', name: 'Cache Placement: Direct Mapping and Tag Calculation' },
+        { id: 'st_m2', code: 'ST2', name: 'Associative and Set-Associative Cache Organization' },
+        { id: 'st_m3', code: 'ST3', name: 'Cache Replacement Policies: LRU, FIFO, Random' },
+        { id: 'st_m4', code: 'ST4', name: 'Write Strategies: Write-Through vs Write-Back' },
+        { id: 'st_m5', code: 'ST5', name: 'Virtual Memory Paging and Translation Lookaside Buffer (TLB)' },
       ];
     }
 
+    // Fallback granular learning objectives for the chosen topic
+    const topicTitle = currentTopic || 'Current Topic';
     return [
-      { id: 'st_gen_1', code: 'SUB-1', name: 'Core concepts, definitions and rationale' },
-      { id: 'st_gen_2', code: 'SUB-2', name: 'Analytical breakdown & syntax structure' },
-      { id: 'st_gen_3', code: 'SUB-3', name: 'Hands-on practice & sample problem solving' },
+      { id: 'st_gen_1', code: 'ST1', name: `${topicTitle} — Core Definitions & Fundamental Syntax` },
+      { id: 'st_gen_2', code: 'ST2', name: `${topicTitle} — Structural Rules & Architectural Schema` },
+      { id: 'st_gen_3', code: 'ST3', name: `${topicTitle} — Implementation Patterns & Code Walkthrough` },
+      { id: 'st_gen_4', code: 'ST4', name: `${topicTitle} — Edge Cases, Diagnostics & Error Handling` },
+      { id: 'st_gen_5', code: 'ST5', name: `${topicTitle} — Practical Exercises & Verification Lab` },
     ];
   }, [formData.subjectId, formData.subjectCode, formData.topic, availableFormSubjects, allDbCompetencies]);
+
+  // Clean, deduplicated faculty options for Autocomplete dropdown
+  const facultyDropdownOptions: SearchableDropdownOption[] = useMemo(() => {
+    const list: SearchableDropdownOption[] = [];
+    const seenEmp = new Set<string>();
+
+    if (Array.isArray(srmsTimetableSubjects)) {
+      for (const s of srmsTimetableSubjects) {
+        const emp = String(s.empid || '');
+        const name = s.EmpName || s.faculty_name || '';
+        if (emp && name && !seenEmp.has(emp)) {
+          seenEmp.add(emp);
+          list.push({
+            value: emp,
+            label: name,
+            badge: emp,
+            sublabel: '(Live Synced from Portal)',
+          });
+        }
+      }
+    }
+
+    if (Array.isArray(allFaculties)) {
+      for (const f of allFaculties) {
+        const emp = String(f.emp_id || f.id || '');
+        const name = f.name || '';
+        if (emp && name && !seenEmp.has(emp)) {
+          seenEmp.add(emp);
+          list.push({
+            value: emp,
+            label: name,
+            badge: f.emp_id || 'FAC',
+            sublabel: f.designation || undefined,
+          });
+        }
+      }
+    }
+    return list;
+  }, [srmsTimetableSubjects, allFaculties]);
 
   // Subject & Faculty Registry List for Timetable Footer
   const registryList = useMemo(() => {
@@ -3407,12 +3857,15 @@ export default function TimetableDesignPage() {
       {isModalOpen && (() => {
         const activeClash = modalError || liveClash?.message || null;
         return (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div ref={modalScrollRef} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5">
+            <div ref={modalScrollRef} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-5xl xl:max-w-6xl w-full p-6 sm:p-7 space-y-4 max-h-[92vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
                 <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                   <span>{editingSlot ? '✏️' : '➕'}</span>
                   <span>{editingSlot ? 'Edit Scheduled Session' : 'Schedule Timetable Session'}</span>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] font-bold border border-indigo-200 dark:border-indigo-800">
+                    {selectedCourseObj?.name || 'Academic'} › Sem {selectedSemester} › Sec {selectedSection === '1' ? 'A' : selectedSection === '2' ? 'B' : selectedSection === '3' ? 'C' : 'D'}
+                  </span>
                 </h3>
                 <button
                   type="button"
@@ -3428,7 +3881,10 @@ export default function TimetableDesignPage() {
                 const isStructured = activeClash.includes('•') || activeClash.includes('\n');
                 const lines = activeClash.split('\n').map((l: string) => l.trim()).filter(Boolean);
                 const headerLine = lines[0] || activeClash;
-                const bulletLines = lines.filter((l: string) => l.startsWith('•')).map((l: string) => l.replace(/^•\s*/, ''));
+                // Deduplicate bullet lines using Set to never repeat lines in alert
+                const bulletLines = Array.from(new Set(
+                  lines.filter((l: string) => l.startsWith('•')).map((l: string) => l.replace(/^•\s*/, ''))
+                ));
                 const footerLine = lines.find((l: string) => !l.startsWith('•') && l !== headerLine);
                 return (
                   <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/80 border-2 border-rose-500 shadow-lg text-rose-800 dark:text-rose-200 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-200">
@@ -3441,9 +3897,9 @@ export default function TimetableDesignPage() {
                     <p className="font-bold leading-snug pl-1 text-rose-900 dark:text-rose-100">
                       {isStructured ? headerLine.replace(/^⚠\s*/, '') : activeClash}
                     </p>
-                    {/* Engagement bullet list */}
+                    {/* Unique Engagement bullet list */}
                     {bulletLines.length > 0 && (
-                      <ul className="pl-2 space-y-1">
+                      <ul className="pl-2 space-y-1.5">
                         {bulletLines.map((eng: string, idx: number) => (
                           <li key={idx} className="flex items-start gap-1.5 font-semibold text-rose-800 dark:text-rose-200">
                             <span className="text-rose-500 mt-0.5 shrink-0">📌</span>
@@ -3469,388 +3925,367 @@ export default function TimetableDesignPage() {
                 </div>
               )}
 
-              <form onSubmit={handleSaveSlot} className="space-y-4 text-xs">
-                {/* Day & Time Row */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Day of Week</label>
-                    <select
-                      value={formData.dayOfWeek}
-                      onChange={(e) => setFormData({ ...formData, dayOfWeek: Number(e.target.value) })}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                    >
-                      {DAYS_OF_WEEK.map(d => (
-                        <option key={d.value} value={d.value}>{d.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Start Time</label>
-                    <input
-                      type="time"
-                      value={formData.startTime.slice(0, 5)}
-                      onChange={(e) => setFormData({ ...formData, startTime: `${e.target.value}:00` })}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">End Time</label>
-                    <input
-                      type="time"
-                      value={formData.endTime.slice(0, 5)}
-                      onChange={(e) => setFormData({ ...formData, endTime: `${e.target.value}:00` })}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* 1. Camera Classroom Selection (LoadCamera API) */}
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    1. Camera Classroom (from SRMS LoadCamera) *
-                  </label>
-                  <select
-                    value={formData.cameraId}
-                    onChange={(e) => {
-                      const camId = e.target.value;
-                      const camObj = camerasList.find(c => String(c.camera_id) === camId);
-                      setFormData(prev => ({
-                        ...prev,
-                        cameraId: camId,
-                        room: camObj?.classroom || prev.room,
-                      }));
-                    }}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                    required
-                  >
-                    <option value="">-- Select Camera Classroom --</option>
-                    {camerasList.map(c => (
-                      <option key={c.camera_id} value={c.camera_id}>
-                        [{c.camera_id}] {c.classroom} {c.camera_ip && c.camera_ip !== '0' ? `(${c.camera_ip.slice(0, 25)}...)` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {cameraLoading && (
-                    <p className="text-[10px] text-indigo-500 font-semibold mt-1 animate-pulse">
-                      Loading cameras from portal...
-                    </p>
-                  )}
-                </div>
-
-                {/* 2. Subject Selection (Loadsubject API) */}
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    2. Subject (from SRMS LoadSubject) *
-                  </label>
-                  <select
-                    value={formData.subjectId}
-                    onChange={(e) => handleSubjectChange(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                    required
-                  >
-                    <option value="">-- Select Subject --</option>
-                    {availableFormSubjects.map(s => {
-                      const valKey = String(s.id || s.code || s.linkcd || s.sub_cd || '');
-                      return (
-                        <option key={valKey} value={valKey}>
-                          [{s.code || s.sub_cd || s.linkcd}] {s.name || s.sub_name} {s.faculty_name || s.EmpName ? `(${s.faculty_name || s.EmpName})` : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                {/* 3. Faculty Selection & EmpID Display */}
-                <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                    <span>3. Faculty Member (Auto-Assigned from Subject) *</span>
-                    {formData.facultyEmpId && (
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono font-bold bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
-                        Emp ID: {formData.facultyEmpId}
-                      </span>
-                    )}
-                  </label>
-
-                  {activeClash && (
-                    <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/80 border-2 border-rose-500 shadow-sm text-rose-800 dark:text-rose-200 text-xs font-bold space-y-1 animate-in fade-in">
-                      <div className="flex items-center gap-1 text-rose-700 dark:text-rose-300 font-black text-[11px] uppercase tracking-wide">
-                        <span>🚫</span>
-                        <span>Faculty Overlap / Conflict</span>
+              <form onSubmit={handleSaveSlot} className="space-y-5 text-xs">
+                {/* Responsive 2-Column Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                  {/* LEFT COLUMN: Timing, Classroom, Subject, Faculty, Group/Section, Mode */}
+                  <div className="lg:col-span-6 space-y-4">
+                    {/* Day & Time Row */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Day of Week</label>
+                        <select
+                          value={formData.dayOfWeek}
+                          onChange={(e) => setFormData({ ...formData, dayOfWeek: Number(e.target.value) })}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                        >
+                          {DAYS_OF_WEEK.map(d => (
+                            <option key={d.value} value={d.value}>{d.name}</option>
+                          ))}
+                        </select>
                       </div>
-                      <p className="leading-relaxed font-bold">{activeClash}</p>
-                      <div className="text-[11px] text-amber-800 dark:text-amber-300 font-extrabold flex items-center gap-1 pt-0.5 border-t border-rose-200 dark:border-rose-800/60">
-                        <span>👉</span>
-                        <span>Please choose another available faculty member below for this session:</span>
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Start Time</label>
+                        <input
+                          type="time"
+                          value={formData.startTime.slice(0, 5)}
+                          onChange={(e) => setFormData({ ...formData, startTime: `${e.target.value}:00` })}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">End Time</label>
+                        <input
+                          type="time"
+                          value={formData.endTime.slice(0, 5)}
+                          onChange={(e) => setFormData({ ...formData, endTime: `${e.target.value}:00` })}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                          required
+                        />
                       </div>
                     </div>
-                  )}
 
-                  <select
-                    value={formData.facultyId || formData.facultyEmpId}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const foundFac = allFaculties.find((f: any) => String(f.id) === val || String(f.emp_id) === val);
-                      setFormData(prev => ({
-                        ...prev,
-                        facultyId: val,
-                        facultyEmpId: foundFac?.emp_id || val,
-                        facultyName: foundFac?.name || prev.facultyName,
-                      }));
-                      if (modalError) setModalError(null);
-                    }}
-                    className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl p-2.5 font-bold transition-all ${activeClash
-                        ? 'border-2 border-rose-500 bg-rose-50/20 ring-4 ring-rose-500/20 text-rose-900 dark:text-white'
-                        : 'border-slate-300 dark:border-slate-700'
-                      }`}
-                    required
-                  >
-                    <option value="">-- Select Faculty --</option>
-                    {Array.isArray(srmsTimetableSubjects) && srmsTimetableSubjects.length > 0 && (
-                      <optgroup label="Live Synced Faculty (From Portal)">
-                        {srmsTimetableSubjects.map((s: any, idx: number) => {
-                          const facId = s.empid || `srms-fac-${idx}`;
-                          const facName = s.EmpName || s.faculty_name || 'Faculty';
-                          return (
-                            <option key={`srms_${facId}_${idx}`} value={facId}>
-                              [{s.empid || 'SRMS'}] {facName}
-                            </option>
-                          );
+                    {/* 1. Camera Classroom Selection (Autocomplete) */}
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                        <span>1. Camera Classroom (from SRMS LoadCamera) *</span>
+                        {cameraLoading && (
+                          <span className="text-[10px] text-indigo-500 font-semibold animate-pulse">
+                            Loading cameras...
+                          </span>
+                        )}
+                      </label>
+                      <SearchableDropdown
+                        options={camerasList.map(c => ({
+                          value: String(c.camera_id),
+                          label: c.classroom,
+                          badge: `ID ${c.camera_id}`,
+                          sublabel: c.camera_ip && c.camera_ip !== '0' ? c.camera_ip : undefined,
+                        }))}
+                        value={formData.cameraId}
+                        onChange={(val) => {
+                          const camObj = camerasList.find(c => String(c.camera_id) === val);
+                          setFormData(prev => ({
+                            ...prev,
+                            cameraId: val,
+                            room: camObj?.classroom || prev.room,
+                          }));
+                        }}
+                        placeholder="-- Search & Select Camera Classroom --"
+                        searchPlaceholder="Type classroom name or camera ID..."
+                        required
+                      />
+                    </div>
+
+                    {/* 2. Subject Selection (Autocomplete) */}
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                        <span>2. Subject (from SRMS LoadSubject) *</span>
+                        <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                          {availableFormSubjects.length} subjects available
+                        </span>
+                      </label>
+                      <SearchableDropdown
+                        options={availableFormSubjects.map(s => {
+                          const valKey = String(s.id || s.code || s.linkcd || s.sub_cd || '');
+                          return {
+                            value: valKey,
+                            label: s.name || s.sub_name || 'Subject',
+                            badge: s.code || s.sub_cd || s.linkcd,
+                            sublabel: s.faculty_name || s.EmpName ? `(${s.faculty_name || s.EmpName})` : undefined,
+                          };
                         })}
-                      </optgroup>
-                    )}
-                    <optgroup label="All Institutional Faculty">
-                      {(Array.isArray(allFaculties) ? allFaculties : []).map(f => (
-                        <option key={f.id || f.emp_id} value={f.id || f.emp_id}>
-                          [{f.emp_id || 'FAC'}] {f.name} {f.designation ? `(${f.designation})` : ''}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
+                        value={formData.subjectId}
+                        onChange={(val) => handleSubjectChange(val)}
+                        placeholder="-- Search & Select Subject --"
+                        searchPlaceholder="Search subject by code or name..."
+                        required
+                      />
+                    </div>
 
-                {/* 4. Group & Section Row (Default Group 0 for All Group) */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Group (txtG)
-                    </label>
-                    <select
-                      value={formData.groupValue}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormData(prev => ({
-                          ...prev,
-                          groupValue: val,
-                          groupName: val === '0' ? 'All Group' : `Group ${val}`,
-                        }));
-                      }}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                    >
-                      <option value="0">0 (All Group / Whole Batch)</option>
-                      <option value="1">1 (Group 1 / Batch G1)</option>
-                      <option value="2">2 (Group 2 / Batch G2)</option>
-                      <option value="3">3 (Group 3 / Batch G3)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Section (txtSec)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.sectionValue}
-                      onChange={(e) => setFormData({ ...formData, sectionValue: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                      placeholder="1"
-                    />
-                  </div>
-                </div>
+                    {/* 3. Faculty Selection & EmpID Display (Autocomplete) */}
+                    <div className="space-y-1.5">
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                        <span>3. Faculty Member (Auto-Assigned from Subject) *</span>
+                        {formData.facultyEmpId && (
+                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono font-bold bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
+                            Emp ID: {formData.facultyEmpId}
+                          </span>
+                        )}
+                      </label>
+                      <SearchableDropdown
+                        options={facultyDropdownOptions}
+                        value={formData.facultyId || formData.facultyEmpId}
+                        onChange={(val) => {
+                          const foundFac = allFaculties.find((f: any) => String(f.id) === val || String(f.emp_id) === val);
+                          setFormData(prev => ({
+                            ...prev,
+                            facultyId: val,
+                            facultyEmpId: foundFac?.emp_id || val,
+                            facultyName: foundFac?.name || prev.facultyName,
+                          }));
+                          if (modalError) setModalError(null);
+                        }}
+                        placeholder="-- Search & Select Faculty --"
+                        searchPlaceholder="Search faculty by name or Emp ID..."
+                        error={Boolean(activeClash)}
+                        required
+                      />
+                    </div>
 
-                {/* 5. Teaching Mode & Room */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Teaching Mode</label>
-                    <select
-                      value={formData.slotType}
-                      onChange={(e) => setFormData({ ...formData, slotType: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                    >
-                      {TEACHING_MODES.map(m => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Room / Lab</label>
-                    <input
-                      type="text"
-                      value={formData.room}
-                      onChange={(e) => setFormData({ ...formData, room: e.target.value })}
-                      placeholder="e.g. Room 204, Physiology Lab"
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                    />
-                  </div>
-                </div>
-
-                {/* Subject Description (Replaced Topic / Lesson Label) */}
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Subject Description
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.subjectDescription}
-                    onChange={(e) => setFormData({ ...formData, subjectDescription: e.target.value })}
-                    placeholder="e.g. Web Technology VINAY KUMAR"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                  />
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                    Sent as description to SRMS addEvent and stored in PostgreSQL.
-                  </p>
-                </div>
-
-                {/* Subject Code Based Structure: 1. Unit, 2. Topic, 3. Sub Topics */}
-                <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 space-y-3">
-                  <div className="text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
-                    <span>📚 Subject Code Based Curriculum Structure</span>
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-indigo-200 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-200">
-                      {formData.subjectCode || 'SYLLABUS'}
-                    </span>
-                  </div>
-
-                  {/* 1. Unit */}
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      1. Unit
-                    </label>
-                    <select
-                      value={formData.unitName}
-                      onChange={(e) => {
-                        const selectedVal = e.target.value;
-                        const matchedU = availableSubjectUnits.find(u => u.name === selectedVal || u.code === selectedVal);
-                        setFormData(prev => ({
-                          ...prev,
-                          unitName: selectedVal,
-                          unitId: matchedU?.id || 'unit_1',
-                        }));
-                      }}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-xs"
-                    >
-                      {availableSubjectUnits.map((u) => (
-                        <option key={u.id || u.code} value={u.name}>
-                          [{u.code}] {u.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* 2. Topic */}
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      2. Topic
-                    </label>
-                    <select
-                      value={formData.topic}
-                      onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-xs mb-1.5"
-                    >
-                      <option value="">-- Select or type custom topic below --</option>
-                      {availableSubjectTopics.map((t) => (
-                        <option key={t.id || t.code} value={t.name}>
-                          [{t.code}] {t.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      value={formData.topic}
-                      onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                      placeholder="e.g. Object Oriented Programming in C++ / Custom Topic"
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold text-xs"
-                    />
-                  </div>
-
-                  {/* 3. Sub Topics / Competencies */}
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      3. Sub Topics
-                    </label>
-                    {availableSubjectSubTopics.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-2 max-h-24 overflow-y-auto p-1 bg-white/50 dark:bg-black/20 rounded-lg border border-indigo-100 dark:border-indigo-900/50">
-                        {availableSubjectSubTopics.map((st) => {
-                          const isSelected = selectedCompetencies.includes(st.name) || selectedCompetencies.includes(st.code);
-                          return (
-                            <button
-                              key={st.id || st.code}
-                              type="button"
-                              onClick={() => {
-                                if (isSelected) {
-                                  setSelectedCompetencies(prev => prev.filter(c => c !== st.name && c !== st.code));
-                                } else {
-                                  setSelectedCompetencies(prev => [...prev, st.name]);
-                                }
-                              }}
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all border ${isSelected
-                                  ? 'bg-[#5B4BFF] text-white border-[#5B4BFF]'
-                                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#5B4BFF]'
-                                }`}
-                            >
-                              + [{st.code}] {st.name.length > 30 ? st.name.slice(0, 30) + '...' : st.name}
-                            </button>
-                          );
-                        })}
+                    {/* 4. Group & Section Row */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Group (txtG)
+                        </label>
+                        <select
+                          value={formData.groupValue}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setFormData(prev => ({
+                              ...prev,
+                              groupValue: val,
+                              groupName: val === '0' ? 'All Group' : `Group ${val}`,
+                            }));
+                          }}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                        >
+                          <option value="0">0 (All Group / Whole Batch)</option>
+                          <option value="1">1 (Group 1 / Batch G1)</option>
+                          <option value="2">2 (Group 2 / Batch G2)</option>
+                          <option value="3">3 (Group 3 / Batch G3)</option>
+                        </select>
                       </div>
-                    )}
-                    <input
-                      type="text"
-                      value={selectedCompetencies.join(', ') || formData.subTopics}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const items = val.split(',').map(s => s.trim()).filter(Boolean);
-                        setSelectedCompetencies(items);
-                        setFormData(prev => ({ ...prev, subTopics: val }));
-                      }}
-                      placeholder="e.g. Classes, Objects, Inheritance, Virtual Functions"
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                    />
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                      Separate multiple sub topics with commas. Displayed on slot hover popover.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Bottom Conflict Alert & Saving Alerts directly above Save button */}
-                {activeClash && (
-                  <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/90 border-2 border-rose-500 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-start gap-2.5 shadow-sm animate-in fade-in">
-                    <span className="text-base shrink-0 mt-0.5">⚠️</span>
-                    <div className="space-y-0.5">
-                      <div className="font-black text-rose-700 dark:text-rose-300 uppercase tracking-wide text-[10px]">
-                        Scheduling Conflict Before Saving:
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Section (txtSec)
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.sectionValue}
+                          onChange={(e) => setFormData({ ...formData, sectionValue: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                          placeholder="1"
+                        />
                       </div>
-                      <p className="leading-relaxed font-bold">{activeClash}</p>
+                    </div>
+
+                    {/* 5. Teaching Mode & Room */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Teaching Mode</label>
+                        <select
+                          value={formData.slotType}
+                          onChange={(e) => setFormData({ ...formData, slotType: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                        >
+                          {TEACHING_MODES.map(m => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Room / Lab</label>
+                        <input
+                          type="text"
+                          value={formData.room}
+                          onChange={(e) => setFormData({ ...formData, room: e.target.value })}
+                          placeholder="e.g. Room 204, Computer Lab 1"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                        />
+                      </div>
                     </div>
                   </div>
-                )}
 
-                {loading && (
-                  <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-2.5 shadow-sm animate-pulse">
-                    <div className="w-4 h-4 border-2 border-indigo-600 dark:border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
-                    <span>Saving in progress... Please wait while schedule is committed.</span>
+                  {/* RIGHT COLUMN: Description & Cascading Curriculum (Unit -> Topic -> Sub Topic) */}
+                  <div className="lg:col-span-6 space-y-4">
+                    {/* Subject Description */}
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Subject Description
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.subjectDescription}
+                        onChange={(e) => setFormData({ ...formData, subjectDescription: e.target.value })}
+                        placeholder="e.g. Computer Organization and Architecture UPENDRA KUMAR"
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                      />
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                        Sent as description to SRMS addEvent and stored in PostgreSQL.
+                      </p>
+                    </div>
+
+                    {/* Cascading Curriculum Structure Card */}
+                    <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 space-y-3.5">
+                      <div className="text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
+                        <span>📚 Subject Code Based Curriculum Structure</span>
+                        <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-indigo-200 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-200 font-bold">
+                          {formData.subjectCode || 'SYLLABUS'}
+                        </span>
+                      </div>
+
+                      {/* 1. Unit (Searchable Autocomplete with subject-based dynamic units) */}
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                          <span>1. Unit *</span>
+                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                            {availableSubjectUnits.length} units available
+                          </span>
+                        </label>
+                        <SearchableDropdown
+                          options={availableSubjectUnits.map(u => ({
+                            value: u.name,
+                            label: u.name,
+                            badge: u.code,
+                            sublabel: u.description || undefined,
+                          }))}
+                          value={formData.unitName}
+                          onChange={(val) => {
+                            const matchedU = availableSubjectUnits.find(u => u.name === val || u.code === val || u.id === val);
+                            setFormData(prev => ({
+                              ...prev,
+                              unitName: matchedU?.name || val,
+                              unitId: matchedU?.id || 'unit_1',
+                              topic: '', // Reset topic when unit changes per requirement
+                              subTopics: '', // Reset subtopic when unit changes per requirement
+                            }));
+                            setSelectedCompetencies([]);
+                          }}
+                          placeholder="-- Search or select Unit --"
+                          searchPlaceholder="Search unit by code or title..."
+                          allowCustom={true}
+                          required
+                        />
+                      </div>
+
+                      {/* 2. Topic (Cascaded by Unit Selection with Searchable Autocomplete + custom input) */}
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                          <span>2. Topic (Filtered by Unit) *</span>
+                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                            {availableSubjectTopics.length} topics
+                          </span>
+                        </label>
+                        <SearchableDropdown
+                          options={availableSubjectTopics.map(t => ({
+                            value: t.name,
+                            label: t.name,
+                            badge: t.code,
+                          }))}
+                          value={formData.topic}
+                          onChange={(val) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              topic: val,
+                              subTopics: '', // Reset subtopic when topic changes per requirement
+                            }));
+                            setSelectedCompetencies([]);
+                          }}
+                          placeholder="-- Search or select Topic --"
+                          searchPlaceholder="Search topic for this unit..."
+                          allowCustom={true}
+                        />
+                        <input
+                          type="text"
+                          value={formData.topic}
+                          onChange={(e) => setFormData(prev => ({ ...prev, topic: e.target.value }))}
+                          placeholder="Or type custom topic directly..."
+                          className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold text-xs mt-1.5"
+                        />
+                      </div>
+
+                      {/* 3. Sub Topics (Cascaded by Topic Selection with Clickable Badges + Custom Text Input) */}
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                          <span>3. Sub Topics / Learning Objectives</span>
+                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                            Click tags to add / remove
+                          </span>
+                        </label>
+                        {availableSubjectSubTopics.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-2 max-h-28 overflow-y-auto p-2 bg-white/70 dark:bg-black/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                            {availableSubjectSubTopics.map((st) => {
+                              const isSelected = selectedCompetencies.includes(st.name) || selectedCompetencies.includes(st.code);
+                              return (
+                                <button
+                                  key={st.id || st.code}
+                                  type="button"
+                                  onClick={() => {
+                                    let newComps: string[];
+                                    if (isSelected) {
+                                      newComps = selectedCompetencies.filter(c => c !== st.name && c !== st.code);
+                                    } else {
+                                      newComps = [...selectedCompetencies, st.name];
+                                    }
+                                    setSelectedCompetencies(newComps);
+                                    setFormData(prev => ({ ...prev, subTopics: newComps.join(', ') }));
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border flex items-center gap-1 cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-[#5B4BFF] text-white border-[#5B4BFF] shadow-sm scale-105'
+                                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#5B4BFF]'
+                                  }`}
+                                >
+                                  <span className="opacity-70 font-mono">[{st.code}]</span>
+                                  <span>{st.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <input
+                          type="text"
+                          value={selectedCompetencies.join(', ') || formData.subTopics}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const items = val.split(',').map(s => s.trim()).filter(Boolean);
+                            setSelectedCompetencies(items);
+                            setFormData(prev => ({ ...prev, subTopics: val }));
+                          }}
+                          placeholder="e.g. Classes, Objects, Inheritance, Virtual Functions"
+                          className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                        />
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                          Separate multiple sub topics with commas. Displayed on slot hover popover.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                )}
+                </div>
 
-                {/* Actions */}
+                {/* Actions Bar */}
                 <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
                   {editingSlot ? (
                     <button
                       type="button"
                       onClick={handleDelete}
                       disabled={loading}
-                      className="px-4 py-2.5 rounded-xl bg-rose-500/10 text-rose-600 border border-rose-500/30 hover:bg-rose-500/20 font-bold transition-all disabled:opacity-50"
+                      className="px-4 py-2.5 rounded-xl bg-rose-500/10 text-rose-600 border border-rose-500/30 hover:bg-rose-500/20 font-bold transition-all disabled:opacity-50 cursor-pointer"
                     >
-                      Delete
+                      Delete Session
                     </button>
                   ) : <div />}
 
@@ -3859,14 +4294,14 @@ export default function TimetableDesignPage() {
                       type="button"
                       onClick={() => setIsModalOpen(false)}
                       disabled={loading}
-                      className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-300 transition-all disabled:opacity-50"
+                      className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition-all disabled:opacity-50 cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={loading}
-                      className="px-5 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4a3cf5] text-white font-bold shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                      className="px-5 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4a3cf5] text-white font-bold shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                     >
                       {loading && (
                         <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
