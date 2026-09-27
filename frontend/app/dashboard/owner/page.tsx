@@ -165,7 +165,7 @@ function OwnerDashboardContent() {
   }, []);
 
   useEffect(() => {
-    const tab = searchParams.get('tab') as TabType;
+    const tab = searchParams?.get('tab') as TabType;
     if (tab && ['overview', 'firms', 'admins', 'licenses', 'transactions', 'rights', 'theme', 'security'].includes(tab)) {
       setActiveTab(tab);
     }

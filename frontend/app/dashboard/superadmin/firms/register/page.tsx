@@ -27,7 +27,7 @@ const WIZARD_STEPS: StepItem[] = [
 function FirmRegistrationWizardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const firmIdParam = searchParams.get('firmId') || searchParams.get('id') || searchParams.get('slug');
+  const firmIdParam = searchParams?.get('firmId') || searchParams?.get('id') || searchParams?.get('slug');
 
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [maxAccessibleStep, setMaxAccessibleStep] = useState<number>(1);
