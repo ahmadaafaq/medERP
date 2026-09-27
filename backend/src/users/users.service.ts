@@ -37,16 +37,49 @@ export class UsersService {
         const s = `tenant_${col.slug}`;
         try {
           const rows = await this.ds.query(
-            `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url,
+            `SELECT s.id, 
+                    CASE
+                      WHEN LENGTH(COALESCE(s.registration_no, '')) > LENGTH(COALESCE(s.rollno, '')) 
+                           AND LENGTH(COALESCE(s.registration_no, '')) >= 13 
+                           AND LENGTH(COALESCE(s.rollno, '')) = 10 
+                      THEN s.registration_no
+                      ELSE s.rollno
+                    END AS rollno,
+                    CASE
+                      WHEN LENGTH(COALESCE(s.registration_no, '')) > LENGTH(COALESCE(s.rollno, '')) 
+                           AND LENGTH(COALESCE(s.registration_no, '')) >= 13 
+                           AND LENGTH(COALESCE(s.rollno, '')) = 10 
+                      THEN s.rollno
+                      ELSE s.registration_no
+                    END AS registration_no,
+                    s.name, s.photo_url,
                     COALESCE(s.attendance_percentage, 0) AS attendance_percentage,
-                    COALESCE(b.code, s.batch_cd, '2025-MBBS') AS batch_cd,
+                    COALESCE(
+                      NULLIF(b.year, ''),
+                      CASE 
+                        WHEN s.batch_cd ~ '^\\d{4}$' THEN s.batch_cd
+                        WHEN s.batch_cd = '2' AND s.course_cd = '13' THEN '2025'
+                        WHEN s.batch_cd = '1' AND s.course_cd = '13' THEN '2024'
+                        WHEN s.batch_cd = '18' AND s.course_cd = '1' THEN '2025'
+                        WHEN s.batch_cd = '17' AND s.course_cd = '1' THEN '2024'
+                        ELSE COALESCE(b.code, s.batch_cd, '2025')
+                      END
+                    ) AS batch_cd,
                     s.course_cd, s.phone, s.admission_year, s.batch_id, s.department_id, s.branch_id,
+                    s.bio, s.github_url, s.github_followers, s.linkedin_url, s.linkedin_connections,
                     u.email, COALESCE(u.is_active, s.is_active, true) as is_active, s.created_at,
                     d.name as department_name, d.code as department_code
              FROM "${s}".students s
              LEFT JOIN "${s}".users u ON u.id::text = s.user_id::text
-             LEFT JOIN "${s}".batches b ON b.id::text = s.batch_id::text
+             LEFT JOIN "${s}".batches b ON (
+               b.id::text = s.batch_id::text 
+               OR (b.course_cd = s.course_cd AND (b.code = s.batch_cd OR b.batch_cd = s.batch_cd OR b.year = s.batch_cd))
+             )
              LEFT JOIN "${s}".departments d ON (d.id::text = s.department_id::text OR d.code = s.branch_id OR d.code = s.department_id::text)
+             WHERE (s.is_active = true OR s.is_active IS NULL)
+               AND s.name NOT ILIKE '%test student%' 
+               AND COALESCE(s.registration_no, '') NOT ILIKE '%test%' 
+               AND COALESCE(s.registration_no, '') != 'NA'
              ORDER BY s.name ASC`
           );
           rows.forEach((r: any) => {
@@ -68,7 +101,10 @@ export class UsersService {
     const { page = 1, limit = 20 } = pagination;
     const offset = (page - 1) * limit;
 
-    const conditions: string[] = ['(s.is_active = true OR s.is_active IS NULL)'];
+    const conditions: string[] = [
+      '(s.is_active = true OR s.is_active IS NULL)',
+      "(s.name NOT ILIKE '%test student%' AND COALESCE(s.registration_no, '') NOT ILIKE '%test%' AND COALESCE(s.registration_no, '') != 'NA')"
+    ];
     const params: any[] = [];
     let i = 1;
 
@@ -119,22 +155,51 @@ export class UsersService {
 
     const [rows, countRows] = await Promise.all([
       this.ds.query(
-        `SELECT s.id, s.rollno, s.registration_no, s.name, s.photo_url,
+        `SELECT s.id, 
+                CASE
+                  WHEN LENGTH(COALESCE(s.registration_no, '')) > LENGTH(COALESCE(s.rollno, '')) 
+                       AND LENGTH(COALESCE(s.registration_no, '')) >= 13 
+                       AND LENGTH(COALESCE(s.rollno, '')) = 10 
+                  THEN s.registration_no
+                  ELSE s.rollno
+                END AS rollno,
+                CASE
+                  WHEN LENGTH(COALESCE(s.registration_no, '')) > LENGTH(COALESCE(s.rollno, '')) 
+                       AND LENGTH(COALESCE(s.registration_no, '')) >= 13 
+                       AND LENGTH(COALESCE(s.rollno, '')) = 10 
+                  THEN s.rollno
+                  ELSE s.registration_no
+                END AS registration_no,
+                s.name, s.photo_url,
                 COALESCE(s.attendance_percentage, 0) AS attendance_percentage,
-                COALESCE(b.code, s.batch_cd, '2025') AS batch_cd,
+                COALESCE(
+                  NULLIF(b.year, ''),
+                  CASE 
+                    WHEN s.batch_cd ~ '^\\d{4}$' THEN s.batch_cd
+                    WHEN s.batch_cd = '2' AND s.course_cd = '13' THEN '2025'
+                    WHEN s.batch_cd = '1' AND s.course_cd = '13' THEN '2024'
+                    WHEN s.batch_cd = '18' AND s.course_cd = '1' THEN '2025'
+                    WHEN s.batch_cd = '17' AND s.course_cd = '1' THEN '2024'
+                    ELSE COALESCE(b.code, s.batch_cd, '2025')
+                  END
+                ) AS batch_cd,
                 s.course_cd, s.phone, s.admission_year, s.batch_id, s.department_id, s.branch_id,
+                s.bio, s.github_url, s.github_followers, s.linkedin_url, s.linkedin_connections,
                 u.email, COALESCE(u.is_active, s.is_active, true) as is_active, s.created_at,
                 d.name as department_name, d.code as department_code
          FROM "${schema}".students s
          LEFT JOIN "${schema}".users u ON u.id::text = s.user_id::text
-         LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
+         LEFT JOIN "${schema}".batches b ON (
+           b.id::text = s.batch_id::text 
+           OR (b.course_cd = s.course_cd AND (b.code = s.batch_cd OR b.batch_cd = s.batch_cd OR b.year = s.batch_cd))
+         )
          LEFT JOIN LATERAL (
            SELECT id, name, code FROM "${schema}".departments
            WHERE (id::text = s.department_id::text OR code = s.branch_id OR code = s.department_id::text)
            LIMIT 1
          ) d ON true
          ${where}
-         ORDER BY s.rollno ASC, s.name ASC
+         ORDER BY s.name ASC, s.rollno ASC
          LIMIT $${i} OFFSET $${i + 1}`,
         [...params, limit, offset],
       ),

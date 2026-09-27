@@ -193,7 +193,25 @@ function extractArray<T = any>(json: any): T[] {
 
 export default function TimetableDesignPage() {
   // Top Level Navigation Tabs: 1. Course-Department Time Format | 2. Design - TimeTable
-  const [activeTab, setActiveTab] = useState<'format' | 'design'>('format');
+  const [activeTab, setActiveTab] = useState<'format' | 'design' | 'copy'>('format');
+
+  // ── Copy TimeTable Tab State ──────────────────────────────────────────────
+  const getCopyWeekDefault = (offsetDays = 0) => {
+    const d = new Date();
+    const day = d.getDay();
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - day + (day === 0 ? -6 : 1) + offsetDays);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6); // Monday + 6 = Sunday (7 days total, as required by SRMS)
+    const fmt = (dd: Date) => `${dd.getFullYear()}-${String(dd.getMonth() + 1).padStart(2, '0')}-${String(dd.getDate()).padStart(2, '0')}`;
+    return { from: fmt(mon), to: fmt(sun) };
+  };
+  const [copyFromDate, setCopyFromDate] = useState(() => getCopyWeekDefault(0).from);
+  const [copyToDate, setCopyToDate] = useState(() => getCopyWeekDefault(0).to);
+  const [copyFromDate1new, setCopyFromDate1new] = useState(() => getCopyWeekDefault(7).from);
+  const [copyToDate1new, setCopyToDate1new] = useState(() => getCopyWeekDefault(7).to);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyResult, setCopyResult] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [configuredTimeSlots, setConfiguredTimeSlots] = useState<TimeSlotConfig[]>(DEFAULT_TIME_SLOTS);
 
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
@@ -2420,6 +2438,18 @@ export default function TimetableDesignPage() {
               <span className="text-base">📅</span>
               <span>2. Design - TimeTable</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('copy')}
+              className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-xs transition-all shadow-sm cursor-pointer ${activeTab === 'copy'
+                  ? 'bg-gradient-to-r from-[#F36C21] to-[#FF9248] text-white shadow-orange-500/25 ring-2 ring-[#F36C21]/30 scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800 hover:border-[#F36C21]/40'
+                }`}
+            >
+              <span className="text-base">📋</span>
+              <span>3. Copy TimeTable</span>
+            </button>
           </div>
 
           {/* Master Cascading Filters Bar — Follows Exact 1-6 Hierarchy */}
@@ -2950,6 +2980,286 @@ export default function TimetableDesignPage() {
               )}
             </>
           )}
+
+          {/* ──────────────────────────────────────────────────────────────────
+              Tab 3: Copy TimeTable
+              Same layout as SRMS portal: Copy From Date + Copy To sections
+          ────────────────────────────────────────────────────────────────── */}
+          {activeTab === 'copy' && (() => {
+            const isSrmsTenantCopy = Boolean(getActiveTenantSlug()?.toLowerCase().includes('srms'));
+
+            const handleCopyLecture = async () => {
+              if (!copyFromDate || !copyToDate || !copyFromDate1new || !copyToDate1new) {
+                setCopyResult({ type: 'error', message: 'Please fill all date fields before copying.' });
+                return;
+              }
+              setCopyLoading(true);
+              setCopyResult({ type: 'info', message: 'Copying timetable, please wait...' });
+              const tenantSlug = getActiveTenantSlug();
+              try {
+                const res = await fetch('/api/srms/copy-lecture', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-tenant-id': tenantSlug,
+                    'x-tenant-slug': tenantSlug,
+                  },
+                  body: JSON.stringify({
+                    colgcd: selectedCollege || '',
+                    course: selectedCourse || '',
+                    ddl_batch: selectedBatch || '',
+                    branch: selectedBranch || '',
+                    sem: selectedSemester || '',
+                    sec: selectedSection || '',
+                    FromDate: copyFromDate,
+                    ToDate: copyToDate,
+                    FromDate1new: copyFromDate1new,
+                    ToDate1new: copyToDate1new,
+                    tenant: tenantSlug,
+                    tenantSlug,
+                  }),
+                });
+                const json = await res.json().catch(() => ({}));
+                if (res.ok && json.success) {
+                  const synced = json.synced ?? 0;
+                  const copied = json.count ?? 0;
+                  const msg = json.message || `Copied ${copied} lecture(s) successfully.`;
+                  setCopyResult({ type: synced > 0 ? 'success' : 'info', message: msg });
+                  // Navigate to Design tab showing the target week immediately
+                  const targetDate = new Date(copyFromDate1new + 'T12:00:00');
+                  setCurrentDate(targetDate);
+                  fetchTimetableSlots(targetDate);
+                  if (synced > 0) {
+                    // Short delay so result banner is visible, then switch tab
+                    setTimeout(() => setActiveTab('design'), 800);
+                  }
+                } else {
+                  setCopyResult({ type: 'error', message: json.message || 'Copy failed. Please try again.' });
+                }
+              } catch (err: any) {
+                setCopyResult({ type: 'error', message: err.message || 'Network error.' });
+              } finally {
+                setCopyLoading(false);
+              }
+            };
+
+            const handleViewCopied = () => {
+              const targetDate = new Date(copyFromDate1new + 'T12:00:00');
+              setCurrentDate(targetDate);
+              fetchTimetableSlots(targetDate);
+              setActiveTab('design');
+            };
+
+
+
+            return (
+              <div className="space-y-5 max-w-3xl">
+
+                {/* Result banner */}
+                {copyResult && (
+                  <div className={`flex items-start gap-3 px-4 py-3 rounded-2xl border text-xs font-semibold ${
+                    copyResult.type === 'success'
+                      ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
+                      : copyResult.type === 'error'
+                      ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-300'
+                      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+                  }`}>
+                    <span className="text-sm mt-0.5">
+                      {copyResult.type === 'success' ? '✅' : copyResult.type === 'error' ? '❌' : 'ℹ️'}
+                    </span>
+                    <div className="flex-1">
+                      <p>{copyResult.message}</p>
+                      {copyResult.type === 'success' && (
+                        <button
+                          type="button"
+                          onClick={handleViewCopied}
+                          className="mt-2 text-[11px] font-black underline underline-offset-2 text-emerald-700 dark:text-emerald-300 hover:opacity-80 transition-opacity"
+                        >
+                          → View copied week in Design tab
+                        </button>
+                      )}
+                    </div>
+                    <button type="button" onClick={() => setCopyResult(null)} className="text-xs opacity-60 hover:opacity-100">✕</button>
+                  </div>
+                )}
+
+                {/* ── Section 1: Copy From Date ── */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-md">
+                  {/* Header */}
+                  <div className="flex items-center gap-2 px-5 py-3.5 bg-[#2D2575] text-white">
+                    <span className="text-base">📅</span>
+                    <h3 className="font-black text-sm tracking-wide">Copy From Date</h3>
+                  </div>
+
+                  <div className="p-5 space-y-4">
+
+
+                    {/* Row 2: From Date / To Date */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-black text-[#F36C21] uppercase tracking-wider">
+                          From Date
+                        </label>
+                        <input
+                          type="date"
+                          value={copyFromDate}
+                          onChange={e => {
+                            const v = e.target.value;
+                            setCopyFromDate(v);
+                            // Auto-set ToDate to 6 days after selected date (7-day span for SRMS)
+                            if (v) {
+                              const d = new Date(v + 'T12:00:00');
+                              const sun = new Date(d);
+                              sun.setDate(d.getDate() + 6);
+                              const fmt = (dd: Date) => `${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}`;
+                              setCopyToDate(fmt(sun));
+                            }
+                          }}
+                          className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#F36C21]/40 transition-all"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-black text-[#F36C21] uppercase tracking-wider">
+                          To Date
+                        </label>
+                        <input
+                          type="date"
+                          value={copyToDate}
+                          onChange={e => setCopyToDate(e.target.value)}
+                          className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#F36C21]/40 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Note */}
+                    <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                      Note: One Week Time Table Will Be Carried Forward. The Day Of The Copy From Date And The From Date Should Be The Same.
+                    </p>
+
+                    {/* Quick select buttons */}
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider self-center">Quick:</span>
+                      {[-7, 0, 7, 14].map(offset => {
+                        const wk = getCopyWeekDefault(offset);
+                        const d = new Date(wk.from + 'T12:00:00');
+                        const label = offset === 0 ? 'This Week' : offset === -7 ? 'Last Week' : offset === 7 ? 'Next Week' : '+2 Weeks';
+                        return (
+                          <button
+                            key={offset}
+                            type="button"
+                            onClick={() => { setCopyFromDate(wk.from); setCopyToDate(wk.to); }}
+                            className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black text-slate-600 dark:text-slate-300 hover:border-[#F36C21] hover:text-[#F36C21] transition-all"
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Section 2: Copy To ── */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-md">
+                  {/* Header */}
+                  <div className="flex items-center gap-2 px-5 py-3.5 bg-[#2D2575] text-white">
+                    <span className="text-base">📋</span>
+                    <h3 className="font-black text-sm tracking-wide">Copy To</h3>
+                  </div>
+
+                  <div className="p-5 space-y-4">
+                    {/* Row: From Date / To Date */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-black text-[#00C48C] uppercase tracking-wider">
+                          From Date
+                        </label>
+                        <input
+                          type="date"
+                          value={copyFromDate1new}
+                          onChange={e => {
+                            const v = e.target.value;
+                            setCopyFromDate1new(v);
+                            // Auto-set ToDate to 6 days after selected date (7-day span for SRMS)
+                            if (v) {
+                              const d = new Date(v + 'T12:00:00');
+                              const sun = new Date(d);
+                              sun.setDate(d.getDate() + 6);
+                              const fmt = (dd: Date) => `${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}`;
+                              setCopyToDate1new(fmt(sun));
+                            } else {
+                              setCopyFromDate1new(v);
+                            }
+                          }}
+                          className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#00C48C]/40 transition-all"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-black text-[#00C48C] uppercase tracking-wider">
+                          To Date
+                        </label>
+                        <input
+                          type="date"
+                          value={copyToDate1new}
+                          onChange={e => setCopyToDate1new(e.target.value)}
+                          className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#00C48C]/40 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick select for target week */}
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider self-center">Quick:</span>
+                      {[7, 14, 21].map(offset => {
+                        const wk = getCopyWeekDefault(offset);
+                        const label = offset === 7 ? 'Next Week' : offset === 14 ? '+2 Weeks' : '+3 Weeks';
+                        return (
+                          <button
+                            key={offset}
+                            type="button"
+                            onClick={() => { setCopyFromDate1new(wk.from); setCopyToDate1new(wk.to); }}
+                            className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black text-slate-600 dark:text-slate-300 hover:border-[#00C48C] hover:text-[#00C48C] transition-all"
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Summary preview */}
+                    {copyFromDate && copyToDate && copyFromDate1new && copyToDate1new && (
+                      <div className="p-3 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                        <p className="font-black text-slate-800 dark:text-white text-xs">📋 Copy Summary</p>
+                        <p>College: <span className="font-bold text-slate-900 dark:text-white">{selectedCollegeObj?.name || `#${selectedCollege}`}</span></p>
+                        <p>Course: <span className="font-bold text-slate-900 dark:text-white">{selectedCourseObj?.name || `#${selectedCourse}`}</span> &nbsp;|&nbsp; Batch: <span className="font-bold text-slate-900 dark:text-white">{selectedBatch}</span></p>
+                        <p>From: <span className="font-bold text-[#F36C21]">{copyFromDate} → {copyToDate}</span></p>
+                        <p>To: <span className="font-bold text-[#00C48C]">{copyFromDate1new} → {copyToDate1new}</span></p>
+                        {isSrmsTenantCopy && (
+                          <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-semibold">🔒 SRMS Portal will be called. Copied slots will also be synced to database for topic enrichment.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Copy Lecture button */}
+                    <button
+                      type="button"
+                      disabled={copyLoading}
+                      onClick={handleCopyLecture}
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#7867FF] active:scale-95 text-white text-xs font-black shadow-md shadow-[#5B4BFF]/30 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {copyLoading ? (
+                        <><span className="animate-spin">⏳</span><span>Copying...</span></>
+                      ) : (
+                        <><span>📋</span><span>Copy Lecture</span></>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            );
+          })()}
 
         </main>
       </div>

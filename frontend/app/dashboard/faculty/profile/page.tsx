@@ -3,8 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import GithubReadmeCard from '../../../../components/GithubReadmeCard';
 import { 
   FolderGit2, 
+  Github,
+  Link2,
   Linkedin, 
   Users, 
   Building2, 
@@ -27,7 +30,8 @@ import {
   Check,
   Save,
   Loader2,
-  Trash2
+  Trash2,
+  FileText
 } from 'lucide-react';
 
 interface FacultyProfile {
@@ -46,6 +50,9 @@ interface FacultyProfile {
   qualification?: string;
   experience?: string;
   joining_date?: string;
+  bio?: string;
+  github_url?: string;
+  github_followers?: number;
   linkedin_url?: string;
   linkedin_connections?: string | number;
   repository_evaluated_count?: number;
@@ -138,10 +145,170 @@ export default function FacultyProfilePage() {
     gender: 'Male',
     photo_url: '',
     cover_url: '',
+    bio: '',
+    github_url: '',
+    followers_count: 384,
+    repository_evaluated_count: 18,
     linkedin_url: '',
     linkedin_connections: '',
     research_interests_str: '',
   });
+
+  // Inline edit state matching student profile
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [bioInput, setBioInput] = useState('');
+
+  const [isEditingGithub, setIsEditingGithub] = useState(false);
+  const [githubUrlInput, setGithubUrlInput] = useState('');
+  const [githubFollowersInput, setGithubFollowersInput] = useState<number | string>(0);
+  const [githubReposInput, setGithubReposInput] = useState<number | string>(0);
+
+  const [isEditingLinkedin, setIsEditingLinkedin] = useState(false);
+  const [linkedinUrlInput, setLinkedinUrlInput] = useState('');
+  const [linkedinConnectionsInput, setLinkedinConnectionsInput] = useState<string>('');
+
+  const deptLower = (profile?.department_name || '').toLowerCase();
+  const collegeLower = (profile?.college_name || '').toLowerCase();
+  const specLower = (profile?.specialization || '').toLowerCase();
+  const isPharma = deptLower.includes('pharma') || deptLower.includes('b.pharm') || deptLower.includes('bpharm') || collegeLower.includes('pharma') || specLower.includes('pharma');
+
+  // ── GitHub: auto-fetch stats when URL is entered / pasted ──
+  const [githubFetchStatus, setGithubFetchStatus] = useState<'idle' | 'fetching' | 'ok' | 'error'>('idle');
+  const [githubFetchMsg, setGithubFetchMsg] = useState('');
+  const [isFetchingGithub, setIsFetchingGithub] = useState(false);
+
+  const handleFetchGithubStats = async (urlOverride?: string) => {
+    const raw = (urlOverride ?? githubUrlInput ?? formData.github_url).trim();
+    if (!raw) return;
+
+    let username = raw;
+    const mdMatch = username.match(/\[.*?\]\((.*?)\)/);
+    if (mdMatch && mdMatch[1]) {
+      username = mdMatch[1].trim();
+    }
+    if (username.includes('github.com/')) {
+      username = username.split('github.com/')[1].split('/')[0].split('?')[0].trim();
+    }
+    if (username.includes('raw.githubusercontent.com/')) {
+      username = username.split('raw.githubusercontent.com/')[1].split('/')[0].split('?')[0].trim();
+    }
+    if (username.includes('/')) {
+      username = username.split('/')[0].trim();
+    }
+    username = username.replace(/^@/, '').trim();
+    if (!username) return;
+
+    setIsFetchingGithub(true);
+    setGithubFetchStatus('fetching');
+    setGithubFetchMsg('');
+    try {
+      const res = await fetch(`https://api.github.com/users/${username}`);
+      if (res.ok) {
+        const ghData = await res.json();
+        if (ghData.followers !== undefined) {
+          const canonicalUrl = `https://github.com/${username}`;
+          setFormData(prev => ({
+            ...prev,
+            github_url: canonicalUrl,
+            followers_count: ghData.followers,
+            repository_evaluated_count: ghData.public_repos !== undefined ? ghData.public_repos : prev.repository_evaluated_count,
+            bio: ghData.bio || prev.bio,
+          }));
+          setGithubUrlInput(canonicalUrl);
+          setGithubFollowersInput(ghData.followers);
+          if (ghData.public_repos !== undefined) {
+            setGithubReposInput(ghData.public_repos);
+          }
+          if (ghData.bio) {
+            setBioInput(ghData.bio);
+          }
+          setGithubFetchStatus('ok');
+          const bioNote = ghData.bio ? ' · Bio synced' : '';
+          setGithubFetchMsg(`✅ @${username} · ${ghData.followers} followers · ${ghData.public_repos} public repos${bioNote}`);
+        }
+      } else {
+        setGithubFetchStatus('error');
+        setGithubFetchMsg(`❌ GitHub user @${username} not found. Enter counts manually.`);
+      }
+    } catch {
+      setGithubFetchStatus('error');
+      setGithubFetchMsg('⚠️ GitHub API unavailable. Enter counts manually.');
+    } finally {
+      setIsFetchingGithub(false);
+    }
+  };
+
+  // Quick save profile fields (Bio, GitHub, LinkedIn) directly to PostgreSQL
+  const handleSaveProfileField = async (payload: Partial<FacultyProfile>) => {
+    setSaving(true);
+    const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-slug': slug,
+          'x-tenant': slug,
+          'x-user-role': 'FACULTY',
+          'x-user-id': profile?.emp_id || '',
+        },
+        body: JSON.stringify({
+          role: 'FACULTY',
+          emp_id: profile?.emp_id,
+          ...payload,
+        }),
+      });
+
+      if (res.ok) {
+        showToast('success', '✨ Profile updated successfully in PostgreSQL!');
+        setProfile(prev => prev ? { ...prev, ...payload } : null);
+        setFormData(prev => ({
+          ...prev,
+          ...(payload.bio !== undefined ? { bio: payload.bio } : {}),
+          ...(payload.github_url !== undefined ? { github_url: payload.github_url } : {}),
+          ...(payload.followers_count !== undefined ? { followers_count: payload.followers_count } : {}),
+          ...(payload.repository_evaluated_count !== undefined ? { repository_evaluated_count: payload.repository_evaluated_count } : {}),
+          ...(payload.linkedin_url !== undefined ? { linkedin_url: payload.linkedin_url } : {}),
+          ...(payload.linkedin_connections !== undefined ? { linkedin_connections: String(payload.linkedin_connections) } : {}),
+        }));
+        setIsEditingBio(false);
+        setIsEditingGithub(false);
+        setIsEditingLinkedin(false);
+      } else {
+        showToast('error', 'Failed to save changes. Please try again.');
+      }
+    } catch {
+      showToast('error', 'Network error while saving profile.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveBio = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleSaveProfileField({ bio: bioInput.trim() });
+  };
+
+  const handleSaveGithub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleSaveProfileField({
+      github_url: githubUrlInput.trim(),
+      followers_count: Number(githubFollowersInput) || 0,
+      repository_evaluated_count: Number(githubReposInput) || 0,
+      bio: bioInput.trim(),
+    });
+  };
+
+  const handleSaveLinkedin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleSaveProfileField({
+      linkedin_url: linkedinUrlInput.trim(),
+      linkedin_connections: linkedinConnectionsInput.trim(),
+    });
+  };
 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -204,7 +371,7 @@ export default function FacultyProfilePage() {
           ? p.research_interests 
           : (isEng ? ['Machine Learning & NLP', 'Multi-Tenant Microservices', 'Distributed Systems'] : ['Cardiovascular Dynamics', 'Autonomic Nervous System', 'Clinical Neurophysiology']);
 
-        setProfile({
+        const facData: FacultyProfile = {
           id: p.id || meData.id || '1',
           name,
           emp_id,
@@ -220,15 +387,26 @@ export default function FacultyProfilePage() {
           qualification: p.qualification || meData.qualification || defaultQual,
           experience: p.experience || meData.experience || '12 Years Teaching & Research',
           joining_date: p.joining_date || meData.joining_date || '2015-07-15',
+          bio: p.bio || meData.bio || 'Dedicated Academic Mentor, Researcher, and Faculty Member.',
+          github_url: p.github_url || meData.github_url || '',
+          github_followers: Number(p.followers_count ?? meData.followers_count) || 384,
           linkedin_url: p.linkedin_url || meData.linkedin_url || 'https://www.linkedin.com/in/srms-faculty',
           linkedin_connections: p.linkedin_connections || '1,420',
-          repository_evaluated_count: p.repository_evaluated_count ?? meData.repoCount ?? 18,
-          followers_count: p.followers_count ?? meData.followersCount ?? 384,
+          repository_evaluated_count: Number(p.repository_evaluated_count ?? meData.repoCount) || 18,
+          followers_count: Number(p.followers_count ?? meData.followersCount) || 384,
           assigned_courses: isEng 
             ? ['BCA 3rd Sem — Object Oriented Programming in C++', 'B.Tech CSE 5th Sem — Software Engineering', 'BCA 5th Sem — Front End Dev']
             : ['MBBS Phase 1 — Physiology Theory & Practical', 'MD Physiology — Applied Neurobiology'],
           research_interests: researchList,
-        });
+        };
+
+        setProfile(facData);
+        setBioInput(facData.bio || '');
+        setGithubUrlInput(facData.github_url || '');
+        setGithubFollowersInput(facData.followers_count || 384);
+        setGithubReposInput(facData.repository_evaluated_count || 18);
+        setLinkedinUrlInput(facData.linkedin_url || '');
+        setLinkedinConnectionsInput(String(facData.linkedin_connections || '1,420'));
       } else {
         loadFallbackFromStorage();
       }
@@ -249,7 +427,7 @@ export default function FacultyProfilePage() {
     const isEng = slug.includes('cet') || slug.includes('eng');
     const name = cp.name || cached?.name || (isEng ? 'Dr. Shorab Ahmad' : 'Dr. Sanjay Singh');
 
-    setProfile({
+    const fallbackData: FacultyProfile = {
       id: cp.id || '1',
       name,
       emp_id: cp.emp_id || cp.empId || cached?.empId || (isEng ? 'FAC/CET/102' : 'DR/07/026'),
@@ -265,17 +443,28 @@ export default function FacultyProfilePage() {
       qualification: cp.qualification || (isEng ? 'M.Tech (CSE), Ph.D.' : 'MD (Physiology), MBBS'),
       experience: cp.experience || '12 Years Teaching & Research',
       joining_date: cp.joining_date || '2015-07-15',
-      linkedin_url: 'https://www.linkedin.com/in/srms-faculty',
-      linkedin_connections: '1,420',
-      repository_evaluated_count: 18,
-      followers_count: 384,
+      bio: cp.bio || 'Dedicated Academic Mentor, Researcher, and Faculty Member.',
+      github_url: cp.github_url || '',
+      github_followers: Number(cp.followers_count) || 384,
+      linkedin_url: cp.linkedin_url || 'https://www.linkedin.com/in/srms-faculty',
+      linkedin_connections: cp.linkedin_connections || '1,420',
+      repository_evaluated_count: Number(cp.repository_evaluated_count) || 18,
+      followers_count: Number(cp.followers_count) || 384,
       assigned_courses: isEng 
         ? ['BCA 3rd Sem — Object Oriented Programming in C++', 'B.Tech CSE 5th Sem — Software Engineering', 'BCA 5th Sem — Front End Dev']
         : ['MBBS Phase 1 — Physiology Theory & Practical', 'MD Physiology — Applied Neurobiology'],
       research_interests: isEng
         ? ['Machine Learning & NLP', 'Multi-Tenant Microservices', 'Distributed Systems']
         : ['Cardiovascular Dynamics', 'Autonomic Nervous System', 'Clinical Neurophysiology'],
-    });
+    };
+
+    setProfile(fallbackData);
+    setBioInput(fallbackData.bio || '');
+    setGithubUrlInput(fallbackData.github_url || '');
+    setGithubFollowersInput(fallbackData.followers_count || 384);
+    setGithubReposInput(fallbackData.repository_evaluated_count || 18);
+    setLinkedinUrlInput(fallbackData.linkedin_url || '');
+    setLinkedinConnectionsInput(String(fallbackData.linkedin_connections || '1,420'));
   };
 
   const handleOpenEditModal = () => {
@@ -290,10 +479,16 @@ export default function FacultyProfilePage() {
       gender: profile.gender || 'Male',
       photo_url: profile.photo_url || '',
       cover_url: profile.cover_url || '',
+      bio: profile.bio || '',
+      github_url: profile.github_url || '',
+      followers_count: Number(profile.followers_count) || 384,
+      repository_evaluated_count: Number(profile.repository_evaluated_count) || 18,
       linkedin_url: profile.linkedin_url || '',
       linkedin_connections: String(profile.linkedin_connections || '1,420'),
       research_interests_str: Array.isArray(profile.research_interests) ? profile.research_interests.join(', ') : '',
     });
+    setGithubFetchStatus('idle');
+    setGithubFetchMsg('');
     setPhotoPreview(profile.photo_url || null);
     setCoverPreview(profile.cover_url || null);
     setIsEditModalOpen(true);
@@ -363,6 +558,10 @@ export default function FacultyProfilePage() {
       gender: formData.gender,
       photo_url: photoPreview || formData.photo_url || null,
       cover_url: coverPreview || formData.cover_url || null,
+      bio: formData.bio.trim(),
+      github_url: formData.github_url.trim(),
+      followers_count: Number(formData.followers_count) || 0,
+      repository_evaluated_count: Number(formData.repository_evaluated_count) || 0,
       linkedin_url: formData.linkedin_url.trim(),
       linkedin_connections: formData.linkedin_connections.trim(),
       research_interests: researchInterestsArray,
@@ -403,6 +602,11 @@ export default function FacultyProfilePage() {
             gender: payload.gender,
             photo_url: payload.photo_url || prev.photo_url,
             cover_url: payload.cover_url || prev.cover_url,
+            bio: payload.bio,
+            github_url: payload.github_url,
+            github_followers: payload.followers_count,
+            followers_count: payload.followers_count,
+            repository_evaluated_count: payload.repository_evaluated_count,
             linkedin_url: payload.linkedin_url,
             linkedin_connections: payload.linkedin_connections,
             research_interests: researchInterestsArray,
@@ -417,10 +621,18 @@ export default function FacultyProfilePage() {
             cachedObj.name = payload.name;
             cachedObj.photo_url = payload.photo_url;
             cachedObj.photoUrl = payload.photo_url;
+            cachedObj.bio = payload.bio;
+            cachedObj.github_url = payload.github_url;
+            cachedObj.linkedin_url = payload.linkedin_url;
+            cachedObj.linkedin_connections = payload.linkedin_connections;
             if (cachedObj.profile) {
               cachedObj.profile.name = payload.name;
               cachedObj.profile.photo_url = payload.photo_url;
               cachedObj.profile.photoUrl = payload.photo_url;
+              cachedObj.profile.bio = payload.bio;
+              cachedObj.profile.github_url = payload.github_url;
+              cachedObj.profile.linkedin_url = payload.linkedin_url;
+              cachedObj.profile.linkedin_connections = payload.linkedin_connections;
             }
             localStorage.setItem('user', JSON.stringify(cachedObj));
           }
@@ -545,63 +757,433 @@ export default function FacultyProfilePage() {
                       </div>
                     </div>
 
-                    {/* Right: 3 Key Metrics Cards (1. Repository, 2. LinkedIn, 3. Followers) */}
-                    <div className="w-full lg:w-auto bg-[#F6F8FC] dark:bg-slate-800/70 border border-[#E7EAF3] dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm flex items-center justify-around sm:justify-start gap-4 sm:gap-6 mt-2 lg:mt-0">
-                      
-                      {/* 1. Repository Evaluated */}
-                      <div className="text-center px-2 sm:px-3 group cursor-default">
-                        <div className="flex items-center justify-center gap-1.5 text-[#5B4BFF] mb-1">
-                          <FolderGit2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                          <span className="text-xl font-black text-[#1B1E28] dark:text-white">
-                            {profile?.repository_evaluated_count ?? 18}
-                          </span>
+                    {/* Right: Key Metrics Cards (1. Repository [hidden for Pharma], 2. LinkedIn, 3. Followers) */}
+                    {(() => {
+                      const deptLower = (profile?.department_name || '').toLowerCase();
+                      const colgLower = (profile?.college_name || '').toLowerCase();
+                      const specLower = (profile?.specialization || '').toLowerCase();
+                      const isPharma = deptLower.includes('pharma') || deptLower.includes('b.pharm') || deptLower.includes('bpharm') || colgLower.includes('pharma') || specLower.includes('pharma');
+
+                      return (
+                        <div className="w-full lg:w-auto bg-[#F6F8FC] dark:bg-slate-800/70 border border-[#E7EAF3] dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm flex items-center justify-around sm:justify-start gap-4 sm:gap-6 mt-2 lg:mt-0">
+                          
+                          {/* 1. Repository / GitHub — hidden for Pharmacy */}
+                          {!isPharma && (
+                            <>
+                              {profile?.github_url ? (
+                                <a
+                                  href={profile.github_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-center px-2 sm:px-3 group cursor-pointer hover:opacity-90 transition-opacity"
+                                  title="View Faculty GitHub Profile"
+                                >
+                                  <div className="flex items-center justify-center gap-1.5 text-[#5B4BFF] mb-1">
+                                    <FolderGit2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                    <span className="text-xl font-black text-[#1B1E28] dark:text-white">
+                                      {profile?.repository_evaluated_count ?? 18}
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#5B4BFF] flex items-center justify-center gap-1">
+                                    <span>Repository</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </span>
+                                </a>
+                              ) : (
+                                <div className="text-center px-2 sm:px-3 group cursor-default">
+                                  <div className="flex items-center justify-center gap-1.5 text-[#5B4BFF] mb-1">
+                                    <FolderGit2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                    <span className="text-xl font-black text-[#1B1E28] dark:text-white">
+                                      {profile?.repository_evaluated_count ?? 18}
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
+                                    Repository
+                                  </span>
+                                </div>
+                              )}
+
+                              <div className="w-[1px] h-9 bg-[#E7EAF3] dark:bg-slate-700" />
+                            </>
+                          )}
+
+                          {/* 2. LinkedIn */}
+                          <a
+                            href={profile?.linkedin_url || '#'}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-center px-2 sm:px-3 group cursor-pointer hover:opacity-90 transition-opacity"
+                            title="View Faculty LinkedIn Profile"
+                          >
+                            <div className="flex items-center justify-center gap-1.5 text-[#0A66C2] mb-1">
+                              <Linkedin className="w-4 h-4 group-hover:scale-110 transition-transform fill-[#0A66C2]" />
+                              <span className="text-xl font-black text-[#1B1E28] dark:text-white">
+                                {profile?.linkedin_connections ?? '1.4k'}
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0A66C2] flex items-center justify-center gap-1">
+                              <span>LinkedIn</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </span>
+                          </a>
+
+                          <div className="w-[1px] h-9 bg-[#E7EAF3] dark:bg-slate-700" />
+
+                          {/* 3. Followers */}
+                          <div className="text-center px-2 sm:px-3 group cursor-default">
+                            <div className="flex items-center justify-center gap-1.5 text-[#F36C21] mb-1">
+                              <Users className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                              <span className="text-xl font-black text-[#1B1E28] dark:text-white">
+                                {profile?.followers_count ?? 384}
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
+                              Followers
+                            </span>
+                          </div>
+
                         </div>
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
-                          Repository
-                        </span>
-                      </div>
-
-                      <div className="w-[1px] h-9 bg-[#E7EAF3] dark:bg-slate-700" />
-
-                      {/* 2. LinkedIn */}
-                      <a
-                        href={profile?.linkedin_url || '#'}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-center px-2 sm:px-3 group cursor-pointer hover:opacity-90 transition-opacity"
-                        title="View Faculty LinkedIn Profile"
-                      >
-                        <div className="flex items-center justify-center gap-1.5 text-[#0A66C2] mb-1">
-                          <Linkedin className="w-4 h-4 group-hover:scale-110 transition-transform fill-[#0A66C2]" />
-                          <span className="text-xl font-black text-[#1B1E28] dark:text-white">
-                            {profile?.linkedin_connections ?? '1.4k'}
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0A66C2] flex items-center justify-center gap-1">
-                          <span>LinkedIn</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </span>
-                      </a>
-
-                      <div className="w-[1px] h-9 bg-[#E7EAF3] dark:bg-slate-700" />
-
-                      {/* 3. Followers */}
-                      <div className="text-center px-2 sm:px-3 group cursor-default">
-                        <div className="flex items-center justify-center gap-1.5 text-[#F36C21] mb-1">
-                          <Users className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                          <span className="text-xl font-black text-[#1B1E28] dark:text-white">
-                            {profile?.followers_count ?? 384}
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
-                          Followers
-                        </span>
-                      </div>
-
-                    </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
+
+              {/* Bio & Developer Profiles Grid (Matching Student Profile) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
+                
+                {/* Faculty Biography & Professional Summary Card (Span 2) */}
+                <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-3">
+                  <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-2">
+                    <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      <span>Faculty Biography &amp; Professional Summary</span>
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBioInput(profile?.bio || '');
+                        setIsEditingBio(!isEditingBio);
+                      }}
+                      className="text-[11px] font-bold text-[#5B4BFF] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      <span>{isEditingBio ? 'Close' : 'Edit Bio'}</span>
+                    </button>
+                  </div>
+
+                  <div>
+                    {isEditingBio ? (
+                      <form onSubmit={handleSaveBio} className="space-y-3 pt-2">
+                        <textarea
+                          rows={4}
+                          value={bioInput}
+                          onChange={(e) => setBioInput(e.target.value)}
+                          placeholder="Write your academic background, teaching philosophy, research focus..."
+                          className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                          required
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingBio(false)}
+                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={saving}
+                            className="px-4 py-1.5 rounded-xl text-xs font-bold bg-[#5B4BFF] hover:bg-indigo-600 text-white flex items-center gap-1.5 shadow-md shadow-indigo-500/20 disabled:opacity-50"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>{saving ? 'Saving...' : 'Save Bio'}</span>
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <p className="text-xs sm:text-sm text-[#4E5969] dark:text-slate-300 leading-relaxed italic bg-[#F6F8FC] dark:bg-slate-800/50 p-4 rounded-xl border border-dashed border-[#E7EAF3] dark:border-slate-700">
+                        "{profile?.bio || 'Dedicated Academic Mentor, Researcher, and Faculty Member.'}"
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-400 pt-1">
+                    <Sparkles className="w-3.5 h-3.5 text-[#F36C21]" />
+                    <span>Visible to academic administration, students, and research collaborators.</span>
+                  </div>
+                </div>
+
+                {/* Developer Profiles Card (Span 1) */}
+                <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
+                    <h3 className="text-xs font-black text-[#5B4BFF] uppercase tracking-wider flex items-center gap-2">
+                      <Link2 className="w-4 h-4" />
+                      <span>Developer Profiles</span>
+                    </h3>
+                  </div>
+
+                  <div className="space-y-3.5">
+                    {/* GitHub Box — hidden for Pharmacy */}
+                    {!isPharma && (
+                      <div className="p-3.5 rounded-xl border border-[#E7EAF3] dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-800/60 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center">
+                              <Github className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-black text-[#1B1E28] dark:text-white block">GitHub Profile</span>
+                              <span className="text-[10px] font-bold text-[#5B4BFF]">
+                                {profile?.followers_count ?? 0} Followers · {profile?.repository_evaluated_count ?? 0} Repos
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setGithubUrlInput(profile?.github_url || '');
+                                setGithubFollowersInput(profile?.followers_count ?? 0);
+                                setGithubReposInput(profile?.repository_evaluated_count ?? 0);
+                                setBioInput(profile?.bio || '');
+                                setIsEditingGithub(!isEditingGithub);
+                              }}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#5B4BFF] hover:bg-white dark:hover:bg-slate-700 transition-all cursor-pointer"
+                              title="Edit GitHub Link"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            {profile?.github_url && (
+                              <a
+                                href={profile.github_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-[#5B4BFF] hover:bg-white dark:hover:bg-slate-700 transition-all"
+                                title="Open GitHub Profile"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+
+                        {isEditingGithub ? (
+                          <form onSubmit={handleSaveGithub} className="pt-2 space-y-2 border-t border-slate-200 dark:border-slate-700">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                                GitHub Profile URL or Username
+                              </label>
+                              <input
+                                type="text"
+                                value={githubUrlInput}
+                                onChange={(e) => {
+                                  setGithubUrlInput(e.target.value);
+                                  setGithubFetchStatus('idle');
+                                  setGithubFetchMsg('');
+                                }}
+                                onBlur={(e) => {
+                                  if (e.target.value.trim()) handleFetchGithubStats(e.target.value.trim());
+                                }}
+                                onPaste={(e) => {
+                                  const pasted = e.clipboardData.getData('text').trim();
+                                  if (pasted) setTimeout(() => handleFetchGithubStats(pasted), 200);
+                                }}
+                                placeholder="https://github.com/username (auto-fetches on paste)"
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                                required
+                              />
+                              {githubFetchStatus === 'fetching' && (
+                                <p className="text-[10px] text-indigo-500 mt-1 animate-pulse">🔄 Fetching GitHub stats...</p>
+                              )}
+                              {githubFetchStatus === 'ok' && (
+                                <p className="text-[10px] text-[#00C48C] mt-1 font-semibold">{githubFetchMsg}</p>
+                              )}
+                              {githubFetchStatus === 'error' && (
+                                <p className="text-[10px] text-[#F04438] mt-1">{githubFetchMsg}</p>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                                  Followers
+                                </label>
+                                <input
+                                  type="number"
+                                  value={githubFollowersInput}
+                                  onChange={(e) => setGithubFollowersInput(e.target.value)}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                                  Repositories
+                                </label>
+                                <input
+                                  type="number"
+                                  value={githubReposInput}
+                                  onChange={(e) => setGithubReposInput(e.target.value)}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Editable Bio / About info fetched from GitHub */}
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1 flex items-center justify-between">
+                                <span>Bio / About Info</span>
+                                <span className="font-normal text-slate-400 text-[9px]">(synced from GitHub, editable)</span>
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={bioInput}
+                                onChange={(e) => setBioInput(e.target.value)}
+                                placeholder="Academic background, teaching philosophy, research focus..."
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-[#5B4BFF]"
+                              />
+                            </div>
+
+                            <div className="flex justify-end gap-1.5 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => { setIsEditingGithub(false); setGithubFetchStatus('idle'); setGithubFetchMsg(''); }}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-200 dark:border-slate-700 text-slate-600"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={saving || isFetchingGithub}
+                                className="px-3 py-1 rounded-lg text-[11px] font-bold bg-[#5B4BFF] text-white hover:bg-indigo-600 disabled:opacity-50"
+                              >
+                                {saving ? 'Saving…' : 'Save'}
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <p className="text-[11px] font-mono font-medium text-slate-500 dark:text-slate-400 truncate">
+                            {profile?.github_url || 'Not connected yet'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* LinkedIn Box */}
+                    <div className="p-3.5 rounded-xl border border-[#E7EAF3] dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-800/60 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-[#0A66C2] text-white flex items-center justify-center">
+                            <Linkedin className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-[#1B1E28] dark:text-white block">LinkedIn Profile</span>
+                            <span className="text-[10px] font-bold text-[#00C48C]">
+                              {profile?.linkedin_connections || '0'}+ Connections
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLinkedinUrlInput(profile?.linkedin_url || '');
+                              setLinkedinConnectionsInput(String(profile?.linkedin_connections || ''));
+                              setIsEditingLinkedin(!isEditingLinkedin);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-[#5B4BFF] hover:bg-white dark:hover:bg-slate-700 transition-all cursor-pointer"
+                            title="Edit LinkedIn Link"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          {profile?.linkedin_url && (
+                            <a
+                              href={profile.linkedin_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#5B4BFF] hover:bg-white dark:hover:bg-slate-700 transition-all"
+                              title="Open LinkedIn Profile"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      {isEditingLinkedin ? (
+                        <form onSubmit={handleSaveLinkedin} className="pt-2 space-y-2 border-t border-slate-200 dark:border-slate-700">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                              LinkedIn Profile URL
+                            </label>
+                            <input
+                              type="url"
+                              value={linkedinUrlInput}
+                              onChange={(e) => setLinkedinUrlInput(e.target.value)}
+                              onBlur={(e) => {
+                                const v = e.target.value.trim();
+                                if (v && v.includes('linkedin.com/in/')) {
+                                  const handle = v.split('linkedin.com/in/')[1].split('/')[0].split('?')[0].trim();
+                                  if (handle) setLinkedinUrlInput(`https://www.linkedin.com/in/${handle}`);
+                                }
+                              }}
+                              placeholder="https://linkedin.com/in/your-handle"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                              required
+                            />
+                            <p className="text-[9px] text-slate-400 mt-1">
+                              ℹ️ LinkedIn has no public API — connections count must be entered manually below.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                              Connections Count <span className="font-normal text-slate-400">(e.g. 500+ or 1,420)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={linkedinConnectionsInput}
+                              onChange={(e) => setLinkedinConnectionsInput(e.target.value)}
+                              placeholder="e.g. 500+ or 1,420"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                            />
+                          </div>
+
+                          <div className="flex justify-end gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingLinkedin(false)}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-200 dark:border-slate-700 text-slate-600"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={saving}
+                              className="px-3 py-1 rounded-lg text-[11px] font-bold bg-[#5B4BFF] text-white hover:bg-indigo-600"
+                            >
+                              {saving ? 'Saving…' : 'Save'}
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <p className="text-[11px] font-mono font-medium text-slate-500 dark:text-slate-400 truncate">
+                          {profile?.linkedin_url || 'Not connected yet'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* GitHub Profile Portfolio README.md Display */}
+              <GithubReadmeCard 
+                githubUrl={profile?.github_url} 
+                isPharma={isPharma} 
+              />
 
               {/* Detailed Faculty Information Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -699,6 +1281,32 @@ export default function FacultyProfilePage() {
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     </div>
+                    {(() => {
+                      const deptLower = (profile?.department_name || '').toLowerCase();
+                      const colgLower = (profile?.college_name || '').toLowerCase();
+                      const specLower = (profile?.specialization || '').toLowerCase();
+                      const isPharma = deptLower.includes('pharma') || deptLower.includes('b.pharm') || deptLower.includes('bpharm') || colgLower.includes('pharma') || specLower.includes('pharma');
+
+                      if (isPharma) return null;
+                      return (
+                        <div className="flex justify-between py-1 border-b border-[#E7EAF3] dark:border-slate-800/50">
+                          <span className="text-[#4E5969] dark:text-slate-400 font-medium">GitHub Profile</span>
+                          {profile?.github_url ? (
+                            <a 
+                              href={profile.github_url} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              className="font-mono font-bold text-[#5B4BFF] hover:underline flex items-center gap-1"
+                            >
+                              <span>{profile.github_url.replace(/^https?:\/\/github\.com\//i, '@')}</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 font-mono">Not connected</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -931,33 +1539,163 @@ export default function FacultyProfilePage() {
                   />
                 </div>
 
-                {/* LinkedIn Profile URL */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#1B1E28] dark:text-slate-200 flex items-center gap-1">
-                    <Linkedin className="w-3.5 h-3.5 text-[#0A66C2]" />
-                    <span>LinkedIn Profile URL</span>
+                {/* Faculty Biography & Professional Summary */}
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-bold text-[#1B1E28] dark:text-slate-200 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-[#5B4BFF]" />
+                      <span>Faculty Biography &amp; Professional Summary</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">Auto-fetched from GitHub, editable</span>
                   </label>
-                  <input
-                    type="url"
-                    value={formData.linkedin_url}
-                    onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
-                    className="w-full h-10 px-3 text-xs font-medium rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white"
-                    placeholder="https://www.linkedin.com/in/username"
+                  <textarea
+                    rows={3}
+                    value={formData.bio}
+                    onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                    placeholder="Academic background, teaching philosophy, research focus, or bio..."
+                    className="w-full p-3 text-xs font-medium rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white"
                   />
                 </div>
 
-                {/* LinkedIn Connections Count */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#1B1E28] dark:text-slate-200">
-                    LinkedIn Connections Display
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.linkedin_connections}
-                    onChange={(e) => setFormData({ ...formData, linkedin_connections: e.target.value })}
-                    className="w-full h-10 px-3 text-xs font-medium rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white"
-                    placeholder="e.g. 1,420"
-                  />
+                {/* Professional & Social Profiles Card in Form */}
+                <div className="sm:col-span-2 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 space-y-4">
+                  <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                    <Link2 className="w-4 h-4 text-[#5B4BFF]" />
+                    <span className="text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider">
+                      Professional &amp; Developer Profiles
+                    </span>
+                  </div>
+
+                  {/* GitHub Profile — hidden for Pharmacy */}
+                  {(() => {
+                    const deptLower = (profile?.department_name || '').toLowerCase();
+                    const colgLower = (profile?.college_name || '').toLowerCase();
+                    const specLower = (profile?.specialization || '').toLowerCase();
+                    const isPharma = deptLower.includes('pharma') || deptLower.includes('b.pharm') || deptLower.includes('bpharm') || colgLower.includes('pharma') || specLower.includes('pharma');
+
+                    if (isPharma) return null;
+                    return (
+                      <div className="space-y-3 p-3 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-[#1B1E28] dark:text-slate-200 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Github className="w-3.5 h-3.5 text-slate-800 dark:text-white" />
+                              <span>GitHub Profile URL or Username</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-normal">Auto-fetches on paste or blur</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.github_url}
+                            onChange={(e) => {
+                              setFormData({ ...formData, github_url: e.target.value });
+                              setGithubFetchStatus('idle');
+                              setGithubFetchMsg('');
+                            }}
+                            onBlur={(e) => {
+                              if (e.target.value.trim()) handleFetchGithubStats(e.target.value.trim());
+                            }}
+                            onPaste={(e) => {
+                              const pasted = e.clipboardData.getData('text').trim();
+                              if (pasted) setTimeout(() => handleFetchGithubStats(pasted), 200);
+                            }}
+                            placeholder="https://github.com/username (auto-fetches stats on paste/blur)"
+                            className="w-full h-10 px-3 text-xs font-medium rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white"
+                          />
+                          {/* Live inline fetch status */}
+                          {githubFetchStatus === 'fetching' && (
+                            <p className="text-[10px] text-indigo-500 font-semibold animate-pulse">🔄 Fetching GitHub stats...</p>
+                          )}
+                          {githubFetchStatus === 'ok' && (
+                            <p className="text-[10px] text-[#00C48C] font-semibold">{githubFetchMsg}</p>
+                          )}
+                          {githubFetchStatus === 'error' && (
+                            <p className="text-[10px] text-[#F04438]">{githubFetchMsg}</p>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                              GitHub Followers <span className="font-normal text-slate-400 text-[10px]">(auto-filled)</span>
+                            </label>
+                            <input
+                              type="number"
+                              value={formData.followers_count}
+                              onChange={(e) => setFormData({ ...formData, followers_count: Number(e.target.value) || 0 })}
+                              className="w-full h-9 px-3 text-xs font-medium rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                              Repositories / Evaluated <span className="font-normal text-slate-400 text-[10px]">(auto-filled)</span>
+                            </label>
+                            <input
+                              type="number"
+                              value={formData.repository_evaluated_count}
+                              onChange={(e) => setFormData({ ...formData, repository_evaluated_count: Number(e.target.value) || 0 })}
+                              className="w-full h-9 px-3 text-xs font-medium rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Bio / About Info from GitHub */}
+                        <div className="space-y-1 pt-1">
+                          <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                            <span>Bio / About Info</span>
+                            <span className="font-normal text-slate-400 text-[10px]">(auto-fetched from GitHub, editable)</span>
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={formData.bio}
+                            onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                            placeholder="Academic background, teaching philosophy, research focus..."
+                            className="w-full p-2.5 text-xs font-medium rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* LinkedIn Profile URL & Connections */}
+                  <div className="space-y-3 p-3 rounded-xl bg-[#F6F8FC] dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-[#1B1E28] dark:text-slate-200 flex items-center gap-1.5">
+                        <Linkedin className="w-3.5 h-3.5 text-[#0A66C2]" />
+                        <span>LinkedIn Profile URL</span>
+                      </label>
+                      <input
+                        type="url"
+                        value={formData.linkedin_url}
+                        onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          if (v && v.includes('linkedin.com/in/')) {
+                            const handle = v.split('linkedin.com/in/')[1].split('/')[0].split('?')[0].trim();
+                            if (handle) setFormData(prev => ({ ...prev, linkedin_url: `https://www.linkedin.com/in/${handle}` }));
+                          }
+                        }}
+                        className="w-full h-10 px-3 text-xs font-medium rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white"
+                        placeholder="https://www.linkedin.com/in/your-handle"
+                      />
+                      <p className="text-[10px] text-slate-400">
+                        ℹ️ LinkedIn has no public API — connections count must be entered manually below.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-[#1B1E28] dark:text-slate-200">
+                        LinkedIn Connections Count <span className="font-normal text-slate-400 text-[10px]">(e.g. 1,420 or 500+)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.linkedin_connections}
+                        onChange={(e) => setFormData({ ...formData, linkedin_connections: e.target.value })}
+                        className="w-full h-10 px-3 text-xs font-medium rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white"
+                        placeholder="e.g. 1,420"
+                      />
+                    </div>
+                  </div>
                 </div>
 
               </div>

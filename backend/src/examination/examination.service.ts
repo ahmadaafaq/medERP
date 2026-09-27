@@ -254,10 +254,16 @@ export class ExaminationService {
 
   async getResults(tenantSlug: string, paperId?: string, studentId?: string) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
-    let sql = `SELECT r.*, s.name as student_name, s.registration_no, s.rollno, s.photo_url, p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks, p.type as paper_type, p.sections
+    let sql = `SELECT r.*, s.name as student_name, s.registration_no, s.rollno, s.photo_url, s.batch_cd, s.course_cd,
+                      p.name as paper_name, p.code as paper_code, p.max_marks, p.passing_marks, p.type as paper_type, p.sections,
+                      p.subject_id,
+                      COALESCE(sub.name, p.name) as subject_name,
+                      COALESCE(sub.sem_cd, sub.semester, '3') as sem_cd,
+                      COALESCE(sub.semester, sub.sem_cd, '3') as semester
                FROM student_results r
                LEFT JOIN students s ON r.student_id::text = s.id::text
                LEFT JOIN examination_papers p ON r.paper_id::text = p.id::text
+               LEFT JOIN subjects sub ON p.subject_id::text = sub.id::text
                WHERE 1=1`;
     const params: any[] = [];
 
@@ -290,6 +296,8 @@ export class ExaminationService {
               COALESCE(p.type, 'THEORY') as paper_type, 
               p.sections, 
               COALESCE(sub.name, p.name, 'Academic Subject') as subject_name,
+              COALESCE(sub.sem_cd, sub.semester, '3') as sem_cd,
+              COALESCE(sub.semester, sub.sem_cd, '3') as semester,
               s.name as student_name,
               s.rollno,
               s.registration_no

@@ -61,6 +61,18 @@ export class LogbookService {
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
+        INSERT INTO "${schema}".logbook_categories (code, name, description, is_active)
+        SELECT 'SEMINAR', 'Academic Seminar', 'Academic Seminar Presentations and Reports', true
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "${schema}".logbook_categories WHERE UPPER(code) = 'SEMINAR'
+        );
+
+        INSERT INTO "${schema}".logbook_categories (code, name, description, is_active)
+        SELECT 'TUTORIAL', 'Tutorial', 'Unit Tutorials, Problem Sheets and Exercises', true
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "${schema}".logbook_categories WHERE UPPER(code) = 'TUTORIAL'
+        );
+
         CREATE TABLE IF NOT EXISTS "${schema}".logbook_topics (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           category_id UUID,
@@ -314,18 +326,24 @@ export class LogbookService {
     const trimmed = identifier ? String(identifier).trim() : '';
 
     if (trimmed) {
+      const cleaned = trimmed.replace(/^srms[-_]/i, '');
       try {
         const stRows = await this.tenantSchemaService.queryInTenant(
           tenantSlug,
           `SELECT id, user_id, name, rollno, registration_no
            FROM "${schema}".students
            WHERE id::text = $1
+              OR id::text = $2
               OR user_id::text = $1
+              OR user_id::text = $2
               OR LOWER(COALESCE(rollno, '')) = LOWER($1)
+              OR LOWER(COALESCE(rollno, '')) = LOWER($2)
               OR LOWER(COALESCE(registration_no, '')) = LOWER($1)
+              OR LOWER(COALESCE(registration_no, '')) = LOWER($2)
               OR LOWER(COALESCE(name, '')) = LOWER($1)
+              OR LOWER(COALESCE(name, '')) = LOWER($2)
            LIMIT 1`,
-          [trimmed],
+          [trimmed, cleaned],
         );
         if (stRows && stRows.length > 0) {
           return stRows[0].id;
@@ -336,6 +354,9 @@ export class LogbookService {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (uuidRegex.test(trimmed)) {
         return trimmed;
+      }
+      if (uuidRegex.test(cleaned)) {
+        return cleaned;
       }
     }
 
@@ -1436,6 +1457,10 @@ startxref
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
     const studentId = await this.resolveStudentId(tenantSlug, userIdOrStudentId);
 
+    if (userIdOrStudentId && !studentId) {
+      return [];
+    }
+
     return this.tenantSchemaService.queryInTenant(
       tenantSlug,
       `SELECT w.*, st.name as student_name, st.rollno
@@ -1535,6 +1560,10 @@ startxref
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
     const studentId = await this.resolveStudentId(tenantSlug, userIdOrStudentId);
 
+    if (userIdOrStudentId && !studentId) {
+      return [];
+    }
+
     return this.tenantSchemaService.queryInTenant(
       tenantSlug,
       `SELECT * FROM "${schema}".logbook_seminars WHERE student_id::text = $1 ORDER BY presentation_date DESC, created_at DESC`,
@@ -1603,6 +1632,10 @@ startxref
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
     const studentId = await this.resolveStudentId(tenantSlug, userIdOrStudentId);
 
+    if (userIdOrStudentId && !studentId) {
+      return [];
+    }
+
     return this.tenantSchemaService.queryInTenant(
       tenantSlug,
       `SELECT * FROM "${schema}".logbook_tutorials WHERE student_id::text = $1 ORDER BY submission_date DESC, created_at DESC`,
@@ -1669,6 +1702,10 @@ startxref
     await this.ensureTables(tenantSlug);
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
     const studentId = await this.resolveStudentId(tenantSlug, userIdOrStudentId);
+
+    if (userIdOrStudentId && !studentId) {
+      return [];
+    }
 
     return this.tenantSchemaService.queryInTenant(
       tenantSlug,
@@ -2005,6 +2042,21 @@ startxref
 
   async createTopic(tenantSlug: string, facultyId: string, dto: CreateLogbookTopicDto) {
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
+    await this.ensureTables(tenantSlug);
+    let categoryId = dto.categoryId;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(categoryId || '')) {
+      const targetCode = (categoryId || 'SEMINAR').toUpperCase().includes('TUTORIAL') ? 'TUTORIAL' : 'SEMINAR';
+      const catRows = await this.tenantSchemaService.queryInTenant(
+        tenantSlug,
+        `SELECT id FROM "${schema}".logbook_categories WHERE UPPER(code) = $1 OR UPPER(name) = $1 LIMIT 1`,
+        [targetCode],
+      ).catch(() => []);
+      if (catRows && catRows.length > 0) {
+        categoryId = catRows[0].id;
+      }
+    }
+
     const res = await this.tenantSchemaService.queryInTenant(
       tenantSlug,
       `INSERT INTO "${schema}".logbook_topics (
@@ -2012,7 +2064,7 @@ startxref
         max_marks, course_id, branch_id, batch_id, semester_id, is_active
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true) RETURNING *`,
       [
-        dto.categoryId, facultyId, dto.title, dto.description || null,
+        categoryId || null, facultyId, dto.title, dto.description || null,
         dto.submissionDeadline || null, dto.maxMarks || 100,
         dto.courseId || null, dto.branchId || null, dto.batchId || null, dto.semesterId || null,
       ],
@@ -2390,6 +2442,13 @@ startxref
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
     const effectiveStudentId = await this.resolveStudentId(tenantSlug, userIdOrStudentId);
 
+    // CRITICAL: If a specific student was requested (e.g. from student detail modal)
+    // but the student does not exist or has no submissions, return empty list!
+    // Never fallback to an empty WHERE clause that returns all other students' work!
+    if (userIdOrStudentId && !effectiveStudentId) {
+      return [];
+    }
+
     const whereClause = effectiveStudentId
       ? `WHERE (s.student_id::text = $1::text OR s.student_id::text = $2::text)`
       : ``;
@@ -2400,7 +2459,7 @@ startxref
     return this.tenantSchemaService.queryInTenant(
       tenantSlug,
       `SELECT s.*, t.title AS topic_title, t.description AS topic_description, t.max_marks,
-              t.submission_deadline,
+              t.submission_deadline, t.semester_id, t.course_id, t.batch_id,
               c.name AS category_name, c.code AS category_code,
               f.name AS faculty_name,
               COALESCE(e.marks_obtained, s.marks_awarded::numeric) AS marks_obtained,

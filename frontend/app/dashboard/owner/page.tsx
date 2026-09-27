@@ -463,25 +463,37 @@ function OwnerDashboardContent() {
       clearTimeout(autoSaveTimerRef.current);
     }
 
+    const targetFirm = selectedFirmId;
+    const targetRole = String(selectedRole || 'STUDENT').toUpperCase().trim();
+    const sanitizedKeys = Array.from(
+      new Set(
+        (newKeys || [])
+          .filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+          .map((k) => k.trim())
+      )
+    );
+
     autoSaveTimerRef.current = setTimeout(async () => {
       try {
-        await fetch(`/api/firms/${selectedFirmId}/role-permissions`, {
+        const payload = {
+          role: targetRole,
+          menu_keys: sanitizedKeys,
+        };
+
+        const res = await fetch(`/api/firms/${targetFirm}/role-permissions`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            role: selectedRole,
-            menu_keys: newKeys,
-          }),
+          body: JSON.stringify(payload),
         });
 
-        if (typeof window !== 'undefined') {
+        if (res.ok && typeof window !== 'undefined') {
           localStorage.setItem('permissions_updated_at', Date.now().toString());
           window.dispatchEvent(new CustomEvent('permissionsUpdated'));
         }
       } catch (e) {
         console.error('Auto-save permissions error:', e);
       }
-    }, 350);
+    }, 600);
   };
 
   const getTabBadge = (route?: string, key?: string) => {
@@ -512,7 +524,16 @@ function OwnerDashboardContent() {
   };
 
   const handleSaveMenuRights = async () => {
-    if (!selectedFirmId) return;
+    if (!selectedFirmId) {
+      alert('Please select a firm first.');
+      return;
+    }
+    // Cancel pending auto-save debounce to avoid concurrent update race condition
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
     if (enabledKeys.length === 0) {
       const confirmZero = window.confirm(
         `⚠️ WARNING: You currently have 0 modules selected for ${selectedRole}.\n\nSaving this will hide all navigation menus in the sidebar for all ${selectedRole} users in this institution.\n\nAre you sure you want to save with 0 modules?`
@@ -523,16 +544,51 @@ function OwnerDashboardContent() {
     setRightsSaveSuccess('');
 
     try {
-      const res = await fetch(`/api/firms/${selectedFirmId}/role-permissions`, {
+      const sanitizedKeys = Array.from(
+        new Set(
+          (enabledKeys || [])
+            .filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+            .map((k) => k.trim())
+        )
+      );
+
+      const targetRole = String(selectedRole || 'STUDENT').toUpperCase().trim();
+      const payload = {
+        role: targetRole,
+        menu_keys: sanitizedKeys,
+      };
+
+      let res = await fetch(`/api/firms/${selectedFirmId}/role-permissions`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: selectedRole,
-          menu_keys: enabledKeys,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error('Failed to update permissions');
+      // Resilient fallback to direct API URL if Next.js proxy rewrite returned an error
+      if (!res.ok && typeof window !== 'undefined') {
+        const backendBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api/v1';
+        try {
+          const directRes = await fetch(`${backendBase}/firms/${selectedFirmId}/role-permissions`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (directRes.ok) {
+            res = directRes;
+          }
+        } catch {
+          // ignore fallback failure and handle original res
+        }
+      }
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        const detailedMsg =
+          errJson.message ||
+          (Array.isArray(errJson.errors) ? errJson.errors.join(', ') : null) ||
+          `HTTP ${res.status}: Failed to update permissions`;
+        throw new Error(detailedMsg);
+      }
 
       // Instantly notify and sync all active tabs/windows
       if (typeof window !== 'undefined') {
@@ -950,6 +1006,12 @@ function OwnerDashboardContent() {
   const trialFirms = firms.filter((f) => f.status === 'TRIAL').length;
   const expiredFirms = firms.filter((f) => f.status === 'EXPIRED').length;
 
+  const isMedicalMenu = (m: { menu_key: string; route_path?: string; applicable_firm_mode?: string }) => {
+    const k = (m.menu_key || '').toLowerCase();
+    const r = (m.route_path || '').toLowerCase();
+    return m.applicable_firm_mode === 'MED' || k.includes('medical') || r.includes('medical') || (k.includes('logbook') && k.includes('med'));
+  };
+
   const currentRoleMenus = (() => {
     const matches = menuRegistry.filter((m) => {
       // Internal horizontal tabs should not appear as separate top-level module cards
@@ -957,7 +1019,12 @@ function OwnerDashboardContent() {
       if (ALL_SUB_TAB_KEYS.has(m.menu_key)) return false;
 
       const roleMatches = m.role === selectedRole;
+      const isMed = isMedicalMenu(m);
+
+      // Superadmin governance: Medical Logbook & clinical modules are ALWAYS visible and governable!
+      // For non-medical modules, filter based on firm_mode if selected.
       const modeMatches =
+        isMed ||
         !selectedFirm ||
         m.applicable_firm_mode === 'BOTH' ||
         m.applicable_firm_mode === selectedFirm.firm_mode;
@@ -987,6 +1054,9 @@ function OwnerDashboardContent() {
       return true;
     });
   })();
+
+  const academicRoleMenus = currentRoleMenus.filter((m) => !isMedicalMenu(m));
+  const medicalRoleMenus = currentRoleMenus.filter((m) => isMedicalMenu(m));
 
   return (
     <div className="flex min-h-screen bg-[#F6F8FC]">
@@ -1959,7 +2029,13 @@ function OwnerDashboardContent() {
                   <label className="block text-xs font-bold text-[#1B1E28] mb-1.5">Select Firm</label>
                   <select
                     value={selectedFirmId}
-                    onChange={(e) => setSelectedFirmId(e.target.value)}
+                    onChange={(e) => {
+                      if (autoSaveTimerRef.current) {
+                        clearTimeout(autoSaveTimerRef.current);
+                        autoSaveTimerRef.current = null;
+                      }
+                      setSelectedFirmId(e.target.value);
+                    }}
                     className="w-full px-3 py-2 bg-white border border-[#E7EAF3] rounded-xl text-xs font-bold text-[#1B1E28]"
                   >
                     <option value="">Select Firm...</option>
@@ -1978,7 +2054,13 @@ function OwnerDashboardContent() {
                       <button
                         key={r}
                         type="button"
-                        onClick={() => setSelectedRole(r)}
+                        onClick={() => {
+                          if (autoSaveTimerRef.current) {
+                            clearTimeout(autoSaveTimerRef.current);
+                            autoSaveTimerRef.current = null;
+                          }
+                          setSelectedRole(r);
+                        }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                           selectedRole === r
                             ? 'bg-[#5B4BFF] text-white shadow-sm'
@@ -2008,7 +2090,7 @@ function OwnerDashboardContent() {
                 <div className="font-bold text-[#1B1E28] flex items-center gap-2">
                   <span>Available Modules for {selectedRole} ({currentRoleMenus.length})</span>
                   <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-[#5B4BFF] font-black text-[10px] border border-indigo-200">
-                    Enabled: {enabledKeys.length}
+                    Total Enabled: {enabledKeys.length}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2048,7 +2130,7 @@ function OwnerDashboardContent() {
                 </div>
               </div>
 
-              {/* Menus Grid */}
+              {/* Menus Grid / Sections */}
               {rightsLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {[...Array(6)].map((_, i) => (
@@ -2070,151 +2152,304 @@ function OwnerDashboardContent() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {currentRoleMenus.map((item) => {
-                    const norm = item.menu_key.replace(/[\/\-\.]+/g, '_');
-                    const subTabs = MODULE_SUB_TABS[item.menu_key] || [];
-                    const hasSubTabs = subTabs.length > 0;
-                    const subTabKeys = subTabs.map((t) => t.key);
+                <div className="space-y-8">
+                  {/* Card rendering function */}
+                  {(() => {
+                    const renderCard = (item: any, isMed: boolean) => {
+                      const norm = item.menu_key.replace(/[\/\-\.]+/g, '_');
+                      const subTabs = MODULE_SUB_TABS[item.menu_key] || [];
+                      const hasSubTabs = subTabs.length > 0;
+                      const subTabKeys = subTabs.map((t) => t.key);
 
-                    const isChecked =
-                      enabledKeys.includes(item.menu_key) ||
-                      enabledKeys.some((k) => k.replace(/[\/\-\.]+/g, '_') === norm);
+                      const isChecked =
+                        enabledKeys.includes(item.menu_key) ||
+                        enabledKeys.some((k: string) => k.replace(/[\/\-\.]+/g, '_') === norm);
 
-                    const activeSubTabCount = subTabs.filter((t) => enabledKeys.includes(t.key)).length;
+                      const activeSubTabCount = subTabs.filter((t) => enabledKeys.includes(t.key)).length;
+
+                      return (
+                        <div
+                          key={item.id || item.menu_key}
+                          className={`p-4 rounded-2xl border transition-all ${
+                            isChecked
+                              ? isMed
+                                ? 'bg-teal-50/60 border-teal-300 text-[#1B1E28] shadow-xs'
+                                : 'bg-indigo-50/40 border-indigo-200 text-[#1B1E28] shadow-xs'
+                              : 'bg-white border-[#E7EAF3] text-slate-500 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              id={`module_${item.menu_key}`}
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                let nextKeys: string[];
+                                if (checked) {
+                                  nextKeys = Array.from(new Set(enabledKeys.concat([item.menu_key, norm, ...subTabKeys])));
+                                } else {
+                                  nextKeys = enabledKeys.filter(
+                                    (k) =>
+                                      k !== item.menu_key &&
+                                      k.replace(/[\/\-\.]+/g, '_') !== norm &&
+                                      !subTabKeys.includes(k)
+                                  );
+                                }
+                                setEnabledKeys(nextKeys);
+                                triggerAutoSavePermissions(nextKeys);
+                              }}
+                              className={`w-4 h-4 mt-0.5 rounded cursor-pointer ${
+                                isMed
+                                  ? 'text-teal-600 focus:ring-teal-500 border-teal-300'
+                                  : 'text-[#5B4BFF] focus:ring-[#5B4BFF] border-slate-300'
+                              }`}
+                            />
+                            <label htmlFor={`module_${item.menu_key}`} className="min-w-0 flex-1 cursor-pointer select-none">
+                              <div className="flex items-center justify-between gap-1 flex-wrap">
+                                <div className="text-xs font-black truncate text-[#1B1E28] flex items-center gap-1.5">
+                                  {isMed && <span>🏥</span>}
+                                  <span>{item.menu_label}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {hasSubTabs && (
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-orange-100 text-[#F36C21] border border-orange-200 flex items-center gap-1">
+                                      <span>📑</span>
+                                      <span>{subTabs.length} Horizontal Tabs</span>
+                                    </span>
+                                  )}
+                                  {getTabBadge(item.route_path, item.menu_key)}
+                                  {isMed ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-teal-100 text-teal-800 border border-teal-300">
+                                      CLINICAL / MEDICAL
+                                    </span>
+                                  ) : (
+                                    item.applicable_firm_mode && item.applicable_firm_mode !== 'BOTH' && (
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200">
+                                        {item.applicable_firm_mode}
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-[10px] font-mono text-[#5B4BFF] truncate mt-0.5">{item.route_path}</div>
+                              <div className="text-[9px] font-mono text-slate-400 truncate">Key: {item.menu_key}</div>
+                            </label>
+                          </div>
+
+                          {/* Internal Sub-Tabs Checklist */}
+                          {hasSubTabs && (
+                            <div className="mt-3 pt-3 border-t border-indigo-100/70 dark:border-slate-800 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                                    Tabs Permission Control:
+                                  </span>
+                                  <span className="px-1.5 py-0.2 rounded-md bg-indigo-50 dark:bg-slate-800 text-[9px] font-black text-[#5B4BFF] border border-indigo-100">
+                                    {activeSubTabCount} / {subTabs.length} Active
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const next = Array.from(new Set([...enabledKeys, item.menu_key, norm, ...subTabKeys]));
+                                      setEnabledKeys(next);
+                                      triggerAutoSavePermissions(next);
+                                    }}
+                                    className="text-[10px] font-bold text-[#5B4BFF] hover:underline"
+                                  >
+                                    Select All
+                                  </button>
+                                  <span className="text-slate-300">•</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const setKeys = new Set(subTabKeys);
+                                      const next = enabledKeys.filter((k) => !setKeys.has(k));
+                                      setEnabledKeys(next);
+                                      triggerAutoSavePermissions(next);
+                                    }}
+                                    className="text-[10px] font-bold text-rose-500 hover:underline"
+                                  >
+                                    Clear All
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 bg-slate-50/80 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                                {subTabs.map((tab) => {
+                                  const isTabChecked = enabledKeys.includes(tab.key);
+                                  return (
+                                    <label
+                                      key={tab.key}
+                                      className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
+                                        isTabChecked
+                                          ? isMed
+                                            ? 'bg-white border-teal-300 text-teal-900 shadow-xs font-semibold'
+                                            : 'bg-white border-indigo-200 text-slate-900 shadow-xs font-semibold'
+                                          : 'bg-transparent border-transparent text-slate-400 hover:text-slate-600 hover:bg-white/60'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isTabChecked}
+                                        onChange={(e) => {
+                                          let next: string[];
+                                          if (e.target.checked) {
+                                            next = Array.from(new Set([...enabledKeys, item.menu_key, norm, tab.key]));
+                                          } else {
+                                            next = enabledKeys.filter((k) => k !== tab.key);
+                                          }
+                                          setEnabledKeys(next);
+                                          triggerAutoSavePermissions(next);
+                                        }}
+                                        className={`w-3.5 h-3.5 rounded ${
+                                          isMed ? 'text-teal-600 focus:ring-teal-500 border-teal-300' : 'text-[#F36C21] focus:ring-[#F36C21] border-slate-300'
+                                        }`}
+                                      />
+                                      <span className="truncate" title={tab.label}>{tab.label}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    };
 
                     return (
-                      <div
-                        key={item.id || item.menu_key}
-                        className={`p-4 rounded-2xl border transition-all ${
-                          isChecked
-                            ? 'bg-indigo-50/40 border-indigo-200 text-[#1B1E28] shadow-xs'
-                            : 'bg-white border-[#E7EAF3] text-slate-500 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            id={`module_${item.menu_key}`}
-                            checked={isChecked}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              let nextKeys: string[];
-                              if (checked) {
-                                nextKeys = Array.from(new Set(enabledKeys.concat([item.menu_key, norm, ...subTabKeys])));
-                              } else {
-                                nextKeys = enabledKeys.filter(
-                                  (k) =>
-                                    k !== item.menu_key &&
-                                    k.replace(/[\/\-\.]+/g, '_') !== norm &&
-                                    !subTabKeys.includes(k)
-                                );
-                              }
-                              setEnabledKeys(nextKeys);
-                              triggerAutoSavePermissions(nextKeys);
-                            }}
-                            className="w-4 h-4 mt-0.5 rounded text-[#5B4BFF] focus:ring-[#5B4BFF] border-slate-300 cursor-pointer"
-                          />
-                          <label htmlFor={`module_${item.menu_key}`} className="min-w-0 flex-1 cursor-pointer select-none">
-                            <div className="flex items-center justify-between gap-1 flex-wrap">
-                              <div className="text-xs font-black truncate text-[#1B1E28]">{item.menu_label}</div>
-                              <div className="flex items-center gap-1">
-                                {hasSubTabs && (
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-orange-100 text-[#F36C21] border border-orange-200 flex items-center gap-1">
-                                    <span>📑</span>
-                                    <span>{subTabs.length} Horizontal Tabs</span>
-                                  </span>
-                                )}
-                                {getTabBadge(item.route_path, item.menu_key)}
-                                {item.applicable_firm_mode && item.applicable_firm_mode !== 'BOTH' && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200">
-                                    {item.applicable_firm_mode}
-                                  </span>
-                                )}
-                              </div>
+                      <>
+                        {/* SECTION 1: CORE ACADEMIC & CAMPUS GOVERNANCE MODULES */}
+                        <div>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs pb-3 gap-2">
+                            <div className="font-bold text-[#1B1E28] flex items-center gap-2">
+                              <span className="text-sm font-black">🏛️ Core Academic & Campus Governance Modules</span>
+                              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-[#5B4BFF] font-black text-[10px] border border-indigo-200">
+                                Available: {academicRoleMenus.length}
+                              </span>
                             </div>
-                            <div className="text-[10px] font-mono text-[#5B4BFF] truncate mt-0.5">{item.route_path}</div>
-                            <div className="text-[9px] font-mono text-slate-400 truncate">Key: {item.menu_key}</div>
-                          </label>
-                        </div>
-
-                        {/* Internal Sub-Tabs Checklist */}
-                        {hasSubTabs && (
-                          <div className="mt-3 pt-3 border-t border-indigo-100/70 dark:border-slate-800 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                                  Tabs Permission Control:
-                                </span>
-                                <span className="px-1.5 py-0.2 rounded-md bg-indigo-50 dark:bg-slate-800 text-[9px] font-black text-[#5B4BFF] border border-indigo-100">
-                                  {activeSubTabCount} / {subTabs.length} Active
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const next = Array.from(new Set([...enabledKeys, item.menu_key, norm, ...subTabKeys]));
-                                    setEnabledKeys(next);
-                                    triggerAutoSavePermissions(next);
-                                  }}
-                                  className="text-[10px] font-bold text-[#5B4BFF] hover:underline"
-                                >
-                                  Select All
-                                </button>
-                                <span className="text-slate-300">•</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const setKeys = new Set(subTabKeys);
-                                    const next = enabledKeys.filter((k) => !setKeys.has(k));
-                                    setEnabledKeys(next);
-                                    triggerAutoSavePermissions(next);
-                                  }}
-                                  className="text-[10px] font-bold text-rose-500 hover:underline"
-                                >
-                                  Clear All
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 bg-slate-50/80 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                              {subTabs.map((tab) => {
-                                const isTabChecked = enabledKeys.includes(tab.key);
-                                return (
-                                  <label
-                                    key={tab.key}
-                                    className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
-                                      isTabChecked
-                                        ? 'bg-white dark:bg-slate-800 border-indigo-200 dark:border-indigo-800 text-slate-900 dark:text-white shadow-xs font-semibold'
-                                        : 'bg-transparent border-transparent text-slate-400 hover:text-slate-600 hover:bg-white/60'
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isTabChecked}
-                                      onChange={(e) => {
-                                        let next: string[];
-                                        if (e.target.checked) {
-                                          next = Array.from(new Set([...enabledKeys, item.menu_key, norm, tab.key]));
-                                        } else {
-                                          next = enabledKeys.filter((k) => k !== tab.key);
-                                        }
-                                        setEnabledKeys(next);
-                                        triggerAutoSavePermissions(next);
-                                      }}
-                                      className="w-3.5 h-3.5 rounded text-[#F36C21] focus:ring-[#F36C21] border-slate-300"
-                                    />
-                                    <span className="truncate" title={tab.label}>{tab.label}</span>
-                                  </label>
-                                );
-                              })}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allKeys = academicRoleMenus.flatMap((m) => {
+                                    const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                                    return [m.menu_key, ...subTabs.map((t) => t.key)];
+                                  });
+                                  const combined = Array.from(new Set([...enabledKeys, ...allKeys]));
+                                  setEnabledKeys(combined);
+                                  triggerAutoSavePermissions(combined);
+                                }}
+                                className="text-xs font-black text-[#5B4BFF] hover:underline"
+                              >
+                                Select All Academic
+                              </button>
+                              <span>•</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const academicKeys = new Set(
+                                    academicRoleMenus.flatMap((m) => {
+                                      const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                                      return [m.menu_key, ...subTabs.map((t) => t.key)];
+                                    })
+                                  );
+                                  const remaining = enabledKeys.filter((k) => !academicKeys.has(k));
+                                  setEnabledKeys(remaining);
+                                  triggerAutoSavePermissions(remaining);
+                                }}
+                                className="text-xs font-black text-rose-500 hover:underline"
+                              >
+                                Deselect All Academic
+                              </button>
                             </div>
                           </div>
-                        )}
-                      </div>
+
+                          {academicRoleMenus.length === 0 ? (
+                            <div className="p-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+                              <p className="text-xs font-bold text-[#4E5969]">No academic modules found matching criteria.</p>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {academicRoleMenus.map((item) => renderCard(item, false))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* SECTION 2: SEPARATED MEDICAL & CLINICAL MODULES (SEPARATED FOR EASY CHECK/UNCHECK) */}
+                        <div className="mt-8 rounded-2xl border-2 border-teal-200 bg-gradient-to-br from-teal-50/50 via-white to-emerald-50/30 p-5 shadow-xs">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-teal-100 gap-3">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-black text-teal-900 flex items-center gap-2">
+                                  <span>🏥</span> Medical University &amp; Clinical Modules (Separated Section)
+                                </span>
+                                <span className="px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-black border border-teal-300">
+                                  Dedicated Medical Governance
+                                </span>
+                              </div>
+                              <p className="text-xs text-teal-700 font-medium mt-1">
+                                Specialized clinical modules including <strong>Medical Logbook</strong> (1. Data Directory, 2. UG LogBook, 3. PG LogBook) and Medical Schedule. Check mark here to grant medical logbook rights, or uncheck to hide from menus.
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="px-2 py-0.5 rounded-full bg-white text-teal-700 font-black text-[10px] border border-teal-200 shadow-2xs">
+                                {medicalRoleMenus.filter((m) => enabledKeys.includes(m.menu_key)).length} / {medicalRoleMenus.length} Active
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allMedKeys = medicalRoleMenus.flatMap((m) => {
+                                    const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                                    return [m.menu_key, ...subTabs.map((t) => t.key)];
+                                  });
+                                  const combined = Array.from(new Set([...enabledKeys, ...allMedKeys]));
+                                  setEnabledKeys(combined);
+                                  triggerAutoSavePermissions(combined);
+                                }}
+                                className="text-xs font-black text-teal-700 hover:underline"
+                              >
+                                Select All Medical
+                              </button>
+                              <span className="text-teal-300">•</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const medKeys = new Set(
+                                    medicalRoleMenus.flatMap((m) => {
+                                      const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                                      return [m.menu_key, ...subTabs.map((t) => t.key)];
+                                    })
+                                  );
+                                  const remaining = enabledKeys.filter((k) => !medKeys.has(k));
+                                  setEnabledKeys(remaining);
+                                  triggerAutoSavePermissions(remaining);
+                                }}
+                                className="text-xs font-black text-rose-500 hover:underline"
+                              >
+                                Deselect All Medical
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            {medicalRoleMenus.length === 0 ? (
+                              <div className="p-6 text-center bg-white/70 rounded-xl border border-dashed border-teal-300">
+                                <p className="text-xs font-bold text-teal-800">No medical modules registered for role {selectedRole}.</p>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {medicalRoleMenus.map((item) => renderCard(item, true))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
                     );
-                  })}
+                  })()}
                 </div>
               )}
             </div>

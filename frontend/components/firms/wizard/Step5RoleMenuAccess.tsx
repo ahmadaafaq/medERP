@@ -50,6 +50,11 @@ export default function Step5RoleMenuAccess({
   const currentRole = currentRoleObj.key;
   const selectedKeys = rolePermissions[currentRole] || [];
 
+  const isMedItem = (m: MenuItem) =>
+    m.applicable_firm_mode === 'MED' ||
+    m.menu_key.toLowerCase().includes('medical') ||
+    m.route_path.toLowerCase().includes('medical');
+
   useEffect(() => {
     fetchMenusForRole(currentRole);
   }, [currentRole, firmMode]);
@@ -57,7 +62,7 @@ export default function Step5RoleMenuAccess({
   const fetchMenusForRole = async (role: RoleType) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/menu-registry?role=${role}&firm_mode=${firmMode}`);
+      const res = await fetch(`/api/menu-registry?role=${role}`);
       if (res.ok) {
         const rawJson = await res.json();
         const data: MenuItem[] = Array.isArray(rawJson)
@@ -68,10 +73,12 @@ export default function Step5RoleMenuAccess({
         
         if (data.length > 0) {
           setMenuList(data);
-          // If nothing is selected yet for this role, default select all applicable menus
+          // If nothing is selected yet for this role, default select based on firmMode
           if (!rolePermissions[role] || rolePermissions[role].length === 0) {
-            const allKeys = data.map((m) => m.menu_key);
-            updateRolePermissions(role, allKeys);
+            const defaultKeys = data
+              .filter((m) => firmMode === 'MED' || !isMedItem(m))
+              .map((m) => m.menu_key);
+            updateRolePermissions(role, defaultKeys);
           }
         } else {
           generateFallbackMenus(role);
@@ -250,41 +257,95 @@ export default function Step5RoleMenuAccess({
         </div>
       ) : safeMenuList.length === 0 ? (
         <div className="py-12 text-center text-[#4E5969] text-sm bg-[#F6F8FC] rounded-2xl border border-dashed border-[#E7EAF3]">
-          No menu items registered for this role and mode.
+          No menu items registered for this role.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
-          {safeMenuList.map((item) => {
-            const isChecked = selectedKeys.includes(item.menu_key);
-            return (
-              <div
-                key={item.menu_key}
-                onClick={() => handleToggleKey(item.menu_key)}
-                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 select-none ${
-                  isChecked
-                    ? 'border-[#5B4BFF] bg-[#5B4BFF]/5 ring-2 ring-[#5B4BFF]/10'
-                    : 'border-[#E7EAF3] bg-white hover:border-[#5B4BFF]/40'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={() => {}}
-                  className="w-4 h-4 mt-0.5 rounded text-[#5B4BFF] focus:ring-[#5B4BFF]"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-sm text-[#1B1E28]">{item.menu_label}</p>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#E7EAF3] text-[#4E5969]">
-                      {item.applicable_firm_mode}
-                    </span>
+        <div className="space-y-6 mb-8">
+          {/* Card Component */}
+          {(() => {
+            const academicMenus = safeMenuList.filter((m) => !isMedItem(m));
+            const medicalMenus = safeMenuList.filter((m) => isMedItem(m));
+
+            const renderItem = (item: MenuItem, isMed: boolean) => {
+              const isChecked = selectedKeys.includes(item.menu_key);
+              return (
+                <div
+                  key={item.menu_key}
+                  onClick={() => handleToggleKey(item.menu_key)}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 select-none ${
+                    isChecked
+                      ? isMed
+                        ? 'border-teal-500 bg-teal-50/50 ring-2 ring-teal-500/10'
+                        : 'border-[#5B4BFF] bg-[#5B4BFF]/5 ring-2 ring-[#5B4BFF]/10'
+                      : 'border-[#E7EAF3] bg-white hover:border-[#5B4BFF]/40'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => {}}
+                    className={`w-4 h-4 mt-0.5 rounded ${
+                      isMed ? 'text-teal-600 focus:ring-teal-500' : 'text-[#5B4BFF] focus:ring-[#5B4BFF]'
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="font-bold text-sm text-[#1B1E28] flex items-center gap-1.5">
+                        {isMed && <span>🏥</span>}
+                        <span>{item.menu_label}</span>
+                      </p>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-black ${
+                        isMed ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'bg-[#E7EAF3] text-[#4E5969]'
+                      }`}>
+                        {isMed ? 'MED/CLINICAL' : item.applicable_firm_mode}
+                      </span>
+                    </div>
+                    <p className="text-xs font-mono text-[#4E5969] truncate mt-0.5">{item.route_path}</p>
+                    <p className="text-[11px] text-[#4E5969]/80 font-mono mt-0.5">{item.menu_key}</p>
                   </div>
-                  <p className="text-xs font-mono text-[#4E5969] truncate mt-0.5">{item.route_path}</p>
-                  <p className="text-[11px] text-[#4E5969]/80 font-mono mt-0.5">{item.menu_key}</p>
                 </div>
-              </div>
+              );
+            };
+
+            return (
+              <>
+                {/* 1. Core Academic Modules */}
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-[#1B1E28] mb-3 flex items-center gap-2">
+                    <span>🏛️ Core Academic & Campus Modules</span>
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px]">
+                      {academicMenus.length} Modules
+                    </span>
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {academicMenus.map((item) => renderItem(item, false))}
+                  </div>
+                </div>
+
+                {/* 2. Separated Medical & Clinical Section */}
+                <div className="pt-5 border-t border-teal-100 bg-teal-50/30 p-4 rounded-2xl border border-teal-200">
+                  <div className="mb-3">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-teal-900 flex items-center gap-2">
+                      <span>🏥 Medical University &amp; Clinical Modules (Separated Section)</span>
+                      <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px]">
+                        {medicalMenus.length} Modules
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-teal-700 mt-0.5">
+                      Includes <strong>Medical Logbook</strong> and clinical postings. Check to enable clinical logbooks for this firm.
+                    </p>
+                  </div>
+                  {medicalMenus.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No medical modules for this role.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {medicalMenus.map((item) => renderItem(item, true))}
+                    </div>
+                  )}
+                </div>
+              </>
             );
-          })}
+          })()}
         </div>
       )}
 

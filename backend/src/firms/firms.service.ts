@@ -569,21 +569,42 @@ export class FirmsService {
 
     const uniqueKeys = Array.from(new Set((dto.menu_keys || []).map((k) => k.trim()).filter(Boolean)));
 
-    for (const fid of firmIdsToUpdate) {
-      // Delete existing permissions for this firm + role
-      await this.dataSource.query(
-        `DELETE FROM public.firm_role_permissions WHERE firm_id = $1 AND role = $2`,
-        [fid, dto.role],
-      );
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-      for (const key of uniqueKeys) {
-        await this.dataSource.query(
-          `INSERT INTO public.firm_role_permissions (firm_id, role, menu_key, is_enabled, created_at, updated_at)
-           VALUES ($1, $2, $3, true, NOW(), NOW())
-           ON CONFLICT (firm_id, role, menu_key) DO UPDATE SET is_enabled = EXCLUDED.is_enabled, updated_at = NOW()`,
-          [fid, dto.role, key],
+    try {
+      for (const fid of firmIdsToUpdate) {
+        // Delete existing permissions for this firm + role
+        await queryRunner.query(
+          `DELETE FROM public.firm_role_permissions WHERE firm_id = $1 AND role = $2`,
+          [fid, dto.role],
         );
+
+        if (uniqueKeys.length > 0) {
+          // Batch insert all keys in a single atomic query
+          const params: any[] = [fid, dto.role];
+          const rowClauses = uniqueKeys.map((key, idx) => {
+            params.push(key);
+            return `($1, $2, $${idx + 3}, true, NOW(), NOW())`;
+          });
+
+          await queryRunner.query(
+            `INSERT INTO public.firm_role_permissions (firm_id, role, menu_key, is_enabled, created_at, updated_at)
+             VALUES ${rowClauses.join(', ')}
+             ON CONFLICT (firm_id, role, menu_key) DO UPDATE SET is_enabled = EXCLUDED.is_enabled, updated_at = NOW()`,
+            params,
+          );
+        }
       }
+
+      await queryRunner.commitTransaction();
+    } catch (err: any) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Failed to update firm permissions for ${firmIdOrSlug} (${dto.role}): ${err.message}`, err.stack);
+      throw err;
+    } finally {
+      await queryRunner.release();
     }
 
     return {

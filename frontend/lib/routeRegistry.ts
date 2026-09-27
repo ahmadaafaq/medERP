@@ -36,7 +36,6 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/admin/attendance-mark': [
     { role: 'ADMIN', menuKey: 'admin_attendance_mark', label: 'Attendance Mark' },
-    { role: 'ADMIN', menuKey: 'admin_attendance_master', label: 'Attendance Mark' },
   ],
   '/dashboard/admin/attendance-reports': [
     { role: 'ADMIN', menuKey: 'admin_reports_attendance', parentKey: 'admin_reports', label: 'Attendance Report' },
@@ -137,7 +136,6 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/clerk/attendance-mark': [
     { role: 'CLERK', menuKey: 'clerk_attendance_mark', label: 'Attendance Mark' },
-    { role: 'CLERK', menuKey: 'clerk_attendance', label: 'Attendance Mark' },
   ],
   '/dashboard/clerk/attendance-biometric': [
     { role: 'CLERK', menuKey: 'clerk_biometric', label: 'Attendance — Bio-Metric/CCTV' },
@@ -168,8 +166,6 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/faculty/attendance-mark': [
     { role: 'FACULTY', menuKey: 'faculty_attendance_mark', label: 'Attendance Mark' },
-    { role: 'FACULTY', menuKey: 'faculty_attendance', label: 'Attendance Mark' },
-    { role: 'FACULTY', menuKey: 'faculty_schedule', label: 'Attendance Mark' },
   ],
   '/dashboard/faculty/attendance-biometric': [
     { role: 'FACULTY', menuKey: 'faculty_biometric', label: 'Attendance — Bio-Metric/CCTV' },

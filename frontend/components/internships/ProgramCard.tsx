@@ -50,6 +50,13 @@ export interface InternshipProgram {
     cert_external_url?: string;
     external_cert_url?: string;
     certificate_source?: string;
+    // Certificate generation fields (populated when status = 'completed')
+    student_name?: string;
+    student_reg_no?: string;
+    issued_date?: string;
+    approved_by?: string;
+    course_cd?: string;
+    batch_cd?: string;
   };
 }
 

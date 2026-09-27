@@ -674,10 +674,11 @@ export default function StudentDashboard() {
                 </Link>
               </div>
 
-              {/* Seminar Topic Cards Row */}
+              {/* Seminar / Tutorial Topic Cards Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {assignedSeminarTopics.slice(0, 3).map((top: any) => {
-                  const isSem = (top.category_code || '').toUpperCase().includes('SEMINAR') || !((top.category_code || '').toUpperCase().includes('TUTORIAL'));
+                  const isTut = (top.category_code || '').toUpperCase().includes('TUTORIAL') || (top.category_name || '').toLowerCase().includes('tutorial') || (top.title || '').toLowerCase().includes('tutorial');
+                  const isSem = !isTut;
                   return (
                     <div
                       key={top.id}
@@ -713,7 +714,7 @@ export default function StudentDashboard() {
                       </div>
 
                       <Link
-                        href="/dashboard/student/logbook?tab=SEMINARS"
+                        href={isTut ? "/dashboard/student/logbook?tab=TUTORIALS" : "/dashboard/student/logbook?tab=SEMINARS"}
                         className="w-full py-2 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] hover:from-[#4737e6] hover:to-[#6554e7] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md transition-all text-center"
                       >
                         <span>Submit Deliverable</span>

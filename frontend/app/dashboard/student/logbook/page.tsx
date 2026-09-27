@@ -234,12 +234,18 @@ export default function StudentLogbookPage() {
         await new Promise(r => setTimeout(r, interval));
         elapsed += interval;
       }
-      // Check URL parameters for tab selection (e.g. ?tab=SEMINARS)
+      // Check URL parameters for tab selection (e.g. ?tab=SEMINARS or ?tab=TUTORIALS)
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         const tabParam = params.get('tab');
         if (tabParam && ['DASHBOARD', 'SEMINARS', 'TUTORIALS', 'MINI_PROJECT', 'WEEKLY_LOG', 'TECHNICAL_ACTIVITIES', 'REVIEWS', 'DOCUMENTS', 'FACULTY_REMARKS', 'FINAL_EVALUATION'].includes(tabParam.toUpperCase())) {
-          setActiveTab(tabParam.toUpperCase() as LogbookTabKey);
+          const t = tabParam.toUpperCase() as LogbookTabKey;
+          setActiveTab(t);
+          if (t === 'TUTORIALS') {
+            setTopicTypeFilter('TUTORIAL');
+          } else if (t === 'SEMINARS') {
+            setTopicTypeFilter('SEMINAR');
+          }
         }
       }
       fetchAllData();
@@ -716,15 +722,24 @@ export default function StudentLogbookPage() {
 
   const filteredTopics = useMemo(() => {
     return topics.filter((t) => {
+      const isTut = (t.category_code || '').toUpperCase().includes('TUTORIAL') || (t.category_name || '').toLowerCase().includes('tutorial') || (t.title || '').toLowerCase().includes('tutorial');
+      const isSem = (t.category_code || '').toUpperCase().includes('SEMINAR') || (!isTut && (t.category_name || '').toLowerCase().includes('seminar')) || (!isTut && !(t.category_code || '').toUpperCase().includes('TUTORIAL'));
+
+      if (activeTab === 'TUTORIALS' && topicTypeFilter === 'ALL') {
+        return isTut;
+      }
+      if (activeTab === 'SEMINARS' && topicTypeFilter === 'ALL') {
+        return isSem;
+      }
       if (topicTypeFilter === 'SEMINAR') {
-        return t.category_code === 'SEMINAR' || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'));
+        return isSem;
       }
       if (topicTypeFilter === 'TUTORIAL') {
-        return t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial');
+        return isTut;
       }
       return true;
     });
-  }, [topics, topicTypeFilter]);
+  }, [topics, topicTypeFilter, activeTab]);
 
   // Memoized computations for Dashboard Deliverables 2-Tab Component
   const dashboardTopicsStats = useMemo(() => {
@@ -825,11 +840,20 @@ export default function StudentLogbookPage() {
             {/* Navigation Tabs Bar */}
             <DigitalLogbookNavigation
               activeTab={activeTab}
-              onTabChange={setActiveTab}
+              onTabChange={(tab) => {
+                setActiveTab(tab);
+                if (tab === 'TUTORIALS') {
+                  setTopicTypeFilter('TUTORIAL');
+                } else if (tab === 'SEMINARS') {
+                  setTopicTypeFilter('SEMINAR');
+                } else {
+                  setTopicTypeFilter('ALL');
+                }
+              }}
               stats={{
                 weeklyCount: weeklyLogs.length,
-                seminarsCount: seminars.length,
-                tutorialsCount: tutorials.length,
+                seminarsCount: topics.filter(t => (t.category_code || '').toUpperCase() === 'SEMINAR' || (!((t.category_code || '').toUpperCase().includes('TUTORIAL')) && !t.title?.toLowerCase().includes('tutorial'))).length || seminars.length,
+                tutorialsCount: topics.filter(t => (t.category_code || '').toUpperCase() === 'TUTORIAL' || (t.category_name || '').toLowerCase().includes('tutorial') || t.title?.toLowerCase().includes('tutorial')).length || tutorials.length,
                 techCount: techActivities.length,
                 remarksCount: remarks.length,
               }}
@@ -2236,14 +2260,25 @@ export default function StudentLogbookPage() {
                   <div>
                     <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] dark:text-indigo-400 text-[11px] sm:text-xs font-bold mb-1.5 sm:mb-2">
                       <Sparkles className="w-3.5 h-3.5 text-[#F36C21]" />
-                      <span>Academic Portfolio Deliverable Submissions</span>
+                      <span>{activeTab === 'TUTORIALS' ? 'Unit Tutorial Problem Sheets & Exercises' : 'Academic Portfolio Deliverable Submissions'}</span>
                     </div>
                     <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                      <Presentation className="w-5 h-5 sm:w-6 sm:h-6 text-[#F36C21]" />
-                      <span>Seminar &amp; Tutorial Academic Portfolio</span>
+                      {activeTab === 'TUTORIALS' ? (
+                        <>
+                          <BookOpenCheck className="w-5 h-5 sm:w-6 sm:h-6 text-[#00C48C]" />
+                          <span>Unit Tutorials &amp; Problem Sheets</span>
+                        </>
+                      ) : (
+                        <>
+                          <Presentation className="w-5 h-5 sm:w-6 sm:h-6 text-[#F36C21]" />
+                          <span>Academic Seminars</span>
+                        </>
+                      )}
                     </h2>
                     <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">
-                      Access newly assigned technical topics, submit slide deck / solution deliverables, and track faculty progressive scoring.
+                      {activeTab === 'TUTORIALS'
+                        ? 'Access newly assigned unit tutorials and problem sheets, submit solution deliverables, and track faculty progressive scoring.'
+                        : 'Access newly assigned technical topics, submit slide deck deliverables, and track faculty progressive scoring.'}
                     </p>
                   </div>
 
@@ -2261,11 +2296,19 @@ export default function StudentLogbookPage() {
                     </button>
 
                     <button
-                      onClick={() => { setEditingSeminar(null); setIsSeminarModalOpen(true); }}
+                      onClick={() => {
+                        if (activeTab === 'TUTORIALS') {
+                          setEditingTutorial(null);
+                          setIsTutorialModalOpen(true);
+                        } else {
+                          setEditingSeminar(null);
+                          setIsSeminarModalOpen(true);
+                        }
+                      }}
                       className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#F36C21]" />
-                      <span className="truncate">Log External</span>
+                      <span className="truncate">{activeTab === 'TUTORIALS' ? 'Log Tutorial' : 'Log External'}</span>
                     </button>
                   </div>
                 </div>
@@ -2299,7 +2342,7 @@ export default function StudentLogbookPage() {
                 {/* Sub-Tabs Switcher Bar */}
                 <div className="bg-slate-100/90 dark:bg-slate-800/80 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 border border-slate-200/80 dark:border-slate-700">
                   <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-                    {/* Tab 1: Newly Topics */}
+                    {/* Tab 1: Topics */}
                     <button
                       type="button"
                       onClick={() => setSeminarSubTab('NEW_TOPICS')}
@@ -2309,15 +2352,21 @@ export default function StudentLogbookPage() {
                           : 'text-slate-600 dark:text-slate-300 hover:text-[#5B4BFF] hover:bg-white/60 dark:hover:bg-slate-700/60'
                       }`}
                     >
-                      <Presentation className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                      <span className="sm:hidden">1. Seminars</span>
-                      <span className="hidden sm:inline">1. Academic &amp; Technical Seminars</span>
+                      {activeTab === 'TUTORIALS' ? (
+                        <BookOpenCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      ) : (
+                        <Presentation className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      )}
+                      <span className="sm:hidden">{activeTab === 'TUTORIALS' ? '1. Tutorials' : '1. Seminars'}</span>
+                      <span className="hidden sm:inline">
+                        {activeTab === 'TUTORIALS' ? '1. Assigned Unit Tutorials' : '1. Academic & Technical Seminars'}
+                      </span>
                       <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold ${
                         seminarSubTab === 'NEW_TOPICS'
                           ? 'bg-white/20 text-white'
                           : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                       }`}>
-                        {topics.length}
+                        {filteredTopics.length}
                       </span>
                     </button>
 
@@ -2333,18 +2382,26 @@ export default function StudentLogbookPage() {
                     >
                       <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                       <span className="sm:hidden">2. Submissions</span>
-                      <span className="hidden sm:inline">2. Submitted Seminar Deliverables &amp; Faculty Scores</span>
+                      <span className="hidden sm:inline">
+                        {activeTab === 'TUTORIALS'
+                          ? '2. Submitted Tutorial Deliverables & Faculty Scores'
+                          : '2. Submitted Seminar Deliverables & Faculty Scores'}
+                      </span>
                       <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold ${
                         seminarSubTab === 'SUBMITTED_DELIVERABLES'
                           ? 'bg-white/20 text-white'
                           : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                       }`}>
-                        {mySubmissions.length}
+                        {activeTab === 'TUTORIALS'
+                          ? mySubmissions.filter(s => (s.category_code === 'TUTORIAL' || s.topic_title?.toLowerCase().includes('tutorial'))).length
+                          : activeTab === 'SEMINARS'
+                          ? mySubmissions.filter(s => (s.category_code === 'SEMINAR' || (!s.category_code?.includes('TUTORIAL') && !s.topic_title?.toLowerCase().includes('tutorial')))).length
+                          : mySubmissions.length}
                       </span>
                     </button>
                   </div>
 
-                  {/* Filter Pills for Tab 1 */}
+                  {/* Filter Pills for Tab 1 (only needed when activeTab is not already dedicated) */}
                   {seminarSubTab === 'NEW_TOPICS' && (
                     <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 sm:py-0 self-start sm:self-auto">
                       <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden md:inline">Filter:</span>
@@ -2368,7 +2425,7 @@ export default function StudentLogbookPage() {
                             : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                         }`}
                       >
-                        Seminars ({topics.filter(t => t.category_code === 'SEMINAR' || (!t.category_code?.includes('TUTORIAL') && !t.title?.toLowerCase().includes('tutorial'))).length})
+                        Seminars ({topics.filter(t => (t.category_code || '').toUpperCase() === 'SEMINAR' || (!((t.category_code || '').toUpperCase().includes('TUTORIAL')) && !t.title?.toLowerCase().includes('tutorial'))).length})
                       </button>
                       <button
                         type="button"
@@ -2379,14 +2436,14 @@ export default function StudentLogbookPage() {
                             : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                         }`}
                       >
-                        Tutorials ({topics.filter(t => t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('tutorial')).length})
+                        Tutorials ({topics.filter(t => (t.category_code || '').toUpperCase() === 'TUTORIAL' || (t.category_name || '').toLowerCase().includes('tutorial') || t.title?.toLowerCase().includes('tutorial')).length})
                       </button>
                     </div>
                   )}
                 </div>
 
                 {/* ========================================================================= */}
-                {/* 1. ACADEMIC & TECHNICAL SEMINARS (MODERN UI CARD: 1 ROW 4 CARDS) */}
+                {/* 1. TOPICS (MODERN UI CARD: 1 ROW 4 CARDS) */}
                 {/* ========================================================================= */}
                 {seminarSubTab === 'NEW_TOPICS' && (
                   <div className="space-y-3 sm:space-y-4">
@@ -2394,9 +2451,17 @@ export default function StudentLogbookPage() {
                       <div>
                         <h3 className="text-xs sm:text-sm font-black uppercase text-[#5B4BFF] tracking-wider flex items-center gap-1.5 sm:gap-2">
                           <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                          <span>Active Seminar &amp; Tutorial Topics ({filteredTopics.length})</span>
+                          <span>
+                            {activeTab === 'TUTORIALS'
+                              ? `Active Unit Tutorial Topics (${filteredTopics.length})`
+                              : `Active Seminar Topics (${filteredTopics.length})`}
+                          </span>
                         </h3>
-                        <p className="text-[11px] sm:text-xs text-slate-500">Every topic either seminar or tutorial displayed in modern stylish cards. Click below to submit deliverables.</p>
+                        <p className="text-[11px] sm:text-xs text-slate-500">
+                          {activeTab === 'TUTORIALS'
+                            ? 'Every assigned tutorial problem sheet displayed in modern cards. Click below to submit deliverables.'
+                            : 'Every seminar topic displayed in modern stylish cards. Click below to submit deliverables.'}
+                        </p>
                       </div>
                       <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full hidden sm:inline-block">
                         1 Row 4 Cards Layout
@@ -2406,8 +2471,14 @@ export default function StudentLogbookPage() {
                     {filteredTopics.length === 0 ? (
                       <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-8 sm:p-12 text-center shadow-soft border border-slate-200/80 dark:border-slate-800 space-y-3">
                         <BookOpenCheck className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto" />
-                        <h4 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">No Topics Found</h4>
-                        <p className="text-xs text-slate-500">There are currently no topics matching this category filter.</p>
+                        <h4 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">
+                          {activeTab === 'TUTORIALS' ? 'No Tutorial Topics Found' : 'No Topics Found'}
+                        </h4>
+                        <p className="text-xs text-slate-500">
+                          {activeTab === 'TUTORIALS'
+                            ? 'Your faculty guide has not assigned any tutorial topics for this cohort yet.'
+                            : 'There are currently no topics matching this category filter.'}
+                        </p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
@@ -2532,7 +2603,11 @@ export default function StudentLogbookPage() {
                       <div>
                         <h3 className="text-xs sm:text-sm font-black uppercase text-[#F36C21] tracking-wider flex items-center gap-1.5 sm:gap-2">
                           <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                          <span>Submitted Deliverables &amp; Continuous Faculty Scoring ({mySubmissions.length})</span>
+                          <span>
+                            {activeTab === 'TUTORIALS'
+                              ? `Submitted Tutorial Deliverables & Continuous Faculty Scoring (${mySubmissions.filter(s => (s.category_code === 'TUTORIAL' || s.topic_title?.toLowerCase().includes('tutorial'))).length})`
+                              : `Submitted Deliverables & Continuous Faculty Scoring (${mySubmissions.length})`}
+                          </span>
                         </h3>
                         <p className="text-[11px] sm:text-xs text-slate-500">Real-time faculty evaluation records, progressive score bars, and exam-grade marked PDF documents.</p>
                       </div>
@@ -2541,24 +2616,43 @@ export default function StudentLogbookPage() {
                       </span>
                     </div>
 
-                    {mySubmissions.length === 0 ? (
-                      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-8 sm:p-12 text-center shadow-soft border border-slate-200/80 dark:border-slate-800 space-y-3 sm:space-y-4">
-                        <Presentation className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto" />
-                        <h4 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">No Deliverables Submitted Yet</h4>
-                        <p className="text-xs text-slate-500 max-w-md mx-auto">
-                          You haven&apos;t submitted any seminar presentation slide decks or tutorial problem sheets yet. Select an assigned topic from Tab 1 to submit your deliverable.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => setSeminarSubTab('NEW_TOPICS')}
-                          className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold transition shadow-md shadow-[#5B4BFF]/25 cursor-pointer"
-                        >
-                          Browse Assigned Topics &amp; Submit
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                        {mySubmissions.map((sub) => {
+                    {(() => {
+                      const tabSubmissions = activeTab === 'TUTORIALS'
+                        ? mySubmissions.filter(s => (s.category_code === 'TUTORIAL' || s.topic_title?.toLowerCase().includes('tutorial')))
+                        : activeTab === 'SEMINARS'
+                        ? mySubmissions.filter(s => (s.category_code === 'SEMINAR' || (!s.category_code?.includes('TUTORIAL') && !s.topic_title?.toLowerCase().includes('tutorial'))))
+                        : mySubmissions;
+
+                      if (tabSubmissions.length === 0) {
+                        return (
+                          <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[22px] p-8 sm:p-12 text-center shadow-soft border border-slate-200/80 dark:border-slate-800 space-y-3 sm:space-y-4">
+                            {activeTab === 'TUTORIALS' ? (
+                              <BookOpenCheck className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto" />
+                            ) : (
+                              <Presentation className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto" />
+                            )}
+                            <h4 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">
+                              {activeTab === 'TUTORIALS' ? 'No Tutorial Deliverables Submitted Yet' : 'No Deliverables Submitted Yet'}
+                            </h4>
+                            <p className="text-xs text-slate-500 max-w-md mx-auto">
+                              {activeTab === 'TUTORIALS'
+                                ? "You haven't submitted any unit tutorial problem sheets yet. Select an assigned tutorial from Tab 1 to submit your deliverable."
+                                : "You haven't submitted any seminar presentation slide decks yet. Select an assigned topic from Tab 1 to submit your deliverable."}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setSeminarSubTab('NEW_TOPICS')}
+                              className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4338CA] text-white text-xs font-bold transition shadow-md shadow-[#5B4BFF]/25 cursor-pointer"
+                            >
+                              {activeTab === 'TUTORIALS' ? 'Browse Assigned Tutorials & Submit' : 'Browse Assigned Topics & Submit'}
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                          {tabSubmissions.map((sub) => {
                           const marks = Number(sub.marks_obtained ?? sub.marks_awarded ?? 0);
                           const maxMarks = Number(sub.max_marks || 20);
                           const pct = maxMarks > 0 ? Math.min(100, Math.max(0, Math.round((marks / maxMarks) * 100))) : 0;
@@ -2746,7 +2840,8 @@ export default function StudentLogbookPage() {
                           );
                         })}
                       </div>
-                    )}
+                    )
+                    })()} 
                   </div>
                 )}
               </div>

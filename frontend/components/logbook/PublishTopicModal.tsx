@@ -225,8 +225,17 @@ export default function PublishTopicModal({ isOpen, onClose, onSuccess }: Publis
       if (res.ok) {
         const json = await res.json();
         const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
+        const hasTutorial = list.some((c: any) => (c.code || '').toUpperCase().includes('TUTORIAL') || (c.name || '').toLowerCase().includes('tutorial'));
+        if (!hasTutorial) {
+          list.push({
+            id: 'TUTORIAL',
+            code: 'TUTORIAL',
+            name: 'Tutorial',
+            description: 'Unit Tutorials, Problem Sheets and Exercises',
+          });
+        }
         setCategories(list);
-        if (list.length > 0) setCategoryId(list[0].id);
+        if (list.length > 0 && !categoryId) setCategoryId(list[0].id);
       }
     } catch (e) {
       console.error('Failed to fetch categories:', e);
@@ -335,7 +344,11 @@ export default function PublishTopicModal({ isOpen, onClose, onSuccess }: Publis
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {(c.code || '').toUpperCase().includes('TUTORIAL') || (c.name || '').toLowerCase().includes('tutorial')
+                    ? '📘 Tutorial'
+                    : (c.code || '').toUpperCase().includes('SEMINAR') || (c.name || '').toLowerCase().includes('seminar')
+                    ? '🎓 Academic Seminar'
+                    : c.name}
                 </option>
               ))}
             </select>

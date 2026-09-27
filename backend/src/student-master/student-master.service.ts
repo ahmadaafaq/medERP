@@ -84,6 +84,7 @@ export class StudentMasterService {
         const params: any[] = [];
         let sql = `
           SELECT DISTINCT ON (s.id) s.id, s.name, s.rollno, s.registration_no, s.is_active, s.created_at, s.photo_url,
+                 s.bio, s.github_url, s.github_followers, s.linkedin_url, s.linkedin_connections,
                  sa.college_name,
                  COALESCE(sa.course_code, s.course_cd) AS course_code,
                  s.course_cd,
@@ -189,6 +190,7 @@ export class StudentMasterService {
           const fallbackParams: any[] = [];
           let fallbackSql = `
             SELECT DISTINCT ON (s.id) s.id, s.name, s.rollno, s.registration_no, s.is_active, s.created_at, s.photo_url,
+                   s.bio, s.github_url, s.github_followers, s.linkedin_url, s.linkedin_connections,
                    sa.college_name,
                    COALESCE(sa.course_code, s.course_cd) AS course_code,
                    sa.academic_session,
@@ -221,7 +223,7 @@ export class StudentMasterService {
       }
     }
 
-    allResults.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    allResults.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
     return allResults;
   }
 
@@ -367,6 +369,15 @@ export class StudentMasterService {
       // Step 6: Medical & Status
       vaccinationStatus: med.vaccination_status,
       admissionStatus: adm.status,
+      bio: student.bio || '',
+      githubUrl: student.github_url || '',
+      githubFollowers: student.github_followers || 0,
+      linkedinUrl: student.linkedin_url || '',
+      linkedinConnections: student.linkedin_connections || '',
+      github_url: student.github_url || '',
+      github_followers: student.github_followers || 0,
+      linkedin_url: student.linkedin_url || '',
+      linkedin_connections: student.linkedin_connections || '',
     };
   }
 

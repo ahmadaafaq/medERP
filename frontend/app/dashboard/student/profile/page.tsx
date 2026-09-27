@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import GithubReadmeCard from '../../../../components/GithubReadmeCard';
 import { resolveCourseTitle, resolveDepartmentTitle } from '../../../utils/courseResolver';
 import { 
   FolderGit2, 
@@ -83,6 +84,9 @@ export default function StudentProfilePage() {
 
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+
+  const courseLower = (profile?.course_name || '').toLowerCase();
+  const isBPharm = courseLower.includes('pharma') || courseLower.includes('b.pharm') || courseLower.includes('bpharm');
 
   useEffect(() => {
     fetchProfile();
@@ -243,7 +247,7 @@ export default function StudentProfilePage() {
           admission_status: p.admission_status || 'ACTIVE',
           college_name: meData.collegeName || meData.tenantName || (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution',
           bio: p.bio || meData.bio || 'Enrolled & Active Student.',
-          github_url: derivedGithubUrl || p.github_url || meData.github_url || '',
+          github_url: p.github_url || meData.github_url || derivedGithubUrl || '',
           github_followers: Number(p.github_followers ?? meData.github_followers) || 0,
           linkedin_url: p.linkedin_url || meData.linkedin_url || '',
           linkedin_connections: Number(p.linkedin_connections ?? meData.linkedin_connections) || 0,
@@ -288,34 +292,37 @@ export default function StudentProfilePage() {
       }
     }
 
+    const cachedUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+    const cachedProfile = cachedUser.profile || cachedUser;
+
     const fallbackData: StudentProfile = {
       id: identity.userId || identity.regNo || '',
-      name: identity.name || 'Student Profile',
-      registration_no: identity.regNo || '2025107990',
-      rollno: identity.rollno || '2500140500000',
-      photo_url: identity.photoUrl || (identity.regNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${identity.regNo}/${identity.regNo}.JPG` : ''),
-      cover_url: '/campus-cover.png',
+      name: identity.name || cachedProfile.name || 'Student Profile',
+      registration_no: identity.regNo || cachedProfile.registration_no || '2025107990',
+      rollno: identity.rollno || cachedProfile.rollno || '2500140500000',
+      photo_url: identity.photoUrl || cachedProfile.photo_url || (identity.regNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${identity.regNo}/${identity.regNo}.JPG` : ''),
+      cover_url: cachedProfile.cover_url || '/campus-cover.png',
       course_name: resolvedCourse,
-      course_cd: identity.courseCd || '4',
+      course_cd: identity.courseCd || cachedProfile.course_cd || '4',
       department_name: resolvedDept,
-      batch_cd: identity.batchName || identity.batchCd || '2025 Batch',
-      admission_year: '2025',
+      batch_cd: identity.batchName || identity.batchCd || cachedProfile.batch_cd || '2025 Batch',
+      admission_year: cachedProfile.admission_year || '2025',
       email: typeof window !== 'undefined' ? (JSON.parse(localStorage.getItem('user') || '{}')?.email || '') : '',
-      phone: '',
-      father_name: 'N/A',
-      mother_name: 'N/A',
-      residency_type: 'Hosteller',
-      academic_session: '2025-2026',
+      phone: cachedProfile.phone || '',
+      father_name: cachedProfile.father_name || 'N/A',
+      mother_name: cachedProfile.mother_name || 'N/A',
+      residency_type: cachedProfile.residency_type || 'Hosteller',
+      academic_session: cachedProfile.academic_session || '2025-2026',
       admission_status: 'ACTIVE',
-      college_name: (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution',
-      bio: 'Enrolled & Active Student.',
-      github_url: derivedGithubUrl,
-      github_followers: 0,
-      linkedin_url: '',
-      linkedin_connections: 0,
+      college_name: (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || cachedProfile.college_name || 'Institution',
+      bio: cachedProfile.bio || 'Enrolled & Active Student.',
+      github_url: cachedProfile.github_url || derivedGithubUrl || '',
+      github_followers: Number(cachedProfile.github_followers) || 0,
+      linkedin_url: cachedProfile.linkedin_url || '',
+      linkedin_connections: Number(cachedProfile.linkedin_connections) || 0,
       repository_count: repoCount || 0,
       attendance_percentage: liveAttPct,
-      followers_count: 0,
+      followers_count: (Number(cachedProfile.github_followers) || 0) + (Number(cachedProfile.linkedin_connections) || 0),
     };
 
     setProfile(fallbackData);
@@ -326,38 +333,44 @@ export default function StudentProfilePage() {
     setLinkedinConnectionsInput(fallbackData.linkedin_connections ?? 0);
   };
 
-  // Auto-fetch GitHub Followers from Public API
-  const handleFetchGithubStats = async () => {
-    if (!githubUrlInput || !githubUrlInput.trim()) {
-      alert('Please enter a GitHub profile URL or username first.');
-      return;
+  // ── GitHub: auto-fetch followers when URL is pasted / user leaves the field ──
+  const [githubFetchStatus, setGithubFetchStatus] = useState<'idle' | 'fetching' | 'ok' | 'error'>('idle');
+  const [githubFetchMsg, setGithubFetchMsg] = useState('');
+
+  const handleFetchGithubStats = async (urlOverride?: string) => {
+    const raw = (urlOverride ?? githubUrlInput).trim();
+    if (!raw) return;
+
+    let username = raw;
+    if (username.includes('github.com/')) {
+      username = username.split('github.com/')[1].split('/')[0].split('?')[0].trim();
     }
+    if (!username) return;
 
     setIsFetchingGithub(true);
+    setGithubFetchStatus('fetching');
+    setGithubFetchMsg('');
     try {
-      let username = githubUrlInput.trim();
-      if (username.includes('github.com/')) {
-        username = username.split('github.com/')[1].split('/')[0].split('?')[0];
-      }
-      if (!username) {
-        alert('Could not extract GitHub username from URL');
-        return;
-      }
-
       const res = await fetch(`https://api.github.com/users/${username}`);
       if (res.ok) {
         const ghData = await res.json();
         if (ghData.followers !== undefined) {
           setGithubFollowersInput(ghData.followers);
           setGithubUrlInput(`https://github.com/${username}`);
-          alert(`Successfully fetched ${ghData.followers} followers and ${ghData.public_repos} public repos from GitHub for @${username}!`);
+          if (ghData.bio) {
+            setBioInput(ghData.bio);
+          }
+          setGithubFetchStatus('ok');
+          const bioNote = ghData.bio ? ' · Bio synced' : '';
+          setGithubFetchMsg(`✅ @${username} · ${ghData.followers} followers · ${ghData.public_repos} public repos${bioNote}`);
         }
       } else {
-        alert(`Could not fetch GitHub user @${username}. You can enter follower count manually.`);
+        setGithubFetchStatus('error');
+        setGithubFetchMsg(`❌ GitHub user @${username} not found. Enter follower count manually.`);
       }
-    } catch (e) {
-      console.warn('GitHub API rate limit or error:', e);
-      alert('GitHub public API is currently offline. You can set the follower count manually.');
+    } catch {
+      setGithubFetchStatus('error');
+      setGithubFetchMsg('⚠️ GitHub API unavailable. Enter follower count manually.');
     } finally {
       setIsFetchingGithub(false);
     }
@@ -409,19 +422,33 @@ export default function StudentProfilePage() {
           const cachedStr = localStorage.getItem('user');
           if (cachedStr) {
             const cachedObj = JSON.parse(cachedStr);
+            if (!cachedObj.profile) cachedObj.profile = {};
+
             if (payload.photo_url !== undefined) {
               cachedObj.photo_url = payload.photo_url;
               cachedObj.photoUrl = payload.photo_url;
-              if (cachedObj.profile) {
-                cachedObj.profile.photo_url = payload.photo_url;
-                cachedObj.profile.photoUrl = payload.photo_url;
-              }
+              cachedObj.profile.photo_url = payload.photo_url;
+              cachedObj.profile.photoUrl = payload.photo_url;
+            }
+            if (payload.bio !== undefined) {
+              cachedObj.bio = payload.bio;
+              cachedObj.profile.bio = payload.bio;
+            }
+            if (payload.github_url !== undefined) {
+              cachedObj.github_url = payload.github_url;
+              cachedObj.profile.github_url = payload.github_url;
             }
             if (payload.github_followers !== undefined) {
               cachedObj.github_followers = payload.github_followers;
-              if (cachedObj.profile) {
-                cachedObj.profile.github_followers = payload.github_followers;
-              }
+              cachedObj.profile.github_followers = payload.github_followers;
+            }
+            if (payload.linkedin_url !== undefined) {
+              cachedObj.linkedin_url = payload.linkedin_url;
+              cachedObj.profile.linkedin_url = payload.linkedin_url;
+            }
+            if (payload.linkedin_connections !== undefined) {
+              cachedObj.linkedin_connections = payload.linkedin_connections;
+              cachedObj.profile.linkedin_connections = payload.linkedin_connections;
             }
             localStorage.setItem('user', JSON.stringify(cachedObj));
           }
@@ -471,6 +498,7 @@ export default function StudentProfilePage() {
       github_url: githubUrlInput.trim(),
       github_followers: followers,
       followers_count: followers + (profile?.linkedin_connections ?? 0),
+      ...(bioInput.trim() ? { bio: bioInput.trim() } : {}),
     });
   };
 
@@ -593,49 +621,64 @@ export default function StudentProfilePage() {
 
                     {/* 3 Key Header Metric Cards */}
                     <div className="w-full lg:w-auto bg-[#F6F8FC] dark:bg-slate-800/70 border border-[#E7EAF3] dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm flex items-center justify-around sm:justify-start gap-4 sm:gap-6 mt-2 lg:mt-0">
-                      
-                      {/* 1. Repository Count */}
-                      <a href="/dashboard/student/repository" className="text-center px-2 sm:px-3 group cursor-pointer block hover:opacity-80 transition-opacity">
-                        <div className="flex items-center justify-center gap-1.5 text-[#5B4BFF] mb-1">
-                          <FolderGit2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                          <span className="text-xl font-black text-[#1B1E28] dark:text-white">
-                            {profile?.repository_count ?? 0}
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 group-hover:text-[#5B4BFF]">
-                          Repository
-                        </span>
-                      </a>
 
-                      <div className="w-[1px] h-9 bg-[#E7EAF3] dark:bg-slate-700" />
+                      {/* Detect B.Pharma: hide dev/repo stats for pharmacy students */}
+                      {(() => {
+                        const courseLower = (profile?.course_name || '').toLowerCase();
+                        const isBPharm = courseLower.includes('pharma') || courseLower.includes('b.pharm') || courseLower.includes('bpharm');
 
-                      {/* 2. Attendance % */}
-                      <a href="/dashboard/student/attendance" className="text-center px-2 sm:px-3 group cursor-pointer block hover:opacity-80 transition-opacity">
-                        <div className="flex items-center justify-center gap-1.5 text-[#00C48C] mb-1">
-                          <CalendarCheck className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                          <span className="text-xl font-black text-[#1B1E28] dark:text-white">
-                            {profile?.attendance_percentage ?? '0.00%'}
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 group-hover:text-[#00C48C]">
-                          Attendance
-                        </span>
-                      </a>
+                        return (
+                          <>
+                            {/* 1. Repository Count — hidden for B.Pharma */}
+                            {!isBPharm && (
+                              <>
+                                <a href="/dashboard/student/repository" className="text-center px-2 sm:px-3 group cursor-pointer block hover:opacity-80 transition-opacity">
+                                  <div className="flex items-center justify-center gap-1.5 text-[#5B4BFF] mb-1">
+                                    <FolderGit2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                    <span className="text-xl font-black text-[#1B1E28] dark:text-white">
+                                      {profile?.repository_count ?? 0}
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 group-hover:text-[#5B4BFF]">
+                                    Repository
+                                  </span>
+                                </a>
+                                <div className="w-[1px] h-9 bg-[#E7EAF3] dark:bg-slate-700" />
+                              </>
+                            )}
 
-                      <div className="w-[1px] h-9 bg-[#E7EAF3] dark:bg-slate-700" />
+                            {/* 2. Attendance % */}
+                            <a href="/dashboard/student/attendance" className="text-center px-2 sm:px-3 group cursor-pointer block hover:opacity-80 transition-opacity">
+                              <div className="flex items-center justify-center gap-1.5 text-[#00C48C] mb-1">
+                                <CalendarCheck className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                <span className="text-xl font-black text-[#1B1E28] dark:text-white">
+                                  {profile?.attendance_percentage ?? '0.00%'}
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400 group-hover:text-[#00C48C]">
+                                Attendance
+                              </span>
+                            </a>
 
-                      {/* 3. Combined Social Followers & Connections */}
-                      <div className="text-center px-2 sm:px-3 group cursor-default">
-                        <div className="flex items-center justify-center gap-1.5 text-[#F36C21] mb-1">
-                          <Users className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                          <span className="text-xl font-black text-[#1B1E28] dark:text-white">
-                            {(profile?.github_followers ?? 0) + (profile?.linkedin_connections ?? 0)}
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
-                          Followers
-                        </span>
-                      </div>
+                            <div className="w-[1px] h-9 bg-[#E7EAF3] dark:bg-slate-700" />
+
+                            {/* 3. LinkedIn Connections (renamed from Followers) */}
+                            <div className="text-center px-2 sm:px-3 group cursor-default">
+                              <div className="flex items-center justify-center gap-1.5 text-[#F36C21] mb-1">
+                                <Users className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                <span className="text-xl font-black text-[#1B1E28] dark:text-white">
+                                  {(profile?.linkedin_connections ?? 0) > 0
+                                    ? `${profile?.linkedin_connections}+`
+                                    : (profile?.github_followers ?? 0) + (profile?.linkedin_connections ?? 0)}
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4E5969] dark:text-slate-400">
+                                Connections
+                              </span>
+                            </div>
+                          </>
+                        );
+                      })()}
 
                     </div>
 
@@ -715,97 +758,132 @@ export default function StudentProfilePage() {
                   </div>
 
                   <div className="space-y-3.5">
-                    {/* GitHub Box */}
-                    <div className="p-3.5 rounded-xl border border-[#E7EAF3] dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-800/60 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center">
-                            <Github className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <span className="text-xs font-black text-[#1B1E28] dark:text-white block">GitHub Profile</span>
-                            <span className="text-[10px] font-bold text-[#5B4BFF]">
-                              {profile?.github_followers ?? 0} Followers
-                            </span>
-                          </div>
-                        </div>
+                    {/* GitHub Box — hidden for B.Pharma students */}
+                    {(() => {
+                      const courseLower = (profile?.course_name || '').toLowerCase();
+                      const isBPharm = courseLower.includes('pharma') || courseLower.includes('b.pharm') || courseLower.includes('bpharm');
+                      if (isBPharm) return null;
+                      return (
+                        <div className="p-3.5 rounded-xl border border-[#E7EAF3] dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-800/60 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center">
+                                <Github className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-black text-[#1B1E28] dark:text-white block">GitHub Profile</span>
+                                <span className="text-[10px] font-bold text-[#5B4BFF]">
+                                  {profile?.github_followers ?? 0} Followers
+                                </span>
+                              </div>
+                            </div>
 
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setIsEditingGithub(!isEditingGithub)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-[#5B4BFF] hover:bg-white dark:hover:bg-slate-700 transition-all cursor-pointer"
-                            title="Edit GitHub Link"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          {profile?.github_url && (
-                            <a
-                              href={profile.github_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#5B4BFF] hover:bg-white dark:hover:bg-slate-700 transition-all"
-                              title="Open GitHub Profile"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-
-                      {isEditingGithub ? (
-                        <form onSubmit={handleSaveGithub} className="pt-2 space-y-2 border-t border-slate-200 dark:border-slate-700">
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                              GitHub Profile URL / Username
-                            </label>
-                            <div className="flex gap-1.5">
-                              <input
-                                type="text"
-                                value={githubUrlInput}
-                                onChange={(e) => setGithubUrlInput(e.target.value)}
-                                placeholder="https://github.com/username"
-                                className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
-                                required
-                              />
+                            <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={handleFetchGithubStats}
-                                disabled={isFetchingGithub}
-                                className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
-                                title="Fetch public followers count directly from GitHub API"
+                                onClick={() => setIsEditingGithub(!isEditingGithub)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-[#5B4BFF] hover:bg-white dark:hover:bg-slate-700 transition-all cursor-pointer"
+                                title="Edit GitHub Link"
                               >
-                                {isFetchingGithub ? '...' : 'Fetch'}
+                                <Edit3 className="w-3.5 h-3.5" />
                               </button>
+                              {profile?.github_url && (
+                                <a
+                                  href={profile.github_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 rounded-lg text-slate-500 hover:text-[#5B4BFF] hover:bg-white dark:hover:bg-slate-700 transition-all"
+                                  title="Open GitHub Profile"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
                             </div>
                           </div>
 
+                          {isEditingGithub ? (
+                        <form onSubmit={handleSaveGithub} className="pt-2 space-y-2 border-t border-slate-200 dark:border-slate-700">
                           <div>
                             <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                              Followers Count
+                              GitHub Profile URL or Username
                             </label>
                             <input
-                              type="number"
-                              value={githubFollowersInput}
-                              onChange={(e) => setGithubFollowersInput(e.target.value)}
+                              type="text"
+                              value={githubUrlInput}
+                              onChange={(e) => {
+                                setGithubUrlInput(e.target.value);
+                                setGithubFetchStatus('idle');
+                                setGithubFetchMsg('');
+                              }}
+                              onBlur={(e) => {
+                                // Auto-fetch followers when user leaves the URL field
+                                if (e.target.value.trim()) handleFetchGithubStats(e.target.value.trim());
+                              }}
+                              onPaste={(e) => {
+                                // Auto-fetch on paste (after React processes the paste)
+                                const pasted = e.clipboardData.getData('text').trim();
+                                if (pasted) setTimeout(() => handleFetchGithubStats(pasted), 200);
+                              }}
+                              placeholder="https://github.com/username  (auto-fetches on paste)"
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                              required
+                            />
+                            {/* Inline fetch status */}
+                            {githubFetchStatus === 'fetching' && (
+                              <p className="text-[10px] text-indigo-500 mt-1 animate-pulse">🔄 Fetching GitHub stats...</p>
+                            )}
+                            {githubFetchStatus === 'ok' && (
+                              <p className="text-[10px] text-[#00C48C] mt-1 font-semibold">{githubFetchMsg}</p>
+                            )}
+                            {githubFetchStatus === 'error' && (
+                              <p className="text-[10px] text-[#F04438] mt-1">{githubFetchMsg}</p>
+                            )}
+                          </div>
+
+                          {/* Only show manual followers input if auto-fetch failed */}
+                          {(githubFetchStatus === 'error' || githubFetchStatus === 'idle') && (
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                                Followers Count <span className="font-normal text-slate-400">(auto-filled after URL fetch)</span>
+                              </label>
+                              <input
+                                type="number"
+                                value={githubFollowersInput}
+                                onChange={(e) => setGithubFollowersInput(e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                              />
+                            </div>
+                          )}
+
+                          {/* Editable Bio / About info fetched from GitHub */}
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1 flex items-center justify-between">
+                              <span>Bio / About Info</span>
+                              <span className="font-normal text-slate-400 text-[9px]">(synced from GitHub, editable)</span>
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={bioInput}
+                              onChange={(e) => setBioInput(e.target.value)}
+                              placeholder="Write a brief bio about your technical interests, projects, or goals..."
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-[#5B4BFF]"
                             />
                           </div>
 
                           <div className="flex justify-end gap-1.5 pt-1">
                             <button
                               type="button"
-                              onClick={() => setIsEditingGithub(false)}
+                              onClick={() => { setIsEditingGithub(false); setGithubFetchStatus('idle'); setGithubFetchMsg(''); }}
                               className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-200 dark:border-slate-700 text-slate-600"
                             >
                               Cancel
                             </button>
                             <button
                               type="submit"
-                              disabled={saving}
-                              className="px-3 py-1 rounded-lg text-[11px] font-bold bg-[#5B4BFF] text-white hover:bg-indigo-600"
+                              disabled={saving || isFetchingGithub}
+                              className="px-3 py-1 rounded-lg text-[11px] font-bold bg-[#5B4BFF] text-white hover:bg-indigo-600 disabled:opacity-50"
                             >
-                              Save
+                              {saving ? 'Saving…' : 'Save'}
                             </button>
                           </div>
                         </form>
@@ -815,6 +893,8 @@ export default function StudentProfilePage() {
                         </p>
                       )}
                     </div>
+                      );
+                    })()}
 
                     {/* LinkedIn Box */}
                     <div className="p-3.5 rounded-xl border border-[#E7EAF3] dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-800/60 space-y-2">
@@ -864,20 +944,32 @@ export default function StudentProfilePage() {
                               type="url"
                               value={linkedinUrlInput}
                               onChange={(e) => setLinkedinUrlInput(e.target.value)}
-                              placeholder="https://linkedin.com/in/username"
+                              onBlur={(e) => {
+                                // Auto-format LinkedIn URL to canonical form on blur
+                                const v = e.target.value.trim();
+                                if (v && v.includes('linkedin.com/in/')) {
+                                  const handle = v.split('linkedin.com/in/')[1].split('/')[0].split('?')[0].trim();
+                                  if (handle) setLinkedinUrlInput(`https://www.linkedin.com/in/${handle}`);
+                                }
+                              }}
+                              placeholder="https://linkedin.com/in/your-handle"
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
                               required
                             />
+                            <p className="text-[9px] text-slate-400 mt-1">
+                              ℹ️ LinkedIn has no public API — connections count must be entered manually below.
+                            </p>
                           </div>
 
                           <div>
                             <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                              Connections Count
+                              Connections Count <span className="font-normal text-slate-400">(enter manually, e.g. 350)</span>
                             </label>
                             <input
                               type="number"
                               value={linkedinConnectionsInput}
                               onChange={(e) => setLinkedinConnectionsInput(e.target.value)}
+                              placeholder="350"
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
                             />
                           </div>
@@ -895,7 +987,7 @@ export default function StudentProfilePage() {
                               disabled={saving}
                               className="px-3 py-1 rounded-lg text-[11px] font-bold bg-[#5B4BFF] text-white hover:bg-indigo-600"
                             >
-                              Save
+                              {saving ? 'Saving…' : 'Save'}
                             </button>
                           </div>
                         </form>
@@ -909,6 +1001,12 @@ export default function StudentProfilePage() {
                 </div>
 
               </div>
+
+              {/* GitHub Profile Portfolio README.md Display */}
+              <GithubReadmeCard 
+                githubUrl={profile?.github_url} 
+                isPharma={isBPharm} 
+              />
 
               {/* Secondary Details Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">

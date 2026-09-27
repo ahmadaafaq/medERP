@@ -31,6 +31,7 @@ interface UserProfileData {
   tenantSlug?: string;
   tenantName?: string;
   collegeName?: string;
+  firm_name?: string;   // For custom SaaS / non-institution tenants (apex-tech, etc.)
   colgCd?: string;
   created_at?: string;
 }

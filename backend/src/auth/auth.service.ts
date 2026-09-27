@@ -1309,7 +1309,8 @@ export class AuthService {
   }
 
   async updateProfile(tenantSlug: string, user: any, dto: any) {
-    const slug = tenantSlug || 'srms-cet-bareilly';
+    const rawSlug = tenantSlug || dto?.tenant || dto?.collegeId || user?.tenantSlug || 'srms-cet-bareilly';
+    const slug = this.tenantSchemaService.resolveTenantSlug(rawSlug) || 'srms-cet-bareilly';
     const schema = `tenant_${slug}`;
     const role = (user?.role || dto?.role || '').toUpperCase();
     const hasStudentReg = Boolean(dto.student_reg_no || dto.registration_no || dto.rollno || user?.registration_no);
@@ -1398,17 +1399,44 @@ export class AuthService {
       return { success: true, message: 'No fields to update' };
     }
 
-    params.push(empId);
+    params.push(empId || 'NO_EMP_ID');
     const whereIdx = params.length;
+    params.push(userId || 'NO_USER_ID');
+    const userWhereIdx = params.length;
+    params.push(emailPrefix ? `${emailPrefix}%` : 'NO_EMAIL%');
+    const emailPrefixIdx = params.length;
 
-    const sql = `
-      UPDATE "${schema}".faculty 
+    const buildFacultySql = (targetSchema: string) => `
+      UPDATE "${targetSchema}".faculty 
       SET ${fields.join(', ')}, updated_at = NOW()
-      WHERE emp_id = $${whereIdx} OR user_id = $${whereIdx} OR user_id = (SELECT id FROM "${schema}".users WHERE email ILIKE '${emailPrefix}%' LIMIT 1)
+      WHERE emp_id = $${whereIdx} OR user_id = $${userWhereIdx} OR user_id = (SELECT id FROM "${targetSchema}".users WHERE email ILIKE $${emailPrefixIdx} LIMIT 1)
       RETURNING *
     `;
 
-    const updated = await this.ds.query(sql, params).catch(() => []);
+    let activeSchema = schema;
+    let updated = await this.ds.query(buildFacultySql(activeSchema), params).catch(() => []);
+
+    // Fallback: If 0 rows updated, check other tenant schemas
+    if (!updated || updated.length === 0) {
+      try {
+        const tenants = await this.ds.query(`SELECT slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+        for (const t of tenants) {
+          const altSlug = this.tenantSchemaService.resolveTenantSlug(t.slug);
+          if (!altSlug || altSlug === slug) continue;
+          const altSchema = `tenant_${altSlug}`;
+          try {
+            const res = await this.ds.query(buildFacultySql(altSchema), params);
+            if (res && res.length > 0) {
+              updated = res;
+              activeSchema = altSchema;
+              break;
+            }
+          } catch {}
+        }
+      } catch (err: any) {
+        this.logger.warn(`Fallback search for faculty across schemas failed: ${err.message}`);
+      }
+    }
 
     // Also update users.name / avatar if photo or name updated
     const userUpdates: string[] = [];
@@ -1421,10 +1449,17 @@ export class AuthService {
       userParams.push(dto.photo_url || dto.photoUrl);
       userUpdates.push(`avatar_url = $${userParams.length}`);
     }
+    if (dto.bio !== undefined && dto.bio !== null) {
+      userParams.push(dto.bio);
+      userUpdates.push(`bio = $${userParams.length}`);
+    }
     if (userUpdates.length > 0) {
-      userParams.push(userId);
+      userParams.push(userId || 'NO_USER_ID');
+      const uIdIdx = userParams.length;
+      userParams.push(emailPrefix ? `${emailPrefix}%` : 'NO_EMAIL%');
+      const uEmailIdx = userParams.length;
       await this.ds.query(
-        `UPDATE "${schema}".users SET ${userUpdates.join(', ')}, updated_at = NOW() WHERE id = $${userParams.length} OR email ILIKE '${emailPrefix}%'`,
+        `UPDATE "${activeSchema}".users SET ${userUpdates.join(', ')}, updated_at = NOW() WHERE id::text = $${uIdIdx} OR email ILIKE $${uEmailIdx}`,
         userParams,
       ).catch(() => null);
     }
@@ -1433,20 +1468,20 @@ export class AuthService {
     const facultyAvatar = dto.photo_url || dto.photoUrl;
     if (facultyAvatar !== undefined) {
       await this.ds.query(
-        `UPDATE "${schema}".chat_group_members 
+        `UPDATE "${activeSchema}".chat_group_members 
          SET avatar_url = $1 
          WHERE user_id::text = $2::text 
             OR user_id::text = $3::text 
-            OR user_id::text = (SELECT user_id::text FROM "${schema}".faculty WHERE emp_id = $2 LIMIT 1)`,
+            OR user_id::text = (SELECT user_id::text FROM "${activeSchema}".faculty WHERE emp_id = $2 LIMIT 1)`,
         [facultyAvatar || null, empId, userId],
       ).catch(() => null);
 
       await this.ds.query(
-        `UPDATE "${schema}".chat_messages 
+        `UPDATE "${activeSchema}".chat_messages 
          SET sender_avatar = $1 
          WHERE sender_id::text = $2::text 
             OR sender_id::text = $3::text 
-            OR sender_id::text = (SELECT user_id::text FROM "${schema}".faculty WHERE emp_id = $2 LIMIT 1)`,
+            OR sender_id::text = (SELECT user_id::text FROM "${activeSchema}".faculty WHERE emp_id = $2 LIMIT 1)`,
         [facultyAvatar || null, empId, userId],
       ).catch(() => null);
     }
@@ -1459,8 +1494,9 @@ export class AuthService {
   }
 
   async updateStudentSocialProfile(tenantSlug: string, user: any, dto: any) {
-    const slug = tenantSlug || 'srms-cet-bareilly';
-    const schema = `tenant_${slug}`;
+    const rawSlug = tenantSlug || dto?.tenant || dto?.collegeId || user?.tenantSlug || 'srms-cet-bareilly';
+    const cleanSlug = this.tenantSchemaService.resolveTenantSlug(rawSlug) || 'srms-cet-bareilly';
+    let schema = `tenant_${cleanSlug}`;
 
     const studentId = String(dto.student_id || dto.studentId || dto.id || '').trim();
     const regNo = String(dto.student_reg_no || dto.registration_no || user?.registration_no || '').trim();
@@ -1521,22 +1557,77 @@ export class AuthService {
     params.push(regNo || 'NO_REG');
     const regIdx = params.length;
 
-    const sql = `
-      UPDATE "${schema}".students 
-      SET ${fields.join(', ')}
+    await this.ds.query(`
+      ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS bio TEXT;
+      ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS github_url TEXT;
+      ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS github_followers VARCHAR(50);
+      ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS linkedin_url TEXT;
+      ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS linkedin_connections VARCHAR(50);
+      ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS cover_url TEXT;
+    `).catch(() => null);
+
+    const buildQuery = (targetSchema: string) => `
+      UPDATE "${targetSchema}".students 
+      SET ${fields.join(', ')}, updated_at = NOW()
       WHERE id::text = $${sidIdx}
          OR user_id::text = $${userIdx}
          OR rollno = $${rollIdx}
          OR rollno = $${regIdx}
          OR registration_no = $${regIdx}
          OR registration_no = $${rollIdx}
-      RETURNING id, name, registration_no, rollno, photo_url, cover_url, bio, github_url, github_followers, linkedin_url, linkedin_connections
+      RETURNING id, user_id, name, registration_no, rollno, photo_url, bio, github_url, github_followers, linkedin_url, linkedin_connections
     `;
 
-    const updated = await this.ds.query(sql, params).catch((err: any) => {
-      this.logger.error(`Error updating student profile: ${err.message}`);
+    let updated = await this.ds.query(buildQuery(schema), params).catch((err: any) => {
+      this.logger.error(`Error updating student profile in ${schema}: ${err.message}`);
       return [];
     });
+
+    // Fallback: If 0 rows updated in current schema, search all active tenant schemas
+    if (!updated || updated.length === 0) {
+      try {
+        const tenants = await this.ds.query(`SELECT slug FROM public.tenants WHERE is_active = true`).catch(() => []);
+        for (const t of tenants) {
+          const altSlug = this.tenantSchemaService.resolveTenantSlug(t.slug);
+          if (!altSlug || altSlug === cleanSlug) continue;
+          const altSchema = `tenant_${altSlug}`;
+          try {
+            const res = await this.ds.query(buildQuery(altSchema), params);
+            if (res && res.length > 0) {
+              updated = res;
+              schema = altSchema;
+              break;
+            }
+          } catch {}
+        }
+      } catch (err: any) {
+        this.logger.warn(`Fallback search for student across schemas failed: ${err.message}`);
+      }
+    }
+
+    // Auto sync updated student avatar and bio to users table
+    if (updated && updated.length > 0) {
+      const targetUserId = updated[0].user_id || (userId !== 'NO_USER' ? userId : null);
+      if (targetUserId) {
+        const userUpdates: string[] = [];
+        const userParams: any[] = [];
+        if (dto.bio !== undefined) {
+          userParams.push(dto.bio);
+          userUpdates.push(`bio = $${userParams.length}`);
+        }
+        if (dto.photo_url || dto.photoUrl) {
+          userParams.push(dto.photo_url || dto.photoUrl);
+          userUpdates.push(`avatar_url = $${userParams.length}`);
+        }
+        if (userUpdates.length > 0) {
+          userParams.push(targetUserId);
+          await this.ds.query(
+            `UPDATE "${schema}".users SET ${userUpdates.join(', ')}, updated_at = NOW() WHERE id::text = $${userParams.length}`,
+            userParams,
+          ).catch(() => null);
+        }
+      }
+    }
 
     // Auto sync updated student avatar to chat groups and messages
     const studentAvatar = dto.photo_url || dto.photoUrl;

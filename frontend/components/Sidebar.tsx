@@ -738,12 +738,14 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              <Link href="/dashboard/admin/attendance-mark" data-active={isLinkActive('/dashboard/admin/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/attendance-mark')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span>Attendance Mark</span>
-              </Link>
+              {isAllowed('admin_attendance_mark', '/dashboard/admin/attendance-mark') && (
+                <Link href="/dashboard/admin/attendance-mark" data-active={isLinkActive('/dashboard/admin/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/attendance-mark')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span>Attendance Mark</span>
+                </Link>
+              )}
 
               {(isAllowed('admin_attendance_biometric', '/dashboard/admin/attendance-biometric') || isAllowed('admin_biometric', '/dashboard/admin/attendance-biometric')) && (
                 <Link href="/dashboard/admin/attendance-biometric" data-active={isLinkActive('/dashboard/admin/attendance-biometric') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/attendance-biometric')}>
@@ -772,11 +774,11 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('admin_medical_logbook', '/dashboard/admin/medical-logbook') &&
+              {isAllowed('admin_medical_logbook') &&
                 (
-                  isAllowed('admin_medical_logbook_data_directory', '/dashboard/admin/medical-logbook/data-directory') ||
-                  isAllowed('admin_medical_logbook_ug_logbook', '/dashboard/admin/medical-logbook/ug-logbook') ||
-                  isAllowed('admin_medical_logbook_pg_logbook', '/dashboard/admin/medical-logbook/pg-logbook')
+                  isAllowed('admin_medical_logbook_data_directory') ||
+                  isAllowed('admin_medical_logbook_ug_logbook') ||
+                  isAllowed('admin_medical_logbook_pg_logbook')
                 ) && (
                 <div className="space-y-1">
                   <button
@@ -801,7 +803,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
 
                   {medicalLogbookOpen && (
                     <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-slate-200 dark:border-slate-800 ml-3">
-                      {isAllowed('admin_medical_logbook_data_directory', '/dashboard/admin/medical-logbook/data-directory') && (
+                      {isAllowed('admin_medical_logbook_data_directory') && (
                         <Link
                           href="/dashboard/admin/medical-logbook/data-directory"
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
@@ -815,7 +817,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                         </Link>
                       )}
 
-                      {isAllowed('admin_medical_logbook_ug_logbook', '/dashboard/admin/medical-logbook/ug-logbook') && (
+                      {isAllowed('admin_medical_logbook_ug_logbook') && (
                         <Link
                           href="/dashboard/admin/medical-logbook/ug-logbook"
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
@@ -829,7 +831,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                         </Link>
                       )}
 
-                      {isAllowed('admin_medical_logbook_pg_logbook', '/dashboard/admin/medical-logbook/pg-logbook') && (
+                      {isAllowed('admin_medical_logbook_pg_logbook') && (
                         <Link
                           href="/dashboard/admin/medical-logbook/pg-logbook"
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
@@ -1055,12 +1057,14 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              <Link href="/dashboard/faculty/attendance-mark" data-active={isLinkActive('/dashboard/faculty/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/attendance-mark')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span>Attendance Mark</span>
-              </Link>
+              {isAllowed('faculty_attendance_mark', '/dashboard/faculty/attendance-mark') && (
+                <Link href="/dashboard/faculty/attendance-mark" data-active={isLinkActive('/dashboard/faculty/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/attendance-mark')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span>Attendance Mark</span>
+                </Link>
+              )}
 
               {isAllowed('faculty_biometric') && (
                 <Link href="/dashboard/faculty/attendance-biometric" className={getLinkClass('/dashboard/faculty/attendance-biometric')}>
@@ -1089,11 +1093,11 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('faculty_medical_logbook', '/dashboard/faculty/medical-logbook') &&
+              {isAllowed('faculty_medical_logbook') &&
                 (
-                  isAllowed('faculty_medical_logbook_data_directory', '/dashboard/faculty/medical-logbook/data-directory') ||
-                  isAllowed('faculty_medical_logbook_ug_logbook', '/dashboard/faculty/medical-logbook/ug-logbook') ||
-                  isAllowed('faculty_medical_logbook_pg_logbook', '/dashboard/faculty/medical-logbook/pg-logbook')
+                  isAllowed('faculty_medical_logbook_data_directory') ||
+                  isAllowed('faculty_medical_logbook_ug_logbook') ||
+                  isAllowed('faculty_medical_logbook_pg_logbook')
                 ) && (
                 <div className="space-y-1">
                   <button
@@ -1118,7 +1122,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
 
                   {medicalLogbookOpen && (
                     <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-slate-200 dark:border-slate-800 ml-3">
-                      {isAllowed('faculty_medical_logbook_data_directory', '/dashboard/faculty/medical-logbook/data-directory') && (
+                      {isAllowed('faculty_medical_logbook_data_directory') && (
                         <Link
                           href="/dashboard/faculty/medical-logbook/data-directory"
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
@@ -1132,7 +1136,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                         </Link>
                       )}
 
-                      {isAllowed('faculty_medical_logbook_ug_logbook', '/dashboard/faculty/medical-logbook/ug-logbook') && (
+                      {isAllowed('faculty_medical_logbook_ug_logbook') && (
                         <Link
                           href="/dashboard/faculty/medical-logbook/ug-logbook"
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
@@ -1146,7 +1150,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                         </Link>
                       )}
 
-                      {isAllowed('faculty_medical_logbook_pg_logbook', '/dashboard/faculty/medical-logbook/pg-logbook') && (
+                      {isAllowed('faculty_medical_logbook_pg_logbook') && (
                         <Link
                           href="/dashboard/faculty/medical-logbook/pg-logbook"
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
@@ -1392,12 +1396,14 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              <Link href="/dashboard/clerk/attendance-mark" data-active={isLinkActive('/dashboard/clerk/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/attendance-mark')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span>Attendance Mark</span>
-              </Link>
+              {isAllowed('clerk_attendance_mark', '/dashboard/clerk/attendance-mark') && (
+                <Link href="/dashboard/clerk/attendance-mark" data-active={isLinkActive('/dashboard/clerk/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/attendance-mark')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span>Attendance Mark</span>
+                </Link>
+              )}
 
               {(isAllowed('clerk_attendance_biometric', '/dashboard/clerk/attendance-biometric') || isAllowed('clerk_biometric')) && (
                 <Link href="/dashboard/clerk/attendance-biometric" data-active={isLinkActive('/dashboard/clerk/attendance-biometric') ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/attendance-biometric')}>
