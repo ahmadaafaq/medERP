@@ -541,17 +541,17 @@ export default function TimetableDesignPage() {
       const timeRange = `${String(clash.start_time).slice(0, 5)} - ${String(clash.end_time).slice(0, 5)}`;
       const facName = clash.faculty_name || formData.facultyName || 'Faculty';
 
-      // Dynamic course name — look up from courses state, fall back to raw code only
-      const matchedCourse = Array.isArray(courses)
-        ? courses.find((c: any) => String(c.code) === String(clash.course_cd) || String(c.id) === String(clash.course_cd))
+      // Dynamic course name — look up from coursesList state, fall back to raw code only
+      const matchedCourse = Array.isArray(coursesList)
+        ? coursesList.find((c: any) => String(c.code) === String(clash.course_cd) || String(c.id) === String(clash.course_cd))
         : null;
       const courseName = matchedCourse?.name
         ? `Course: ${matchedCourse.name}`
         : (selectedCourseObj?.name ? `Course: ${selectedCourseObj.name}` : (clash.course_cd ? `Course: ${clash.course_cd}` : 'Course: Academic'));
 
-      // Dynamic batch name — look up from batches state
-      const matchedBatch = Array.isArray(batches)
-        ? batches.find((b: any) => String(b.code) === String(clash.batch_cd) || String(b.id) === String(clash.batch_cd))
+      // Dynamic batch name — look up from batchesList state
+      const matchedBatch = Array.isArray(batchesList)
+        ? batchesList.find((b: any) => String(b.code) === String(clash.batch_cd) || String(b.id) === String(clash.batch_cd))
         : null;
       const batchName = matchedBatch?.name
         ? `Batch: ${matchedBatch.name}`
@@ -576,7 +576,7 @@ export default function TimetableDesignPage() {
       };
     }
     return null;
-  }, [isModalOpen, formData.facultyId, formData.facultyEmpId, formData.facultyName, formData.dayOfWeek, formData.startTime, formData.endTime, slots, editingSlot, selectedCourseObj, selectedBatchObj, selectedSemester, selectedSection, courses, batches]);
+  }, [isModalOpen, formData.facultyId, formData.facultyEmpId, formData.facultyName, formData.dayOfWeek, formData.startTime, formData.endTime, slots, editingSlot, selectedCourseObj, selectedBatchObj, selectedSemester, selectedSection, coursesList, batchesList]);
 
   // Dynamically Filter Form Subjects based on Active College, Course, and Live SRMS Loadsubject
   const availableFormSubjects = useMemo(() => {
