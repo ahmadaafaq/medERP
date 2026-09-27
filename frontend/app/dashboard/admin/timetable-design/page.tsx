@@ -3409,15 +3409,44 @@ export default function TimetableDesignPage() {
                 </button>
               </div>
 
-              {activeClash && (
-                <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/80 border-2 border-rose-500 shadow-md text-rose-800 dark:text-rose-200 text-xs font-bold space-y-1 animate-in fade-in zoom-in-95 duration-200">
-                  <div className="flex items-center gap-1.5 font-black uppercase tracking-wider text-rose-700 dark:text-rose-300 text-[11px]">
-                    <span>🚫</span>
-                    <span>Faculty Scheduling Conflict / Overlap</span>
+              {activeClash && (() => {
+                // Parse structured conflict data from API response if available
+                const isStructured = activeClash.includes('•') || activeClash.includes('\n');
+                const lines = activeClash.split('\n').map((l: string) => l.trim()).filter(Boolean);
+                const headerLine = lines[0] || activeClash;
+                const bulletLines = lines.filter((l: string) => l.startsWith('•')).map((l: string) => l.replace(/^•\s*/, ''));
+                const footerLine = lines.find((l: string) => !l.startsWith('•') && l !== headerLine);
+                return (
+                  <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/80 border-2 border-rose-500 shadow-lg text-rose-800 dark:text-rose-200 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-200">
+                    {/* Header */}
+                    <div className="flex items-center gap-2 font-black uppercase tracking-wider text-rose-700 dark:text-rose-300 text-[11px]">
+                      <span className="text-base">🚫</span>
+                      <span>Faculty Scheduling Conflict / Overlap</span>
+                    </div>
+                    {/* Main message */}
+                    <p className="font-bold leading-snug pl-1 text-rose-900 dark:text-rose-100">
+                      {isStructured ? headerLine.replace(/^⚠\s*/, '') : activeClash}
+                    </p>
+                    {/* Engagement bullet list */}
+                    {bulletLines.length > 0 && (
+                      <ul className="pl-2 space-y-1">
+                        {bulletLines.map((eng: string, idx: number) => (
+                          <li key={idx} className="flex items-start gap-1.5 font-semibold text-rose-800 dark:text-rose-200">
+                            <span className="text-rose-500 mt-0.5 shrink-0">📌</span>
+                            <span>{eng}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {/* Footer hint */}
+                    {footerLine && (
+                      <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 pl-1 border-t border-rose-200 dark:border-rose-800 pt-1.5">
+                        👉 {footerLine}
+                      </p>
+                    )}
                   </div>
-                  <p className="leading-relaxed font-bold pl-5">{activeClash}</p>
-                </div>
-              )}
+                );
+              })()}
 
               {loading && (
                 <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-300 dark:border-indigo-700 shadow-md text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-2.5 animate-pulse">

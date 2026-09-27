@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { srmsPost, isSrmsTenant } from '@/lib/srms-client';
 import { queryDb } from '@/lib/db';

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { srmsPostDirect, isSrmsTenant } from '@/lib/srms-client';
 import { queryDb } from '@/lib/db';
@@ -291,7 +293,110 @@ export async function POST(req: NextRequest) {
       }
 
       if (!srmsSuccess) {
-        const errMsg = srmsMessage || 'SRMS portal rejected slot: Lecture already exists for this faculty at the selected time.';
+        // SRMS portal rejected — detect if it's a scheduling conflict or raw DB error
+        // SRMS often returns "There is no row at position 0" or similar raw PG errors on duplicate lecture
+        const rawMsg = (srmsMessage || '').toLowerCase();
+        const isConflict = rawMsg.includes('already') || rawMsg.includes('exists') || rawMsg.includes('duplicate') ||
+          rawMsg.includes('no row') || rawMsg.includes('position 0') || rawMsg.includes('overlap') ||
+          rawMsg.includes('conflict') || rawMsg.includes('assigned') || !srmsMessage;
+
+        if (isConflict) {
+          // Query PostgreSQL to find where this faculty is already scheduled for this day & time
+          const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+          const targetEmpId = empid || linkcd;
+
+          // Search in srms_timetable_events (SRMS portal events stored in PG)
+          const existingEvents = await queryDb(
+            `SELECT te.id, te.day_of_week, te.start_str, te.end_str, te.title, te.description,
+                    te.course_cd, te.branch_cd, te.batch_cd, te.sem_cd, te.txt_sec,
+                    te.linkcd, te.empid,
+                    f.name AS faculty_name, f.emp_id AS faculty_emp_id,
+                    sub.name AS subject_name,
+                    d.name AS department_name,
+                    d.code AS branch_code
+             FROM "${schema}".srms_timetable_events te
+             LEFT JOIN "${schema}".faculty f ON (f.emp_id = te.empid OR f.id::text = te.empid)
+             LEFT JOIN "${schema}".subjects sub ON (sub.code = te.linkcd OR sub.id::text = te.linkcd)
+             LEFT JOIN "${schema}".departments d ON (d.code = te.branch_cd OR d.id::text = te.branch_cd)
+             WHERE te.day_of_week = $1
+               AND (te.empid = $2 OR f.emp_id = $2)
+               AND ($3::text = '' OR (te.id::text <> $3 AND te.srms_id::text <> $3))
+             ORDER BY te.created_at DESC
+             LIMIT 3`,
+            [startMeta.dayOfWeek, targetEmpId, String(srmsPayload as any).trim() || '']
+          ).catch(() => []);
+
+          // Also search timetable_slots
+          const existingSlots = await queryDb(
+            `SELECT ts.id, ts.day_of_week, ts.start_time, ts.end_time, ts.topic, ts.description,
+                    ts.course_cd, ts.branch_cd, ts.batch_cd, ts.semester, ts.section,
+                    f.name AS faculty_name, f.emp_id AS faculty_emp_id,
+                    sub.name AS subject_name,
+                    d.name AS department_name
+             FROM "${schema}".timetable_slots ts
+             LEFT JOIN "${schema}".faculty f ON f.id = ts.faculty_id
+             LEFT JOIN "${schema}".subjects sub ON sub.id = ts.subject_id
+             LEFT JOIN "${schema}".departments d ON d.id = ts.department_id
+             WHERE ts.day_of_week = $1
+               AND (f.emp_id = $2 OR ts.description ILIKE $3)
+             ORDER BY ts.start_time
+             LIMIT 3`,
+            [startMeta.dayOfWeek, targetEmpId, `%${description}%`]
+          ).catch(() => []);
+
+          // Build detailed conflict message
+          const dayName = days[startMeta.dayOfWeek] || `Day ${startMeta.dayOfWeek}`;
+          const facName = (existingEvents[0]?.faculty_name || existingSlots[0]?.faculty_name || description || title || 'Faculty Member').split('(')[0].trim();
+
+          // Collect all engagements for this faculty on this day
+          const engagements: string[] = [];
+
+          for (const ev of existingEvents) {
+            const cName = ev.course_cd === '13' ? 'BCA' : (ev.course_cd || 'Unknown Course');
+            const bName = ev.branch_code || ev.department_name || ev.branch_cd || 'Branch';
+            const semName = `Sem ${ev.sem_cd || '?'}`;
+            const secRaw = String(ev.txt_sec || '1');
+            const secLetter = secRaw === '1' ? 'A' : secRaw === '2' ? 'B' : secRaw === '3' ? 'C' : secRaw === '4' ? 'D' : secRaw;
+            const subName = ev.subject_name || (ev.title || '').replace(/\s*\([^)]*\)/, '').trim() || 'Subject';
+            const timeInfo = ev.start_str ? ev.start_str.trim().slice(0, 5) : '';
+            engagements.push(`${cName} › ${bName} › ${semName} › Sec-${secLetter} (${subName}${timeInfo ? ' @ ' + timeInfo : ''})`);
+          }
+
+          for (const sl of existingSlots) {
+            if (engagements.length >= 3) break;
+            const cName = sl.course_cd === '13' ? 'BCA' : (sl.course_cd || 'Unknown Course');
+            const bName = sl.department_name || sl.branch_cd || 'Branch';
+            const semName = `Sem ${sl.semester || '?'}`;
+            const secRaw = String(sl.section || '1');
+            const secLetter = secRaw === '1' ? 'A' : secRaw === '2' ? 'B' : secRaw === '3' ? 'C' : secRaw === '4' ? 'D' : secRaw;
+            const subName = sl.subject_name || sl.topic || 'Subject';
+            const timeInfo = sl.start_time ? String(sl.start_time).slice(0, 5) : '';
+            engagements.push(`${cName} › ${bName} › ${semName} › Sec-${secLetter} (${subName}${timeInfo ? ' @ ' + timeInfo : ''})`);
+          }
+
+          let conflictMsg: string;
+          if (engagements.length > 0) {
+            conflictMsg = `⚠ Faculty Scheduling Conflict: ${facName} is already engaged on ${dayName} in:\n• ${engagements.join('\n• ')}\nPlease select a different time slot or choose another available faculty member.`;
+          } else {
+            conflictMsg = `⚠ Faculty Scheduling Conflict: ${facName} already has a lecture scheduled on ${dayName} at ${startMeta.timeStr.slice(0, 5)}–${endMeta.timeStr.slice(0, 5)}. SRMS portal rejected the slot. Please choose a different time or another faculty member.`;
+          }
+
+          return NextResponse.json({
+            success: false,
+            error: conflictMsg,
+            message: conflictMsg,
+            conflict: {
+              faculty_name: facName,
+              day: dayName,
+              time: `${startMeta.timeStr.slice(0, 5)} – ${endMeta.timeStr.slice(0, 5)}`,
+              engagements,
+            },
+            srms_data: srmsResponse,
+          }, { status: 409 });
+        }
+
+        // Non-conflict SRMS error
+        const errMsg = srmsMessage || 'SRMS portal rejected slot. Please try again.';
         return NextResponse.json({
           success: false,
           error: errMsg,

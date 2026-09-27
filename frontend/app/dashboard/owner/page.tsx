@@ -42,7 +42,7 @@ type TabType = 'overview' | 'firms' | 'admins' | 'licenses' | 'transactions' | '
 
 function OwnerDashboardContent() {
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get('tab') as TabType) || 'overview';
+  const initialTab = (searchParams?.get('tab') as TabType) || 'overview';
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [firms, setFirms] = useState<Firm[]>([]);
