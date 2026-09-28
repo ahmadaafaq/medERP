@@ -874,34 +874,88 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         // ── Topic Master ──────────────────────────────────────────────────────
         await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".topics (
-          id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-          subject_id   UUID,
-          linker_id    UUID,
-          code         VARCHAR(50) NOT NULL,
-          name         VARCHAR(200) NOT NULL,
-          description  TEXT,
-          hours        INT         DEFAULT 1,
-          is_active    BOOLEAN     DEFAULT true,
-          created_at   TIMESTAMPTZ DEFAULT NOW()
+          id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          subject_id        UUID,
+          subject_code      VARCHAR(50),
+          unit_id           UUID,
+          unit_code         VARCHAR(50),
+          linker_id         UUID,
+          course_cd         VARCHAR(50),
+          branch_cd         VARCHAR(50),
+          batch_year        VARCHAR(20),
+          bloom_level       VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+          code              VARCHAR(50) NOT NULL,
+          name              VARCHAR(200) NOT NULL,
+          description       TEXT,
+          hours             INT         DEFAULT 1,
+          learning_method   VARCHAR(100),
+          assessment_method VARCHAR(100),
+          is_active         BOOLEAN     DEFAULT true,
+          created_at        TIMESTAMPTZ DEFAULT NOW(),
+          updated_at        TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+
+        // Migrate existing topics tables — add all columns added after initial schema creation
+        await runner.query(`
+        ALTER TABLE "${schema}".topics
+          ADD COLUMN IF NOT EXISTS subject_code      VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS unit_id           UUID,
+          ADD COLUMN IF NOT EXISTS unit_code         VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS course_cd         VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS branch_cd         VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS batch_year        VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS bloom_level       VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+          ADD COLUMN IF NOT EXISTS learning_method   VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS assessment_method VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS updated_at        TIMESTAMPTZ DEFAULT NOW();
+      `).catch(() => { });
 
         // ── Competency Master ─────────────────────────────────────────────────
         await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".competencies (
-          id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-          subject_id   UUID,
-          topic_id     UUID,
-          linker_id    UUID,
-          code         VARCHAR(50) NOT NULL,
-          description  TEXT        NOT NULL,
-          domain       VARCHAR(50) DEFAULT 'Knowledge',
-          level        VARCHAR(50) DEFAULT 'Knows How',
-          is_core      BOOLEAN     DEFAULT true,
-          is_active    BOOLEAN     DEFAULT true,
-          created_at   TIMESTAMPTZ DEFAULT NOW()
+          id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          subject_id        UUID,
+          subject_code      VARCHAR(50),
+          unit_id           UUID,
+          unit_code         VARCHAR(50),
+          topic_id          UUID,
+          topic_code        VARCHAR(50),
+          linker_id         UUID,
+          course_cd         VARCHAR(50),
+          branch_cd         VARCHAR(50),
+          batch_year        VARCHAR(20),
+          bloom_level       VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+          code              VARCHAR(50) NOT NULL,
+          name              VARCHAR(200),
+          description       TEXT        NOT NULL,
+          domain            VARCHAR(50) DEFAULT 'Knowledge',
+          level             VARCHAR(50) DEFAULT 'Knows How',
+          learning_method   VARCHAR(100),
+          assessment_method VARCHAR(100),
+          is_core           BOOLEAN     DEFAULT true,
+          is_active         BOOLEAN     DEFAULT true,
+          created_at        TIMESTAMPTZ DEFAULT NOW(),
+          updated_at        TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+
+        // Migrate existing competencies tables — add all columns added after initial schema creation
+        await runner.query(`
+        ALTER TABLE "${schema}".competencies
+          ADD COLUMN IF NOT EXISTS subject_code      VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS unit_id           UUID,
+          ADD COLUMN IF NOT EXISTS unit_code         VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS topic_code        VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS course_cd         VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS branch_cd         VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS batch_year        VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS name              VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS bloom_level       VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+          ADD COLUMN IF NOT EXISTS learning_method   VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS assessment_method VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS updated_at        TIMESTAMPTZ DEFAULT NOW();
+      `).catch(() => { });
 
         // ── Professional Phases ───────────────────────────────────────────────
         await runner.query(`
@@ -2271,32 +2325,54 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     // ── Topic Master ───────────────────────────────────────────────────────
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".topics (
-        id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        subject_id   UUID,
-        linker_id    UUID,
-        code         VARCHAR(50) NOT NULL,
-        name         VARCHAR(200) NOT NULL,
-        description  TEXT,
-        hours        INT         DEFAULT 1,
-        is_active    BOOLEAN     DEFAULT true,
-        created_at   TIMESTAMPTZ DEFAULT NOW()
+        id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        subject_id        UUID,
+        subject_code      VARCHAR(50),
+        unit_id           UUID,
+        unit_code         VARCHAR(50),
+        linker_id         UUID,
+        course_cd         VARCHAR(50),
+        branch_cd         VARCHAR(50),
+        batch_year        VARCHAR(20),
+        bloom_level       VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+        code              VARCHAR(50) NOT NULL,
+        name              VARCHAR(200) NOT NULL,
+        description       TEXT,
+        hours             INT         DEFAULT 1,
+        learning_method   VARCHAR(100),
+        assessment_method VARCHAR(100),
+        is_active         BOOLEAN     DEFAULT true,
+        created_at        TIMESTAMPTZ DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
     // ── Competency Master ──────────────────────────────────────────────────
     await runner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}".competencies (
-        id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        subject_id   UUID,
-        topic_id     UUID,
-        linker_id    UUID,
-        code         VARCHAR(50) NOT NULL,
-        description  TEXT        NOT NULL,
-        domain       VARCHAR(50) DEFAULT 'Knowledge',
-        level        VARCHAR(50) DEFAULT 'Knows How',
-        is_core      BOOLEAN     DEFAULT true,
-        is_active    BOOLEAN     DEFAULT true,
-        created_at   TIMESTAMPTZ DEFAULT NOW()
+        id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        subject_id        UUID,
+        subject_code      VARCHAR(50),
+        unit_id           UUID,
+        unit_code         VARCHAR(50),
+        topic_id          UUID,
+        topic_code        VARCHAR(50),
+        linker_id         UUID,
+        course_cd         VARCHAR(50),
+        branch_cd         VARCHAR(50),
+        batch_year        VARCHAR(20),
+        bloom_level       VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+        code              VARCHAR(50) NOT NULL,
+        name              VARCHAR(200),
+        description       TEXT        NOT NULL,
+        domain            VARCHAR(50) DEFAULT 'Knowledge',
+        level             VARCHAR(50) DEFAULT 'Knows How',
+        learning_method   VARCHAR(100),
+        assessment_method VARCHAR(100),
+        is_core           BOOLEAN     DEFAULT true,
+        is_active         BOOLEAN     DEFAULT true,
+        created_at        TIMESTAMPTZ DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 

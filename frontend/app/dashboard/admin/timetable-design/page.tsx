@@ -1350,7 +1350,8 @@ export default function TimetableDesignPage() {
   // ─── API FETCHING HELPERS ──────────────────────────────────────────────────
   const fetchColleges = async () => {
     try {
-      const res = await fetch(`/api/srms/colleges`);
+      const activeTenant = getActiveTenantSlug();
+      const res = await fetch(`/api/srms/colleges?tenant=${encodeURIComponent(activeTenant)}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -1359,7 +1360,7 @@ export default function TimetableDesignPage() {
             code: String(c.colg_cd || c.code || c.id || '1'),
             colg_cd: String(c.colg_cd || c.code || c.id || '1'),
             name: c.colg_name || c.name || `College ${c.colg_cd}`,
-            slug: c.slug || (c.colg_cd === '1' ? 'srms-cet-bareilly' : c.slug),
+            slug: c.slug || activeTenant,
           }));
           return mapped;
         }
@@ -1374,7 +1375,7 @@ export default function TimetableDesignPage() {
     const cd = colgcd || '1';
     try {
       const activeTenant = getActiveTenantSlug();
-      const res = await fetch(`/api/srms/sessions?colgcd=${cd}&tenant=${activeTenant}`);
+      const res = await fetch(`/api/srms/sessions?colgcd=${encodeURIComponent(cd)}&tenant=${encodeURIComponent(activeTenant)}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -1400,7 +1401,7 @@ export default function TimetableDesignPage() {
     const cd = colgcd || '1';
     try {
       const activeTenant = getActiveTenantSlug();
-      const res = await fetch(`/api/srms/courses?colgcd=${cd}&tenant=${activeTenant}`);
+      const res = await fetch(`/api/srms/courses?colgcd=${encodeURIComponent(cd)}&tenant=${encodeURIComponent(activeTenant)}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -1419,16 +1420,17 @@ export default function TimetableDesignPage() {
     } catch (err) {
       console.warn('Failed to fetch courses:', err);
     }
+    setCoursesList([]);
     return [];
   };
 
   const fetchBranchesForCourse = async (colgcd: string, coursecd: string, knownDepts?: DropdownItem[]) => {
     const cd = colgcd || '1';
-    const crs = coursecd || '13';
+    const crs = coursecd || '';
     const activeDepts = (knownDepts && knownDepts.length > 0) ? knownDepts : departmentsList;
     try {
       const activeTenant = getActiveTenantSlug();
-      const res = await fetch(`/api/srms/branches?colgcd=${cd}&coursecd=${crs}&tenant=${activeTenant}`);
+      const res = await fetch(`/api/srms/branches?colgcd=${encodeURIComponent(cd)}&coursecd=${encodeURIComponent(crs)}&tenant=${encodeURIComponent(activeTenant)}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -1442,8 +1444,6 @@ export default function TimetableDesignPage() {
               );
               if (matchingDept) {
                 validName = matchingDept.name;
-              } else if (crs === '13') {
-                validName = 'BCA Department';
               } else {
                 validName = b.course_name ? `${b.course_name} Department` : `Branch ${b.branch_cd || '1'}`;
               }
@@ -1468,7 +1468,7 @@ export default function TimetableDesignPage() {
 
     // Direct fallback to PostgreSQL departments matching the course
     const dbBranches = (activeDepts || [])
-      .filter((d: any) => String(d.course_cd) === String(crs))
+      .filter((d: any) => !crs || String(d.course_cd) === String(crs))
       .map((d: any) => ({
         id: String(d.branch_cd || d.code || d.id || '1'),
         code: String(d.branch_cd || d.code || d.id || '1'),
@@ -1484,24 +1484,16 @@ export default function TimetableDesignPage() {
       return dbBranches;
     }
 
-    const fallbackBranch = [{
-      id: '1',
-      code: '1',
-      branch_cd: '1',
-      name: crs === '13' ? 'BCA Department' : 'Department 1',
-      course_cd: crs,
-      colg_cd: cd,
-    }];
-    setBranchesList(fallbackBranch);
-    return fallbackBranch;
+    setBranchesList([]);
+    return [];
   };
 
   const fetchBatchesForCourse = async (colgcd: string, coursecd: string) => {
     const cd = colgcd || '1';
-    const crs = coursecd || '13';
+    const crs = coursecd || '';
     try {
       const activeTenant = getActiveTenantSlug();
-      const res = await fetch(`/api/srms/batches?colgcd=${cd}&coursecd=${crs}&tenant=${activeTenant}`);
+      const res = await fetch(`/api/srms/batches?colgcd=${encodeURIComponent(cd)}&coursecd=${encodeURIComponent(crs)}&tenant=${encodeURIComponent(activeTenant)}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -1522,6 +1514,7 @@ export default function TimetableDesignPage() {
     } catch (err) {
       console.warn('Failed to fetch batches:', err);
     }
+    setBatchesList([]);
     return [];
   };
 
@@ -1551,10 +1544,12 @@ export default function TimetableDesignPage() {
       let role = 'ADMIN';
       let userColg = '1';
       let userSlug = 'srms-cet-bareilly';
+      let savedCollegeName = '';
       if (typeof window !== 'undefined') {
         role = (localStorage.getItem('role') || 'ADMIN').toUpperCase();
         userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
         userSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+        savedCollegeName = localStorage.getItem('collegeName') || localStorage.getItem('college_name') || '';
         setUserRole(role);
         setUserColgCd(userColg);
         setUserTenantSlug(userSlug);
@@ -1569,19 +1564,21 @@ export default function TimetableDesignPage() {
         const myCol = allColleges.find(c => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
         if (myCol) {
           filteredColleges = [myCol];
+        } else if (allColleges.length > 0) {
+          filteredColleges = [allColleges[0]];
         } else {
           filteredColleges = [{
             id: userColg,
             code: userColg,
             colg_cd: userColg,
-            name: 'SHRI RAM MURTI SMARAK COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY',
+            name: savedCollegeName || userSlug.toUpperCase(),
             slug: userSlug
           }];
         }
       }
       setCollegesList(filteredColleges);
 
-      const activeColCode = role === 'SUPER_ADMIN' ? (filteredColleges[0]?.code || '1') : userColg;
+      const activeColCode = role === 'SUPER_ADMIN' ? (filteredColleges[0]?.code || '1') : (filteredColleges[0]?.code || userColg);
       setSelectedCollege(activeColCode);
 
       // Fetch Cameras for active college
@@ -1598,12 +1595,12 @@ export default function TimetableDesignPage() {
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
 
       const [deptRes, subRes, unitRes, topicRes, compRes, facRes] = await Promise.all([
-        fetch(`${API_BASE}/admin-master/departments?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/units?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/topics?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/competencies?tenant=${activeTenantSlug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/users/faculty?tenant=${activeTenantSlug}&limit=500`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/departments?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/units?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/topics?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/competencies?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/users/faculty?tenant=${encodeURIComponent(activeTenantSlug)}&limit=500`, { headers }).catch(() => null),
       ]);
 
       let loadedDepts: DropdownItem[] = [];
@@ -1638,26 +1635,29 @@ export default function TimetableDesignPage() {
 
       // 4. Fetch Courses for active college
       const courses = await fetchCoursesForCollege(activeColCode);
-      const bca = courses.find(c => c.code === '13' || c.name === 'BCA') || courses[0];
-      const initialCourseCd = bca ? bca.code : '13';
-      setSelectedCourse(initialCourseCd);
+      const initialCourse = courses[0];
+      const initialCourseCd = initialCourse ? initialCourse.code : '';
+      if (initialCourseCd) {
+        setSelectedCourse(initialCourseCd);
+      }
 
-      if (loadedDepts.length > 0) {
-        const bcaDept = loadedDepts.find((d: any) => String(d.course_cd) === String(initialCourseCd) || d.name?.includes('BCA')) || loadedDepts[0];
-        if (bcaDept) setSelectedDept(bcaDept.id || bcaDept.code);
+      if (loadedDepts.length > 0 && initialCourseCd) {
+        const matchedDept = loadedDepts.find((d: any) => String(d.course_cd) === String(initialCourseCd)) || loadedDepts[0];
+        if (matchedDept) setSelectedDept(matchedDept.id || matchedDept.code);
       }
 
       // 5. Fetch Branches for active college + course with live departments matching
       const branches = await fetchBranchesForCourse(activeColCode, initialCourseCd, loadedDepts);
-      if (branches.length > 0) {
-        setSelectedBranch(branches[0].code);
+      const initialBranchCd = branches[0]?.code || '';
+      if (initialBranchCd) {
+        setSelectedBranch(initialBranchCd);
       }
 
       // 6. Fetch Batches for active college + course
       const batches = await fetchBatchesForCourse(activeColCode, initialCourseCd);
-      const curBatch = batches.find(b => b.name === '2025' || b.year === 2025 || b.code === '2') || batches[0];
-      if (curBatch) {
-        setSelectedBatch(curBatch.code);
+      const initialBatchCd = batches[0]?.code || '';
+      if (initialBatchCd) {
+        setSelectedBatch(initialBatchCd);
       }
     } catch (err) {
       console.error('Failed to load master metadata:', err);
@@ -1665,6 +1665,7 @@ export default function TimetableDesignPage() {
       setMetadataLoading(false);
     }
   };
+
 
   const fetchPostgresSlots = async (
     courseCd?: string,
@@ -3184,10 +3185,10 @@ export default function TimetableDesignPage() {
                   {/* College Header */}
                   <div className="print-compact-header text-center space-y-2 border-b-2 border-slate-800 dark:border-slate-700 pb-4 mb-6">
                     <h2 className="text-xl font-extrabold uppercase tracking-wide text-slate-900 dark:text-white">
-                      {selectedCollegeObj?.name || 'SHRI RAM MURTI SMARAK COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY'}
+                      {selectedCollegeObj?.name || (typeof window !== 'undefined' ? localStorage.getItem('collegeName') || localStorage.getItem('college_name') : '') || userTenantSlug.toUpperCase()}
                     </h2>
                     <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300 uppercase">
-                      {selectedDeptObj?.name || selectedBranchObj?.name || 'FACULTY OF COMPUTER APPLICATIONS'}
+                      {selectedDeptObj?.name || selectedBranchObj?.name || 'ACADEMIC DEPARTMENT'}
                     </h3>
                     <p className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase">
                       TIME TABLE - {selectedCourseObj?.name || selectedCourse} {selectedBatchObj ? `(BATCH ${selectedBatchObj.name || selectedBatchObj.year || selectedBatchObj.code})` : ''} • SEMESTER {selectedSemester} • SECTION {selectedSection === '1' ? 'A' : selectedSection === '2' ? 'B' : selectedSection === '3' ? 'C' : 'D'} • {weekRangeLabel}

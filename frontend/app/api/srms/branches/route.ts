@@ -4,6 +4,8 @@ import { queryDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
+const BACKEND_API = (process.env.BACKEND_BASE_URL ? `${process.env.BACKEND_BASE_URL}/api/v1` : '') || (process.env.NEXT_PUBLIC_API_URL?.startsWith('http') ? process.env.NEXT_PUBLIC_API_URL : 'http://127.0.0.1:8081/api/v1');
+
 const srmsCollegeSlugMap: Record<string, string> = {
   '1': 'srms-cet-bareilly',
   '2': 'srms-cetr-bareilly',
@@ -68,74 +70,56 @@ const DEFAULT_COURSE_BRANCHES: Record<string, { branch_cd: string; branch_name: 
   ],
 };
 
+function resolveTenantFromReq(req: NextRequest, bodyOrParamTenant?: string): string {
+  if (bodyOrParamTenant && bodyOrParamTenant.trim() && bodyOrParamTenant !== 'undefined' && bodyOrParamTenant !== 'null') {
+    return bodyOrParamTenant.trim();
+  }
+  const urlTenant = req.nextUrl.searchParams.get('tenant') || req.nextUrl.searchParams.get('tenantSlug');
+  if (urlTenant && urlTenant.trim() && urlTenant !== 'undefined' && urlTenant !== 'null') {
+    return urlTenant.trim();
+  }
+  const headerTenant = req.headers.get('x-tenant-slug');
+  if (headerTenant && headerTenant.trim()) {
+    return headerTenant.trim();
+  }
+  const cookieTenant = req.cookies.get('auth_tenant')?.value || req.cookies.get('tenantSlug')?.value || req.cookies.get('selectedTenant')?.value;
+  if (cookieTenant && cookieTenant.trim()) {
+    return cookieTenant.trim();
+  }
+  return '';
+}
+
 async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: string) {
   const cd = String(colgcd || '1').trim();
-  const crs = String(coursecd || '1').trim();
+  const crs = String(coursecd || '').trim();
 
   let targetSlug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
   if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
-    targetSlug = srmsCollegeSlugMap[cd] || 'srms-cet-bareilly';
+    try {
+      const tRows = await queryDb<any>(`SELECT slug FROM public.tenants WHERE code = $1 OR slug = $1 OR id::text = $1 LIMIT 1`, [cd]);
+      if (tRows.length > 0 && tRows[0].slug) {
+        targetSlug = tRows[0].slug;
+      }
+    } catch {}
+    if (!targetSlug) {
+      targetSlug = srmsCollegeSlugMap[cd] || 'srms-cet-bareilly';
+    }
   }
   if (targetSlug === 'srms-cet') targetSlug = 'srms-cet-bareilly';
   if (targetSlug === 'srms-cetr') targetSlug = 'srms-cetr-bareilly';
   const schema = `tenant_${targetSlug}`;
+  const isSrmsTenant = targetSlug.startsWith('srms');
 
-  // 1. Live SRMS ERP API: https://myportal.srms.ac.in/SRMSERP/erpadmin/GetBranch
-  try {
-    const data = await srmsPost('erpadmin/GetBranch', { colgcd: cd, coursecd: crs });
-    if (Array.isArray(data) && data.length > 0) {
-      // Filter by course_cd if provided
-      const courseFiltered = data.filter((b: any) => {
-        const bCourse = String(b.course_cd || b.coursecd || b.course_id || '').trim();
-        return !bCourse || bCourse === String(crs);
-      });
-      const targetList = courseFiltered.length > 0 ? courseFiltered : data;
-
-      // Deduplicate by unique branch_name + branch_cd
-      const seen = new Set<string>();
-      const deduplicated: any[] = [];
-      for (const item of targetList) {
-        const bCode = String(item.branch_cd || item.code || item.id || '1').trim();
-        let bName = String(item.branch_name || item.name || '').trim();
-
-        // If SRMS returns '-' or empty for single-department course (e.g. MBA, BCA, MCA), resolve to real department name
-        if (!bName || bName === '-' || bName === 'null') {
-          const knownName = DEFAULT_COURSE_BRANCHES[crs]?.[0]?.branch_name;
-          bName = knownName || `${item.course_name || 'Department'}`.trim();
-        }
-
-        const key = `${bCode}:::${bName.toLowerCase()}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          deduplicated.push({
-            colg_cd: String(item.colg_cd || cd),
-            course_cd: String(item.course_cd || crs),
-            branch_cd: bCode,
-            branch_name: bName,
-          });
-        }
-      }
-
-      if (deduplicated.length > 0) {
-        return NextResponse.json(deduplicated);
-      }
-    }
-  } catch (error: any) {
-    console.warn('[API /api/srms/branches] SRMS live portal fetch error:', error?.message);
-  }
-
-  // 2. Direct Fallback to PostgreSQL (per RestrictAPI.md Rule 2 & Rule 3)
+  // 1. Direct PostgreSQL query to tenant's departments table FIRST
   try {
     const dbBranches = await queryDb<any>(
       `SELECT DISTINCT 
-         d.branch_cd::text AS branch_cd, 
-         COALESCE(d.name, d.branch_name)::text AS branch_name, 
-         d.course_cd::text AS course_cd, 
-         COALESCE(d.colg_cd::text, $2::text) AS colg_cd
+         d.code::text AS branch_cd, 
+         d.name::text AS branch_name, 
+         $2::text AS colg_cd,
+         (CASE WHEN d.code ~ '^[0-9]+$' THEN d.code::int ELSE 999 END) AS sort_order
        FROM "${schema}".departments d
-       WHERE (d.course_cd::text = $1::text OR d.code::text = $1::text)
-         AND d.branch_cd IS NOT NULL
-       ORDER BY d.branch_cd::text ASC`,
+       ORDER BY sort_order ASC, branch_name ASC`,
       [crs, cd]
     );
 
@@ -144,31 +128,99 @@ async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: 
         colg_cd: b.colg_cd || cd,
         course_cd: b.course_cd || crs,
         branch_cd: String(b.branch_cd),
+        code: String(b.branch_cd),
         branch_name: b.branch_name,
+        name: b.branch_name,
       }));
       return NextResponse.json(mapped);
     }
   } catch (dbErr: any) {
-    console.warn('[API /api/srms/branches] PostgreSQL direct query error:', dbErr?.message);
+    console.warn(`[API /api/srms/branches] PostgreSQL direct query error on ${schema}:`, dbErr?.message);
   }
 
-  // 3. Fallback to resilient course-branch dictionary
-  if (DEFAULT_COURSE_BRANCHES[crs]) {
-    const fallbackList = DEFAULT_COURSE_BRANCHES[crs].map((b) => ({
-      colg_cd: cd,
-      course_cd: crs,
-      branch_cd: b.branch_cd,
-      branch_name: b.branch_name,
-    }));
-    return NextResponse.json(fallbackList);
+  // 2. Dynamic Fallback to NestJS backend
+  try {
+    const res = await fetch(`${BACKEND_API}/college-master/branches?tenant=${encodeURIComponent(targetSlug)}${crs ? `&course_cd=${encodeURIComponent(crs)}` : ''}`, {
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const list = json.data || json;
+      if (Array.isArray(list) && list.length > 0) {
+        const mapped = list.map((b: any) => ({
+          colg_cd: b.colg_cd || cd,
+          course_cd: b.course_cd || crs,
+          branch_cd: String(b.branch_cd || b.code || b.id || '1'),
+          code: String(b.branch_cd || b.code || b.id || '1'),
+          branch_name: b.name || b.branch_name,
+          name: b.name || b.branch_name,
+        }));
+        return NextResponse.json(mapped);
+      }
+    }
+  } catch (backendErr: any) {
+    console.warn('[API /api/srms/branches] Backend query fallback error:', backendErr?.message);
   }
 
-  return NextResponse.json([{
-    colg_cd: cd,
-    course_cd: crs,
-    branch_cd: '1',
-    branch_name: `Department ${crs}`,
-  }]);
+  // 3. Live SRMS ERP API: ONLY for SRMS tenants!
+  if (isSrmsTenant) {
+    try {
+      const data = await srmsPost('erpadmin/GetBranch', { colgcd: cd, coursecd: crs });
+      if (Array.isArray(data) && data.length > 0) {
+        const courseFiltered = data.filter((b: any) => {
+          const bCourse = String(b.course_cd || b.coursecd || b.course_id || '').trim();
+          return !bCourse || bCourse === String(crs);
+        });
+        const targetList = courseFiltered.length > 0 ? courseFiltered : data;
+
+        const seen = new Set<string>();
+        const deduplicated: any[] = [];
+        for (const item of targetList) {
+          const bCode = String(item.branch_cd || item.code || item.id || '1').trim();
+          let bName = String(item.branch_name || item.name || '').trim();
+
+          if (!bName || bName === '-' || bName === 'null') {
+            const knownName = DEFAULT_COURSE_BRANCHES[crs]?.[0]?.branch_name;
+            bName = knownName || `${item.course_name || 'Department'}`.trim();
+          }
+
+          const key = `${bCode}:::${bName.toLowerCase()}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            deduplicated.push({
+              colg_cd: String(item.colg_cd || cd),
+              course_cd: String(item.course_cd || crs),
+              branch_cd: bCode,
+              code: bCode,
+              branch_name: bName,
+              name: bName,
+            });
+          }
+        }
+
+        if (deduplicated.length > 0) {
+          return NextResponse.json(deduplicated);
+        }
+      }
+    } catch (error: any) {
+      console.warn('[API /api/srms/branches] SRMS live portal fetch error:', error?.message);
+    }
+
+    if (DEFAULT_COURSE_BRANCHES[crs]) {
+      const fallbackList = DEFAULT_COURSE_BRANCHES[crs].map((b) => ({
+        colg_cd: cd,
+        course_cd: crs,
+        branch_cd: b.branch_cd,
+        code: b.branch_cd,
+        branch_name: b.branch_name,
+        name: b.branch_name,
+      }));
+      return NextResponse.json(fallbackList);
+    }
+  }
+
+  return NextResponse.json([]);
 }
 
 export async function POST(req: NextRequest) {
@@ -176,7 +228,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const colgcd = String(body.colgcd || body.colg_cd || '').trim();
     const coursecd = String(body.coursecd || body.course_cd || '').trim();
-    const tenant = String(body.tenant || body.tenantSlug || '').trim();
+    const tenant = resolveTenantFromReq(req, String(body.tenant || body.tenantSlug || '').trim());
     return handleGetBranch(colgcd, coursecd, tenant);
   } catch (error: any) {
     console.error('[API /api/srms/branches] Error in POST:', error);
@@ -189,10 +241,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const colgcd = String(searchParams.get('colgcd') || searchParams.get('colg_cd') || '').trim();
     const coursecd = String(searchParams.get('coursecd') || searchParams.get('course_cd') || searchParams.get('course') || '').trim();
-    const tenant = String(searchParams.get('tenant') || searchParams.get('tenantSlug') || '').trim();
+    const tenant = resolveTenantFromReq(req, String(searchParams.get('tenant') || searchParams.get('tenantSlug') || '').trim());
     return handleGetBranch(colgcd, coursecd, tenant);
   } catch (error: any) {
     console.error('[API /api/srms/branches] Error in GET:', error);
     return NextResponse.json([]);
   }
 }
+

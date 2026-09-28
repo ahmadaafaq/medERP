@@ -2575,10 +2575,12 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     const params: any[] = [];
     let sql = `
       SELECT g.*, 
-             b.code AS batch_code, b.year AS batch_year,
+             b.code AS batch_code, b.year AS batch_year, b.course_cd AS batch_course_cd,
+             c.code AS course_code, c.name AS course_name, c.course_cd AS course_cd,
              d.name AS department_name, d.code AS department_code
       FROM groups_master g
       LEFT JOIN batches b ON b.id = g.batch_id
+      LEFT JOIN courses c ON (c.id = g.course_id OR c.course_cd = b.course_cd OR c.code = b.course_cd)
       LEFT JOIN departments d ON d.id = g.department_id
       WHERE 1=1
     `;
@@ -2598,10 +2600,37 @@ export class CollegeMasterService implements OnApplicationBootstrap {
 
   async createGroup(dto: CreateGroupDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
-    const validBatchId = this.isUUID(dto.batchId) ? dto.batchId : null;
-    const validDeptId = this.isUUID(dto.departmentId) ? dto.departmentId : null;
+    let validBatchId = this.isUUID(dto.batchId) ? dto.batchId : null;
+    if (!validBatchId && dto.batchId) {
+      const bRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM batches WHERE code = $1 OR batch_cd = $1 LIMIT 1`,
+        [String(dto.batchId)],
+      ).catch(() => []);
+      if (bRows.length > 0) validBatchId = bRows[0].id;
+    }
+
+    let validDeptId = this.isUUID(dto.departmentId) ? dto.departmentId : null;
+    if (!validDeptId && dto.departmentId) {
+      const dRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM departments WHERE code = $1 OR branch_cd = $1 OR name ILIKE $1 LIMIT 1`,
+        [String(dto.departmentId)],
+      ).catch(() => []);
+      if (dRows.length > 0) validDeptId = dRows[0].id;
+    }
+
+    let validCourseId = this.isUUID(dto.courseId) ? dto.courseId : null;
+    if (!validCourseId && dto.courseId) {
+      const cRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM courses WHERE code = $1 OR course_cd = $1 LIMIT 1`,
+        [String(dto.courseId)],
+      ).catch(() => []);
+      if (cRows.length > 0) validCourseId = cRows[0].id;
+    }
+
     const validCollegeId = this.isUUID(dto.collegeId) ? dto.collegeId : null;
-    const validCourseId = this.isUUID(dto.courseId) ? dto.courseId : null;
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -2615,21 +2644,49 @@ export class CollegeMasterService implements OnApplicationBootstrap {
 
   async updateGroup(id: string, dto: UpdateGroupDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
-    const validBatchId = dto.batchId !== undefined ? (this.isUUID(dto.batchId) ? dto.batchId : null) : undefined;
-    const validDeptId = dto.departmentId !== undefined ? (this.isUUID(dto.departmentId) ? dto.departmentId : null) : undefined;
+    let validBatchId = dto.batchId !== undefined ? (this.isUUID(dto.batchId) ? dto.batchId : null) : undefined;
+    if (dto.batchId && !validBatchId) {
+      const bRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM batches WHERE code = $1 OR batch_cd = $1 LIMIT 1`,
+        [String(dto.batchId)],
+      ).catch(() => []);
+      if (bRows.length > 0) validBatchId = bRows[0].id;
+    }
+
+    let validDeptId = dto.departmentId !== undefined ? (this.isUUID(dto.departmentId) ? dto.departmentId : null) : undefined;
+    if (dto.departmentId && !validDeptId) {
+      const dRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM departments WHERE code = $1 OR branch_cd = $1 OR name ILIKE $1 LIMIT 1`,
+        [String(dto.departmentId)],
+      ).catch(() => []);
+      if (dRows.length > 0) validDeptId = dRows[0].id;
+    }
+
+    let validCourseId = dto.courseId !== undefined ? (this.isUUID(dto.courseId) ? dto.courseId : null) : undefined;
+    if (dto.courseId && !validCourseId) {
+      const cRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM courses WHERE code = $1 OR course_cd = $1 LIMIT 1`,
+        [String(dto.courseId)],
+      ).catch(() => []);
+      if (cRows.length > 0) validCourseId = cRows[0].id;
+    }
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE groups_master
        SET code = COALESCE($1, code),
            name = COALESCE($2, name),
-           batch_id = COALESCE($3, batch_id),
-           department_id = COALESCE($4, department_id),
-           capacity = COALESCE($5, capacity),
-           is_active = COALESCE($6, is_active)
-       WHERE id = $7
+           course_id = COALESCE($3, course_id),
+           batch_id = COALESCE($4, batch_id),
+           department_id = COALESCE($5, department_id),
+           capacity = COALESCE($6, capacity),
+           is_active = COALESCE($7, is_active)
+       WHERE id = $8
        RETURNING *`,
-      [dto.code ? dto.code.toUpperCase() : undefined, dto.name, validBatchId, validDeptId, dto.capacity, dto.isActive, id],
+      [dto.code ? dto.code.toUpperCase() : undefined, dto.name, validCourseId, validBatchId, validDeptId, dto.capacity, dto.isActive, id],
     );
     if (rows.length === 0) throw new NotFoundException('Group not found');
     return rows[0];

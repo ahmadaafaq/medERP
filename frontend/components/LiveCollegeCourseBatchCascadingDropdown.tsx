@@ -13,6 +13,7 @@ export interface LiveCourseItem {
   course_name: string;
   ACTIVESTS?: string;
   active_flg?: string;
+  is_active?: boolean;
 }
 
 export interface LiveBatchItem {
@@ -20,7 +21,8 @@ export interface LiveBatchItem {
   course_cd: string;
   batch_cd: number | string;
   batch_name: string;
-  active_flg: string;
+  active_flg?: string;
+  is_active?: boolean;
   curr_bat_Cd?: number | string;
   startdt?: string | null;
   enddt?: string | null;
@@ -118,33 +120,34 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
     if (onBatchSelectRef.current) onBatchSelectRef.current(null);
 
     try {
+      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
       // 1. Next.js server proxy route
       let res = await fetch('/api/srms/batches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colgcd: colgCd, coursecd: courseCd }),
+        body: JSON.stringify({ colgcd: colgCd, coursecd: courseCd, tenant: slug }),
       }).catch(() => null);
 
-      // Fallback 1: Backend live proxy
+      // Fallback 1: Backend proxy
       if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/live/batches?colgcd=${colgCd}&coursecd=${courseCd}`, {
-          method: 'POST',
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/batches?tenant=${encodeURIComponent(slug)}&course_cd=${encodeURIComponent(courseCd)}`, {
+          method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
       }
 
       if (!res || !res.ok) {
-        throw new Error(`Failed to load live batches`);
+        throw new Error(`Failed to load batches`);
       }
 
       const data = await res.json();
       const rawList: LiveBatchItem[] = Array.isArray(data) ? data : data.data || [];
 
-      // Filter: only show active batches where active_flg == "1"
-      const activeBatches = rawList.filter((b) => String(b.active_flg) === '1');
+      // Filter: only show active batches where active_flg == "1" (or all if not flagged)
+      const activeBatches = rawList.filter((b) => b.active_flg === undefined || String(b.active_flg) === '1' || b.is_active);
 
       // Sort batches descending by batch_name (year)
-      const sortedBatches = activeBatches.sort((a, b) => {
+      const sortedBatches = (activeBatches.length > 0 ? activeBatches : rawList).sort((a, b) => {
         const aYear = parseInt(a.batch_name, 10) || 0;
         const bYear = parseInt(b.batch_name, 10) || 0;
         return bYear - aYear;
@@ -185,23 +188,24 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
     if (onBatchSelectRef.current) onBatchSelectRef.current(null);
 
     try {
+      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
       // 1. Next.js server proxy route
       let res = await fetch('/api/srms/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colgcd: colgCd }),
+        body: JSON.stringify({ colgcd: colgCd, tenant: slug }),
       }).catch(() => null);
 
-      // Fallback 1: Backend live proxy
+      // Fallback 1: Backend proxy
       if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/live/courses?colgcd=${colgCd}`, {
-          method: 'POST',
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/courses?tenant=${encodeURIComponent(slug)}`, {
+          method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
       }
 
       if (!res || !res.ok) {
-        throw new Error(`Failed to load live courses`);
+        throw new Error(`Failed to load courses`);
       }
 
       const data = await res.json();
@@ -209,10 +213,10 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
 
       // Filter: only show active courses
       const activeCourses = rawList.filter(
-        (c) => String(c.active_flg) === '1' || c.ACTIVESTS === 'ACTIVE'
+        (c) => c.active_flg === undefined || String(c.active_flg) === '1' || c.ACTIVESTS === 'ACTIVE' || c.is_active
       );
 
-      setCourses(activeCourses);
+      setCourses(activeCourses.length > 0 ? activeCourses : rawList);
     } catch (err: any) {
       console.error('[LiveBatchCascade] Fetch Courses Error:', err);
       setCoursesError(err.message || 'No active courses found for selected institution');
@@ -220,6 +224,59 @@ export default function LiveCollegeCourseBatchCascadingDropdown({
       setCoursesLoading(false);
     }
   }, []);
+
+  // ─── STEP 1: FETCH COLLEGES ON INITIAL MOUNT ──────────────────────────────
+  const fetchColleges = useCallback(async () => {
+    setCollegesLoading(true);
+    setCollegesError(null);
+    try {
+      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
+      let res = await fetch(`/api/srms/colleges?tenant=${encodeURIComponent(slug)}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/colleges?tenant=${encodeURIComponent(slug)}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(() => null);
+      }
+
+      if (!res || !res.ok) {
+        throw new Error(`Failed to load colleges`);
+      }
+
+      const data = await res.json();
+      const list: LiveCollegeItem[] = Array.isArray(data) ? data : data.data || [];
+      const role = typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN').toUpperCase() : 'ADMIN';
+      const colg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+
+      if (role !== 'SUPER_ADMIN') {
+        const myCol = list.filter((c: any) => String(c.colg_cd) === String(colg) || String(c.code) === String(colg) || c.slug === slug);
+        const finalCols = myCol.length > 0 ? myCol : list;
+        setColleges(finalCols);
+        const activeCol = finalCols[0];
+        if (activeCol) {
+          setSelectedColgCd(activeCol.colg_cd);
+          setSelectedCollege(activeCol);
+          if (onCollegeSelectRef.current) onCollegeSelectRef.current(activeCol);
+          fetchCoursesForCollege(activeCol.colg_cd);
+        }
+      } else {
+        setColleges(list);
+      }
+    } catch (err: any) {
+      console.error('[LiveBatchCascade] Fetch Colleges Error:', err);
+      setCollegesError(err.message || 'Unable to load colleges');
+    } finally {
+      setCollegesLoading(false);
+    }
+  }, [fetchCoursesForCollege]);
+
+  useEffect(() => {
+    fetchColleges();
+  }, [fetchColleges]);
 
   // ─── CONTROLLED PROPS SYNCHRONIZATION ──────────────────────────────────────
   useEffect(() => {

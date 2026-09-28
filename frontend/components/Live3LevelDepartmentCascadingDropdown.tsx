@@ -13,6 +13,7 @@ export interface LiveCourseItem {
   course_name: string;
   ACTIVESTS?: string;
   active_flg?: string;
+  is_active?: boolean;
 }
 
 export interface LiveBranchItem {
@@ -23,6 +24,7 @@ export interface LiveBranchItem {
   branch_name: string;
   BRANCHSTS?: string;
   active_flg?: string;
+  is_active?: boolean;
 }
 
 export interface Live3LevelCascadingSelection {
@@ -103,34 +105,35 @@ export default function Live3LevelDepartmentCascadingDropdown({
     if (onBranchSelectRef.current) onBranchSelectRef.current(null);
 
     try {
+      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
       // 1. Next.js server proxy route
       let res = await fetch('/api/srms/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colgcd: colgCd, coursecd: courseCd }),
+        body: JSON.stringify({ colgcd: colgCd, coursecd: courseCd, tenant: slug }),
       }).catch(() => null);
 
-      // Fallback 1: Backend live proxy
+      // Fallback 1: Backend proxy
       if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/live/branches?colgcd=${colgCd}&coursecd=${courseCd}`, {
-          method: 'POST',
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/branches?tenant=${encodeURIComponent(slug)}&course_cd=${encodeURIComponent(courseCd)}`, {
+          method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
       }
 
       if (!res || !res.ok) {
-        throw new Error(`Failed to load live branches`);
+        throw new Error(`Failed to load branches`);
       }
 
       const data = await res.json();
       const rawList: LiveBranchItem[] = Array.isArray(data) ? data : data.data || [];
 
-      // Filter: only show branches where active_flg == "1" (BRANCHSTS == "ACTIVE")
+      // Filter: only show active branches where active_flg == "1" (or all if not flagged)
       const activeBranches = rawList.filter(
-        (b) => String(b.active_flg) === '1' || b.BRANCHSTS === 'ACTIVE'
+        (b) => b.active_flg === undefined || String(b.active_flg) === '1' || b.BRANCHSTS === 'ACTIVE' || b.is_active
       );
 
-      setBranches(activeBranches);
+      setBranches(activeBranches.length > 0 ? activeBranches : rawList);
     } catch (err: any) {
       console.error('[Live3LevelCascade] Fetch Branches Error:', err);
       setBranchesError(err.message || 'No active departments/branches found for this course');
@@ -165,34 +168,35 @@ export default function Live3LevelDepartmentCascadingDropdown({
     if (onBranchSelectRef.current) onBranchSelectRef.current(null);
 
     try {
+      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
       // 1. Next.js server proxy route
       let res = await fetch('/api/srms/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colgcd: colgCd }),
+        body: JSON.stringify({ colgcd: colgCd, tenant: slug }),
       }).catch(() => null);
 
-      // Fallback 1: Backend live proxy
+      // Fallback 1: Backend proxy
       if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/live/courses?colgcd=${colgCd}`, {
-          method: 'POST',
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/courses?tenant=${encodeURIComponent(slug)}`, {
+          method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
       }
 
       if (!res || !res.ok) {
-        throw new Error(`Failed to load live courses`);
+        throw new Error(`Failed to load courses`);
       }
 
       const data = await res.json();
       const rawList: LiveCourseItem[] = Array.isArray(data) ? data : data.data || [];
 
-      // Filter: only show active courses where active_flg == "1"
+      // Filter: only show active courses where active_flg == "1" (or all if not flagged)
       const activeCourses = rawList.filter(
-        (c) => String(c.active_flg) === '1' || c.ACTIVESTS === 'ACTIVE'
+        (c) => c.active_flg === undefined || String(c.active_flg) === '1' || c.ACTIVESTS === 'ACTIVE' || c.is_active
       );
 
-      setCourses(activeCourses);
+      setCourses(activeCourses.length > 0 ? activeCourses : rawList);
     } catch (err: any) {
       console.error('[Live3LevelCascade] Fetch Courses Error:', err);
       setCoursesError(err.message || 'No active courses found for selected institution');
@@ -200,6 +204,59 @@ export default function Live3LevelDepartmentCascadingDropdown({
       setCoursesLoading(false);
     }
   }, []);
+
+  // ─── STEP 1: FETCH COLLEGES ON INITIAL MOUNT ──────────────────────────────
+  const fetchColleges = useCallback(async () => {
+    setCollegesLoading(true);
+    setCollegesError(null);
+    try {
+      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
+      let res = await fetch(`/api/srms/colleges?tenant=${encodeURIComponent(slug)}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/colleges?tenant=${encodeURIComponent(slug)}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(() => null);
+      }
+
+      if (!res || !res.ok) {
+        throw new Error(`Failed to load colleges`);
+      }
+
+      const data = await res.json();
+      const list: LiveCollegeItem[] = Array.isArray(data) ? data : data.data || [];
+      const role = typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN').toUpperCase() : 'ADMIN';
+      const colg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+
+      if (role !== 'SUPER_ADMIN') {
+        const myCol = list.filter((c: any) => String(c.colg_cd) === String(colg) || String(c.code) === String(colg) || c.slug === slug);
+        const finalCols = myCol.length > 0 ? myCol : list;
+        setColleges(finalCols);
+        const activeCol = finalCols[0];
+        if (activeCol) {
+          setSelectedColgCd(activeCol.colg_cd);
+          setSelectedCollege(activeCol);
+          if (onCollegeSelectRef.current) onCollegeSelectRef.current(activeCol);
+          fetchCoursesForCollege(activeCol.colg_cd);
+        }
+      } else {
+        setColleges(list);
+      }
+    } catch (err: any) {
+      console.error('[Live3LevelCascade] Fetch Colleges Error:', err);
+      setCollegesError(err.message || 'Unable to load colleges');
+    } finally {
+      setCollegesLoading(false);
+    }
+  }, [fetchCoursesForCollege]);
+
+  useEffect(() => {
+    fetchColleges();
+  }, [fetchColleges]);
 
   // ─── CONTROLLED PROPS SYNCHRONIZATION ──────────────────────────────────────
   useEffect(() => {

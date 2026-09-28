@@ -282,6 +282,7 @@ export default function CollegeMasterPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   // ─── TENANT SLUG RESOLVER ────────────────────────────────────────────────────
   const getActiveTenantSlug = (): string => {
@@ -955,14 +956,28 @@ export default function CollegeMasterPage() {
       if (courses.length === 0) fetchData('courses');
       if (batches.length === 0) fetchData('batches');
       if (branches.length === 0) fetchData('branches');
+
+      const defaultCol = colleges.find(c => c.id === defaultCollegeCode || c.code === defaultCollegeCode || c.slug === defaultCollegeCode) || colleges[0];
+      const targetColId = defaultCol?.code || defaultCol?.id || defaultCollegeCode;
+      const colCourses = getCoursesForCollege(targetColId);
+      const firstCrs = colCourses[0];
+      const targetCrsId = firstCrs?.course_cd || firstCrs?.code || firstCrs?.id || defaultCourseCd;
+      const colBatches = batches.filter(b => {
+        const crsCd = firstCrs?.course_cd || firstCrs?.code;
+        return !crsCd || b.course_code === crsCd || (b as any).course_cd === crsCd || b.course_id === firstCrs?.id;
+      });
+      const firstBch = colBatches[0] || batches[0];
+      const targetBchId = firstBch?.id || firstBch?.batch_cd || firstBch?.code || '';
+
       setFormData({
-        collegeId: defaultCollegeId,
-        courseId: defaultCourseId,
-        batchId: '',          // user picks via cascade
-        departmentId: '',     // optional
+        collegeId: targetColId,
+        courseId: targetCrsId,
+        batchId: targetBchId,
+        departmentId: '',
         code: '',
         name: '',
         capacity: 50,
+        isActive: true,
       });
     } else if (activeTab === 'sessions') {
       setFormData({ collegeId: defaultCollegeId, name: '', startDate: '', endDate: '', isCurrent: false });
@@ -1106,6 +1121,83 @@ export default function CollegeMasterPage() {
       return;
     }
 
+    if (activeTab === 'groups') {
+      const col = colleges.find(c => c.id === item.college_id || c.code === item.college_code || c.slug === item.college_slug) || colleges[0];
+      const targetCollegeId = col?.code || col?.id || colleges[0]?.code || colleges[0]?.id;
+
+      // Match course
+      const crs = courses.find(c =>
+        c.id === item.course_id ||
+        c.course_cd === item.course_id ||
+        c.code === item.course_id ||
+        c.course_cd === item.course_cd ||
+        c.code === item.course_code ||
+        c.course_cd === (item as any).batch_course_cd ||
+        c.code === (item as any).batch_course_cd
+      ) || (item.batch_id ? courses.find(c => {
+        const b = batches.find(bx => bx.id === item.batch_id || bx.code === item.batch_id || (bx as any).batch_cd === item.batch_id);
+        return b && (c.id === b.course_id || c.code === b.course_code || c.course_cd === (b as any).course_cd || c.code === (b as any).course_cd);
+      }) : undefined) || courses[0];
+
+      const targetCourseId = crs?.course_cd || crs?.code || crs?.id || item.course_id || '';
+
+      // Match batch
+      const bch = batches.find(b =>
+        b.id === item.batch_id ||
+        b.code === item.batch_id ||
+        b.batch_cd === item.batch_id ||
+        b.code === item.batch_code ||
+        b.batch_cd === item.batch_code ||
+        String(b.year) === String(item.batch_year)
+      );
+      const targetBatchId = bch?.id || bch?.batch_cd || bch?.code || item.batch_id || item.batch_code || '';
+
+      // Match department / branch
+      const dept = branches.find(br =>
+        br.id === item.department_id ||
+        br.code === item.department_id ||
+        br.branch_cd === item.department_id ||
+        br.code === item.department_code ||
+        br.branch_cd === item.department_code ||
+        br.name === item.department_name
+      );
+      const targetDeptId = dept?.id || dept?.branch_cd || dept?.code || item.department_id || item.department_code || '';
+
+      setFormData({
+        ...item,
+        collegeId: targetCollegeId,
+        courseId: targetCourseId,
+        batchId: targetBatchId,
+        departmentId: targetDeptId,
+        code: item.code || item.group_code || '',
+        name: item.name || item.group_name || '',
+        capacity: Number(item.capacity) || 50,
+        isActive: item.is_active ?? true,
+      });
+      setIsModalOpen(true);
+      return;
+    }
+
+    if (activeTab === 'residencies') {
+      const col = colleges.find(c => c.id === item.college_id || c.code === item.college_code || c.slug === item.college_slug) || colleges[0];
+      const targetCollegeId = col?.code || col?.id || colleges[0]?.code || colleges[0]?.id;
+      const crs = courses.find(c => c.id === item.course_id || c.course_cd === item.course_id || c.code === item.course_id || c.code === item.course_code);
+      setFormData({
+        ...item,
+        collegeId: targetCollegeId,
+        courseId: crs?.course_cd || crs?.code || item.course_id || '',
+        residencyType: item.residency_type || item.residencyType || 'Hosteller',
+        categoryName: item.category_name || item.categoryName || '',
+        blockWing: item.block_wing || item.blockWing || '',
+        totalCapacity: item.total_capacity || item.totalCapacity || 100,
+        allocatedCount: item.allocated_count || item.allocatedCount || 0,
+        monthlyFee: item.monthly_fee || item.monthlyFee || 0,
+        isActive: item.is_active ?? true,
+      });
+      setIsModalOpen(true);
+      return;
+    }
+
     const rawStartDate = item.start_date || item.startDate || '';
     const rawEndDate = item.end_date || item.endDate || '';
     const startDate = rawStartDate && rawStartDate !== '—' ? formatDate(rawStartDate) : '';
@@ -1127,6 +1219,7 @@ export default function CollegeMasterPage() {
       totalCapacity: item.total_capacity || item.totalCapacity || 100,
       allocatedCount: item.allocated_count || item.allocatedCount || 0,
       monthlyFee: item.monthly_fee || item.monthlyFee || 0,
+      isActive: item.is_active ?? true,
     });
     setIsModalOpen(true);
   };
@@ -1419,6 +1512,30 @@ export default function CollegeMasterPage() {
         const next = isEdit ? prev.map((b) => (b.id === targetId ? item : b)) : [item, ...prev];
         return next;
       });
+    } else if (activeTab === 'groups') {
+      const selectedCourse = courses.find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId);
+      const selectedBatch = batches.find(b => b.id === formData.batchId || b.code === formData.batchId || b.batch_cd === formData.batchId);
+      const selectedDept = branches.find(br => br.id === formData.departmentId || br.code === formData.departmentId || br.branch_cd === formData.departmentId);
+
+      const item: Group = {
+        id: targetId,
+        code: formData.code || 'A',
+        name: formData.name || 'Group A',
+        college_id,
+        college_name,
+        course_id: selectedCourse?.id || formData.courseId,
+        batch_id: selectedBatch?.id || formData.batchId,
+        batch_code: selectedBatch?.code || selectedBatch?.batch_cd || '',
+        department_id: selectedDept?.id || formData.departmentId,
+        department_code: selectedDept?.code || selectedDept?.branch_cd || '',
+        department_name: selectedDept?.name || (selectedDept as any)?.branch_name || '',
+        capacity: Number(formData.capacity) || 50,
+        is_active: formData.isActive ?? true,
+      };
+      setGroups((prev) => {
+        const next = isEdit ? prev.map((g) => (g.id === targetId ? item : g)) : [item, ...prev];
+        return next;
+      });
     } else if (activeTab === 'sessions') {
       const item: AcademicSession = {
         id: targetId,
@@ -1460,13 +1577,6 @@ export default function CollegeMasterPage() {
     const isEdit = Boolean(editingItem);
     const method = isEdit ? 'PUT' : 'POST';
     const recordId = editingItem?.id || editingItem?.slug || '';
-
-    // Residencies: local fallback (no backend endpoint yet)
-    if (activeTab === 'residencies') {
-      updateLocalStateFallback(isEdit);
-      setIsModalOpen(false);
-      return;
-    }
 
     // Colleges → public schema endpoint, no tenant slug needed
     if (activeTab === 'colleges') {
@@ -1648,15 +1758,22 @@ export default function CollegeMasterPage() {
         bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
       }
     } else if (activeTab === 'groups') {
+      const selectedCourse = courses.find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId);
+      const selectedBatch = batches.find(b => b.id === formData.batchId || b.code === formData.batchId || b.batch_cd === formData.batchId || String(b.year) === String(formData.batchId));
+      const selectedDept = branches.find(br => br.id === formData.departmentId || br.code === formData.departmentId || br.branch_cd === formData.departmentId);
+
       bodyPayload = {
         code: formData.code,
         name: formData.name,
         collegeId: formData.collegeId,
-        courseId: formData.courseId || null,
-        batchId: formData.batchId || null,
-        departmentId: formData.departmentId || null,
+        courseId: selectedCourse?.id || formData.courseId || null,
+        batchId: selectedBatch?.id || formData.batchId || null,
+        departmentId: selectedDept?.id || formData.departmentId || null,
         capacity: Number(formData.capacity) || 50,
       };
+      if (isEdit) {
+        bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
+      }
     } else if (activeTab === 'residencies') {
       bodyPayload = {
         collegeId: formData.collegeId,
@@ -1673,6 +1790,7 @@ export default function CollegeMasterPage() {
       }
     }
 
+    setIsSaving(true);
     try {
       const res = await fetch(url, {
         method,
@@ -1681,6 +1799,7 @@ export default function CollegeMasterPage() {
       });
       if (res.ok) {
         console.log(`[CollegeMaster] Saved ${activeTab} to tenant_${slug} in PostgreSQL ✅`);
+        setIsModalOpen(false);
         await fetchData(activeTab);
       } else {
         const errText = await res.text();
@@ -1689,9 +1808,10 @@ export default function CollegeMasterPage() {
       }
     } catch (err) {
       console.error('[CollegeMaster] Network error during save:', err);
+      alert('Network error occurred while saving.');
+    } finally {
+      setIsSaving(false);
     }
-
-    setIsModalOpen(false);
   };
 
   // Delete Record
@@ -2219,6 +2339,19 @@ export default function CollegeMasterPage() {
                         <th className="p-4 text-right whitespace-nowrap min-w-[140px]">Actions</th>
                       </tr>
                     )}
+                    {activeTab === 'groups' && (
+                      <tr>
+                        <th className="p-4 whitespace-nowrap">Mapped College</th>
+                        <th className="p-4 whitespace-nowrap">Mapped Course</th>
+                        <th className="p-4 whitespace-nowrap">Group Code</th>
+                        <th className="p-4 whitespace-nowrap">Group Title / Name</th>
+                        <th className="p-4 whitespace-nowrap">Assigned Batch</th>
+                        <th className="p-4 whitespace-nowrap">Branch / Department</th>
+                        <th className="p-4 whitespace-nowrap">Capacity</th>
+                        <th className="p-4 whitespace-nowrap">Status</th>
+                        <th className="p-4 text-right whitespace-nowrap min-w-[140px]">Actions</th>
+                      </tr>
+                    )}
                     {activeTab === 'sessions' && (
                       <tr>
                         <th className="p-4 whitespace-nowrap">Session Code</th>
@@ -2561,28 +2694,59 @@ export default function CollegeMasterPage() {
                           (g.code || '').toLowerCase().includes((searchTerm || '').toLowerCase())
                         )
                         .map((grp) => {
-                          const course = courses.find((c) => c.id === grp.course_id);
-                          const batch = batches.find((b) => b.id === grp.batch_id);
+                          const course = courses.find((c) =>
+                            c.id === grp.course_id ||
+                            c.code === grp.course_id ||
+                            c.course_cd === grp.course_id ||
+                            c.code === (grp as any).course_code ||
+                            c.course_cd === (grp as any).course_cd ||
+                            c.code === (grp as any).batch_course_cd ||
+                            c.course_cd === (grp as any).batch_course_cd
+                          );
+                          const batch = batches.find((b) =>
+                            b.id === grp.batch_id ||
+                            b.code === grp.batch_id ||
+                            b.batch_cd === grp.batch_id ||
+                            b.code === grp.batch_code ||
+                            b.batch_cd === grp.batch_code ||
+                            String(b.year) === String((grp as any).batch_year)
+                          );
+                          const dept = branches.find((br) =>
+                            br.id === grp.department_id ||
+                            br.code === grp.department_id ||
+                            br.branch_cd === grp.department_id ||
+                            br.code === grp.department_code ||
+                            br.branch_cd === grp.department_code ||
+                            br.name === grp.department_name
+                          );
+
                           return (
-                            <tr key={grp.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-200/40 dark:bg-slate-200 dark:bg-slate-800/40 transition-colors">
-                              <td className="p-4 font-medium text-slate-600 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            <tr key={grp.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="p-4 font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                 <div className="flex items-center gap-1.5">
                                   <span>🏛️</span>
-                                  <span>{colleges.find((c) => c.id === grp.college_id)?.name || grp.college_name || 'srms-ims'}</span>
+                                  <span>{colleges.find((c) => c.id === grp.college_id)?.name || grp.college_name || 'SRMS Institution'}</span>
                                 </div>
                               </td>
-                              <td className="p-4 text-indigo-600 dark:text-indigo-300 font-bold font-mono whitespace-nowrap">
-                                🎓 {course?.code || (grp as any).course_code || 'MBBS'}
-                              </td>
-                              <td className="p-4 font-bold font-mono text-purple-600 dark:text-purple-400 whitespace-nowrap">{grp.code}</td>
-                              <td className="p-4 font-bold text-slate-900 dark:text-slate-900 dark:text-white">{grp.name}</td>
                               <td className="p-4 whitespace-nowrap">
-                                <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 font-bold text-xs">
-                                  Batch {grp.batch_code || batch?.code || '2025'}
+                                <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-xs">
+                                  🎓 {course?.name || (grp as any).course_name || (course?.code ? `Course #${course.code}` : (grp as any).course_code ? `Course #${(grp as any).course_code}` : 'General')}
                                 </span>
                               </td>
-                              <td className="p-4 text-slate-600 dark:text-slate-400 text-xs whitespace-nowrap">
-                                {grp.department_name && grp.department_name !== 'None' ? `${grp.department_name} (${grp.department_code})` : 'All Departments / General'}
+                              <td className="p-4 font-bold font-mono text-purple-600 dark:text-purple-400 whitespace-nowrap">{grp.code}</td>
+                              <td className="p-4 font-bold text-slate-900 dark:text-white">{grp.name}</td>
+                              <td className="p-4 whitespace-nowrap">
+                                <span className="px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-bold text-xs">
+                                  📅 {batch?.year
+                                    ? `Batch ${batch.code && batch.code !== String(batch.year) ? `${batch.code} — ` : ''}${batch.year}`
+                                    : (grp.batch_code ? `Batch ${grp.batch_code}` : (grp as any).batch_year ? `Batch ${(grp as any).batch_year}` : 'Batch 2026')
+                                  }
+                                </span>
+                              </td>
+                              <td className="p-4 text-slate-700 dark:text-slate-300 text-xs font-semibold whitespace-nowrap">
+                                {dept?.name || grp.department_name
+                                  ? `${dept?.name || grp.department_name}${dept?.code || grp.department_code || dept?.branch_cd ? ` (${dept?.code || grp.department_code || dept?.branch_cd})` : ''}`
+                                  : 'All Departments / General'}
                               </td>
                               <td className="p-4 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
                                 👥 {grp.capacity || 50} Students
@@ -2719,695 +2883,584 @@ export default function CollegeMasterPage() {
         </main>
       </div>
 
-      {/* Dynamic Add / Edit Modal Form */}
+      {/* ── Premium Modal Form ─────────────────────────────────────────── */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="glass-card w-full max-w-lg p-6 space-y-6 shadow-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-300 dark:border-slate-800 pb-3">
-              <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-900 dark:text-white">
-                {editingItem ? 'Edit' : 'Add New'} {categories.find((c) => c.key === activeTab)?.label.split('. ')[1]}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-900 dark:text-white font-bold text-base">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700/60 flex flex-col max-h-[92vh]">
+
+            {/* ── Header ─────────────────────────────────────────────────── */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">{categories.find((c) => c.key === activeTab)?.icon || '📋'}</span>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                    {editingItem ? 'Edit' : 'Create New'} {categories.find((c) => c.key === activeTab)?.label.split('. ')[1]}
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">Fill all required fields and save to PostgreSQL</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4 text-xs">
-              {/* STEP 1: Mandatory Select College Dropdown */}
-              {activeTab !== 'colleges' && (
-                <div className="space-y-1 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
-                  <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
-                    <span>Step 1: Select College *</span>
-                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">
-                      colg_cd: #{colleges.find(c => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId)?.code || '1'}
-                    </span>
-                  </label>
-                  <select
-                    required
-                    value={
-                      colleges.find(c => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId)?.code ||
-                      formData.collegeId ||
-                      colleges[0]?.code ||
-                      colleges[0]?.id
-                    }
-                    onChange={(e) => handleFormCollegeChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
-                  >
-                    {colleges.map((col) => (
-                      <option key={col.id} value={col.code || col.id}>
-                        🏛️ {col.name} ({col.slug})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            {/* ── Form Body ───────────────────────────────────────────────── */}
+            <form onSubmit={handleSave} className="overflow-y-auto flex-1">
+              <div className="p-5 space-y-4 text-xs">
 
-              {/* STEP 2: Mandatory Cascading Select Course Dropdown */}
-              {['professionals', 'batches', 'branches', 'residencies'].includes(activeTab) && (
-                <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                  <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
-                    <span>Step 2: Select Course *</span>
-                    <span className="text-[10px] text-slate-500 font-normal">
-                      course_cd: #{getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId)?.course_cd || '1'}
-                    </span>
-                  </label>
-                  <select
-                    required
-                    value={
-                      getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId)?.course_cd ||
-                      formData.courseId ||
-                      ''
-                    }
-                    onChange={(e) => handleFormCourseChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
-                  >
-                    {getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).length === 0 ? (
-                      <option value="">-- No Courses Found for this College --</option>
-                    ) : (
-                      getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).map((crs: any) => (
-                        <option key={crs.id} value={crs.course_cd || crs.code || crs.id}>
-                          🎓 {crs.name} (Code: #{crs.course_cd || crs.code}) — {crs.academic_system === 'semester' ? 'Semester System' : 'Professional Phase'}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  {getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).length === 0 && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium pt-1">
-                      ⚠️ No courses found in database for this college. Switch to &apos;2. Courses&apos; tab to add or sync courses.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* COLLEGE FORM */}
-              {activeTab === 'colleges' && (
-                <>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">College Code (colg_cd) *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.code || ''}
-                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
-                        placeholder="e.g. 1, 11"
-                      />
-                    </div>
-                    <div className="col-span-2 space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">College Name *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.name || ''}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                        placeholder="e.g. SRMS IMS,BAREILLY"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Slug Code / Subdomain *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.slug || ''}
-                        onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono"
-                        placeholder="e.g. srms-ims"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Domain</label>
-                      <input
-                        type="text"
-                        value={formData.domain || ''}
-                        onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
-                        placeholder="e.g. srms.mederp.app"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Plan</label>
+                {/* College + Course selectors in compact grid */}
+                {activeTab !== 'colleges' && (
+                  <div className={`grid gap-3 ${['professionals','batches','branches','residencies'].includes(activeTab) ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    {/* College */}
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        🏛️ College *
+                        <span className="ml-1.5 text-indigo-500 font-normal normal-case">
+                          #{colleges.find(c => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId)?.code || '—'}
+                        </span>
+                      </label>
                       <select
-                        value={formData.plan || 'Enterprise'}
-                        onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
-                      >
-                        <option value="Enterprise">Enterprise</option>
-                        <option value="Standard">Standard</option>
-                        <option value="Starter">Starter</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Primary Color</label>
-                      <input
-                        type="color"
-                        value={formData.primary_color || formData.primaryColor || '#6366F1'}
-                        onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value, primary_color: e.target.value })}
-                        className="w-full h-9 p-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded cursor-pointer"
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* COURSE FORM */}
-              {activeTab === 'courses' && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Course Code (course_cd) *</label>
-                      <input
-                        type="text"
                         required
-                        value={formData.course_cd || formData.code || ''}
-                        onChange={(e) => setFormData({ ...formData, code: e.target.value, course_cd: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
-                        placeholder="e.g. 1, 2, 3"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Degree Level</label>
-                      <select
-                        value={formData.degreeLevel || 'UG'}
-                        onChange={(e) => setFormData({ ...formData, degreeLevel: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-semibold"
+                        value={colleges.find(c => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId)?.code || formData.collegeId || colleges[0]?.code || colleges[0]?.id}
+                        onChange={(e) => handleFormCollegeChange(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
                       >
-                        <option value="UG">Undergraduate (UG)</option>
-                        <option value="PG">Postgraduate (PG)</option>
-                        <option value="Diploma">Diploma / Vocational</option>
-                        <option value="Certificate">Certificate Program</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Course Master Title *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.name || ''}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                      placeholder="e.g. Computer Applications"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Total Duration (Years)</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0.5"
-                        max="8"
-                        value={formData.durationYears ?? 4.0}
-                        onChange={(e) => setFormData({ ...formData, durationYears: parseFloat(e.target.value) || 1.0 })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Starting Phase / Semester</label>
-                      <input
-                        type="text"
-                        value={formData.professionalPhase || formData.phaseName || ''}
-                        onChange={(e) => setFormData({ ...formData, professionalPhase: e.target.value, phaseName: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
-                        placeholder="e.g. 1st Professional (Phase I) / Semester 1"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 bg-indigo-50/60 dark:bg-indigo-950/40 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
-                    <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
-                      <span>Academic System Type *</span>
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">Only IMS is Professional; others Semester-based</span>
-                    </label>
-                    <select
-                      value={formData.academicSystem || 'semester'}
-                      onChange={(e) => setFormData({ ...formData, academicSystem: e.target.value })}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded text-slate-900 dark:text-white font-bold"
-                    >
-                      <option value="professional">🩺 Professional Phase System (NMC MBBS / Medical Specialties)</option>
-                      <option value="semester">📚 Semester System (Engineering, Law, Nursing, Management, etc.)</option>
-                    </select>
-                  </div>
-                </>
-              )}
-
-              {/* DYNAMIC FORM FOR ACADEMIC YEAR (STEPS 3, 4, 5, 6) */}
-              {activeTab === 'professionals' && (
-                <>
-                  {/* STEP 3: Mandatory Branch Selection */}
-                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
-                      <span>Step 3: Select Branch / Department *</span>
-                      <span className="text-[10px] text-slate-500 font-normal">
-                        Filtered by Selected Course & College
-                      </span>
-                    </label>
-                    <select
-                      required
-                      value={formData.branchCd || getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId)[0]?.branch_cd || ''}
-                      onChange={(e) => {
-                        const bCd = e.target.value;
-                        const bList = getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId);
-                        const bObj = bList.find(b => String(b.branch_cd) === String(bCd) || b.code === bCd || b.id === bCd);
-                        const resolvedCd = bObj?.branch_cd || bObj?.code || bCd || '1';
-                        setFormData({
-                          ...formData,
-                          branchCd: resolvedCd,
-                          branchId: resolvedCd,
-                          branchName: bObj?.name || (bCd ? bCd : 'General Branch'),
-                        });
-                      }}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
-                    >
-                      {getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId).length === 0 ? (
-                        <option value="">🏢 General Branch / Department</option>
-                      ) : (
-                        getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId).map((b: any) => (
-                          <option key={b.id || b.code || b.branch_cd} value={b.branch_cd || b.code || b.id}>
-                            🏢 {b.name} (Code: #{b.branch_cd || b.code || '1'})
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </div>
-
-                  {/* STEP 4: Academic Year Dropdown list First Year to Fifth Year */}
-                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between">
-                      <span>Step 4: Select Academic Year (1 to 5 Years) *</span>
-                      <span className="text-[10px] text-slate-500 font-normal">Year Level</span>
-                    </label>
-                    <select
-                      required
-                      value={Number(formData.academicYear) || 1}
-                      onChange={(e) => {
-                        const yearNum = parseInt(e.target.value, 10) || 1;
-                        const defaultSemForYear = YEAR_SEMESTERS[yearNum]?.[0] || '1st Semester';
-                        setFormData({
-                          ...formData,
-                          academicYear: yearNum,
-                          semester: isSelectedCourseSemesterSystem ? defaultSemForYear : formData.semester,
-                          phaseName: isSelectedCourseSemesterSystem ? defaultSemForYear : formData.phaseName,
-                        });
-                      }}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
-                    >
-                      <option value={1}>First Year</option>
-                      <option value={2}>Second Year</option>
-                      <option value={3}>Third Year</option>
-                      <option value={4}>Fourth Year</option>
-                      <option value={5}>Fifth Year</option>
-                    </select>
-                  </div>
-
-                  {/* STEP 5: Included Semesters for the Year */}
-                  <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <label className="text-slate-700 dark:text-slate-300 font-extrabold flex items-center justify-between text-xs">
-                      <span>{isSelectedCourseSemesterSystem ? `Step 5: Semesters Provisioned for ${YEAR_NAMES[Number(formData.academicYear) || 1]}` : 'Step 5: Professional Phase *'}</span>
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
-                        {isSelectedCourseSemesterSystem ? 'Both Semesters Included' : 'NMC Standards'}
-                      </span>
-                    </label>
-                    {isSelectedCourseSemesterSystem ? (
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        {(YEAR_SEMESTERS[Number(formData.academicYear) || 1] || ['1st Semester', '2nd Semester']).map((semName) => (
-                          <div
-                            key={semName}
-                            className="flex items-center gap-2 p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/80 shadow-xs"
-                          >
-                            <span className="text-base">📚</span>
-                            <div className="flex-1">
-                              <p className="font-extrabold text-xs text-slate-900 dark:text-white">{semName}</p>
-                              <p className="text-[10px] text-slate-500 font-medium">{YEAR_NAMES[Number(formData.academicYear) || 1]}</p>
-                            </div>
-                            <span className="text-xs text-emerald-600 font-extrabold">✓ Included</span>
-                          </div>
+                        {colleges.map((col) => (
+                          <option key={col.id} value={col.code || col.id}>🏛️ {col.name} ({col.slug})</option>
                         ))}
-                      </div>
-                    ) : (
-                      <select
-                        value={formData.phaseName || '1st Professional MBBS (Phase I)'}
-                        onChange={(e) => setFormData({ ...formData, phaseName: e.target.value })}
-                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
-                      >
-                        <option value="1st Professional MBBS (Phase I)">1st Professional MBBS (Phase I)</option>
-                        <option value="2nd Professional MBBS (Phase II)">2nd Professional MBBS (Phase II)</option>
-                        <option value="3rd Professional MBBS Part I (Phase III-1)">3rd Professional MBBS Part I (Phase III Part I)</option>
-                        <option value="3rd Professional MBBS Part II (Final MBBS)">3rd Professional MBBS Part II (Final MBBS / Phase III Part II)</option>
                       </select>
+                    </div>
+
+                    {/* Course (cascading) */}
+                    {['professionals','batches','branches','residencies'].includes(activeTab) && (
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          🎓 Course *
+                          <span className="ml-1.5 text-indigo-500 font-normal normal-case">
+                            #{getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId)?.course_cd || '—'}
+                          </span>
+                        </label>
+                        <select
+                          required
+                          value={getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).find(c => c.id === formData.courseId || c.course_cd === formData.courseId || c.code === formData.courseId)?.course_cd || formData.courseId || ''}
+                          onChange={(e) => handleFormCourseChange(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                        >
+                          {getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).length === 0 ? (
+                            <option value="">-- No Courses Found --</option>
+                          ) : (
+                            getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).map((crs: any) => (
+                              <option key={crs.id} value={crs.course_cd || crs.code || crs.id}>
+                                🎓 {crs.name} (#{crs.course_cd || crs.code}) — {crs.academic_system === 'semester' ? 'Semester' : 'Professional'}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                        {getCoursesForCollege(formData.collegeId || colleges[0]?.code || colleges[0]?.id).length === 0 && (
+                          <p className="text-[10px] text-amber-500 font-medium pt-0.5">⚠️ No courses found. Add courses first.</p>
+                        )}
+                      </div>
                     )}
                   </div>
+                )}
 
-                  {/* STEP 6: Duration For Academic Year */}
-                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <label className="text-slate-700 dark:text-slate-300 font-semibold">
-                      Step 6: Duration for Academic Year (Years) *
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      max="6"
-                      value={formData.durationYears ?? 1}
-                      onChange={(e) => setFormData({ ...formData, durationYears: Number(e.target.value) || 1 })}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
-                      placeholder="1"
-                    />
-                  </div>
-                </>
-              )}
+                {/* ── Divider if we showed college/course ── */}
+                {activeTab !== 'colleges' && (
+                  <div className="border-t border-slate-100 dark:border-slate-800" />
+                )}
 
-              {/* BATCH FORM */}
-              {activeTab === 'batches' && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Batch Code (batch_cd) *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.code || formData.batch_cd || ''}
-                        onChange={(e) => setFormData({ ...formData, code: e.target.value, batch_cd: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
-                        placeholder="e.g. 1, 2, 3"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Admission / Batch Year *</label>
-                      <input
-                        type="number"
-                        required
-                        value={formData.year || new Date().getFullYear()}
-                        onChange={(e) => setFormData({ ...formData, year: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                        placeholder="2024"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Start Date</label>
-                      <input type="date" value={formData.startDate || ''} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">End Date</label>
-                      <input type="date" value={formData.endDate || ''} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* DEPARTMENT / BRANCH FORM */}
-              {activeTab === 'branches' && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Branch Code (branch_cd) *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.code || formData.branch_cd || ''}
-                        onChange={(e) => setFormData({ ...formData, code: e.target.value, branch_cd: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
-                        placeholder="e.g. 1, 2, 3"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Specialty / Discipline Type</label>
-                      <select
-                        value={formData.type || 'General'}
-                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
-                      >
-                        <option value="General">General / Core Discipline</option>
-                        <option value="Engineering">Engineering & Technology</option>
-                        <option value="Pharmacy">Pharmacy Sciences</option>
-                        <option value="Management">Management Studies</option>
-                        <option value="Law">Legal Studies</option>
-                        <option value="Pre-Clinical">Pre-Clinical (Anatomy, Physiology, Biochemistry)</option>
-                        <option value="Para-Clinical">Para-Clinical (Pathology, Pharmacology, Microbiology)</option>
-                        <option value="Clinical">Clinical Specialties (Medicine, Surgery, Pediatrics)</option>
-                        <option value="Administration">Administration / Support</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Department / Branch Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.name || ''}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                      placeholder="e.g. (CSE) / BCA Department"
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* GROUP MASTER FORM — Cascading: Course → Batch → Branch → Code/Name/Capacity */}
-              {activeTab === 'groups' && (() => {
-                // Derive filtered lists from already-loaded state
-                const groupCollegeCourses = getCoursesForCollege(formData.collegeId || colleges[0]?.id || '');
-                // Batches link to courses via course_code (e.g. 'MBBS'), not a UUID
-                const selectedCourseCd = courses.find(c => c.id === formData.courseId)?.code || '';
-                const groupCourseBatches = batches.filter((b) =>
-                  formData.courseId && selectedCourseCd
-                    ? (b.course_code === selectedCourseCd || (b as any).course_cd === selectedCourseCd)
-                    : true
-                );
-                return (
+                {/* ══════════════════ COLLEGE FORM ══════════════════ */}
+                {activeTab === 'colleges' && (
                   <>
-                    {/* Step 1 — Select Course */}
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wide">Step 1 — Select Course *</label>
-                      <select
-                        value={formData.courseId || ''}
-                        onChange={(e) => setFormData({ ...formData, courseId: e.target.value, batchId: '' })}
-                        className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 border-2 border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-semibold"
-                      >
-                        <option value="">-- Select Course --</option>
-                        {groupCollegeCourses.map((c) => {
-                          const cCode = c.course_cd || c.code || c.id;
-                          return (
-                            <option key={c.id || cCode} value={cCode}>[{c.code || cCode}] {c.name}</option>
-                          );
-                        })}
-                      </select>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">College Code *</label>
+                        <input type="text" required value={formData.code || ''} onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                          placeholder="e.g. 1, 11" />
+                      </div>
+                      <div className="col-span-2 space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">College Name *</label>
+                        <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                          placeholder="e.g. SRMS IMS, BAREILLY" />
+                      </div>
                     </div>
-
-                    {/* Step 2 — Select Batch (filtered by course) */}
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wide">Step 2 — Select Batch *</label>
-                      <select
-                        value={formData.batchId || ''}
-                        onChange={(e) => setFormData({ ...formData, batchId: e.target.value })}
-                        className="w-full px-3 py-2 bg-purple-50 dark:bg-purple-950/40 border-2 border-purple-300 dark:border-purple-700 rounded-lg text-slate-900 dark:text-white font-semibold"
-                      >
-                        <option value="">-- Select Batch --</option>
-                        {(formData.courseId ? groupCourseBatches : batches).map((b) => {
-                          const bCode = b.batch_cd || b.code || String(b.year) || b.id;
-                          return (
-                            <option key={b.id || bCode} value={bCode}>Batch {b.code} — {b.year}</option>
-                          );
-                        })}
-                      </select>
-                      {formData.courseId && groupCourseBatches.length === 0 && (
-                        <p className="text-xs text-amber-500 mt-1">⚠️ No batches found for selected course. Showing all batches.</p>
-                      )}
-                    </div>
-
-                    {/* Step 3 — Select Department */}
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wide">Step 3 — Select Department</label>
-                      <select
-                        value={formData.departmentId || ''}
-                        onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white"
-                      >
-                        <option value="">-- All Branches (No Filter) --</option>
-                        {branches.map((br) => {
-                          const brCode = br.branch_cd || br.code || br.id;
-                          return (
-                            <option key={br.id || brCode} value={brCode}>[{br.code || brCode}] {br.name}</option>
-                          );
-                        })}
-                      </select>
-                    </div>
-
-                    {/* Step 4 — Group Code + Capacity */}
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-slate-700 dark:text-slate-300 font-semibold">Group Code *</label>
-                        <input
-                          type="text"
-                          required
-                          value={formData.code || ''}
-                          onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono text-lg font-bold"
-                          placeholder="A"
-                        />
-                        <p className="text-xs text-slate-400">e.g. A, B, C, D or GRP-A</p>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Slug / Subdomain *</label>
+                        <input type="text" required value={formData.slug || ''} onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                          placeholder="e.g. srms-ims" />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-slate-700 dark:text-slate-300 font-semibold">Student Capacity</label>
-                        <input
-                          type="number"
-                          value={formData.capacity || 50}
-                          onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono"
-                          placeholder="50"
-                        />
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Domain</label>
+                        <input type="text" value={formData.domain || ''} onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                          placeholder="e.g. srms.mederp.app" />
                       </div>
                     </div>
-
-                    {/* Step 5 — Group Name */}
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Group Title / Name *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.name || ''}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
-                        placeholder="e.g. Group A (Batch 2024)"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Plan</label>
+                        <select value={formData.plan || 'Enterprise'} onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all">
+                          <option value="Enterprise">Enterprise</option>
+                          <option value="Standard">Standard</option>
+                          <option value="Starter">Starter</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Primary Color</label>
+                        <input type="color" value={formData.primary_color || formData.primaryColor || '#6366F1'} onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value, primary_color: e.target.value })}
+                          className="w-full h-9 p-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer" />
+                      </div>
                     </div>
                   </>
-                );
-              })()}
+                )}
 
-              {/* SESSION FORM */}
-              {activeTab === 'sessions' && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Session Code (Numeric) *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.session_cd || formData.code || ''}
-                        onChange={(e) => setFormData({ ...formData, session_cd: e.target.value, code: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-mono font-bold"
-                        placeholder="e.g. 14, 15, 16"
-                      />
-                      <p className="text-[11px] text-slate-400">SRMS FeeAdmin/GetSession Code</p>
+                {/* ══════════════════ COURSE FORM ══════════════════ */}
+                {activeTab === 'courses' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Course Code (course_cd) *</label>
+                        <input type="text" required value={formData.course_cd || formData.code || ''} onChange={(e) => setFormData({ ...formData, code: e.target.value, course_cd: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                          placeholder="e.g. 1, 2, 3" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Degree Level</label>
+                        <select value={formData.degreeLevel || 'UG'} onChange={(e) => setFormData({ ...formData, degreeLevel: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all">
+                          <option value="UG">Undergraduate (UG)</option>
+                          <option value="PG">Postgraduate (PG)</option>
+                          <option value="Diploma">Diploma / Vocational</option>
+                          <option value="Certificate">Certificate Program</option>
+                        </select>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Session Title / Year *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.name || ''}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                        placeholder="e.g. 2026-2027"
-                      />
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Course Title *</label>
+                      <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                        placeholder="e.g. Bachelor of Technology (B.Tech)" />
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Start Date</label>
-                      <input type="date" required value={formData.startDate || ''} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Duration (Years)</label>
+                        <input type="number" step="0.5" min="0.5" max="8" value={formData.durationYears ?? 4.0} onChange={(e) => setFormData({ ...formData, durationYears: parseFloat(e.target.value) || 1.0 })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Starting Phase / Semester</label>
+                        <input type="text" value={formData.professionalPhase || formData.phaseName || ''} onChange={(e) => setFormData({ ...formData, professionalPhase: e.target.value, phaseName: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                          placeholder="e.g. Semester 1 / Phase I" />
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">End Date</label>
-                      <input type="date" required value={formData.endDate || ''} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white" />
+                    <div className="space-y-1.5 p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Academic System *
+                        <span className="ml-1.5 text-indigo-400 font-normal normal-case">Only IMS is Professional; others Semester-based</span>
+                      </label>
+                      <select value={formData.academicSystem || 'semester'} onChange={(e) => setFormData({ ...formData, academicSystem: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all">
+                        <option value="professional">🩺 Professional Phase System (NMC MBBS / Medical)</option>
+                        <option value="semester">📚 Semester System (Engineering, Law, Nursing, etc.)</option>
+                      </select>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 pt-2">
-                    <input type="checkbox" id="isCurrent" checked={Boolean(formData.isCurrent)} onChange={(e) => setFormData({ ...formData, isCurrent: e.target.checked })} className="rounded bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-800" />
-                    <label htmlFor="isCurrent" className="text-slate-700 dark:text-slate-300 font-semibold">Set as Current Active Session</label>
-                  </div>
-                </>
-              )}
+                  </>
+                )}
 
-              {/* RESIDENCY / HOSTELLER / DAY SCHOLAR FORM */}
-              {activeTab === 'residencies' && (
-                <>
-                  <div className="space-y-1 bg-orange-50/60 dark:bg-orange-950/20 p-3 rounded-lg border border-orange-200 dark:border-orange-900/40">
-                    <label className="text-orange-900 dark:text-orange-300 font-extrabold flex items-center justify-between">
-                      <span>Residency Category Type *</span>
-                      <span className="text-[10px] text-orange-600 dark:text-orange-400 font-normal">Select Student Occupancy Category</span>
+                {/* ══════════════════ ACADEMIC YEAR FORM ══════════════════ */}
+                {activeTab === 'professionals' && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Branch / Department *
+                        <span className="ml-1.5 text-slate-400 font-normal normal-case">Filtered by College & Course</span>
+                      </label>
+                      <select required value={formData.branchCd || getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId)[0]?.branch_cd || ''}
+                        onChange={(e) => {
+                          const bCd = e.target.value;
+                          const bList = getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId);
+                          const bObj = bList.find(b => String(b.branch_cd) === String(bCd) || b.code === bCd || b.id === bCd);
+                          const resolvedCd = bObj?.branch_cd || bObj?.code || bCd || '1';
+                          setFormData({ ...formData, branchCd: resolvedCd, branchId: resolvedCd, branchName: bObj?.name || (bCd ? bCd : 'General Branch') });
+                        }}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all">
+                        {getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId).length === 0 ? (
+                          <option value="">🏢 General Branch / Department</option>
+                        ) : (
+                          getBranchesForCollegeAndCourse(formData.collegeId || colleges[0]?.code || colleges[0]?.id, formData.courseId).map((b: any) => (
+                            <option key={b.id || b.code || b.branch_cd} value={b.branch_cd || b.code || b.id}>🏢 {b.name} (#{b.branch_cd || b.code || '1'})</option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Academic Year *</label>
+                        <select required value={Number(formData.academicYear) || 1}
+                          onChange={(e) => {
+                            const yearNum = parseInt(e.target.value, 10) || 1;
+                            const defaultSemForYear = YEAR_SEMESTERS[yearNum]?.[0] || '1st Semester';
+                            setFormData({ ...formData, academicYear: yearNum, semester: isSelectedCourseSemesterSystem ? defaultSemForYear : formData.semester, phaseName: isSelectedCourseSemesterSystem ? defaultSemForYear : formData.phaseName });
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all">
+                          <option value={1}>First Year</option>
+                          <option value={2}>Second Year</option>
+                          <option value={3}>Third Year</option>
+                          <option value={4}>Fourth Year</option>
+                          <option value={5}>Fifth Year</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Duration (Years) *</label>
+                        <input type="number" step="1" min="1" max="6" value={formData.durationYears ?? 1} onChange={(e) => setFormData({ ...formData, durationYears: Number(e.target.value) || 1 })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all" placeholder="1" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        {isSelectedCourseSemesterSystem ? `Semesters for ${YEAR_NAMES[Number(formData.academicYear) || 1]}` : 'Professional Phase *'}
+                        <span className="ml-1.5 text-indigo-500 font-semibold normal-case">{isSelectedCourseSemesterSystem ? 'Both Included' : 'NMC Standards'}</span>
+                      </label>
+                      {isSelectedCourseSemesterSystem ? (
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          {(YEAR_SEMESTERS[Number(formData.academicYear) || 1] || ['1st Semester', '2nd Semester']).map((semName) => (
+                            <div key={semName} className="flex items-center gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/80">
+                              <span className="text-base">📚</span>
+                              <div className="flex-1">
+                                <p className="font-extrabold text-xs text-slate-900 dark:text-white">{semName}</p>
+                                <p className="text-[10px] text-slate-500">{YEAR_NAMES[Number(formData.academicYear) || 1]}</p>
+                              </div>
+                              <span className="text-[10px] text-emerald-600 font-extrabold">✓ Included</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <select value={formData.phaseName || '1st Professional MBBS (Phase I)'} onChange={(e) => setFormData({ ...formData, phaseName: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all">
+                          <option value="1st Professional MBBS (Phase I)">1st Professional MBBS (Phase I)</option>
+                          <option value="2nd Professional MBBS (Phase II)">2nd Professional MBBS (Phase II)</option>
+                          <option value="3rd Professional MBBS Part I (Phase III-1)">3rd Professional MBBS Part I (Phase III Part I)</option>
+                          <option value="3rd Professional MBBS Part II (Final MBBS)">3rd Professional MBBS Part II (Final MBBS)</option>
+                        </select>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* ══════════════════ BATCH FORM ══════════════════ */}
+                {activeTab === 'batches' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Batch Code (batch_cd) *</label>
+                        <input type="text" required value={formData.code || formData.batch_cd || ''} onChange={(e) => setFormData({ ...formData, code: e.target.value, batch_cd: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                          placeholder="e.g. 1, 2, 3" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Admission / Batch Year *</label>
+                        <input type="number" required value={formData.year || new Date().getFullYear()} onChange={(e) => setFormData({ ...formData, year: Number(e.target.value) })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                          placeholder="2024" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Start Date</label>
+                        <input type="date" value={formData.startDate || ''} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">End Date</label>
+                        <input type="date" value={formData.endDate || ''} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ══════════════════ DEPARTMENT / BRANCH FORM ══════════════════ */}
+                {activeTab === 'branches' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Branch Code (branch_cd) *</label>
+                        <input type="text" required value={formData.code || formData.branch_cd || ''} onChange={(e) => setFormData({ ...formData, code: e.target.value, branch_cd: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                          placeholder="e.g. 1, 2, 3" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Specialty / Discipline Type</label>
+                        <select value={formData.type || 'General'} onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all">
+                          <option value="General">General / Core Discipline</option>
+                          <option value="Engineering">Engineering & Technology</option>
+                          <option value="Pharmacy">Pharmacy Sciences</option>
+                          <option value="Management">Management Studies</option>
+                          <option value="Law">Legal Studies</option>
+                          <option value="Pre-Clinical">Pre-Clinical (Anatomy, Physiology, Biochemistry)</option>
+                          <option value="Para-Clinical">Para-Clinical (Pathology, Pharmacology, Microbiology)</option>
+                          <option value="Clinical">Clinical Specialties (Medicine, Surgery, Pediatrics)</option>
+                          <option value="Administration">Administration / Support</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Department / Branch Name *</label>
+                      <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all"
+                        placeholder="e.g. Computer Science & Engineering (CSE)" />
+                    </div>
+                  </>
+                )}
+
+                {/* ══════════════════ GROUP MASTER FORM ══════════════════ */}
+                {activeTab === 'groups' && (() => {
+                  const currentCollegeId = formData.collegeId || colleges[0]?.code || colleges[0]?.id || '';
+                  const groupCollegeCourses = getCoursesForCollege(currentCollegeId);
+                  const selectedCrs = courses.find(c =>
+                    c.id === formData.courseId ||
+                    c.course_cd === formData.courseId ||
+                    c.code === formData.courseId
+                  ) || groupCollegeCourses[0];
+
+                  const resolvedCourseValue = selectedCrs?.course_cd || selectedCrs?.code || selectedCrs?.id || formData.courseId || '';
+                  const selectedCourseCd = selectedCrs?.course_cd || selectedCrs?.code || '';
+
+                  const groupCourseBatches = batches.filter((b) => {
+                    if (!selectedCourseCd && !selectedCrs?.id) return true;
+                    return b.course_code === selectedCourseCd || (b as any).course_cd === selectedCourseCd || b.course_id === selectedCrs?.id || b.course_id === formData.courseId;
+                  });
+
+                  const availableBatches = groupCourseBatches.length > 0 ? groupCourseBatches : batches;
+                  const selectedBch = availableBatches.find(b =>
+                    b.id === formData.batchId ||
+                    b.batch_cd === formData.batchId ||
+                    b.code === formData.batchId ||
+                    String(b.year) === String(formData.batchId)
+                  );
+                  const resolvedBatchValue = selectedBch?.id || selectedBch?.batch_cd || selectedBch?.code || formData.batchId || '';
+
+                  const availableBranches = getBranchesForCollegeAndCourse(currentCollegeId, selectedCrs?.course_cd || selectedCrs?.id);
+                  const deptList = availableBranches.length > 0 ? availableBranches : branches;
+                  const selectedDept = deptList.find(br =>
+                    br.id === formData.departmentId ||
+                    br.branch_cd === formData.departmentId ||
+                    br.code === formData.departmentId ||
+                    br.name === formData.departmentId
+                  );
+                  const resolvedDeptValue = selectedDept?.id || selectedDept?.branch_cd || selectedDept?.code || formData.departmentId || '';
+
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-500 dark:text-indigo-400">Course *</label>
+                          <select
+                            value={resolvedCourseValue}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const newCrs = courses.find(c => c.course_cd === val || c.code === val || c.id === val);
+                              const newBatches = batches.filter(b => {
+                                const code = newCrs?.course_cd || newCrs?.code;
+                                return !code || b.course_code === code || (b as any).course_cd === code || b.course_id === newCrs?.id;
+                              });
+                              setFormData({
+                                ...formData,
+                                courseId: val,
+                                batchId: newBatches[0]?.id || newBatches[0]?.batch_cd || newBatches[0]?.code || '',
+                              });
+                            }}
+                            className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                          >
+                            <option value="">-- Select Course --</option>
+                            {groupCollegeCourses.map((c) => {
+                              const cCode = c.course_cd || c.code || c.id;
+                              return <option key={c.id || cCode} value={cCode}>[{c.code || cCode}] {c.name}</option>;
+                            })}
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-violet-500 dark:text-violet-400">Batch *</label>
+                          <select
+                            value={resolvedBatchValue}
+                            onChange={(e) => setFormData({ ...formData, batchId: e.target.value })}
+                            className="w-full px-3 py-2 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500/40 transition-all"
+                          >
+                            <option value="">-- Select Batch --</option>
+                            {availableBatches.map((b) => {
+                              const bCode = b.id || b.batch_cd || b.code || String(b.year);
+                              return <option key={b.id || bCode} value={bCode}>Batch {b.code || b.batch_cd || b.year} — {b.year}</option>;
+                            })}
+                          </select>
+                          {formData.courseId && groupCourseBatches.length === 0 && (
+                            <p className="text-[10px] text-amber-500 mt-0.5">⚠️ No batches for selected course.</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Department (Optional)</label>
+                        <select
+                          value={resolvedDeptValue}
+                          onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                        >
+                          <option value="">-- All Branches (No Filter) --</option>
+                          {deptList.map((br) => {
+                            const brCode = br.id || br.branch_cd || br.code;
+                            return <option key={br.id || brCode} value={brCode}>[{br.code || br.branch_cd || '—'}] {br.name || (br as any).branch_name}</option>;
+                          })}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Group Code *</label>
+                          <input type="text" required value={formData.code || ''} onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono text-lg font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                            placeholder="A" />
+                          <p className="text-[10px] text-slate-400">e.g. A, B, C, D or GRP-A</p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Student Capacity</label>
+                          <input type="number" value={formData.capacity || 50} onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                            placeholder="50" />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Group Title / Name *</label>
+                        <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                          placeholder="e.g. Group A (Batch 2024)" />
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {/* ══════════════════ SESSION FORM ══════════════════ */}
+                {activeTab === 'sessions' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Session Code *
+                          <span className="ml-1 text-slate-400 font-normal normal-case">(Numeric)</span>
+                        </label>
+                        <input type="text" required value={formData.session_cd || formData.code || ''} onChange={(e) => setFormData({ ...formData, session_cd: e.target.value, code: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                          placeholder="e.g. 14, 15, 16" />
+                        <p className="text-[10px] text-slate-400">SRMS FeeAdmin/GetSession Code</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Session Title / Year *</label>
+                        <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                          placeholder="e.g. 2026-2027" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Start Date</label>
+                        <input type="date" required value={formData.startDate || ''} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">End Date</label>
+                        <input type="date" required value={formData.endDate || ''} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all" />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 cursor-pointer">
+                      <input type="checkbox" id="isCurrent" checked={Boolean(formData.isCurrent)} onChange={(e) => setFormData({ ...formData, isCurrent: e.target.checked })}
+                        className="rounded accent-emerald-500" />
+                      <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">Set as Current Active Session</span>
                     </label>
-                    <select
-                      value={formData.residencyType || 'Hosteller'}
-                      onChange={(e) => setFormData({ ...formData, residencyType: e.target.value })}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 rounded text-slate-900 dark:text-white font-bold"
-                    >
-                      <option value="Resident">🩺 Resident (PG Resident Doctor / Intern)</option>
-                      <option value="Hosteller">🏠 Hosteller (Hostel Inmate / Boarder)</option>
-                      <option value="Day Scholar">🚌 Day Scholar (Non-Hostel Commuter)</option>
-                    </select>
-                  </div>
+                  </>
+                )}
 
-                  <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Category / Block Title *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.categoryName || ''}
-                      onChange={(e) => setFormData({ ...formData, categoryName: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                      placeholder="e.g. PG Engineer Residency Block A / UG BTECH Boys Hostel"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Block / Wing / Route Info</label>
-                    <input
-                      type="text"
-                      value={formData.blockWing || ''}
-                      onChange={(e) => setFormData({ ...formData, blockWing: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white"
-                      placeholder="e.g. Block A - Single Room / City Bus Route 1"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Total Capacity</label>
-                      <input
-                        type="number"
-                        value={formData.totalCapacity ?? 100}
-                        onChange={(e) => setFormData({ ...formData, totalCapacity: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                      />
+                {/* ══════════════════ RESIDENCY FORM ══════════════════ */}
+                {activeTab === 'residencies' && (
+                  <>
+                    <div className="space-y-1.5 p-3 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-orange-600 dark:text-orange-400">Residency Category Type *
+                        <span className="ml-1.5 text-orange-400 font-normal normal-case">Student Occupancy Category</span>
+                      </label>
+                      <select value={formData.residencyType || 'Hosteller'} onChange={(e) => setFormData({ ...formData, residencyType: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all">
+                        <option value="Resident">🩺 Resident (PG Resident Doctor / Intern)</option>
+                        <option value="Hosteller">🏠 Hosteller (Hostel Inmate / Boarder)</option>
+                        <option value="Day Scholar">🚌 Day Scholar (Non-Hostel Commuter)</option>
+                      </select>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-slate-700 dark:text-slate-300 font-semibold">Allocated Count</label>
-                      <input
-                        type="number"
-                        value={formData.allocatedCount ?? 0}
-                        onChange={(e) => setFormData({ ...formData, allocatedCount: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                      />
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Category / Block Title *</label>
+                      <input type="text" required value={formData.categoryName || ''} onChange={(e) => setFormData({ ...formData, categoryName: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-400 transition-all"
+                        placeholder="e.g. PG Engineer Residency Block A / BTECH Boys Hostel" />
                     </div>
-                  </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Block / Wing / Route Info</label>
+                      <input type="text" value={formData.blockWing || ''} onChange={(e) => setFormData({ ...formData, blockWing: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all"
+                        placeholder="e.g. Block A - Single Room / City Bus Route 1" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Capacity</label>
+                        <input type="number" value={formData.totalCapacity ?? 100} onChange={(e) => setFormData({ ...formData, totalCapacity: Number(e.target.value) })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Allocated Count</label>
+                        <input type="number" value={formData.allocatedCount ?? 0} onChange={(e) => setFormData({ ...formData, allocatedCount: Number(e.target.value) })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Monthly Fee (₹)</label>
+                        <input type="number" value={formData.monthlyFee ?? 0} onChange={(e) => setFormData({ ...formData, monthlyFee: Number(e.target.value) })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all" />
+                      </div>
+                    </div>
+                  </>
+                )}
 
-                  <div className="space-y-1">
-                    <label className="text-slate-700 dark:text-slate-300 font-semibold">Monthly Fee (₹) / Allowance</label>
-                    <input
-                      type="number"
-                      value={formData.monthlyFee ?? 10000}
-                      onChange={(e) => setFormData({ ...formData, monthlyFee: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-white font-bold"
-                    />
-                  </div>
-                </>
-              )}
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-300 dark:border-slate-800">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded font-semibold text-slate-600 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:text-white bg-slate-200 dark:bg-slate-200 dark:bg-slate-800">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded font-bold text-slate-900 dark:text-white bg-indigo-600 hover:bg-indigo-500 shadow">Save Record</button>
+              </div>
+              {/* ── Footer ─────────────────────────────────────────────────── */}
+              <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0 bg-slate-50/60 dark:bg-slate-900/60 rounded-b-2xl">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-5 py-2 text-xs font-bold text-white bg-[#F36C21] hover:bg-[#E05B10] rounded-xl shadow-md shadow-orange-500/20 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? (
+                    <>
+                      <svg className="animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+                      </svg>
+                      <span>Saving to PostgreSQL...</span>
+                    </>
+                  ) : (
+                    <span>Save Record to PostgreSQL</span>
+                  )}
+                </button>
               </div>
             </form>
+
           </div>
         </div>
       )}

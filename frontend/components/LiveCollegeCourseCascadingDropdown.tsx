@@ -84,19 +84,19 @@ export default function LiveCollegeCourseCascadingDropdown({
     if (onCourseSelectRef.current) onCourseSelectRef.current(null);
 
     try {
+      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
       // 1. Next.js server proxy route
       let res = await fetch('/api/srms/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colgcd: colgCd }),
+        body: JSON.stringify({ colgcd: colgCd, tenant: slug }),
       }).catch(() => null);
 
       // Fallback: Backend live proxy
       if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/live/courses`, {
-          method: 'POST',
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/courses?tenant=${encodeURIComponent(slug)}`, {
+          method: 'GET',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ colgcd: colgCd }),
         }).catch(() => null);
       }
 
@@ -109,7 +109,7 @@ export default function LiveCollegeCourseCascadingDropdown({
       setCourses(list);
     } catch (err: any) {
       console.error('[CascadingDropdown] Fetch Courses Error:', err);
-      setCoursesError(err.message || 'Unable to load courses from live API');
+      setCoursesError(err.message || 'Unable to load courses');
     } finally {
       setCoursesLoading(false);
     }
@@ -120,17 +120,17 @@ export default function LiveCollegeCourseCascadingDropdown({
     setCollegesLoading(true);
     setCollegesError(null);
     try {
-      // 1. Next.js server proxy route (handles SSL and bypass)
-      let res = await fetch('/api/srms/colleges', {
-        method: 'POST',
+      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
+      // 1. Next.js server proxy route
+      let res = await fetch(`/api/srms/colleges?tenant=${encodeURIComponent(slug)}`, {
+        method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
       }).catch(() => null);
 
-      // Fallback: Backend live endpoint
+      // Fallback: Backend endpoint
       if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/live/colleges`, {
-          method: 'POST',
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/colleges?tenant=${encodeURIComponent(slug)}`, {
+          method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => null);
       }

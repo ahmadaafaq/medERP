@@ -1307,6 +1307,24 @@ export class AdminMasterService {
     const learningMethod = dto.learning_method || dto.learningMethod || null;
     const assessmentMethod = dto.assessment_method || dto.assessmentMethod || null;
 
+    // Ensure all required columns exist — runs ADD COLUMN IF NOT EXISTS before every insert
+    // so this is safe & idempotent even when ensureLatestSchema cache is warm.
+    await this.tenantSchemaService.ensureLatestSchema(slug).catch(() => { });
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `ALTER TABLE topics
+         ADD COLUMN IF NOT EXISTS subject_code      VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS unit_id           UUID,
+         ADD COLUMN IF NOT EXISTS unit_code         VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS course_cd         VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS branch_cd         VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS batch_year        VARCHAR(20),
+         ADD COLUMN IF NOT EXISTS bloom_level       VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+         ADD COLUMN IF NOT EXISTS learning_method   VARCHAR(100),
+         ADD COLUMN IF NOT EXISTS assessment_method VARCHAR(100),
+         ADD COLUMN IF NOT EXISTS updated_at        TIMESTAMPTZ DEFAULT NOW()`,
+    ).catch(() => { });
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO topics (subject_id, subject_code, unit_id, unit_code, course_cd, branch_cd, batch_year, bloom_level, code, name, description, hours, is_active, linker_id, learning_method, assessment_method)
@@ -1659,6 +1677,24 @@ export class AdminMasterService {
 
     const colleges = await this.listColleges();
     const currentCollege = colleges.find((c: any) => c.slug === slug || c.id === dto.college_id || c.code === dto.college_id);
+
+    // Ensure all required columns exist — pre-flight migration for competencies table
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `ALTER TABLE competencies
+         ADD COLUMN IF NOT EXISTS subject_code      VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS unit_code         VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS topic_id          UUID,
+         ADD COLUMN IF NOT EXISTS topic_code        VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS course_cd         VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS branch_cd         VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS batch_year        VARCHAR(20),
+         ADD COLUMN IF NOT EXISTS name              VARCHAR(200),
+         ADD COLUMN IF NOT EXISTS bloom_level       VARCHAR(50) DEFAULT 'KL-2 (Understand)',
+         ADD COLUMN IF NOT EXISTS learning_method   VARCHAR(100),
+         ADD COLUMN IF NOT EXISTS assessment_method VARCHAR(100),
+         ADD COLUMN IF NOT EXISTS updated_at        TIMESTAMPTZ DEFAULT NOW()`,
+    ).catch(() => { });
 
     // If batch items provided
     if (dto.items && Array.isArray(dto.items) && dto.items.length > 0) {

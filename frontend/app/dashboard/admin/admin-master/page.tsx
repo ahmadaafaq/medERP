@@ -461,6 +461,7 @@ export default function AdminMasterPage() {
   const [activeTab, setActiveTab] = useState<SubCategory>('departments');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [selectedCollegeFilter, setSelectedCollegeFilter] = useState<string>('all');
@@ -1565,6 +1566,7 @@ export default function AdminMasterPage() {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
+    setIsSaving(true);
     try {
       const res = await fetch(url, {
         method,
@@ -1589,6 +1591,8 @@ export default function AdminMasterPage() {
       }
     } catch (err) {
       alert('Network error occurred while saving.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -5245,10 +5249,26 @@ export default function AdminMasterPage() {
                     <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-colors">
                       Cancel
                     </button>
-                    <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-[#5B4BFF] hover:bg-indigo-600 rounded-xl shadow-md transition-all active:scale-95">
-                      {activeTab === 'competencies' && tempCompetencies.length > 0
-                        ? `Save (${tempCompetencies.length}) Sub-Topics to PostgreSQL`
-                        : 'Save Record to PostgreSQL'}
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="px-5 py-2 text-xs font-bold text-white bg-[#5B4BFF] hover:bg-indigo-600 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {isSaving ? (
+                        <>
+                          <svg className="animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+                          </svg>
+                          <span>Saving record to PostgreSQL...</span>
+                        </>
+                      ) : (
+                        <span>
+                          {activeTab === 'competencies' && tempCompetencies.length > 0
+                            ? `Save (${tempCompetencies.length}) Sub-Topics to PostgreSQL`
+                            : 'Save Record to PostgreSQL'}
+                        </span>
+                      )}
                     </button>
                   </div>
                 </form>
