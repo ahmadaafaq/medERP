@@ -48,51 +48,96 @@ async function handleGetBatch(colgcd?: string, coursecd?: string, tenantSlug?: s
   const br = branchcd && branchcd !== 'all' ? branchcd : '';
 
   let targetSlug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
-  if (srmsCollegeSlugMap[cd]) {
-    targetSlug = srmsCollegeSlugMap[cd];
-  } else if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
-    try {
-      const tRows = await queryDb<any>(`SELECT slug FROM public.tenants WHERE code = $1 OR slug = $1 OR id::text = $1 LIMIT 1`, [cd]);
-      if (tRows.length > 0 && tRows[0].slug) {
-        targetSlug = tRows[0].slug;
-      }
-    } catch {}
-    if (!targetSlug) {
-      targetSlug = 'srms-cet-bareilly';
+  
+  // Scoped to SRMS only if targetSlug is missing or is just a numeric college code:
+  if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
+    if (cd && srmsCollegeSlugMap[cd]) {
+      targetSlug = srmsCollegeSlugMap[cd];
+    } else if (cd) {
+      try {
+        const tRows = await queryDb<any>(
+          `SELECT slug FROM public.tenants WHERE code = $1 OR slug = $1 OR id::text = $1 LIMIT 1`,
+          [cd]
+        );
+        if (tRows.length > 0 && tRows[0].slug) {
+          targetSlug = tRows[0].slug;
+        }
+      } catch {}
     }
   }
+
   if (targetSlug === 'srms-cet') targetSlug = 'srms-cet-bareilly';
   if (targetSlug === 'srms-cetr') targetSlug = 'srms-cetr-bareilly';
-  const schema = `tenant_${targetSlug}`;
-  const isSrmsTenant = targetSlug.startsWith('srms');
+  if (!targetSlug) {
+    targetSlug = 'srms-cet-bareilly';
+  }
 
-  // 1. Direct PostgreSQL query to tenant's batches table FIRST
+  const schema = `tenant_${targetSlug}`;
+  const isSrmsTenant = targetSlug.includes('srms');
+
+  // 1. Direct PostgreSQL query to tenant's batches table FIRST (feeded batches only)
   try {
-    const dbBatches = await queryDb<any>(
-      `SELECT DISTINCT
-         COALESCE(b.code, b.year::text)::text AS batch_cd,
-         b.code::text AS batch_name,
-         b.year AS year,
-         COALESCE(b.course_cd, $1)::text AS course_cd,
-         b.is_active,
-         b.year AS sort_year
-       FROM "${schema}".batches b
-       WHERE ($1 = '' OR $1 = 'all' OR b.course_cd::text = $1::text)
-       ORDER BY sort_year DESC`,
-      [crs]
-    );
+    const queryParams: any[] = [];
+    let sql = `
+      SELECT DISTINCT
+        b.id::text AS id,
+        COALESCE(b.batch_cd, b.code, b.year::text)::text AS batch_cd,
+        COALESCE(b.name, 'Batch ' || b.year::text, b.year::text)::text AS batch_name,
+        COALESCE(b.name, 'Batch ' || b.year::text, b.year::text)::text AS name,
+        b.code::text AS code,
+        b.year::text AS year,
+        COALESCE(b.course_cd, '')::text AS course_cd,
+        b.is_active,
+        b.year AS sort_year
+      FROM "${schema}".batches b
+      LEFT JOIN "${schema}".courses c ON c.course_cd::text = b.course_cd::text OR c.code::text = b.course_cd::text
+      WHERE 1=1
+    `;
+
+    if (crs && crs !== 'all') {
+      queryParams.push(crs);
+      sql += ` AND (b.course_cd::text = $${queryParams.length}::text OR c.code::text = $${queryParams.length}::text OR c.course_cd::text = $${queryParams.length}::text)`;
+    }
+
+    if (br && br !== 'all') {
+      queryParams.push(br);
+      const brIdx = queryParams.length;
+      sql += ` AND (
+        b.department_id IS NULL
+        OR b.department_id::text = ''
+        OR b.department_id::text = $${brIdx}::text
+        OR b.department_id::text IN (
+          SELECT d.id::text FROM "${schema}".departments d
+          WHERE d.code::text = $${brIdx}::text OR d.branch_cd::text = $${brIdx}::text OR d.id::text = $${brIdx}::text
+        )
+        OR b.id::text IN (
+          SELECT DISTINCT ts.batch_id::text FROM "${schema}".timetable_slots ts
+          WHERE ts.batch_id IS NOT NULL
+            AND (${crs ? `$1::text = '' OR ` : ''}ts.course_cd::text = $1::text)
+            AND (ts.branch_cd::text = $${brIdx}::text OR ts.branch_cd::text IN (
+              SELECT d2.branch_cd::text FROM "${schema}".departments d2
+              WHERE d2.id::text = $${brIdx}::text OR d2.code::text = $${brIdx}::text
+            ))
+        )
+      )`;
+    }
+
+    sql += ` ORDER BY sort_year DESC, b.code ASC`;
+
+    const dbBatches = await queryDb<any>(sql, queryParams);
 
     if (Array.isArray(dbBatches) && dbBatches.length > 0) {
       const mapped = dbBatches.map((b) => ({
+        id: b.id || String(b.batch_cd || b.code || b.year),
         colg_cd: cd,
         course_cd: b.course_cd || crs,
-        batch_cd: Number(b.batch_cd || b.year) || b.batch_cd,
-        code: String(b.batch_cd || b.year),
-        batch_name: String(b.batch_name || b.year),
-        name: String(b.batch_name || b.year),
-        year: Number(b.year) || 2025,
+        batch_cd: b.batch_cd || b.code || b.year,
+        code: String(b.code || b.batch_cd || b.year),
+        batch_name: String(b.batch_name || b.name || (b.year ? `Batch ${b.year}` : b.code)),
+        name: String(b.name || b.batch_name || (b.year ? `Batch ${b.year}` : b.code)),
+        year: Number(b.year) || (Number(String(b.batch_name || '').replace(/[^0-9]/g, '')) || 2026),
         active_flg: b.is_active ? '1' : '0',
-        curr_bat_Cd: Number(b.batch_cd || b.year) || 1,
+        curr_bat_Cd: Number(b.batch_cd || b.code || 1) || 1,
       }));
       return NextResponse.json(mapped);
     }
@@ -102,7 +147,11 @@ async function handleGetBatch(colgcd?: string, coursecd?: string, tenantSlug?: s
 
   // 2. Dynamic Fallback to NestJS backend
   try {
-    const res = await fetch(`${BACKEND_API}/college-master/batches?tenant=${encodeURIComponent(targetSlug)}${crs ? `&course_cd=${encodeURIComponent(crs)}` : ''}`, {
+    let url = `${BACKEND_API}/college-master/batches?tenant=${encodeURIComponent(targetSlug)}`;
+    if (crs) url += `&course_cd=${encodeURIComponent(crs)}`;
+    if (br) url += `&branch_cd=${encodeURIComponent(br)}`;
+
+    const res = await fetch(url, {
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -111,14 +160,16 @@ async function handleGetBatch(colgcd?: string, coursecd?: string, tenantSlug?: s
       const list = json.data || json;
       if (Array.isArray(list) && list.length > 0) {
         const mapped = list.map((b: any) => ({
+          id: b.id || String(b.batch_cd || b.code || b.year),
           colg_cd: b.colg_cd || cd,
           course_cd: b.course_cd || crs,
-          batch_cd: Number(b.batch_cd || b.code || b.year) || (b.batch_cd || b.code),
-          code: String(b.batch_cd || b.code || b.year),
-          batch_name: String(b.name || b.year || b.code),
-          name: String(b.name || b.year || b.code),
+          batch_cd: b.batch_cd || b.code || b.year,
+          code: String(b.code || b.batch_cd || b.year),
+          batch_name: String(b.name || b.batch_name || (b.year ? `Batch ${b.year}` : b.code)),
+          name: String(b.name || b.batch_name || (b.year ? `Batch ${b.year}` : b.code)),
+          year: Number(b.year) || (Number(String(b.name || '').replace(/[^0-9]/g, '')) || 2026),
           active_flg: b.is_active ? '1' : '0',
-          curr_bat_Cd: Number(b.curr_bat_cd || b.batch_cd || b.code || 1),
+          curr_bat_Cd: Number(b.curr_bat_cd || b.batch_cd || b.code || 1) || 1,
         }));
         return NextResponse.json(mapped);
       }
@@ -130,7 +181,10 @@ async function handleGetBatch(colgcd?: string, coursecd?: string, tenantSlug?: s
   // 3. Live SRMS ERP Registration API: ONLY for SRMS tenants!
   if (isSrmsTenant) {
     try {
-      const data = await srmsPost('Registration/GetBatch', { colgcd: String(cd), coursecd: String(crs) });
+      const postPayload: Record<string, string> = { colgcd: String(cd), coursecd: String(crs) };
+      if (br) postPayload.branchcd = br;
+
+      const data = await srmsPost('Registration/GetBatch', postPayload);
       if (Array.isArray(data) && data.length > 0) {
         const mapped = data.map((b: any) => {
           const bCd = String(b.batch_cd || b.code || b.batch_name || '1');
@@ -183,6 +237,7 @@ async function handleGetBatch(colgcd?: string, coursecd?: string, tenantSlug?: s
     }
   }
 
+  // Feeded batches only: return empty array if no feeded batches exist in DB for this branch
   return NextResponse.json([]);
 }
 
@@ -191,7 +246,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const colgcd = String(body.colgcd || body.colg_cd || '').trim();
     const coursecd = String(body.coursecd || body.course_cd || '').trim();
-    const branchcd = String(body.branchcd || body.branch_cd || '').trim();
+    const branchcd = String(body.branchcd || body.branch_cd || body.department_id || body.departmentId || '').trim();
     const tenant = resolveTenantFromReq(req, String(body.tenant || body.tenantSlug || '').trim());
     return handleGetBatch(colgcd, coursecd, tenant, branchcd);
   } catch (error: any) {
@@ -205,7 +260,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const colgcd = String(searchParams.get('colgcd') || searchParams.get('colg_cd') || '').trim();
     const coursecd = String(searchParams.get('coursecd') || searchParams.get('course_cd') || searchParams.get('course') || '').trim();
-    const branchcd = String(searchParams.get('branchcd') || searchParams.get('branch_cd') || '').trim();
+    const branchcd = String(searchParams.get('branchcd') || searchParams.get('branch_cd') || searchParams.get('department_id') || searchParams.get('departmentId') || '').trim();
     const tenant = resolveTenantFromReq(req, String(searchParams.get('tenant') || searchParams.get('tenantSlug') || '').trim());
     return handleGetBatch(colgcd, coursecd, tenant, branchcd);
   } catch (error: any) {

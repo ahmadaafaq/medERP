@@ -183,8 +183,47 @@ export class AdminMasterController {
   // ─── 5. COMPETENCIES ───────────────────────────────────────────────────────
   @Get('competencies')
   @ApiOperation({ summary: 'List Competencies — tenant read' })
-  async listCompetencies(@TenantSlug() tenant: string) {
-    const data = await this.adminMasterService.listCompetencies(tenant);
+  async listCompetencies(
+    @TenantSlug() tenant: string,
+    @Query('topicId') topicId?: string,
+    @Query('topicCode') topicCode?: string,
+    @Query('unitId') unitId?: string,
+    @Query('unitCode') unitCode?: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('subjectCode') subjectCode?: string,
+  ) {
+    const data = await this.adminMasterService.listCompetencies(
+      tenant,
+      topicId,
+      topicCode,
+      unitId,
+      unitCode,
+      subjectId,
+      subjectCode,
+    );
+    return { success: true, data };
+  }
+
+  @Get('subtopics')
+  @ApiOperation({ summary: 'List Subtopics alias — tenant read' })
+  async listSubtopics(
+    @TenantSlug() tenant: string,
+    @Query('topicId') topicId?: string,
+    @Query('topicCode') topicCode?: string,
+    @Query('unitId') unitId?: string,
+    @Query('unitCode') unitCode?: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('subjectCode') subjectCode?: string,
+  ) {
+    const data = await this.adminMasterService.listCompetencies(
+      tenant,
+      topicId,
+      topicCode,
+      unitId,
+      unitCode,
+      subjectId,
+      subjectCode,
+    );
     return { success: true, data };
   }
 

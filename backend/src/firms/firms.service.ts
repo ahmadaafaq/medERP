@@ -458,13 +458,15 @@ export class FirmsService {
       }
     }
 
-    // Normalize role string if passed from client (e.g. COLLEGE_ADMIN -> ADMIN, HOD -> FACULTY)
+    // Normalize role string if passed from client (e.g. COLLEGE_ADMIN -> ADMIN, HOD -> HOD)
     let canonicalRole: string | undefined = undefined;
     if (role) {
       const rUpper = String(role).toUpperCase().trim();
       if (rUpper === 'COLLEGE_ADMIN' || rUpper === 'ADMINISTRATOR' || rUpper === 'ADMIN') {
         canonicalRole = 'ADMIN';
-      } else if (rUpper === 'HOD' || rUpper === 'STAFF' || rUpper === 'TEACHER' || rUpper === 'FACULTY') {
+      } else if (rUpper === 'HOD') {
+        canonicalRole = 'HOD';
+      } else if (rUpper === 'STAFF' || rUpper === 'TEACHER' || rUpper === 'FACULTY') {
         canonicalRole = 'FACULTY';
       } else if (rUpper === 'SUPER_ADMIN' || rUpper === 'OWNER' || rUpper === 'SUPERADMIN') {
         canonicalRole = 'SUPERADMIN';
@@ -472,6 +474,45 @@ export class FirmsService {
         canonicalRole = rUpper;
       } else {
         canonicalRole = rUpper;
+      }
+    }
+
+    // If a specific role is requested, ensure default permissions exist for this role in this firm
+    if (canonicalRole) {
+      try {
+        const roleCountRes = await this.dataSource.query(
+          `SELECT COUNT(*)::int AS cnt FROM public.firm_role_permissions WHERE firm_id = $1 AND role = $2`,
+          [firmId, canonicalRole],
+        );
+        if ((roleCountRes[0]?.cnt || 0) === 0) {
+          const firmData = await this.dataSource.query(
+            `SELECT id, firm_mode, title FROM public.firms WHERE id = $1 LIMIT 1`,
+            [firmId],
+          );
+          if (firmData.length > 0) {
+            const firmMode = firmData[0].firm_mode || 'NONMED';
+            const modeCondition = firmMode === 'MED' ? `('MED', 'BOTH')` : `('NONMED', 'BOTH')`;
+            const menuDefaults = await this.dataSource.query(
+              `SELECT role, menu_key FROM public.menu_registry 
+               WHERE role = $1 AND applicable_firm_mode IN ${modeCondition}
+               ORDER BY sort_order ASC`,
+              [canonicalRole],
+            );
+            for (const md of menuDefaults) {
+              await this.dataSource.query(
+                `INSERT INTO public.firm_role_permissions (firm_id, role, menu_key, is_enabled, created_at, updated_at)
+                 VALUES ($1, $2, $3, true, NOW(), NOW())
+                 ON CONFLICT DO NOTHING`,
+                [firmId, md.role, md.menu_key],
+              ).catch(() => {});
+            }
+            if (menuDefaults.length > 0) {
+              this.logger.log(`Auto-seeded ${menuDefaults.length} default permissions for role '${canonicalRole}' in firm '${firmData[0].title}'`);
+            }
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not verify/seed role permissions for ${canonicalRole}: ${err.message}`);
       }
     }
 

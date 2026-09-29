@@ -17,6 +17,7 @@ import FacultyBatchAttendanceAnalytics from '../../../components/faculty/Faculty
 import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperHustleBoard';
 import StudentAssessmentMarksCard from '../../../components/dashboard/StudentAssessmentMarksCard';
 import DepartmentTimetableCard from '../../../components/dashboard/DepartmentTimetableCard';
+import AdminApprovedQPCard from '../../../components/dashboard/AdminApprovedQPCard';
 
 interface CollegeKPIs {
   totalStudents: number;
@@ -1150,6 +1151,9 @@ export default function AdminDashboard() {
                   />
                 </div>
               </div>
+
+              {/* HOD-Approved Question Papers Print Card */}
+              <AdminApprovedQPCard />
 
               <div className="grid grid-cols-1 gap-6">
                 <FacultyDailyPunchWidget />

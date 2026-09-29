@@ -252,6 +252,11 @@ export default function FacultyLessonsPage() {
 
   const [loadingUnits, setLoadingUnits] = useState<boolean>(false);
   const [loadingTopics, setLoadingTopics] = useState<boolean>(false);
+  const [loadingSubtopics, setLoadingSubtopics] = useState<boolean>(false);
+  const [firmMode, setFirmMode] = useState<string>('NONMED');
+
+  const isNonMed = firmMode === 'NONMED';
+  const subtopicLabel = isNonMed ? 'Sub Topic' : 'Competency';
 
   // Form State
   const [title, setTitle] = useState('');
@@ -746,16 +751,85 @@ export default function FacultyLessonsPage() {
     }
   };
 
-  // 4. On topic select: dynamically load competencies / subtopics
-  const handleTopicChange = (newTopicCode: string) => {
+  // 4. On topic select: dynamically fetch & load sub-topics / competencies from database
+  const handleTopicChange = async (newTopicCode: string) => {
     setSelectedTopic(newTopicCode);
     setSelectedSubtopic('');
     setTopicSubtopics([]);
 
     if (!newTopicCode) return;
 
-    const dynamicSubtopics = generateSyllabusSubtopics(newTopicCode);
-    setTopicSubtopics(dynamicSubtopics);
+    try {
+      setLoadingSubtopics(true);
+      const tenant = getTenantSlug();
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Find the topic object from loaded unitTopics
+      const topicObj = unitTopics.find(
+        (t) =>
+          String(t.code).toLowerCase() === String(newTopicCode).toLowerCase() ||
+          String(t.id).toLowerCase() === String(newTopicCode).toLowerCase(),
+      );
+      const topicId = topicObj?.id || '';
+      const topicCode = topicObj?.code || newTopicCode;
+
+      // Find unit object
+      const unitObj = subjectUnits.find(
+        (u) =>
+          String(u.code).toLowerCase() === String(selectedUnit).toLowerCase() ||
+          String(u.id).toLowerCase() === String(selectedUnit).toLowerCase(),
+      );
+      const unitId = unitObj?.id || '';
+      const unitCode = unitObj?.code || selectedUnit;
+
+      // Query database competencies/subtopics via backend API with cascading filters
+      const queryParams = new URLSearchParams({
+        tenant,
+        topicCode,
+        ...(topicId ? { topicId } : {}),
+        ...(unitCode ? { unitCode } : {}),
+        ...(unitId ? { unitId } : {}),
+        ...(selectedSubject ? { subjectCode: selectedSubject } : {}),
+      });
+
+      const res = await fetch(`${API_BASE}/admin-master/competencies?${queryParams.toString()}`, {
+        headers,
+      }).catch(() => null);
+
+      let fetchedSubtopics: any[] = [];
+      if (res && res.ok) {
+        const j = await res.json();
+        const list = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
+        fetchedSubtopics = list.filter((st: any) => {
+          const matchTopic =
+            !newTopicCode ||
+            String(st.topic_code || '').toLowerCase() === newTopicCode.toLowerCase() ||
+            (topicId && String(st.topic_id || '').toLowerCase() === topicId.toLowerCase());
+          return matchTopic;
+        });
+      }
+
+      if (fetchedSubtopics.length > 0) {
+        setTopicSubtopics(
+          fetchedSubtopics.map((st: any) => ({
+            id: String(st.id || st.code),
+            code: String(st.code || st.competency_code || st.id),
+            name: st.name || st.description || st.title || `${subtopicLabel} ${st.code}`,
+          })),
+        );
+      } else {
+        // Fallback to dynamic syllabus generation if database has no records for this topic
+        const dynamicSubtopics = generateSyllabusSubtopics(newTopicCode);
+        setTopicSubtopics(dynamicSubtopics);
+      }
+    } catch (err) {
+      console.warn('Error loading subtopics for topic:', err);
+      const dynamicSubtopics = generateSyllabusSubtopics(newTopicCode);
+      setTopicSubtopics(dynamicSubtopics);
+    } finally {
+      setLoadingSubtopics(false);
+    }
   };
 
   // Dynamic Lessons Fetching Scoped to Selection
@@ -898,6 +972,46 @@ export default function FacultyLessonsPage() {
 
     setColgCd(cd);
     setColgName(name);
+
+    const detectFirmMode = async () => {
+      const stored = localStorage.getItem('firm_mode') || localStorage.getItem('firmMode');
+      if (stored) {
+        setFirmMode(stored.toUpperCase());
+        return;
+      }
+      try {
+        const uStr = localStorage.getItem('user');
+        if (uStr) {
+          const u = JSON.parse(uStr);
+          if (u.firm_mode || u.firmMode) {
+            const fm = String(u.firm_mode || u.firmMode).toUpperCase();
+            setFirmMode(fm);
+            localStorage.setItem('firm_mode', fm);
+            return;
+          }
+        }
+      } catch {}
+
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const res = await fetch(`${API_BASE}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const d = await res.json();
+            const fm = d?.firm_mode || d?.firmMode || d?.user?.firm_mode || d?.user?.firmMode;
+            if (fm) {
+              setFirmMode(String(fm).toUpperCase());
+              localStorage.setItem('firm_mode', String(fm).toUpperCase());
+              localStorage.setItem('firmMode', String(fm).toUpperCase());
+            }
+          }
+        } catch {}
+      }
+    };
+
+    detectFirmMode();
 
     const initAcademicMetadata = async () => {
       try {
@@ -1319,26 +1433,28 @@ export default function FacultyLessonsPage() {
                   </select>
                 </div>
 
-                {/* 4. Sub-Topic / Competency Dropdown (Loads dynamically on Topic selection) */}
+                {/* 4. Sub-Topic / Competency Dropdown (Loads dynamically on Topic selection from DB) */}
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Sub-Topic / Competency {selectedTopic && (
+                    {subtopicLabel} {selectedTopic && (
                       <span className="text-[#5B4BFF]">({topicSubtopics.length})</span>
                     )}
                   </label>
                   <select
                     value={selectedSubtopic}
                     onChange={(e) => setSelectedSubtopic(e.target.value)}
-                    disabled={!selectedTopic}
+                    disabled={!selectedTopic || loadingSubtopics}
                     className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                   >
                     {!selectedTopic ? (
                       <option value="">-- Select Topic First --</option>
+                    ) : loadingSubtopics ? (
+                      <option value="">⏳ Loading {subtopicLabel}s...</option>
                     ) : topicSubtopics.length === 0 ? (
-                      <option value="">-- No sub-topics available --</option>
+                      <option value="">-- No {subtopicLabel.toLowerCase()}s available --</option>
                     ) : (
                       <>
-                        <option value="">-- Select Sub-Topic / Competency --</option>
+                        <option value="">-- Select {subtopicLabel} --</option>
                         {topicSubtopics.map((st) => (
                           <option key={st.id || st.code} value={st.code}>
                             [{st.code}] {st.name}

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 
-export type RoleType = 'STUDENT' | 'FACULTY' | 'ADMIN' | 'CLERK' | 'WARDEN' | 'SUPERADMIN';
+export type RoleType = 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN' | 'CLERK' | 'WARDEN' | 'SUPERADMIN';
 
 interface MenuItem {
   id?: string;
@@ -27,10 +27,11 @@ interface Step5Props {
 const ROLES: Array<{ key: RoleType; label: string; icon: string }> = [
   { key: 'STUDENT', label: '1. Student Portal', icon: '🎓' },
   { key: 'FACULTY', label: '2. Faculty Space', icon: '👨‍🏫' },
-  { key: 'ADMIN', label: '3. College Admin', icon: '🏛️' },
-  { key: 'CLERK', label: '4. Data Entry Clerk', icon: '📋' },
-  { key: 'WARDEN', label: '5. Hostel Warden', icon: '🏢' },
-  { key: 'SUPERADMIN', label: '6. Central SuperAdmin', icon: '⚡' },
+  { key: 'HOD', label: '3. Head of Dept (HOD)', icon: '🏛️' },
+  { key: 'ADMIN', label: '4. College Admin', icon: '🏛️' },
+  { key: 'CLERK', label: '5. Data Entry Clerk', icon: '📋' },
+  { key: 'WARDEN', label: '6. Hostel Warden', icon: '🏢' },
+  { key: 'SUPERADMIN', label: '7. Central SuperAdmin', icon: '⚡' },
 ];
 
 export default function Step5RoleMenuAccess({
@@ -109,6 +110,13 @@ export default function Step5RoleMenuAccess({
         { role: 'FACULTY', menu_key: 'faculty.logbook', menu_label: 'Logbook Verification', route_path: '/dashboard/faculty/logbook', parent_menu_key: null, sort_order: 30, applicable_firm_mode: 'MED' },
         { role: 'FACULTY', menu_key: 'faculty.lessons', menu_label: 'Lesson Planner', route_path: '/dashboard/faculty/lessons', parent_menu_key: null, sort_order: 40, applicable_firm_mode: 'BOTH' },
         { role: 'FACULTY', menu_key: 'faculty.reports', menu_label: 'Faculty MIS Reports', route_path: '/dashboard/faculty/reports', parent_menu_key: null, sort_order: 50, applicable_firm_mode: 'BOTH' },
+      ],
+      HOD: [
+        { role: 'HOD', menu_key: 'hod.dashboard', menu_label: 'HOD Department Console', route_path: '/dashboard/hod', parent_menu_key: null, sort_order: 10, applicable_firm_mode: 'BOTH' },
+        { role: 'HOD', menu_key: 'hod.qp-approvals', menu_label: 'Question Paper Approvals & Publishing', route_path: '/dashboard/hod/qp-approvals', parent_menu_key: null, sort_order: 20, applicable_firm_mode: 'BOTH' },
+        { role: 'HOD', menu_key: 'hod.timetable-approvals', menu_label: 'Timetable Approvals', route_path: '/dashboard/hod/timetable-approvals', parent_menu_key: null, sort_order: 30, applicable_firm_mode: 'BOTH' },
+        { role: 'HOD', menu_key: 'hod.question-bank', menu_label: 'Department Question Bank', route_path: '/dashboard/hod/question-bank', parent_menu_key: null, sort_order: 40, applicable_firm_mode: 'BOTH' },
+        { role: 'HOD', menu_key: 'hod.chat', menu_label: 'Department Faculty & Staff Chat', route_path: '/dashboard/hod/chat', parent_menu_key: null, sort_order: 50, applicable_firm_mode: 'BOTH' },
       ],
       ADMIN: [
         { role: 'ADMIN', menu_key: 'admin.dashboard', menu_label: 'College KPIs', route_path: '/dashboard/admin', parent_menu_key: null, sort_order: 10, applicable_firm_mode: 'BOTH' },

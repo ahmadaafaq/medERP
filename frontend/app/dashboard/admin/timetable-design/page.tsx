@@ -651,6 +651,7 @@ export default function TimetableDesignPage() {
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; message: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [facultyCrossSlots, setFacultyCrossSlots] = useState<any[]>([]);
   const modalScrollRef = useRef<HTMLDivElement>(null);
 
   const showAlert = (type: 'success' | 'error' | 'info' | 'warning', message: string, duration = 6000) => {
@@ -749,6 +750,46 @@ export default function TimetableDesignPage() {
     return availableDepartments.find(d => String(d.id) === String(selectedDept) || String(d.code) === String(selectedDept) || d.name === selectedDept) || availableDepartments[0];
   }, [availableDepartments, selectedDept]);
 
+  // When modal is open and a faculty is selected, fetch all slots assigned to this faculty across all courses/branches/batches
+  useEffect(() => {
+    if (!isModalOpen) {
+      setFacultyCrossSlots([]);
+      return;
+    }
+    const targetFacId = formData.facultyId || formData.facultyEmpId;
+    if (!targetFacId) {
+      setFacultyCrossSlots([]);
+      return;
+    }
+
+    let isSubscribed = true;
+    const loadFacultySlots = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+        const activeSlug = getActiveTenantSlug();
+        const res = await fetch(`${API_BASE}/timetable?tenant=${activeSlug}&facultyId=${encodeURIComponent(targetFacId)}`, {
+          headers: {
+            'x-tenant-slug': activeSlug,
+            'x-tenant-id': activeSlug,
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+          cache: 'no-store',
+        });
+        if (res.ok && isSubscribed) {
+          const json = await res.json();
+          if (Array.isArray(json?.data)) {
+            setFacultyCrossSlots(json.data);
+          }
+        }
+      } catch (e) {
+        // Continue gracefully
+      }
+    };
+
+    loadFacultySlots();
+    return () => { isSubscribed = false; };
+  }, [isModalOpen, formData.facultyId, formData.facultyEmpId]);
+
   // Live Clash Detection: Check if selected faculty is already engaged in another course/batch/slot on the same day & time
   const liveClash = useMemo(() => {
     if (!isModalOpen) return null;
@@ -761,10 +802,22 @@ export default function TimetableDesignPage() {
     const end = (formData.endTime || '09:30:00').slice(0, 5);
     if (!start || !end) return null;
 
-    // Check against all active slots
-    const clash = (slots || []).find((s) => {
-      if (editingSlot && String(s.id) === String(editingSlot.id)) return false;
-      if (s.day_of_week !== day) return false;
+    // Merge active course slots with all cross-course slots for this faculty
+    const candidateSlotsMap = new Map<string, any>();
+    for (const s of (slots || [])) {
+      if (s?.id) candidateSlotsMap.set(String(s.id), s);
+    }
+    for (const s of (facultyCrossSlots || [])) {
+      if (s?.id && !candidateSlotsMap.has(String(s.id))) {
+        candidateSlotsMap.set(String(s.id), s);
+      }
+    }
+    const candidateSlots = Array.from(candidateSlotsMap.values());
+
+    // Check against all candidate slots
+    const clash = candidateSlots.find((s) => {
+      if (editingSlot && (String(s.id) === String(editingSlot.id) || (editingSlot.postgres_id && String(s.id) === String(editingSlot.postgres_id)))) return false;
+      if (Number(s.day_of_week) !== Number(day)) return false;
 
       const sStart = String(s.start_time || '').slice(0, 5);
       const sEnd = String(s.end_time || '').slice(0, 5);
@@ -773,7 +826,11 @@ export default function TimetableDesignPage() {
 
       // Check faculty match
       const facMatch = (
-        (targetFacId && (String(s.faculty_id) === String(targetFacId) || String(s.faculty_code) === String(targetFacId))) ||
+        (targetFacId && (
+          String(s.faculty_id) === String(targetFacId) || 
+          String(s.faculty_code) === String(targetFacId) ||
+          String(s.faculty_uuid) === String(targetFacId)
+        )) ||
         (targetFacName && s.faculty_name && s.faculty_name.toLowerCase().includes(targetFacName)) ||
         (s.topic && targetFacName && s.topic.toLowerCase().includes(targetFacName))
       );
@@ -788,40 +845,43 @@ export default function TimetableDesignPage() {
 
       // Dynamic course name — look up from coursesList state, fall back to raw code only
       const matchedCourse = Array.isArray(coursesList)
-        ? coursesList.find((c: any) => String(c.code) === String(clash.course_cd) || String(c.id) === String(clash.course_cd))
+        ? coursesList.find((c: any) => String(c.code) === String(clash.course_cd) || String(c.id) === String(clash.course_cd) || String(c.course_cd) === String(clash.course_cd))
         : null;
       const courseName = matchedCourse?.name
         ? `Course: ${matchedCourse.name}`
-        : (selectedCourseObj?.name ? `Course: ${selectedCourseObj.name}` : (clash.course_cd ? `Course: ${clash.course_cd}` : 'Course: Academic'));
+        : (clash.course_cd ? `Course: ${clash.course_cd}` : (clash.department_name ? `Course: ${clash.department_name}` : (selectedCourseObj?.name ? `Course: ${selectedCourseObj.name}` : 'Course: Academic')));
+
+      const deptBranch = clash.department_name ? ` (${clash.department_name})` : (clash.branch_cd ? ` (Branch ${clash.branch_cd})` : '');
 
       // Dynamic batch name — look up from batchesList state
       const matchedBatch = Array.isArray(batchesList)
-        ? batchesList.find((b: any) => String(b.code) === String(clash.batch_cd) || String(b.id) === String(clash.batch_cd))
+        ? batchesList.find((b: any) => String(b.code) === String(clash.batch_cd) || String(b.id) === String(clash.batch_cd) || String(b.batch_cd) === String(clash.batch_cd))
         : null;
       const batchName = matchedBatch?.name
         ? `Batch: ${matchedBatch.name}`
-        : (selectedBatchObj?.name ? `Batch: ${selectedBatchObj.name}` : (clash.batch_cd ? `Batch: ${clash.batch_cd}` : 'Batch: Current'));
+        : (clash.batch_name ? `Batch: ${clash.batch_name}` : (clash.batch_cd ? `Batch: ${clash.batch_cd}` : (selectedBatchObj?.name ? `Batch: ${selectedBatchObj.name}` : 'Batch: Current')));
 
       const semVal = clash.semester || selectedSemester || '3';
       const semesterName = `Semester: ${semVal}`;
       const secRaw = String(clash.section || selectedSection || '1');
       const secLetter = secRaw === '1' ? 'A' : secRaw === '2' ? 'B' : secRaw === '3' ? 'C' : secRaw === '4' ? 'D' : secRaw;
       const sectionName = `Section: ${secLetter}`;
+      const subjectLabel = clash.subject_name || clash.topic || clash.description || 'Subject Session';
 
       return {
         faculty_name: facName,
-        course: courseName,
+        course: `${courseName}${deptBranch}`,
         batch: batchName,
         semester: semesterName,
         section: sectionName,
         day: dayName,
         time: timeRange,
-        subject: clash.subject_name || clash.topic || 'Subject',
-        message: `${facName} is already assigned to ${courseName}, ${batchName}, ${semesterName}, ${sectionName} on ${dayName} (${timeRange}). Please select a different time slot or choose another faculty member, or contact the Academic Administrator or Department Clerk to resolve the schedule overlap.`,
+        subject: subjectLabel,
+        message: `${facName} is already assigned to ${courseName}${deptBranch}, ${batchName}, ${semesterName}, ${sectionName} for "${subjectLabel}" on ${dayName} (${timeRange}). Please select a different time slot or choose another faculty member, or contact the Academic Administrator to resolve the schedule overlap.`,
       };
     }
     return null;
-  }, [isModalOpen, formData.facultyId, formData.facultyEmpId, formData.facultyName, formData.dayOfWeek, formData.startTime, formData.endTime, slots, editingSlot, selectedCourseObj, selectedBatchObj, selectedSemester, selectedSection, coursesList, batchesList]);
+  }, [isModalOpen, formData.facultyId, formData.facultyEmpId, formData.facultyName, formData.dayOfWeek, formData.startTime, formData.endTime, slots, facultyCrossSlots, editingSlot, selectedCourseObj, selectedBatchObj, selectedSemester, selectedSection, coursesList, batchesList]);
 
   // Dynamically Filter Form Subjects based on Active College, Course, and Live SRMS Loadsubject
   const availableFormSubjects = useMemo(() => {

@@ -65,6 +65,7 @@ function FirmRegistrationWizardContent() {
   const [rolePermissions, setRolePermissions] = useState<Record<RoleType, string[]>>({
     STUDENT: [],
     FACULTY: [],
+    HOD: [],
     ADMIN: [],
     CLERK: [],
     WARDEN: [],
@@ -124,6 +125,7 @@ function FirmRegistrationWizardContent() {
         const grouped: Record<RoleType, string[]> = {
           STUDENT: [],
           FACULTY: [],
+          HOD: [],
           ADMIN: [],
           CLERK: [],
           WARDEN: [],
@@ -139,6 +141,7 @@ function FirmRegistrationWizardContent() {
         setRolePermissions((prev) => ({
           STUDENT: grouped.STUDENT.length > 0 ? grouped.STUDENT : prev.STUDENT,
           FACULTY: grouped.FACULTY.length > 0 ? grouped.FACULTY : prev.FACULTY,
+          HOD: grouped.HOD.length > 0 ? grouped.HOD : prev.HOD,
           ADMIN: grouped.ADMIN.length > 0 ? grouped.ADMIN : prev.ADMIN,
           CLERK: grouped.CLERK.length > 0 ? grouped.CLERK : prev.CLERK,
           WARDEN: grouped.WARDEN.length > 0 ? grouped.WARDEN : prev.WARDEN,
@@ -225,7 +228,7 @@ function FirmRegistrationWizardContent() {
       }
 
       // 2. Save Role Menu Permissions for each role
-      const roles: RoleType[] = ['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN', 'SUPERADMIN'];
+      const roles: RoleType[] = ['STUDENT', 'FACULTY', 'HOD', 'ADMIN', 'CLERK', 'WARDEN', 'SUPERADMIN'];
       for (const r of roles) {
         const keys = rolePermissions[r] || [];
         if (keys.length > 0) {

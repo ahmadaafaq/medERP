@@ -224,3 +224,70 @@ export class PublishPaperDto {
   @IsOptional()
   endTime?: string;
 }
+
+// ─── HOD Approval Workflow DTOs ──────────────────────────────────────────────
+
+/** HOD approves or rejects a question paper */
+export class HodApproveQPDto {
+  @IsString()
+  @IsNotEmpty()
+  paperId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  action: string; // 'approve' | 'reject'
+
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+}
+
+/** HOD approves or rejects a timetable draft */
+export class HodApproveTimetableDto {
+  @IsString()
+  @IsNotEmpty()
+  draftId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  action: string; // 'approve' | 'reject'
+
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+}
+
+/** Clerk creates a timetable draft for HOD approval */
+export class CreateTimetableDraftDto {
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @IsString()
+  @IsOptional()
+  departmentId?: string;
+
+  @IsString()
+  @IsOptional()
+  departmentName?: string;
+
+  @IsString()
+  @IsOptional()
+  batchId?: string;
+
+  @IsString()
+  @IsOptional()
+  semester?: string;
+
+  @IsString()
+  @IsOptional()
+  academicYear?: string;
+
+  @IsOptional()
+  slots?: any[];
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+}
+

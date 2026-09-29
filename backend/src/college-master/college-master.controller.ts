@@ -345,11 +345,15 @@ export class CollegeMasterController {
     @Query('course_cd') courseCd?: string,
     @Query('courseId') courseId?: string,
     @Query('coursecd') coursecd?: string,
+    @Query('branch_cd') branchCd?: string,
+    @Query('branchcd') branchcd?: string,
+    @Query('department_id') departmentId?: string,
     @CurrentUser() user?: JwtPayload,
   ) {
     const targetCourse = courseCd || courseId || coursecd;
+    const targetBranch = branchCd || branchcd || departmentId;
     const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
-    const data = await this.collegeMasterService.listBatches(effectiveTenant, targetCourse, user);
+    const data = await this.collegeMasterService.listBatches(effectiveTenant, targetCourse, user, targetBranch);
     return { success: true, data };
   }
 

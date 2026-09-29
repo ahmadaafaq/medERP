@@ -2050,7 +2050,7 @@ function OwnerDashboardContent() {
                 <div>
                   <label className="block text-xs font-bold text-[#1B1E28] mb-1.5">Select Role</label>
                   <div className="flex items-center gap-1.5 overflow-x-auto">
-                    {['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN', 'SUPERADMIN'].map((r) => (
+                    {['STUDENT', 'FACULTY', 'HOD', 'ADMIN', 'CLERK', 'WARDEN', 'SUPERADMIN'].map((r) => (
                       <button
                         key={r}
                         type="button"

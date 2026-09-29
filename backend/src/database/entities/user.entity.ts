@@ -14,6 +14,9 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 50 })
   role: string;
 
+  @Column({ type: 'text', nullable: true })
+  assigned_roles: string;
+
   @Column({ type: 'boolean', default: true })
   is_active: boolean;
 

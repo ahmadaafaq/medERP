@@ -61,6 +61,7 @@ export class MenuRegistryService implements OnModuleInit {
     const roleMap: Record<string, MenuRole> = {
       admin: MenuRole.ADMIN,
       faculty: MenuRole.FACULTY,
+      hod: MenuRole.HOD,
       student: MenuRole.STUDENT,
       clerk: MenuRole.CLERK,
       warden: MenuRole.WARDEN,
@@ -174,6 +175,7 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.ADMIN, menu_key: 'admin_assessment_bank', menu_label: 'Question Bank', route_path: '/dashboard/admin/assessment#bank', parent_menu_key: 'admin_assessment', sort_order: 111, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_assessment_design', menu_label: 'Paper Designer', route_path: '/dashboard/admin/assessment#design', parent_menu_key: 'admin_assessment', sort_order: 112, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_assessment_publish', menu_label: 'Published Assessments', route_path: '/dashboard/admin/assessment#publish', parent_menu_key: 'admin_assessment', sort_order: 113, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_qp_print', menu_label: 'Question Paper Print Center', route_path: '/dashboard/admin/qp-print', parent_menu_key: 'admin_assessment', sort_order: 115, applicable_firm_mode: ApplicableFirmMode.BOTH },
 
       { role: MenuRole.ADMIN, menu_key: 'admin_assessment_marks', menu_label: 'Assessment Marks & Upload', route_path: '/dashboard/admin/assessment-marks', sort_order: 120, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_assessment_marks_theory', menu_label: 'Theory Evaluation', route_path: '/dashboard/admin/assessment-marks#theory', parent_menu_key: 'admin_assessment_marks', sort_order: 121, applicable_firm_mode: ApplicableFirmMode.BOTH },
@@ -222,6 +224,18 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.FACULTY, menu_key: 'faculty_reports_theory_result', menu_label: 'Theory Result', route_path: '/dashboard/faculty/reports/theory-result', parent_menu_key: 'faculty_reports', sort_order: 182, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.FACULTY, menu_key: 'faculty_reports_logbook', menu_label: 'Academic Portfolio (Logbook)', route_path: '/dashboard/faculty/reports/logbook', sort_order: 183, applicable_firm_mode: ApplicableFirmMode.BOTH },
 
+      // ═══════════════════════════ HOD ═══════════════════════════
+      { role: MenuRole.HOD, menu_key: 'hod_overview', menu_label: 'HOD Department Console', route_path: '/dashboard/hod', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_qp_approvals', menu_label: 'Question Paper Approvals & Publishing', route_path: '/dashboard/hod/qp-approvals', sort_order: 20, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_timetable_approvals', menu_label: 'Timetable Approvals', route_path: '/dashboard/hod/timetable-approvals', sort_order: 30, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_question_bank', menu_label: 'Department Question Bank', route_path: '/dashboard/hod/question-bank', sort_order: 40, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_chat', menu_label: 'Department Faculty & Staff Chat', route_path: '/dashboard/hod/chat', sort_order: 50, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_faculty_schedule', menu_label: 'Faculty Schedule & Timetable', route_path: '/dashboard/faculty/schedule', sort_order: 60, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_faculty_attendance', menu_label: 'Daily Attendance Sync', route_path: '/dashboard/faculty/attendance', sort_order: 70, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_faculty_assessment', menu_label: 'Assessment & Grading', route_path: '/dashboard/faculty/assessment', sort_order: 80, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_faculty_marks', menu_label: 'Marks Entry & Grading', route_path: '/dashboard/faculty/marks', sort_order: 90, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_faculty_reports', menu_label: 'Department MIS Reports', route_path: '/dashboard/faculty/reports', sort_order: 100, applicable_firm_mode: ApplicableFirmMode.BOTH },
+
       // ═══════════════════════════ STUDENT ═══════════════════════════
       { role: MenuRole.STUDENT, menu_key: 'student_overview', menu_label: 'Student Dashboard', route_path: '/dashboard/student', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.STUDENT, menu_key: 'student_profile', menu_label: 'Student Profile', route_path: '/dashboard/student/profile', sort_order: 20, applicable_firm_mode: ApplicableFirmMode.BOTH },
@@ -248,6 +262,8 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.CLERK, menu_key: 'clerk_attendance', menu_label: 'Attendance Portal Sync', route_path: '/dashboard/clerk/attendance', sort_order: 20, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_biometric', menu_label: 'Attendance — Bio-Metric/CCTV', route_path: '/dashboard/clerk/attendance-biometric', sort_order: 30, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_assessment', menu_label: 'Assessment & Marks Entry', route_path: '/dashboard/clerk/assessment', sort_order: 40, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.CLERK, menu_key: 'clerk_qp_designer', menu_label: 'Question Paper Designer', route_path: '/dashboard/clerk/qp-designer', sort_order: 42, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.CLERK, menu_key: 'clerk_timetable_designer', menu_label: 'Timetable Designer', route_path: '/dashboard/clerk/timetable-designer', sort_order: 45, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_placement', menu_label: 'Placement Drive Assistance', route_path: '/dashboard/clerk/placement', sort_order: 50, applicable_firm_mode: ApplicableFirmMode.NONMED },
       { role: MenuRole.CLERK, menu_key: 'clerk_internships', menu_label: 'Internships & Certifications', route_path: '/dashboard/clerk/internships', sort_order: 60, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_library', menu_label: 'Digital Library', route_path: '/dashboard/clerk/library', sort_order: 65, applicable_firm_mode: ApplicableFirmMode.BOTH },

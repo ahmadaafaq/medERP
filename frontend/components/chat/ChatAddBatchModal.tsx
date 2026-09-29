@@ -16,10 +16,14 @@ interface DepartmentOption {
 }
 
 interface BatchOption {
+  id?: string;
   year: number | string;
   code?: string;
   batch_cd?: number | string;
   batch_name?: string;
+  name?: string;
+  course_cd?: string;
+  department_id?: string;
 }
 
 interface ChatAddBatchModalProps {
@@ -32,6 +36,7 @@ interface ChatAddBatchModalProps {
     department_name: string;
     batch_year: string;
     batch_code?: string;
+    tenant?: string;
   }) => Promise<boolean>;
 }
 
@@ -44,15 +49,57 @@ export default function ChatAddBatchModal({
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [batches, setBatches] = useState<BatchOption[]>([]);
 
+  // All options from DB — used for cascading in-memory filters
+  const [allDepartments, setAllDepartments] = useState<DepartmentOption[]>([]);
+  const [allBatches, setAllBatches] = useState<BatchOption[]>([]);
+
   const [selectedCourseCd, setSelectedCourseCd] = useState<string>('');
   const [selectedCourseName, setSelectedCourseName] = useState<string>('');
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
   const [selectedDeptName, setSelectedDeptName] = useState<string>('');
-  const [selectedBatchYear, setSelectedBatchYear] = useState<string>('2025');
+  const [selectedBatchCode, setSelectedBatchCode] = useState<string>('');
+  const [selectedBatchYear, setSelectedBatchYear] = useState<string>('');
+  const [selectedBatchName, setSelectedBatchName] = useState<string>('');
 
   const [loadingOptions, setLoadingOptions] = useState<boolean>(true);
+  const [loadingBatches, setLoadingBatches] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  const getActiveTenant = () => {
+    if (typeof window === 'undefined') return '';
+    let slug = (
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('tenant') ||
+      localStorage.getItem('institutionSlug') ||
+      ''
+    ).replace(/^tenant_/, '').replace(/^tenant-/, '');
+
+    if (!slug) {
+      try {
+        const rawUser = localStorage.getItem('user') || localStorage.getItem('auth_user');
+        if (rawUser) {
+          const u = JSON.parse(rawUser);
+          slug = (u.tenantSlug || u.tenant || u.firmSlug || u.college_slug || '').replace(/^tenant_/, '').replace(/^tenant-/, '');
+        }
+      } catch {}
+    }
+
+    if (!slug && typeof document !== 'undefined') {
+      const match = document.cookie.match(/(?:^|;\s*)auth_tenant=([^;]+)/);
+      if (match && match[1]) {
+        slug = decodeURIComponent(match[1]).replace(/^tenant_/, '').replace(/^tenant-/, '');
+      }
+    }
+
+    if (!slug && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      slug = (params.get('tenant') || params.get('tenantSlug') || '').replace(/^tenant_/, '').replace(/^tenant-/, '');
+    }
+
+    return slug;
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -60,51 +107,74 @@ export default function ChatAddBatchModal({
     }
   }, [isOpen]);
 
+  /**
+   * Load all courses, departments, and batches from the chat selection-options endpoint.
+   * This uses PostgreSQL data for ALL tenants (including non-SRMS like rimt-bareilly).
+   */
   const loadDropdownOptions = async () => {
     try {
       setLoadingOptions(true);
       setErrorMsg('');
 
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-      const tenant = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
+      const tenant = getActiveTenant();
 
-      // 1. Fetch courses
+      // Load all data in one call from DB-backed selection-options endpoint
+      const res = await fetch(`/api/v1/chat/selection-options?tenant=${encodeURIComponent(tenant)}`, {
+        headers: { Authorization: `Bearer ${token}`, 'x-tenant-slug': tenant },
+      }).catch(() => null);
+
       let courseList: CourseOption[] = [];
-      try {
-        const cRes = await fetch(`/api/srms/courses?tenant=${tenant}`, {
-          headers: { Authorization: `Bearer ${token}` },
+      let deptList: DepartmentOption[] = [];
+      let batchList: BatchOption[] = [];
+
+      if (res && res.ok) {
+        const json = await res.json();
+        const data = json.data || {};
+
+        courseList = (data.courses || []).map((c: any) => ({
+          course_cd: String(c.course_cd || c.code || c.id || ''),
+          course_name: String(c.course_name || c.name || 'Course'),
+        })).filter((c: CourseOption) => c.course_cd);
+
+        deptList = (data.departments || []).map((d: any) => ({
+          id: String(d.id || d.branch_cd || d.code || ''),
+          name: String(d.name || d.department_name || 'Department'),
+          code: String(d.code || d.branch_cd || ''),
+          branch_cd: String(d.branch_cd || d.code || ''),
+          course_cd: String(d.course_cd || ''),
+        }));
+
+        batchList = (data.batches || []).map((b: any) => {
+          const rawYear = String(b.year || b.batch_cd || '').replace(/[^0-9]/g, '');
+          const displayName = b.name || (rawYear ? `Batch ${rawYear}` : `Batch ${b.code || ''}`);
+          return {
+            id: String(b.id || b.code || rawYear),
+            code: String(b.code || b.batch_cd || rawYear),
+            batch_cd: b.batch_cd || b.code,
+            year: rawYear,
+            batch_name: displayName,
+            name: displayName,
+            course_cd: b.course_cd ? String(b.course_cd) : '',
+            department_id: b.department_id ? String(b.department_id) : '',
+          };
         });
-        if (cRes.ok) {
-          const cJson = await cRes.json();
-          if (Array.isArray(cJson) && cJson.length > 0) {
-            courseList = cJson.map((c: any) => ({
-              course_cd: String(c.course_cd || c.code || c.id),
-              course_name: String(c.course_name || c.name || 'Course'),
-            }));
-          }
-        }
-      } catch {}
-
-      if (courseList.length === 0) {
-        courseList = [
-          { course_cd: '13', course_name: 'B.Tech (Bachelor of Technology)' },
-          { course_cd: '14', course_name: 'BCA (Bachelor of Computer Applications)' },
-          { course_cd: '15', course_name: 'MCA (Master of Computer Applications)' },
-          { course_cd: '1', course_name: 'MBBS (Bachelor of Medicine)' },
-          { course_cd: '2', course_name: 'B.Pharm (Pharmacy)' },
-        ];
       }
+
       setCourses(courseList);
-      if (courseList.length > 0) {
-        setSelectedCourseCd(courseList[0].course_cd);
-        setSelectedCourseName(courseList[0].course_name);
-      }
+      setAllDepartments(deptList);
+      setAllBatches(batchList);
 
-      // 2. Fetch branches / departments
-      const initialCourseCd = courseList[0]?.course_cd || '13';
-      const initialCourseName = courseList[0]?.course_name || 'BCA';
-      await loadBranchesForCourse(initialCourseCd, initialCourseName, tenant, token);
-      await loadBatchesForCourse(initialCourseCd, tenant, token);
+      // Set initial selection with first course
+      const initialCourse = courseList[0];
+      if (initialCourse) {
+        setSelectedCourseCd(initialCourse.course_cd);
+        setSelectedCourseName(initialCourse.course_name);
+        applyCourseCascade(initialCourse.course_cd, deptList, batchList);
+      } else {
+        setDepartments([]);
+        setBatches([]);
+      }
     } catch (err: any) {
       console.error('Error loading dropdown options:', err);
       setErrorMsg('Failed to load courses or departments.');
@@ -113,107 +183,103 @@ export default function ChatAddBatchModal({
     }
   };
 
-  const loadBatchesForCourse = async (courseCd: string, tenant: string, token: string) => {
-    let batchList: BatchOption[] = [];
-    try {
-      const isMed = tenant.includes('ims') || tenant.includes('med');
-      const defaultColg = isMed ? '11' : '1';
-      const btRes = await fetch('/api/srms/batches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ colgcd: defaultColg, coursecd: courseCd, tenantSlug: tenant }),
-      }).catch(() => null);
+  /**
+   * Filter departments and batches by course, then auto-select first department.
+   * Cascading is done in-memory — no extra API calls needed.
+   */
+  const applyCourseCascade = (
+    courseCd: string,
+    deptSource: DepartmentOption[],
+    batchSource: BatchOption[],
+  ) => {
+    // Filter departments for this course (or show all if course_cd not set)
+    const filteredDepts = deptSource.filter((d) =>
+      !d.course_cd || d.course_cd === courseCd || d.course_cd === ''
+    );
+    setDepartments(filteredDepts);
 
-      if (btRes && btRes.ok) {
-        const bJson = await btRes.json();
-        const list = Array.isArray(bJson) ? bJson : bJson.data || [];
-        batchList = list.map((b: any) => {
-          const rawYr = String(b.batch_name || b.year || b.name || b.batch_cd || '2025');
-          const cleanYr = rawYr.replace(/[^0-9]/g, '') || rawYr;
-          return {
-            year: cleanYr,
-            batch_name: b.batch_name?.startsWith('Batch') ? b.batch_name : `Batch ${b.batch_name || cleanYr}`,
-          };
-        });
-      }
-    } catch {}
-
-    if (batchList.length === 0) {
-      batchList = [
-        { year: '2025', batch_name: 'Batch 2025' },
-        { year: '2024', batch_name: 'Batch 2024' },
-        { year: '2023', batch_name: 'Batch 2023' },
-        { year: '2026', batch_name: 'Batch 2026' },
-      ];
-    }
-    setBatches(batchList);
-    if (batchList.length > 0) {
-      setSelectedBatchYear(String(batchList[0].year));
+    const firstDept = filteredDepts[0];
+    if (firstDept) {
+      setSelectedDeptId(firstDept.id);
+      setSelectedDeptName(firstDept.name);
+      applyDeptCascade(firstDept.id, courseCd, batchSource);
+    } else {
+      setSelectedDeptId('');
+      setSelectedDeptName('');
+      setBatches([]);
+      setSelectedBatchCode('');
+      setSelectedBatchYear('');
+      setSelectedBatchName('');
     }
   };
 
-  const loadBranchesForCourse = async (courseCd: string, courseName: string, tenant: string, token: string) => {
-    let deptList: DepartmentOption[] = [];
-    try {
-      const bRes = await fetch(`/api/srms/branches?coursecd=${courseCd}&tenant=${tenant}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (bRes.ok) {
-        const bJson = await bRes.json();
-        if (Array.isArray(bJson) && bJson.length > 0) {
-          deptList = bJson.map((d: any) => {
-            const rawName = String(d.name || d.branch_name || d.department_name || '').trim();
-            const cleanName = (!rawName || rawName === '-' || rawName === 'null')
-              ? `${courseName} (Core / Main)`
-              : rawName;
-            return {
-              id: String(d.id || d.branch_cd || d.code || '1'),
-              name: cleanName,
-              code: String(d.code || d.branch_cd || ''),
-              course_cd: String(d.course_cd || courseCd),
-            };
-          });
-        }
-      }
-    } catch {}
+  /**
+   * Filter batches by course + department, then auto-select first.
+   */
+  const applyDeptCascade = (
+    deptId: string,
+    courseCd: string,
+    batchSource: BatchOption[],
+  ) => {
+    setLoadingBatches(true);
+    let filtered = batchSource.filter((b) => {
+      const matchesCourse = !b.course_cd || b.course_cd === courseCd || b.course_cd === '';
+      const matchesDept = !b.department_id || b.department_id === deptId || b.department_id === '';
+      return matchesCourse && matchesDept;
+    });
 
-    if (deptList.length === 0) {
-      deptList = [
-        { id: `${courseCd}-main`, name: `${courseName} (Department)`, code: courseCd, course_cd: courseCd },
-      ];
+    // If no exact department match, fall back to course-only matching
+    if (filtered.length === 0) {
+      filtered = batchSource.filter((b) =>
+        !b.course_cd || b.course_cd === courseCd || b.course_cd === ''
+      );
     }
-    setDepartments(deptList);
-    if (deptList.length > 0) {
-      setSelectedDeptId(deptList[0].id);
-      setSelectedDeptName(deptList[0].name);
+
+    setBatches(filtered);
+    if (filtered.length > 0) {
+      const first = filtered[0];
+      setSelectedBatchCode(String(first.code || first.batch_cd || first.year));
+      setSelectedBatchYear(String(first.year));
+      setSelectedBatchName(first.batch_name || first.name || `Batch ${first.year}`);
+    } else {
+      setSelectedBatchCode('');
+      setSelectedBatchYear('');
+      setSelectedBatchName('');
     }
+    setLoadingBatches(false);
   };
 
-  const handleCourseChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const cd = e.target.value;
     setSelectedCourseCd(cd);
     const found = courses.find((c) => c.course_cd === cd);
     const cName = found?.course_name || 'Course';
     setSelectedCourseName(cName);
-
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-    const tenant = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
-    await loadBranchesForCourse(cd, cName, tenant, token);
-    await loadBatchesForCourse(cd, tenant, token);
+    // Cascading: Course -> Dept -> Batch (in-memory)
+    applyCourseCascade(cd, allDepartments, allBatches);
   };
 
   const handleDeptChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const dId = e.target.value;
     setSelectedDeptId(dId);
-    const found = departments.find((d) => d.id === dId || d.name === dId);
-    if (found) setSelectedDeptName(found.name);
+    const found = departments.find((d) => d.id === dId || d.code === dId);
+    setSelectedDeptName(found?.name || dId);
+    // Cascading: Dept -> Batch (in-memory)
+    applyDeptCascade(dId, selectedCourseCd, allBatches);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedBatchYear && batches.length === 0) {
+      setErrorMsg('No feeded batches available for this course and branch.');
+      return;
+    }
+
     const cleanDeptName = (!selectedDeptName || selectedDeptName === '-' || selectedDeptName === 'null')
       ? (selectedCourseName || 'General Department')
       : selectedDeptName;
+
+    const currentTenant = getActiveTenant();
 
     try {
       setSubmitting(true);
@@ -225,7 +291,8 @@ export default function ChatAddBatchModal({
         department_id: selectedDeptId,
         department_name: cleanDeptName,
         batch_year: selectedBatchYear,
-        batch_code: `${selectedBatchYear}-${cleanDeptName.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, '')}`,
+        batch_code: selectedBatchCode || selectedBatchYear,
+        tenant: currentTenant,
       });
 
       if (success) {
@@ -327,31 +394,66 @@ export default function ChatAddBatchModal({
                 </select>
               </div>
 
-              {/* Step 3: Batch Year Selection */}
+              {/* Step 3: Batch Selection (Feeded Batches Only) */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#1B1E28] dark:text-slate-200 flex items-center gap-1.5">
-                  <span>📅</span>
-                  <span>Select Batch Year</span>
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {batches.map((b) => {
-                    const isSelected = selectedBatchYear === String(b.year);
-                    return (
-                      <button
-                        key={String(b.year)}
-                        type="button"
-                        onClick={() => setSelectedBatchYear(String(b.year))}
-                        className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all text-center ${
-                          isSelected
-                            ? 'bg-[#5B4BFF] text-white border-[#5B4BFF] shadow-sm'
-                            : 'bg-slate-50 dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]'
-                        }`}
-                      >
-                        {b.year} Batch
-                      </button>
-                    );
-                  })}
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-[#1B1E28] dark:text-slate-200 flex items-center gap-1.5">
+                    <span>📅</span>
+                    <span>Select Feeded Batch</span>
+                  </label>
+                  {batches.length > 0 && (
+                    <span className="text-[10px] font-bold text-[#5B4BFF] bg-[#5B4BFF]/10 px-2 py-0.5 rounded-full">
+                      {batches.length} Feeded {batches.length === 1 ? 'Batch' : 'Batches'}
+                    </span>
+                  )}
                 </div>
+
+                {loadingBatches ? (
+                  <div className="py-6 text-center space-y-2 rounded-xl bg-slate-50/50 dark:bg-slate-800/40 border border-[#E7EAF3] dark:border-slate-800">
+                    <div className="w-5 h-5 border-2 border-[#5B4BFF] border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">
+                      Loading feeded batches for selected branch...
+                    </p>
+                  </div>
+                ) : batches.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-dashed border-amber-300 dark:border-amber-700/50 bg-amber-50/50 dark:bg-amber-950/20 text-center space-y-1">
+                    <p className="text-xs text-amber-800 dark:text-amber-300 font-bold">
+                      No Feeded Batches Found
+                    </p>
+                    <p className="text-[11px] text-[#4E5969] dark:text-slate-400">
+                      No batches are currently configured for this branch in database.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {batches.map((b) => {
+                      const batchIdentifier = String(b.code || b.batch_cd || b.year);
+                      const isSelected = selectedBatchCode === batchIdentifier || selectedBatchYear === String(b.year);
+                      const displayTitle = b.batch_name || b.name || (b.year ? `Batch ${b.year}` : `Batch ${batchIdentifier}`);
+                      return (
+                        <button
+                          key={batchIdentifier}
+                          type="button"
+                          onClick={() => {
+                            setSelectedBatchCode(batchIdentifier);
+                            setSelectedBatchYear(String(b.year));
+                            setSelectedBatchName(displayTitle);
+                          }}
+                          className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                            isSelected
+                              ? 'bg-[#5B4BFF] text-white border-[#5B4BFF] shadow-sm'
+                              : 'bg-slate-50 dark:bg-slate-800 text-[#4E5969] dark:text-slate-300 border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]'
+                          }`}
+                        >
+                          <span>{displayTitle}</span>
+                          <span className={`text-[10px] font-normal ${isSelected ? 'text-white/80' : 'text-[#8C98A4] dark:text-slate-400'}`}>
+                            Year {b.year}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Live Preview Card */}
@@ -365,7 +467,7 @@ export default function ChatAddBatchModal({
                   </span>
                 </div>
                 <p className="text-sm font-black text-[#1B1E28] dark:text-white">
-                  💬 {selectedBatchYear} Batch · {(!selectedDeptName || selectedDeptName === '-' || selectedDeptName === 'null') ? selectedCourseName : selectedDeptName}
+                  💬 {selectedBatchName || (selectedBatchYear ? `Batch ${selectedBatchYear}` : 'Select Batch')} · {(!selectedDeptName || selectedDeptName === '-' || selectedDeptName === 'null') ? selectedCourseName : selectedDeptName}
                 </p>
                 <p className="text-[11px] text-[#4E5969] dark:text-slate-400">
                   Course: <strong>{selectedCourseName}</strong>. Enrolled students and faculty will be connected. This channel will remain saved in your sidebar list.
@@ -385,7 +487,7 @@ export default function ChatAddBatchModal({
             </button>
             <button
               type="submit"
-              disabled={submitting || loadingOptions}
+              disabled={submitting || loadingOptions || loadingBatches || batches.length === 0 || !selectedBatchYear}
               className="px-5 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3FE3] text-white text-xs font-bold shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
             >
               {submitting ? (

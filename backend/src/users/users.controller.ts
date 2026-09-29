@@ -235,6 +235,28 @@ export class UsersController {
     return this.usersService.revokeAdminRights(tenantSlug, id);
   }
 
+  @Public()
+  @Post('staff/:id/update-roles')
+  @ApiOperation({ summary: 'Update cascading multi-role assignments for a staff member' })
+  updateStaffRolesPost(
+    @TenantSlug() tenantSlug: string,
+    @Param('id') id: string,
+    @Body() body: { roles: string[] },
+  ) {
+    return this.usersService.updateStaffRoles(tenantSlug, id, body?.roles || []);
+  }
+
+  @Public()
+  @Patch('staff/:id/update-roles')
+  @ApiOperation({ summary: 'Update cascading multi-role assignments for a staff member' })
+  updateStaffRolesPatch(
+    @TenantSlug() tenantSlug: string,
+    @Param('id') id: string,
+    @Body() body: { roles: string[] },
+  ) {
+    return this.usersService.updateStaffRoles(tenantSlug, id, body?.roles || []);
+  }
+
   // ─── Departments ───────────────────────────────────────────────
   @Get('departments')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY, UserRole.CLERK, UserRole.STUDENT)

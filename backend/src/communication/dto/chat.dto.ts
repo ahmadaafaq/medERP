@@ -166,5 +166,15 @@ export class JoinBatchGroupDto {
   @IsOptional()
   @IsString()
   batch_code?: string;
+
+  @ApiPropertyOptional({ description: 'Tenant identifier' })
+  @IsOptional()
+  @IsString()
+  tenant?: string;
+
+  @ApiPropertyOptional({ description: 'Tenant slug' })
+  @IsOptional()
+  @IsString()
+  tenantSlug?: string;
 }
 

@@ -56,6 +56,7 @@ export default function DashboardRootLayout({
       const cleanPath = (pathname || '').split('?')[0].split('#')[0].toLowerCase().trim();
       if (
         (roleUpper === 'ADMIN' && (cleanPath === '/dashboard/admin' || cleanPath === '/dashboard')) ||
+        (roleUpper === 'HOD' && (cleanPath === '/dashboard/hod' || cleanPath === '/dashboard/faculty' || cleanPath === '/dashboard')) ||
         (roleUpper === 'FACULTY' && (cleanPath === '/dashboard/faculty' || cleanPath === '/dashboard')) ||
         (roleUpper === 'STUDENT' && (cleanPath === '/dashboard/student' || cleanPath === '/dashboard')) ||
         (roleUpper === 'CLERK' && (cleanPath === '/dashboard/clerk' || cleanPath === '/dashboard')) ||
@@ -103,6 +104,7 @@ export default function DashboardRootLayout({
         // Fallback: If network error occurs while checking, avoid total lockout if on own overview
         if (
           (roleUpper === 'ADMIN' && pathname === '/dashboard/admin') ||
+          (roleUpper === 'HOD' && (pathname === '/dashboard/hod' || pathname === '/dashboard/faculty')) ||
           (roleUpper === 'FACULTY' && pathname === '/dashboard/faculty') ||
           (roleUpper === 'STUDENT' && pathname === '/dashboard/student') ||
           (roleUpper === 'CLERK' && pathname === '/dashboard/clerk') ||

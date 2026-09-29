@@ -1168,7 +1168,20 @@ export class ChatService implements OnModuleInit {
    */
   async joinBatchGroup(tenantSlug: string, user: any, dto: any) {
     try {
-      const slug = this.resolveTenantSlug(tenantSlug);
+      let slug = this.resolveTenantSlug(tenantSlug);
+      if (!slug) {
+        slug = this.resolveTenantSlug(
+          dto?.tenant ||
+          dto?.tenantSlug ||
+          dto?.tenant_slug ||
+          user?.tenantSlug ||
+          user?.tenant ||
+          user?.firmSlug
+        );
+      }
+      if (!slug) {
+        throw new BadRequestException('Tenant slug is required to join batch group.');
+      }
       const schema = `tenant_${slug}`;
       await this.ensureTables(slug);
 
@@ -1271,34 +1284,30 @@ export class ChatService implements OnModuleInit {
     const [courses, departments, batches] = await Promise.all([
       this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT DISTINCT code AS course_cd, name AS course_name FROM "${schema}".courses WHERE is_active = true`,
+        `SELECT DISTINCT COALESCE(code, course_cd) AS course_cd, name AS course_name FROM "${schema}".courses WHERE is_active = true ORDER BY course_name ASC`,
       ).catch(() => []),
       this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, name, code FROM "${schema}".departments WHERE is_active = true ORDER BY name ASC`,
+        `SELECT id, name, code, course_cd, branch_cd FROM "${schema}".departments WHERE is_active = true ORDER BY name ASC`,
       ).catch(() => []),
       this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, code, year, course_cd, department_id FROM "${schema}".batches WHERE is_active = true ORDER BY year DESC`,
+        `SELECT id, code, year, course_cd, department_id, name, batch_cd FROM "${schema}".batches WHERE is_active = true ORDER BY year DESC, code ASC`,
       ).catch(() => []),
     ]);
 
-    const finalCourses = courses.length > 0 ? courses : [
-      { course_cd: '13', course_name: 'B.Tech' },
-      { course_cd: '14', course_name: 'BCA' },
-      { course_cd: '15', course_name: 'MCA' },
-      { course_cd: '1', course_name: 'MBBS' },
-    ];
-
     return {
-      courses: finalCourses.filter((c: any) => c.course_cd || c.course_name),
+      courses: courses.filter((c: any) => c.course_cd || c.course_name),
       departments,
-      batches: batches.length > 0 ? batches : [
-        { year: 2025, code: '2025' },
-        { year: 2024, code: '2024' },
-        { year: 2023, code: '2023' },
-        { year: 2022, code: '2022' },
-      ],
+      batches: batches.map((b: any) => ({
+        id: b.id,
+        code: b.code || b.batch_cd || b.year,
+        batch_cd: b.batch_cd || b.code || b.year,
+        year: b.year,
+        course_cd: b.course_cd,
+        department_id: b.department_id,
+        name: b.name || (b.year ? `Batch ${b.year}` : `Batch ${b.code}`),
+      })),
     };
   }
 

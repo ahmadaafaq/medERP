@@ -114,8 +114,8 @@ export default function Step7ReviewConfirm({
             <span className="text-xs font-bold text-[#00C48C]">{totalMenus} Total Menus Enabled</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-center text-xs">
-            {(['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN', 'SUPERADMIN'] as RoleType[]).map((r) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2 text-center text-xs">
+            {(['STUDENT', 'FACULTY', 'HOD', 'ADMIN', 'CLERK', 'WARDEN', 'SUPERADMIN'] as RoleType[]).map((r) => (
               <div key={r} className="p-2.5 bg-white rounded-xl border border-[#E7EAF3]">
                 <p className="text-[10px] font-bold uppercase text-[#4E5969]">{r}</p>
                 <p className="text-sm font-black text-[#5B4BFF] mt-0.5">

@@ -242,6 +242,35 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
     { role: 'FACULTY', menuKey: 'faculty_students', label: 'Student Info & Roster' },
   ],
 
+  // === HOD PORTAL ROUTES ===
+  '/dashboard/hod': [
+    { role: 'HOD', menuKey: 'hod_overview', label: 'HOD Department Overview' },
+  ],
+  '/dashboard/hod/qp-approvals': [
+    { role: 'HOD', menuKey: 'hod_qp_approvals', label: 'Question Paper Approvals' },
+  ],
+  '/dashboard/hod/timetable-approvals': [
+    { role: 'HOD', menuKey: 'hod_timetable_approvals', label: 'Timetable Approvals' },
+  ],
+  '/dashboard/hod/question-bank': [
+    { role: 'HOD', menuKey: 'hod_question_bank', label: 'Question Bank & Topics' },
+  ],
+  '/dashboard/hod/chat': [
+    { role: 'HOD', menuKey: 'hod_chat', label: 'HOD Chat' },
+  ],
+  '/dashboard/admin/qp-print': [
+    { role: 'ADMIN', menuKey: 'admin_qp_print', label: 'QP Print Center' },
+  ],
+  '/dashboard/clerk/question-paper-designer': [
+    { role: 'CLERK', menuKey: 'clerk_qp_designer', label: 'Question Paper Designer' },
+  ],
+  '/dashboard/clerk/qp-designer': [
+    { role: 'CLERK', menuKey: 'clerk_qp_designer', label: 'Question Paper Designer' },
+  ],
+  '/dashboard/clerk/timetable-designer': [
+    { role: 'CLERK', menuKey: 'clerk_timetable_designer', label: 'Timetable Designer' },
+  ],
+
   // === STUDENT PORTAL ROUTES ===
   '/dashboard/student': [
     { role: 'STUDENT', menuKey: 'student_overview', label: 'Student Dashboard' },
@@ -421,7 +450,8 @@ export function normalizeRole(rawRole?: string): string {
   if (!rawRole) return 'STUDENT';
   const r = rawRole.toUpperCase().trim();
   if (r === 'COLLEGE_ADMIN' || r === 'ADMINISTRATOR' || r === 'ADMIN') return 'ADMIN';
-  if (r === 'HOD' || r === 'STAFF' || r === 'TEACHER' || r === 'FACULTY') return 'FACULTY';
+  if (r === 'HOD') return 'HOD';
+  if (r === 'STAFF' || r === 'TEACHER' || r === 'FACULTY') return 'FACULTY';
   if (r === 'SUPERADMIN' || r === 'SUPER_ADMIN' || r === 'OWNER') return 'SUPERADMIN';
   if (r === 'STUDENT') return 'STUDENT';
   if (r === 'CLERK') return 'CLERK';
@@ -561,6 +591,7 @@ export function verifyRouteAccess({
   if (
     (roleUpper === 'ADMIN' && (normPath === '/dashboard/admin' || normPath === '/dashboard')) ||
     (roleUpper === 'FACULTY' && (normPath === '/dashboard/faculty' || normPath === '/dashboard')) ||
+    (roleUpper === 'HOD' && (normPath === '/dashboard/hod' || normPath === '/dashboard')) ||
     (roleUpper === 'STUDENT' && (normPath === '/dashboard/student' || normPath === '/dashboard')) ||
     (roleUpper === 'CLERK' && (normPath === '/dashboard/clerk' || normPath === '/dashboard')) ||
     (roleUpper === 'WARDEN' && (normPath === '/dashboard/warden' || normPath === '/dashboard'))
@@ -577,7 +608,7 @@ export function verifyRouteAccess({
     };
   }
 
-  if (roleUpper === 'FACULTY' && (normPath.startsWith('/dashboard/admin') || normPath.startsWith('/dashboard/student') || normPath.startsWith('/dashboard/clerk') || normPath.startsWith('/dashboard/warden'))) {
+  if ((roleUpper === 'FACULTY' || roleUpper === 'HOD') && (normPath.startsWith('/dashboard/admin') || normPath.startsWith('/dashboard/student') || normPath.startsWith('/dashboard/clerk') || normPath.startsWith('/dashboard/warden'))) {
     return {
       allowed: false,
       reason: 'Your Faculty account does not have access to student or administrative consoles.',
@@ -585,12 +616,17 @@ export function verifyRouteAccess({
     };
   }
 
-  if (roleUpper === 'ADMIN' && (normPath.startsWith('/dashboard/student') || normPath.startsWith('/dashboard/faculty') || normPath.startsWith('/dashboard/clerk') || normPath.startsWith('/dashboard/warden'))) {
+  if (roleUpper === 'ADMIN' && (normPath.startsWith('/dashboard/student') || normPath.startsWith('/dashboard/faculty') || normPath.startsWith('/dashboard/clerk') || normPath.startsWith('/dashboard/warden') || normPath.startsWith('/dashboard/hod'))) {
     return {
       allowed: false,
       reason: 'This section is designated for non-admin user roles.',
       moduleLabel: 'Role Portal',
     };
+  }
+
+  // HOD specific routes are always permitted for HOD
+  if (roleUpper === 'HOD' && normPath.startsWith('/dashboard/hod')) {
+    return { allowed: true };
   }
 
   // 5. While permissions are still loading (null), allow temporary display to avoid flicker on normal navigation
@@ -620,8 +656,8 @@ export function verifyRouteAccess({
 
   // If route is explicitly registered in ROUTE_REGISTRY
   if (matchingConfigs && matchingConfigs.length > 0) {
-    // Find config that matches the current user's role
-    const roleConfig = matchingConfigs.find((c) => c.role === roleUpper);
+    // Find config that matches the current user's role (HOD inherits all FACULTY permissions)
+    const roleConfig = matchingConfigs.find((c) => c.role === roleUpper || (roleUpper === 'HOD' && c.role === 'FACULTY'));
 
     if (!roleConfig) {
       // Route is registered for other roles, but not this one

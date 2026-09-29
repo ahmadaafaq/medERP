@@ -242,7 +242,7 @@ export default function LoginPage() {
   const [collegeSearchQuery, setCollegeSearchQuery] = useState<string>('');
 
   // ─── 2. Auth Credentials & Role State ──────────────────────────────────────
-  const [role, setRole] = useState<'STUDENT' | 'FACULTY' | 'ADMIN' | 'CLERK' | 'WARDEN'>('STUDENT');
+  const [role, setRole] = useState<'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN' | 'CLERK' | 'WARDEN'>('STUDENT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -320,7 +320,7 @@ export default function LoginPage() {
       const urlRole = urlParams.get('role');
       const urlCollege = urlParams.get('college');
 
-      if (urlRole && ['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN'].includes(urlRole.toUpperCase())) {
+      if (urlRole && ['STUDENT', 'FACULTY', 'HOD', 'ADMIN', 'CLERK', 'WARDEN'].includes(urlRole.toUpperCase())) {
         applyRolePreset(urlRole.toUpperCase() as any);
       }
 
@@ -513,7 +513,7 @@ export default function LoginPage() {
     }
   };
 
-  const applyRolePreset = (newRole: 'STUDENT' | 'FACULTY' | 'ADMIN' | 'CLERK' | 'WARDEN') => {
+  const applyRolePreset = (newRole: 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN' | 'CLERK' | 'WARDEN') => {
     setRole(newRole);
     setErrorMsg('');
   };
@@ -601,12 +601,20 @@ export default function LoginPage() {
             if (authData.user.department) {
               localStorage.setItem('department', authData.user.department);
             }
+            if (authData.user.firm_mode || authData.user.firmMode) {
+              const fMode = String(authData.user.firm_mode || authData.user.firmMode).toUpperCase();
+              localStorage.setItem('firm_mode', fMode);
+              localStorage.setItem('firmMode', fMode);
+              document.cookie = `firm_mode=${fMode}; path=/; max-age=604800; SameSite=Lax`;
+            }
           }
 
           const effectiveRole = (authData.user?.role || role).toUpperCase();
           if (effectiveRole === 'ADMIN' || effectiveRole === 'COLLEGE_ADMIN' || effectiveRole === 'SUPER_ADMIN') {
             router.push('/dashboard/admin');
-          } else if (effectiveRole === 'FACULTY' || effectiveRole === 'HOD' || effectiveRole === 'STAFF') {
+          } else if (effectiveRole === 'HOD') {
+            router.push('/dashboard/hod');
+          } else if (effectiveRole === 'FACULTY' || effectiveRole === 'STAFF') {
             router.push('/dashboard/faculty');
           } else if (effectiveRole === 'STUDENT') {
             router.push('/dashboard/student');
@@ -913,11 +921,11 @@ export default function LoginPage() {
           </div>
 
           {/* Role Tabs */}
-          <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-[#FFF5ED] border border-[#FBE0D0] text-[11px] font-bold">
-            {(['STUDENT', 'FACULTY', 'ADMIN', 'CLERK', 'WARDEN'] as const).map((r) => {
+          <div className="grid grid-cols-6 gap-1 p-1 rounded-xl bg-[#FFF5ED] border border-[#FBE0D0] text-[11px] font-bold">
+            {(['STUDENT', 'FACULTY', 'HOD', 'ADMIN', 'CLERK', 'WARDEN'] as const).map((r) => {
               const isActive = role === r;
               const labelMap: Record<string, string> = {
-                STUDENT: 'Student', FACULTY: 'Faculty', ADMIN: 'Admin', CLERK: 'Clerk', WARDEN: 'Warden',
+                STUDENT: 'Student', FACULTY: 'Faculty', HOD: 'HOD', ADMIN: 'Admin', CLERK: 'Clerk', WARDEN: 'Warden',
               };
               return (
                 <button
@@ -946,7 +954,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-2.5">
             <div className="space-y-1">
               <label className="block text-[10px] font-black uppercase tracking-wider text-[#475569]">
-                {role === 'STUDENT' ? 'Student Registration / Roll No' : role === 'FACULTY' ? 'Faculty Emp ID / Email' : 'Admin Username / Email'}
+                {role === 'STUDENT' ? 'Student Registration / Roll No' : role === 'FACULTY' ? 'Faculty Emp ID / Email' : role === 'HOD' ? 'HOD Emp ID / Email' : role === 'CLERK' ? 'Clerk Username / Email' : 'Admin Username / Email'}
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-[#F36C21] text-xs">👤</span>
@@ -954,7 +962,7 @@ export default function LoginPage() {
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={role === 'STUDENT' ? 'Enter Registration / Roll No' : role === 'FACULTY' ? 'Enter Faculty ID / Email' : 'Enter Username / Email'}
+                  placeholder={role === 'STUDENT' ? 'Enter Registration / Roll No' : role === 'FACULTY' ? 'Enter Faculty ID / Email' : role === 'HOD' ? 'Enter HOD ID / Email' : role === 'CLERK' ? 'Enter Clerk Username / Email' : 'Enter Username / Email'}
                   className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 transition placeholder-[#94A3B8]"
                   required
                 />

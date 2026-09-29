@@ -2030,7 +2030,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return syncedBatches;
   }
 
-  async listBatches(tenantSlug?: string, courseCd?: string, user?: any): Promise<any[]> {
+  async listBatches(tenantSlug?: string, courseCd?: string, user?: any, branchCd?: string, departmentId?: string): Promise<any[]> {
     if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
       tenantSlug = user.tenantSlug;
     }
@@ -2053,9 +2053,39 @@ export class CollegeMasterService implements OnApplicationBootstrap {
           LEFT JOIN courses c ON c.course_cd::text = b.course_cd::text OR c.code::text = b.course_cd::text
         `;
         const queryParams: any[] = [];
+        const whereClauses: string[] = [];
+
         if (courseCd && courseCd !== 'all') {
           queryParams.push(courseCd);
-          querySql += ` WHERE (b.course_cd::text = $1::text OR c.code::text = $1::text OR c.course_cd::text = $1::text)`;
+          whereClauses.push(`(b.course_cd::text = $${queryParams.length}::text OR c.code::text = $${queryParams.length}::text OR c.course_cd::text = $${queryParams.length}::text)`);
+        }
+
+        const effectiveBranch = branchCd || departmentId;
+        if (effectiveBranch && effectiveBranch !== 'all') {
+          queryParams.push(effectiveBranch);
+          const brIdx = queryParams.length;
+          whereClauses.push(`(
+            b.department_id IS NULL
+            OR b.department_id::text = ''
+            OR b.department_id::text = $${brIdx}::text
+            OR b.department_id::text IN (
+              SELECT d.id::text FROM "${schema}".departments d
+              WHERE d.code::text = $${brIdx}::text OR d.branch_cd::text = $${brIdx}::text OR d.id::text = $${brIdx}::text
+            )
+            OR b.id::text IN (
+              SELECT DISTINCT ts.batch_id::text FROM "${schema}".timetable_slots ts
+              WHERE ts.batch_id IS NOT NULL
+                AND (${courseCd ? `$1::text = '' OR ` : ''}ts.course_cd::text = $1::text)
+                AND (ts.branch_cd::text = $${brIdx}::text OR ts.branch_cd::text IN (
+                  SELECT d2.branch_cd::text FROM "${schema}".departments d2
+                  WHERE d2.id::text = $${brIdx}::text OR d2.code::text = $${brIdx}::text
+                ))
+            )
+          )`);
+        }
+
+        if (whereClauses.length > 0) {
+          querySql += ` WHERE ` + whereClauses.join(' AND ');
         }
         querySql += ` ORDER BY b.year DESC, b.code ASC`;
 
@@ -2065,7 +2095,8 @@ export class CollegeMasterService implements OnApplicationBootstrap {
           queryParams,
         ).catch(() => []);
 
-        if (rows.length === 0 && (!courseCd || courseCd === 'all')) {
+        const isSrms = slug.toLowerCase().includes('srms');
+        if (rows.length === 0 && isSrms && (!courseCd || courseCd === 'all')) {
           await this.syncExternalBatches(slug);
           rows = await this.tenantSchemaService.queryInTenant(
             slug,

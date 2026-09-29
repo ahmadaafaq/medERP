@@ -6,8 +6,25 @@
 export function resolveCourseTitle(courseCd?: string | number | null, fallbackName?: string | null): string {
   const cd = String(courseCd || '').trim();
   const name = String(fallbackName || '').trim();
+  const lowerName = name.toLowerCase();
 
-  // Check code first
+  // 1. If explicit authentic course name is provided from database, prioritize it!
+  if (lowerName.includes('bca')) return 'BCA';
+  if (lowerName.includes('mba')) return 'MBA';
+  if (lowerName.includes('b.tech') || lowerName === 'btech' || lowerName.includes('b. tech')) return 'B.Tech';
+  if (lowerName.includes('b.pharm') || lowerName.includes('bpharma') || lowerName.includes('b. pharma')) return 'B.Pharm';
+  if (lowerName.includes('mca')) return 'MCA';
+  if (lowerName.includes('m.tech') || lowerName === 'mtech') return 'M.Tech';
+  if (lowerName.includes('m.pharm') || lowerName.includes('mpharma')) return 'M.Pharm';
+  if (lowerName.includes('bba')) return 'BBA';
+  if (lowerName.includes('ll.b') || lowerName.includes('llb') || lowerName.includes('law')) return 'BA.LL.B';
+  if (lowerName.includes('mbbs')) return 'MBBS';
+
+  if (name && !['1', '2', '3', '4', '5', '6', '7', '8', '9', '11', '12', '13', 'null', 'undefined', ''].includes(lowerName)) {
+    return name;
+  }
+
+  // 2. Fall back to numerical code mapping only if no real name was provided
   switch (cd) {
     case '1':
       return 'B.Tech';
@@ -33,23 +50,6 @@ export function resolveCourseTitle(courseCd?: string | number | null, fallbackNa
       return 'BBA';
     case '13':
       return 'BCA';
-  }
-
-  // If code is not an exact match, check string hints
-  const lowerName = name.toLowerCase();
-  if (lowerName.includes('mba')) return 'MBA';
-  if (lowerName.includes('bca')) return 'BCA';
-  if (lowerName.includes('b.tech') || lowerName === 'btech' || lowerName.includes('b. tech')) return 'B.Tech';
-  if (lowerName.includes('b.pharm') || lowerName.includes('bpharma') || lowerName.includes('b. pharma')) return 'B.Pharm';
-  if (lowerName.includes('mca')) return 'MCA';
-  if (lowerName.includes('m.tech') || lowerName === 'mtech') return 'M.Tech';
-  if (lowerName.includes('m.pharm') || lowerName.includes('mpharma')) return 'M.Pharm';
-  if (lowerName.includes('bba')) return 'BBA';
-  if (lowerName.includes('ll.b') || lowerName.includes('llb') || lowerName.includes('law')) return 'BA.LL.B';
-  if (lowerName.includes('mbbs')) return 'MBBS';
-
-  if (name && name !== '1' && name !== '2' && name !== '3' && name !== '4' && name !== '13') {
-    return name;
   }
 
   return cd ? `Course ${cd}` : 'Student';

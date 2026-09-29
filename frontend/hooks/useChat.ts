@@ -78,13 +78,32 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
 
   const getTenantSlug = useCallback(() => {
     if (typeof window === 'undefined') return '';
-    return (
-      (localStorage.getItem('tenantSlug') ||
+    let slug = (
+      localStorage.getItem('tenantSlug') ||
       localStorage.getItem('selectedTenant') ||
       localStorage.getItem('tenant') ||
       localStorage.getItem('institutionSlug') ||
-      '').replace(/^tenant_/, '').replace(/^tenant-/, '')
-    );
+      ''
+    ).replace(/^tenant_/, '').replace(/^tenant-/, '');
+
+    if (!slug) {
+      try {
+        const raw = localStorage.getItem('user') || localStorage.getItem('auth_user');
+        if (raw) {
+          const u = JSON.parse(raw);
+          slug = (u.tenantSlug || u.tenant || u.firmSlug || u.college_slug || '').replace(/^tenant_/, '').replace(/^tenant-/, '');
+        }
+      } catch {}
+    }
+
+    if (!slug) {
+      const match = typeof document !== 'undefined' ? document.cookie.match(/(?:^|;\s*)auth_tenant=([^;]+)/) : null;
+      if (match && match[1]) {
+        slug = decodeURIComponent(match[1]).replace(/^tenant_/, '').replace(/^tenant-/, '');
+      }
+    }
+
+    return slug;
   }, []);
 
   const getHeaders = useCallback(() => {
@@ -653,16 +672,46 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
     department_name: string;
     batch_year: string;
     batch_code?: string;
+    tenant?: string;
   }): Promise<boolean> => {
     try {
-      const slug = getTenantSlug();
-      const res = await fetch(`${API_BASE}/chat/join-batch?tenant=${slug}`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(params),
-      });
+      const slug = (params.tenant || getTenantSlug() || '').trim();
+      const payload = {
+        ...params,
+        tenant: slug,
+        tenantSlug: slug,
+      };
 
-      if (res.ok) {
+      const reqHeaders = {
+        ...getHeaders(),
+        ...(slug ? { 'x-tenant-slug': slug } : {}),
+      };
+
+      // Try primary API_BASE endpoint first, with automatic fallback to relative /api/v1 proxy
+      let res: Response | null = null;
+      try {
+        res = await fetch(`${API_BASE}/chat/join-batch?tenant=${encodeURIComponent(slug)}`, {
+          method: 'POST',
+          headers: reqHeaders,
+          body: JSON.stringify(payload),
+        });
+      } catch (networkErr) {
+        console.warn('[useChat] Primary endpoint join-batch network error, trying relative proxy:', networkErr);
+      }
+
+      if (!res || !res.ok) {
+        try {
+          res = await fetch(`/api/v1/chat/join-batch?tenant=${encodeURIComponent(slug)}`, {
+            method: 'POST',
+            headers: reqHeaders,
+            body: JSON.stringify(payload),
+          });
+        } catch (proxyErr) {
+          console.warn('[useChat] Relative proxy join-batch error:', proxyErr);
+        }
+      }
+
+      if (res && res.ok) {
         const json = await res.json();
         const joined = json.data?.group;
         if (joined) {
@@ -675,10 +724,17 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
         await fetchGroups(true);
         return true;
       }
+
+      if (res) {
+        const errJson = await res.json().catch(() => null);
+        if (errJson?.message) {
+          throw new Error(errJson.message);
+        }
+      }
       return false;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to join batch group:', err);
-      return false;
+      throw err;
     }
   };
 

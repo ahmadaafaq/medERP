@@ -57,14 +57,39 @@ export default function FacultySchedulePage() {
   const isMedical = tenantSlug.includes('ims') || tenantSlug.includes('medical') || tenantSlug.includes('med');
 
   const getCourseName = (slot: TimetableSlot): string => {
+    const deptName = (slot.department_name || '').trim();
+    const courseName = ((slot as any).course_name || '').trim();
     const cCd = String((slot as any).course_cd || '');
-    if (cCd === '1') return 'B.Tech CSE';
-    if (cCd === '13') return 'BCA';
-    if (cCd === '3') return 'MCA';
-    if (cCd === '2') return 'B.Pharm';
-    if (cCd === '6') return 'M.Tech';
-    if (cCd === '8') return 'MBA';
-    return slot.department_name || (cCd ? `Course ${cCd}` : '');
+
+    // 1. Prioritize authentic database department and course definitions
+    if (deptName.toUpperCase() === 'BCA' || courseName.toUpperCase() === 'BCA') {
+      return 'BCA';
+    }
+    if (deptName.toUpperCase() === 'CSE' || deptName.toUpperCase().includes('COMPUTER')) {
+      return 'B.Tech CSE';
+    }
+    if (deptName && courseName && !deptName.toLowerCase().includes(courseName.toLowerCase())) {
+      return `${courseName} ${deptName}`.trim();
+    }
+    if (deptName) {
+      return deptName;
+    }
+    if (courseName) {
+      return courseName;
+    }
+
+    // 2. Strict SRMS course code scoping (Only for SRMS tenants as per AGENTS.md)
+    const isSrms = tenantSlug.toLowerCase().includes('srms');
+    if (isSrms) {
+      if (cCd === '1') return 'B.Tech CSE';
+      if (cCd === '13') return 'BCA';
+      if (cCd === '3') return 'MCA';
+      if (cCd === '2') return 'B.Pharm';
+      if (cCd === '6') return 'M.Tech';
+      if (cCd === '8') return 'MBA';
+    }
+
+    return cCd ? `Course ${cCd}` : '';
   };
 
   const cleanBatch = (slot: TimetableSlot) => {
@@ -191,11 +216,9 @@ export default function FacultySchedulePage() {
       // Note: Never restrict by single departmentId when querying a faculty member's personal schedule
       let url = `${API_BASE}/timetable?tenant=${slug}`;
       if (facId) {
-        url += `&facultyId=${facId}`;
+        url += `&facultyId=${encodeURIComponent(facId)}`;
       } else if (facultyEmpId) {
-        url += `&facultyId=${facultyEmpId}`;
-      } else if (deptId) {
-        url += `&departmentId=${deptId}`;
+        url += `&facultyId=${encodeURIComponent(facultyEmpId)}`;
       }
 
       const res = await fetch(url, {
@@ -208,6 +231,14 @@ export default function FacultySchedulePage() {
       const cleanAndDedupe = (raw: any[]) => {
         const seen = new Set<string>();
         return raw.filter(s => {
+          // Double protection: Ensure slot belongs to logged-in faculty
+          if (facId || facultyEmpId || facultyName) {
+            const matchId = facId && (s.faculty_id === facId || s.faculty_uuid === facId);
+            const matchEmp = facultyEmpId && (s.faculty_code === facultyEmpId || s.emp_id === facultyEmpId);
+            const matchName = facultyName && s.faculty_name && s.faculty_name.trim().toLowerCase() === facultyName.trim().toLowerCase();
+            if (!matchId && !matchEmp && !matchName) return false;
+          }
+
           const normSub = (s.subject_name || s.subject_code || s.topic || '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
           const key = `${s.day_of_week}_${s.start_time?.slice(0, 5)}_${s.course_cd || ''}_${s.section || ''}_${normSub}`;
           if (seen.has(key)) return false;

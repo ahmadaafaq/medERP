@@ -485,6 +485,9 @@ export class UsersService {
           ADD COLUMN IF NOT EXISTS category VARCHAR(100),
           ADD COLUMN IF NOT EXISTS payroll_category VARCHAR(100),
           ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+
+        ALTER TABLE "${schema}".users 
+          ADD COLUMN IF NOT EXISTS assigned_roles TEXT;
       `).catch(() => { });
       UsersService.ensuredFacultySchemas.add(schema);
     } catch (e) { }
@@ -512,7 +515,7 @@ export class UsersService {
                     f.salgrade, f.father_name, f.spouse_name, f.address, f.city, f.state, f.perm_addr,
                     f.perm_city, f.perm_state, f.homephone, f.permanent_tel_no, f.highest_education,
                     f.category, f.payroll_category, f.employment_status,
-                    u.email, u.role, u.is_active as user_active,
+                    u.email, u.role, u.assigned_roles, u.is_active as user_active,
                     d.name AS department_name, d.code AS department_code,
                     s.name AS subject_name, s.code AS subject_code
              FROM "${s}".faculty f
@@ -522,8 +525,25 @@ export class UsersService {
              ORDER BY f.name ASC`
           );
           rows.forEach((r: any) => {
+            let assignedRoles: string[] = [];
+            if (r.assigned_roles && typeof r.assigned_roles === 'string') {
+              assignedRoles = r.assigned_roles.split(',').map((x: string) => x.trim().toUpperCase()).filter(Boolean);
+            } else if (r.role) {
+              const ur = String(r.role).toUpperCase();
+              if (ur === 'COLLEGE_ADMIN' || ur === 'SUPER_ADMIN') {
+                assignedRoles = ['FACULTY', 'COLLEGE_ADMIN'];
+              } else if (ur === 'HOD') {
+                assignedRoles = ['FACULTY', 'HOD'];
+              } else {
+                assignedRoles = [ur];
+              }
+            } else {
+              assignedRoles = ['FACULTY'];
+            }
+
             allFaculty.push({
               ...r,
+              assigned_roles: Array.from(new Set(assignedRoles)),
               college_id: col.id,
               college_name: col.name,
               college_code: col.code,
@@ -587,7 +607,7 @@ export class UsersService {
                 f.salgrade, f.father_name, f.spouse_name, f.address, f.city, f.state, f.perm_addr,
                 f.perm_city, f.perm_state, f.homephone, f.permanent_tel_no, f.highest_education,
                 f.category, f.payroll_category, f.employment_status,
-                u.email, u.role, u.is_active as user_active,
+                u.email, u.role, u.assigned_roles, u.is_active as user_active,
                 d.name AS department_name, d.code AS department_code,
                 s.name AS subject_name, s.code AS subject_code
          FROM "${schema}".faculty f
@@ -609,13 +629,32 @@ export class UsersService {
       ).catch(() => [{ count: '0' }]),
     ]);
 
-    const mappedRows = rows.map((r: any) => ({
-      ...r,
-      college_id: currentCollege?.id,
-      college_name: currentCollege?.name,
-      college_code: currentCollege?.code,
-      college_slug: currentCollege?.slug || resolvedSlug,
-    }));
+    const mappedRows = rows.map((r: any) => {
+      let assignedRoles: string[] = [];
+      if (r.assigned_roles && typeof r.assigned_roles === 'string') {
+        assignedRoles = r.assigned_roles.split(',').map((x: string) => x.trim().toUpperCase()).filter(Boolean);
+      } else if (r.role) {
+        const ur = String(r.role).toUpperCase();
+        if (ur === 'COLLEGE_ADMIN' || ur === 'SUPER_ADMIN') {
+          assignedRoles = ['FACULTY', 'COLLEGE_ADMIN'];
+        } else if (ur === 'HOD') {
+          assignedRoles = ['FACULTY', 'HOD'];
+        } else {
+          assignedRoles = [ur];
+        }
+      } else {
+        assignedRoles = ['FACULTY'];
+      }
+
+      return {
+        ...r,
+        assigned_roles: Array.from(new Set(assignedRoles)),
+        college_id: currentCollege?.id,
+        college_name: currentCollege?.name,
+        college_code: currentCollege?.code,
+        college_slug: currentCollege?.slug || resolvedSlug,
+      };
+    });
 
     return paginate(mappedRows, parseInt(countRows[0].count, 10), pagination);
   }
@@ -629,7 +668,7 @@ export class UsersService {
       return this.ds.query(
         `SELECT f.*,
                 COALESCE(NULLIF(f.photo_url, ''), CASE WHEN f.emp_id IS NOT NULL THEN CONCAT('https://myportal.srms.ac.in/HR/HR/', f.emp_id, '/', f.emp_id, '.jpg') ELSE NULL END) AS photo_url,
-                u.email, u.role, u.is_active as user_active, u.last_login_at,
+                u.email, u.role, u.assigned_roles, u.is_active as user_active, u.last_login_at,
                 d.name AS department_name, d.code AS department_code,
                 s.name AS subject_name, s.code AS subject_code
          FROM "${s}".faculty f
@@ -671,6 +710,7 @@ export class UsersService {
     await this.ds.query(`ALTER TABLE "${schema}".users ADD COLUMN IF NOT EXISTS username VARCHAR(150)`).catch(() => {});
     await this.ds.query(`ALTER TABLE "${schema}".users ADD COLUMN IF NOT EXISTS name VARCHAR(255)`).catch(() => {});
     await this.ds.query(`ALTER TABLE "${schema}".users ADD COLUMN IF NOT EXISTS emp_id VARCHAR(100)`).catch(() => {});
+    await this.ds.query(`ALTER TABLE "${schema}".users ADD COLUMN IF NOT EXISTS assigned_roles TEXT`).catch(() => {});
 
     // 1. Check if employee already exists by emp_id in this tenant schema
     const empCheck = await this.ds.query(
@@ -712,29 +752,31 @@ export class UsersService {
     ).catch(() => []);
 
     let userId: string;
+    const initialRoleStr = role ? String(role).toUpperCase() : 'FACULTY';
+
     if (emailCheck.length > 0) {
       userId = emailCheck[0].id;
       // Update role, password (if provided), emp_id and status
       if (dto.password) {
         await this.ds.query(
           `UPDATE "${schema}".users 
-           SET role = $1, is_active = COALESCE($2, true), password_hash = $3, emp_id = COALESCE($4, emp_id), username = COALESCE($5, username), name = COALESCE($6, name), updated_at = NOW() 
+           SET role = $1, assigned_roles = COALESCE(assigned_roles, $1), is_active = COALESCE($2, true), password_hash = $3, emp_id = COALESCE($4, emp_id), username = COALESCE($5, username), name = COALESCE($6, name), updated_at = NOW() 
            WHERE id = $7`,
           [role, dto.isActive ?? true, hash, dto.empId || null, dto.empId || null, dto.name, userId],
         ).catch(() => { });
       } else {
         await this.ds.query(
           `UPDATE "${schema}".users 
-           SET role = $1, is_active = COALESCE($2, true), emp_id = COALESCE($3, emp_id), username = COALESCE($4, username), name = COALESCE($5, name), updated_at = NOW() 
+           SET role = $1, assigned_roles = COALESCE(assigned_roles, $1), is_active = COALESCE($2, true), emp_id = COALESCE($3, emp_id), username = COALESCE($4, username), name = COALESCE($5, name), updated_at = NOW() 
            WHERE id = $6`,
           [role, dto.isActive ?? true, dto.empId || null, dto.empId || null, dto.name, userId],
         ).catch(() => { });
       }
     } else {
       const userRows = await this.ds.query(
-        `INSERT INTO "${schema}".users (email, username, name, password_hash, role, emp_id, must_change_password, is_active)
-         VALUES ($1,$2,$3,$4,$5,$6,false,COALESCE($7, true)) RETURNING id`,
-        [emailStr, dto.empId || emailStr.split('@')[0], dto.name, hash, role, dto.empId || null, dto.isActive ?? true],
+        `INSERT INTO "${schema}".users (email, username, name, password_hash, role, assigned_roles, emp_id, must_change_password, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,false,COALESCE($8, true)) RETURNING id`,
+        [emailStr, dto.empId || emailStr.split('@')[0], dto.name, hash, role, initialRoleStr, dto.empId || null, dto.isActive ?? true],
       );
       userId = userRows[0].id;
     }
@@ -1265,7 +1307,7 @@ export class UsersService {
     const facRows = await this.ds.query(
       `SELECT f.id, f.user_id, f.emp_id, f.name, u.email 
        FROM "${schema}".faculty f
-       JOIN "${schema}".users u ON u.id = f.user_id
+       JOIN "${schema}".users u ON u.id::text = f.user_id::text
        WHERE f.id::text = $1 OR f.user_id::text = $1 OR LOWER(COALESCE(f.emp_id, '')) = LOWER($1) OR LOWER(COALESCE(f.usr_id, '')) = LOWER($1)
        LIMIT 1`,
       [facultyOrUserId],
@@ -1288,7 +1330,7 @@ export class UsersService {
            ELSE COALESCE(designation, 'Faculty') || ' (Admin)' 
          END, 
          updated_at = NOW() 
-         WHERE id = $1`,
+         WHERE id::text = $1::text`,
         [facRows[0].id],
       );
     } else {
@@ -1301,9 +1343,17 @@ export class UsersService {
       userEmail = uRows[0].email;
     }
 
-    // Elevate user role to COLLEGE_ADMIN
+    // Elevate user role to COLLEGE_ADMIN and sync assigned_roles
     await this.ds.query(
-      `UPDATE "${schema}".users SET role = $1, is_active = true, updated_at = NOW() WHERE id = $2`,
+      `UPDATE "${schema}".users 
+       SET role = $1, 
+           assigned_roles = CASE 
+             WHEN assigned_roles IS NULL OR assigned_roles = '' THEN 'FACULTY,COLLEGE_ADMIN'
+             WHEN assigned_roles ILIKE '%COLLEGE_ADMIN%' THEN assigned_roles
+             ELSE assigned_roles || ',COLLEGE_ADMIN'
+           END, 
+           is_active = true, updated_at = NOW() 
+       WHERE id::text = $2::text`,
       [targetRole, userId],
     );
 
@@ -1328,7 +1378,7 @@ export class UsersService {
     const facRows = await this.ds.query(
       `SELECT f.id, f.user_id, f.emp_id, f.name, f.designation, u.email 
        FROM "${schema}".faculty f
-       JOIN "${schema}".users u ON u.id = f.user_id
+       JOIN "${schema}".users u ON u.id::text = f.user_id::text
        WHERE f.id::text = $1 OR f.user_id::text = $1 OR LOWER(COALESCE(f.emp_id, '')) = LOWER($1) OR LOWER(COALESCE(f.usr_id, '')) = LOWER($1)
        LIMIT 1`,
       [facultyOrUserId],
@@ -1351,7 +1401,7 @@ export class UsersService {
       await this.ds.query(
         `UPDATE "${schema}".faculty 
          SET designation = $1, updated_at = NOW() 
-         WHERE id = $2`,
+         WHERE id::text = $2::text`,
         [cleanedDesignation, facRows[0].id],
       );
     } else {
@@ -1364,9 +1414,13 @@ export class UsersService {
       userEmail = uRows[0].email;
     }
 
-    // Revert user role to default FACULTY
+    // Revert user role to default FACULTY and clean COLLEGE_ADMIN from assigned_roles
     await this.ds.query(
-      `UPDATE "${schema}".users SET role = $1, is_active = true, updated_at = NOW() WHERE id = $2`,
+      `UPDATE "${schema}".users 
+       SET role = $1, 
+           assigned_roles = REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(assigned_roles, 'FACULTY'), '(,)?(COLLEGE_ADMIN|ADMIN)(,)?', '\\1\\3', 'gi'), '^,|,$', '', 'g'),
+           is_active = true, updated_at = NOW() 
+       WHERE id::text = $2::text`,
       [UserRole.FACULTY, userId],
     );
 
@@ -1377,6 +1431,123 @@ export class UsersService {
       message: `Admin rights removed. ${userName || userEmail} reverted to default Faculty role.`,
       userId,
       role: UserRole.FACULTY,
+      tenantSlug: slug,
+    };
+  }
+
+  /**
+   * Update cascading multi-role assignments for any staff member
+   * Allowed roles: FACULTY, HOD, COLLEGE_ADMIN (or ADMIN), CLERK, WARDEN
+   */
+  async updateStaffRoles(tenantSlug: string, facultyOrUserId: string, requestedRoles: string[]) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const schema = `tenant_${slug}`;
+    await this.ensureFacultyColumns(schema);
+
+    // Look up faculty and user
+    const facRows = await this.ds.query(
+      `SELECT f.id, f.user_id, f.emp_id, f.name, f.designation, u.email, u.role, u.assigned_roles 
+       FROM "${schema}".faculty f
+       JOIN "${schema}".users u ON u.id::text = f.user_id::text
+       WHERE f.id::text = $1 OR f.user_id::text = $1 OR LOWER(COALESCE(f.emp_id, '')) = LOWER($1) OR LOWER(COALESCE(f.usr_id, '')) = LOWER($1)
+       LIMIT 1`,
+      [facultyOrUserId],
+    );
+
+    let userId: string;
+    let userName: string = 'Staff Member';
+    let userEmail: string = '';
+    let facultyRecordId: string | null = null;
+    let currentDesignation: string = '';
+
+    if (facRows.length > 0) {
+      userId = facRows[0].user_id;
+      userName = facRows[0].name;
+      userEmail = facRows[0].email;
+      facultyRecordId = facRows[0].id;
+      currentDesignation = facRows[0].designation || 'Faculty Member';
+    } else {
+      const uRows = await this.ds.query(
+        `SELECT id, email, role, assigned_roles FROM "${schema}".users WHERE id::text = $1 OR LOWER(email) = LOWER($1) LIMIT 1`,
+        [facultyOrUserId],
+      );
+      if (uRows.length === 0) throw new NotFoundException('User / Staff not found in this institution');
+      userId = uRows[0].id;
+      userEmail = uRows[0].email;
+    }
+
+    // Normalize incoming roles array
+    const rawRoles = (Array.isArray(requestedRoles) ? requestedRoles : [])
+      .map((r) => String(r || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    const validRolesSet = new Set(['FACULTY', 'HOD', 'COLLEGE_ADMIN', 'ADMIN', 'CLERK', 'WARDEN']);
+    const canonicalRoles: string[] = [];
+    for (const r of rawRoles) {
+      if (!validRolesSet.has(r)) continue;
+      const normalized = (r === 'ADMIN' || r === 'COLLEGE_ADMIN') ? 'COLLEGE_ADMIN' : r;
+      if (!canonicalRoles.includes(normalized)) {
+        canonicalRoles.push(normalized);
+      }
+    }
+
+    // If no valid roles specified, default to at least FACULTY
+    if (canonicalRoles.length === 0) {
+      canonicalRoles.push('FACULTY');
+    }
+
+    // Determine primary user.role by highest privilege
+    let primaryRole = UserRole.FACULTY;
+    if (canonicalRoles.includes('COLLEGE_ADMIN')) {
+      primaryRole = UserRole.COLLEGE_ADMIN;
+    } else if (canonicalRoles.includes('HOD')) {
+      primaryRole = UserRole.HOD;
+    } else if (canonicalRoles.includes('FACULTY')) {
+      primaryRole = UserRole.FACULTY;
+    } else if (canonicalRoles.includes('CLERK')) {
+      primaryRole = UserRole.CLERK;
+    } else if (canonicalRoles.includes('WARDEN')) {
+      primaryRole = UserRole.WARDEN;
+    }
+
+    const assignedRolesStr = canonicalRoles.join(',');
+
+    // Update users table with active role and comma-separated assigned_roles
+    await this.ds.query(
+      `UPDATE "${schema}".users 
+       SET role = $1, assigned_roles = $2, is_active = true, updated_at = NOW() 
+       WHERE id::text = $3::text`,
+      [primaryRole, assignedRolesStr, userId],
+    );
+
+    // Update faculty designation if applicable
+    if (facultyRecordId) {
+      const hasAdmin = canonicalRoles.includes('COLLEGE_ADMIN');
+      let updatedDesignation = currentDesignation;
+      if (hasAdmin) {
+        if (!updatedDesignation.toLowerCase().includes('admin')) {
+          updatedDesignation = `${updatedDesignation} (Admin)`.trim();
+        }
+      } else {
+        updatedDesignation = updatedDesignation.replace(/\s*\(\s*Admin\s*\)/gi, '').trim() || 'Faculty';
+      }
+
+      await this.ds.query(
+        `UPDATE "${schema}".faculty 
+         SET designation = $1, updated_at = NOW() 
+         WHERE id::text = $2::text`,
+        [updatedDesignation, facultyRecordId],
+      );
+    }
+
+    this.logger.log(`Updated roles for user ${userId} (${userName}): [${assignedRolesStr}] primary=${primaryRole} in ${slug}`);
+
+    return {
+      success: true,
+      message: `Roles updated successfully for ${userName || userEmail}: ${canonicalRoles.join(', ')}`,
+      userId,
+      role: primaryRole,
+      assigned_roles: canonicalRoles,
       tenantSlug: slug,
     };
   }

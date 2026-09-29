@@ -37,10 +37,77 @@ interface Faculty {
   qualification?: string;
   specialization?: string;
   role?: string;
+  assigned_roles?: string[] | string;
   usr_id?: string;
   devicecd?: string | number;
   device_cd?: string | number;
 }
+
+const AVAILABLE_STAFF_ROLES = [
+  {
+    id: 'FACULTY',
+    label: 'Faculty',
+    number: '1',
+    icon: '👨‍🏫',
+    description: 'Academic lectures, timetable schedules & verification',
+  },
+  {
+    id: 'HOD',
+    label: 'HOD',
+    number: '2',
+    icon: '🏛️',
+    description: 'Department leadership, syllabus & approval rights',
+  },
+  {
+    id: 'COLLEGE_ADMIN',
+    label: 'ADMIN',
+    number: '3',
+    icon: '🛡️',
+    description: 'Full institutional ERP management & configuration',
+  },
+  {
+    id: 'CLERK',
+    label: 'CLERK',
+    number: '4',
+    icon: '📝',
+    description: 'Attendance entry, student files & marks processing',
+  },
+  {
+    id: 'WARDEN',
+    label: 'WARDEN',
+    number: '5',
+    icon: '🏢',
+    description: 'Hostel rooms, student resident tracking & night gate passes',
+  },
+] as const;
+
+const getStaffAssignedRoles = (fac: Faculty): string[] => {
+  if (Array.isArray(fac.assigned_roles)) {
+    return fac.assigned_roles.map((r: string) => (r === 'ADMIN' ? 'COLLEGE_ADMIN' : r.toUpperCase()));
+  }
+  if (typeof fac.assigned_roles === 'string' && fac.assigned_roles.trim()) {
+    return fac.assigned_roles
+      .split(',')
+      .map((r: string) => (r.trim().toUpperCase() === 'ADMIN' ? 'COLLEGE_ADMIN' : r.trim().toUpperCase()))
+      .filter(Boolean);
+  }
+  const roles: string[] = [];
+  const r = (fac.role || '').toUpperCase();
+  if (r === 'COLLEGE_ADMIN' || r === 'SUPER_ADMIN' || r === 'ADMIN' || (fac.designation && fac.designation.toLowerCase().includes('admin'))) {
+    roles.push('COLLEGE_ADMIN');
+    roles.push('FACULTY');
+  } else if (r === 'HOD') {
+    roles.push('HOD');
+    roles.push('FACULTY');
+  } else if (r === 'CLERK') {
+    roles.push('CLERK');
+  } else if (r === 'WARDEN') {
+    roles.push('WARDEN');
+  } else {
+    roles.push('FACULTY');
+  }
+  return Array.from(new Set(roles));
+};
 
 interface Department {
   id: string;
@@ -113,9 +180,75 @@ export default function StaffAdminPage() {
   // Toast feedback
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Cascading multi-role dropdown state
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [updatingRolesId, setUpdatingRolesId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-dropdown-container="true"]')) {
+        setOpenDropdownId(null);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 5000);
+  };
+
+  // Toggle role in cascading multi-checkpoint dropdown
+  const handleToggleRole = async (fac: Faculty, roleId: string) => {
+    const currentRoles = getStaffAssignedRoles(fac);
+    let updatedRoles: string[];
+    if (currentRoles.includes(roleId)) {
+      if (currentRoles.length === 1) {
+        showToast('error', 'Staff member must retain at least one active assigned role.');
+        return;
+      }
+      updatedRoles = currentRoles.filter((r) => r !== roleId);
+    } else {
+      updatedRoles = [...currentRoles, roleId];
+    }
+
+    // Optimistic UI update
+    setFaculties((prev) =>
+      prev.map((f) => (f.id === fac.id ? { ...f, assigned_roles: updatedRoles } : f))
+    );
+    setUpdatingRolesId(fac.id);
+
+    try {
+      const targetSlug = fac.college_slug || (selectedCollegeFilter !== 'all' ? selectedCollegeFilter : userTenantSlug) || 'srms-cet-bareilly';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const res = await fetch(`${API_BASE}/users/staff/${fac.id}/update-roles?tenant=${targetSlug}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-slug': targetSlug,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ roles: updatedRoles }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Failed to update roles');
+
+      const roleLabels = updatedRoles
+        .map((r) => AVAILABLE_STAFF_ROLES.find((ar) => ar.id === r)?.label || r)
+        .join(', ');
+      showToast('success', `✓ Roles updated for ${fac.name}: ${roleLabels}`);
+    } catch (err: any) {
+      // Revert on error
+      setFaculties((prev) =>
+        prev.map((f) => (f.id === fac.id ? { ...f, assigned_roles: currentRoles } : f))
+      );
+      showToast('error', err.message || 'Could not update staff roles');
+    } finally {
+      setUpdatingRolesId(null);
+    }
   };
 
   // 1. Initial Metadata Fetch (Colleges, Departments)
@@ -407,7 +540,9 @@ export default function StaffAdminPage() {
       }
 
       // 2. Tab filter
+      const staffRoles = getStaffAssignedRoles(fac);
       const isAdmin =
+        staffRoles.includes('COLLEGE_ADMIN') ||
         fac.role === 'COLLEGE_ADMIN' ||
         fac.role === 'SUPER_ADMIN' ||
         fac.role === 'ADMIN' ||
@@ -450,13 +585,16 @@ export default function StaffAdminPage() {
   }, [faculties, selectedCollegeFilter, activeTab, selectedDeptFilter, searchTerm, colleges, departments]);
 
   const currentAdminsCount = useMemo(() => {
-    return faculties.filter(
-      (f) =>
+    return faculties.filter((f) => {
+      const staffRoles = getStaffAssignedRoles(f);
+      return (
+        staffRoles.includes('COLLEGE_ADMIN') ||
         f.role === 'COLLEGE_ADMIN' ||
         f.role === 'SUPER_ADMIN' ||
         f.role === 'ADMIN' ||
         (f.designation && f.designation.toLowerCase().includes('admin'))
-    ).length;
+      );
+    }).length;
   }, [faculties]);
 
   // Active College Display Name
@@ -732,7 +870,7 @@ export default function StaffAdminPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto min-h-[460px]">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[#E7EAF3] dark:border-slate-800 text-slate-500 dark:text-slate-400 font-extrabold uppercase text-[10px] tracking-wider bg-slate-50/80 dark:bg-slate-800/60">
@@ -741,8 +879,8 @@ export default function StaffAdminPage() {
                     <th className="py-4">College</th>
                     <th className="py-4">Department & Subject</th>
                     <th className="py-4">Designation</th>
-                    <th className="py-4">Current Role</th>
-                    <th className="pr-6 py-4 text-right">Admin Delegation Action</th>
+                    <th className="py-4">Assigned Roles</th>
+                    <th className="pr-6 py-4 text-right">Role Delegation & Rights</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800">
@@ -769,12 +907,7 @@ export default function StaffAdminPage() {
                       const matchedCol = colleges.find(c => c.id === fac.college_id || c.code === fac.college_code || c.slug === fac.college_slug);
                       const fallbackStoredName = typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '';
                       const displayColName = matchedCol?.name || fac.college_name || fallbackStoredName || 'Institution';
-
-                      const isAdmin =
-                        fac.role === 'COLLEGE_ADMIN' ||
-                        fac.role === 'SUPER_ADMIN' ||
-                        fac.role === 'ADMIN' ||
-                        (fac.designation && fac.designation.toLowerCase().includes('admin'));
+                      const staffRoles = getStaffAssignedRoles(fac);
 
                       return (
                         <tr key={fac.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all">
@@ -838,49 +971,164 @@ export default function StaffAdminPage() {
                           </td>
 
                           <td className="py-4">
-                            {isAdmin ? (
-                              <span className="px-2.5 py-1 rounded-full font-black uppercase text-[10px] tracking-wide inline-flex items-center gap-1 bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                                🛡️ Admin Rights
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-1 rounded-full font-bold uppercase text-[10px] tracking-wide inline-block bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                {fac.staff_type || 'Faculty'}
-                              </span>
-                            )}
+                            <div className="flex flex-wrap items-center gap-1.5 max-w-[210px]">
+                              {staffRoles.map((rKey) => {
+                                const roleMeta = AVAILABLE_STAFF_ROLES.find((ar) => ar.id === rKey);
+                                if (!roleMeta) return null;
+                                return (
+                                  <span
+                                    key={rKey}
+                                    className={`px-2.5 py-0.5 rounded-full font-bold uppercase text-[9px] tracking-wide inline-flex items-center gap-1 border shadow-2xs ${
+                                      roleMeta.id === 'COLLEGE_ADMIN'
+                                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'
+                                        : roleMeta.id === 'HOD'
+                                        ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/25'
+                                        : roleMeta.id === 'CLERK'
+                                        ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/25'
+                                        : roleMeta.id === 'WARDEN'
+                                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25'
+                                        : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/25'
+                                    }`}
+                                  >
+                                    <span>{roleMeta.icon}</span>
+                                    <span>{roleMeta.label}</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
                           </td>
 
                           <td className="pr-6 py-4 text-right">
-                            {isAdmin ? (
-                              <div className="flex items-center justify-end gap-2.5">
-                                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                  </svg>
-                                  <span>Active Admin</span>
-                                </span>
-                                <button
-                                  onClick={() => handleRevokeAdmin(fac)}
-                                  className="h-8 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-600 text-rose-600 dark:text-rose-400 hover:text-white font-extrabold text-[11px] inline-flex items-center justify-center gap-1.5 border border-rose-500/30 transition-all cursor-pointer shadow-sm hover:scale-[1.03] active:scale-[0.97]"
-                                  title={`Remove Administrator Rights from ${fac.name} and revert to default Faculty`}
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  <span>Remove from Admin</span>
-                                </button>
-                              </div>
-                            ) : (
+                            <div className="relative inline-block text-left" data-dropdown-container="true">
                               <button
-                                onClick={() => handleMakeAdmin(fac)}
-                                className="h-9 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs inline-flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer ml-auto"
-                                title={`Grant Administrator Rights to ${fac.name}`}
+                                type="button"
+                                onClick={() => setOpenDropdownId(openDropdownId === fac.id ? null : fac.id)}
+                                className={`h-9 px-3.5 rounded-xl font-extrabold text-xs inline-flex items-center justify-center gap-2 border transition-all cursor-pointer shadow-sm ${
+                                  staffRoles.includes('COLLEGE_ADMIN')
+                                    ? 'bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/20 hover:scale-[1.02] active:scale-[0.98]'
+                                    : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 border-[#E7EAF3] dark:border-slate-700 hover:scale-[1.02] active:scale-[0.98]'
+                                }`}
+                                title="Configure and assign multi-role ERP checkpoints for this user"
                               >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                                <span className="flex items-center gap-1.5">
+                                  <span
+                                    className="w-2 h-2 rounded-full"
+                                    style={{
+                                      backgroundColor: staffRoles.includes('COLLEGE_ADMIN') ? '#F36C21' : '#5B4BFF',
+                                    }}
+                                  />
+                                  <span>Role Checkpoints</span>
+                                  <span className="px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-700 text-[10px] font-black text-slate-700 dark:text-slate-300">
+                                    {staffRoles.length}
+                                  </span>
+                                </span>
+                                <svg
+                                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                    openDropdownId === fac.id ? 'rotate-180 text-[#5B4BFF]' : 'text-slate-400'
+                                  }`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                                 </svg>
-                                <span>Make Admin</span>
                               </button>
-                            )}
+
+                              {/* Cascading Multi-Checkpoint Dropdown Menu */}
+                              {openDropdownId === fac.id && (
+                                <div className="absolute right-0 top-full mt-2 w-80 z-50 rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-[#E7EAF3] dark:border-slate-800 p-3 text-left animate-in fade-in zoom-in-95 duration-150">
+                                  {/* Menu Header */}
+                                  <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-[#E7EAF3] dark:border-slate-800">
+                                    <div>
+                                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
+                                        <span>🛡️</span> Role Rights Delegation
+                                      </span>
+                                      <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[190px]">
+                                        {fac.name} ({fac.emp_id || 'ID'})
+                                      </p>
+                                    </div>
+                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/60 text-[#5B4BFF] border border-purple-200 dark:border-purple-800">
+                                      {staffRoles.length}/5 Active
+                                    </span>
+                                  </div>
+
+                                  {/* 5 Cascading Checkpoint Rows */}
+                                  <div className="space-y-1">
+                                    {AVAILABLE_STAFF_ROLES.map((roleDef) => {
+                                      const isChecked = staffRoles.includes(roleDef.id);
+                                      const isUpdating = updatingRolesId === fac.id;
+
+                                      return (
+                                        <div
+                                          key={roleDef.id}
+                                          onClick={() => !isUpdating && handleToggleRole(fac, roleDef.id)}
+                                          className={`p-2.5 rounded-xl cursor-pointer transition-all flex items-start gap-2.5 select-none border ${
+                                            isChecked
+                                              ? 'bg-purple-50/70 dark:bg-purple-950/30 border-purple-200 dark:border-purple-900/60 shadow-2xs'
+                                              : 'hover:bg-slate-50 dark:hover:bg-slate-800/60 border-transparent'
+                                          }`}
+                                        >
+                                          {/* Custom Checkbox */}
+                                          <div
+                                            className={`w-5 h-5 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                              isChecked
+                                                ? 'bg-[#5B4BFF] border-[#5B4BFF] text-white shadow-xs'
+                                                : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700'
+                                            }`}
+                                          >
+                                            {isChecked && (
+                                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                              </svg>
+                                            )}
+                                          </div>
+
+                                          {/* Label & Description */}
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-extrabold text-xs flex items-center gap-1.5">
+                                                <span className="text-slate-400 font-mono text-[10px]">{roleDef.number}.</span>
+                                                <span>{roleDef.icon}</span>
+                                                <span className={isChecked ? 'text-slate-900 dark:text-white font-black' : 'text-slate-700 dark:text-slate-300'}>
+                                                  {roleDef.label}
+                                                </span>
+                                              </span>
+                                              {isChecked ? (
+                                                <span className="px-1.5 py-0.2 rounded font-black text-[9px] uppercase tracking-wider bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                                                  Granted
+                                                </span>
+                                              ) : (
+                                                <span className="text-[9px] font-semibold text-slate-400">
+                                                  No Access
+                                                </span>
+                                              )}
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 leading-tight mt-0.5">
+                                              {roleDef.description}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+
+                                  {/* Footer Notice & Close */}
+                                  <div className="mt-2.5 pt-2 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between">
+                                    <p className="text-[9px] text-slate-400 leading-tight flex-1 pr-2">
+                                      💡 User can log in through any granted role portal
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => setOpenDropdownId(null)}
+                                      className="px-2.5 py-1 rounded-lg bg-[#5B4BFF] hover:bg-[#4a3be0] text-white font-extrabold text-[10px] transition-all cursor-pointer shadow-xs"
+                                    >
+                                      Done
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

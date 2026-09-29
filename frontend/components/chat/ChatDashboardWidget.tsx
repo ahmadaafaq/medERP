@@ -6,7 +6,7 @@ import { MessageSquare, ArrowRight, Clock, Sparkles } from 'lucide-react';
 import { useChat } from '../../hooks/useChat';
 
 interface ChatDashboardWidgetProps {
-  role?: 'FACULTY' | 'STUDENT' | 'ADMIN';
+  role?: 'FACULTY' | 'STUDENT' | 'ADMIN' | 'HOD';
   chatUrl?: string;
   maxRows?: number;
 }
@@ -16,7 +16,7 @@ export default function ChatDashboardWidget({
   chatUrl = '/dashboard/faculty/chat',
   maxRows = 2,
 }: ChatDashboardWidgetProps) {
-  const { groups, loadingGroups, unreadTotal } = useChat(role);
+  const { groups, loadingGroups, unreadTotal } = useChat(role === 'HOD' ? 'FACULTY' : role);
 
   const formatTime = (dateStr?: string) => {
     if (!dateStr) return '';

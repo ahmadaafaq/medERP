@@ -20,7 +20,7 @@ import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ChatService } from './chat.service';
-import { SendMessageDto, ChatGroupFilterDto } from './dto/chat.dto';
+import { SendMessageDto, ChatGroupFilterDto, JoinBatchGroupDto } from './dto/chat.dto';
 import { TenantSlug } from '../common/decorators/tenant.decorator';
 import { Public } from '../common/decorators/public.decorator';
 
@@ -268,10 +268,29 @@ export class ChatController {
   async joinBatch(
     @TenantSlug() tenantSlug: string,
     @Req() req: any,
-    @Body() dto: any,
+    @Body() dto: JoinBatchGroupDto,
   ) {
     const user = this.extractUser(req, dto);
-    const data = await this.chatService.joinBatchGroup(tenantSlug, user, dto);
+    let cookieTenant = '';
+    if (req.headers?.cookie) {
+      const match = req.headers.cookie.match(/(?:^|;\s*)auth_tenant=([^;]+)/);
+      if (match && match[1]) {
+        cookieTenant = decodeURIComponent(match[1]).replace(/^tenant_/, '').replace(/^tenant-/, '');
+      }
+    }
+    const effectiveTenant =
+      (tenantSlug && tenantSlug !== 'undefined' && tenantSlug !== 'null' ? tenantSlug : '') ||
+      (req.query?.tenant as string) ||
+      (req.query?.tenantSlug as string) ||
+      (req.headers?.['x-tenant-slug'] as string) ||
+      (req.headers?.['x-tenant'] as string) ||
+      dto?.tenant ||
+      dto?.tenantSlug ||
+      cookieTenant ||
+      user?.tenantSlug ||
+      user?.tenant ||
+      '';
+    const data = await this.chatService.joinBatchGroup(effectiveTenant, user, dto);
     return { success: true, data };
   }
 

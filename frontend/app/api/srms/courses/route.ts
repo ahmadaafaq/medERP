@@ -75,24 +75,26 @@ async function handleGetCourse(colgcd?: string, tenantSlug?: string) {
 
   let targetSlug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
   
-  // Resolve targetSlug based on college code
-  if (srmsCollegeSlugMap[cd]) {
-    targetSlug = srmsCollegeSlugMap[cd];
-  } else if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
-    try {
-      const tRows = await queryDb<any>(`SELECT slug FROM public.tenants WHERE code = $1 OR slug = $1 OR id::text = $1 LIMIT 1`, [cd]);
-      if (tRows.length > 0 && tRows[0].slug) {
-        targetSlug = tRows[0].slug;
-      }
-    } catch {}
-    if (!targetSlug) {
-      targetSlug = 'srms-cet-bareilly';
+  // Scoped to SRMS only if targetSlug is missing or is just a numeric college code:
+  if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
+    if (cd && srmsCollegeSlugMap[cd]) {
+      targetSlug = srmsCollegeSlugMap[cd];
+    } else if (cd) {
+      try {
+        const tRows = await queryDb<any>(`SELECT slug FROM public.tenants WHERE code = $1 OR slug = $1 OR id::text = $1 LIMIT 1`, [cd]);
+        if (tRows.length > 0 && tRows[0].slug) {
+          targetSlug = tRows[0].slug;
+        }
+      } catch {}
     }
   }
   if (targetSlug === 'srms-cet') targetSlug = 'srms-cet-bareilly';
   if (targetSlug === 'srms-cetr') targetSlug = 'srms-cetr-bareilly';
+  if (!targetSlug) {
+    targetSlug = 'srms-cet-bareilly';
+  }
   const schema = `tenant_${targetSlug}`;
-  const isSrmsTenant = targetSlug.startsWith('srms');
+  const isSrmsTenant = targetSlug.includes('srms');
 
   // 1. Direct PostgreSQL query to tenant's schema
   try {

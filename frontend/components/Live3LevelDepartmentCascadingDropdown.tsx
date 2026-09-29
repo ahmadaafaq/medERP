@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { fetchCourses, fetchBranches, fetchColleges, isSrmsTenant, getTenantSlug } from '../hooks/useTenantAcademicData';
 
 export interface LiveCollegeItem {
   colg_cd: string;
@@ -105,35 +106,26 @@ export default function Live3LevelDepartmentCascadingDropdown({
     if (onBranchSelectRef.current) onBranchSelectRef.current(null);
 
     try {
-      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
-      // 1. Next.js server proxy route
-      let res = await fetch('/api/srms/branches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colgcd: colgCd, coursecd: courseCd, tenant: slug }),
-      }).catch(() => null);
+      const slug = getTenantSlug();
+      // Tenant-aware: SRMS tenants use SRMS API, others use PostgreSQL
+      const rawList = await fetchBranches(slug, courseCd, colgCd);
 
-      // Fallback 1: Backend proxy
-      if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/branches?tenant=${encodeURIComponent(slug)}&course_cd=${encodeURIComponent(courseCd)}`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        }).catch(() => null);
-      }
+      // Map to LiveBranchItem format
+      const mapped: LiveBranchItem[] = rawList.map((b) => ({
+        colg_cd: b.colg_cd || colgCd,
+        course_cd: b.course_cd,
+        course_name: '',
+        branch_cd: b.branch_cd,
+        branch_name: b.branch_name,
+        active_flg: b.active_flg,
+        is_active: b.is_active,
+      }));
 
-      if (!res || !res.ok) {
-        throw new Error(`Failed to load branches`);
-      }
-
-      const data = await res.json();
-      const rawList: LiveBranchItem[] = Array.isArray(data) ? data : data.data || [];
-
-      // Filter: only show active branches where active_flg == "1" (or all if not flagged)
-      const activeBranches = rawList.filter(
+      // Filter active only
+      const active = mapped.filter(
         (b) => b.active_flg === undefined || String(b.active_flg) === '1' || b.BRANCHSTS === 'ACTIVE' || b.is_active
       );
-
-      setBranches(activeBranches.length > 0 ? activeBranches : rawList);
+      setBranches(active.length > 0 ? active : mapped);
     } catch (err: any) {
       console.error('[Live3LevelCascade] Fetch Branches Error:', err);
       setBranchesError(err.message || 'No active departments/branches found for this course');
@@ -168,35 +160,23 @@ export default function Live3LevelDepartmentCascadingDropdown({
     if (onBranchSelectRef.current) onBranchSelectRef.current(null);
 
     try {
-      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
-      // 1. Next.js server proxy route
-      let res = await fetch('/api/srms/courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colgcd: colgCd, tenant: slug }),
-      }).catch(() => null);
+      const slug = getTenantSlug();
+      // Tenant-aware: SRMS tenants use SRMS API, others use PostgreSQL
+      const rawList = await fetchCourses(slug, colgCd);
 
-      // Fallback 1: Backend proxy
-      if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/courses?tenant=${encodeURIComponent(slug)}`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        }).catch(() => null);
-      }
+      // Map to LiveCourseItem format
+      const mapped: LiveCourseItem[] = rawList.map((c) => ({
+        colg_cd: c.colg_cd || colgCd,
+        course_cd: c.course_cd,
+        course_name: c.course_name,
+        active_flg: c.active_flg,
+        is_active: c.is_active,
+      }));
 
-      if (!res || !res.ok) {
-        throw new Error(`Failed to load courses`);
-      }
-
-      const data = await res.json();
-      const rawList: LiveCourseItem[] = Array.isArray(data) ? data : data.data || [];
-
-      // Filter: only show active courses where active_flg == "1" (or all if not flagged)
-      const activeCourses = rawList.filter(
+      const active = mapped.filter(
         (c) => c.active_flg === undefined || String(c.active_flg) === '1' || c.ACTIVESTS === 'ACTIVE' || c.is_active
       );
-
-      setCourses(activeCourses.length > 0 ? activeCourses : rawList);
+      setCourses(active.length > 0 ? active : mapped);
     } catch (err: any) {
       console.error('[Live3LevelCascade] Fetch Courses Error:', err);
       setCoursesError(err.message || 'No active courses found for selected institution');
@@ -206,65 +186,35 @@ export default function Live3LevelDepartmentCascadingDropdown({
   }, []);
 
   // ─── STEP 1: FETCH COLLEGES ON INITIAL MOUNT ──────────────────────────────
-  const fetchColleges = useCallback(async () => {
+  const fetchCollegesData = useCallback(async () => {
     setCollegesLoading(true);
     setCollegesError(null);
     try {
-      const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
-      const tenantId = typeof window !== 'undefined' ? (localStorage.getItem('tenantId') || '') : '';
-      const tenantName = typeof window !== 'undefined' ? (localStorage.getItem('tenantName') || localStorage.getItem('college_name') || '') : '';
+      const slug = getTenantSlug();
       const colg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+      const srms = isSrmsTenant(slug);
 
-      const isSrms = slug.toLowerCase().includes('srms') || tenantName.toLowerCase().includes('srms');
+      // Tenant-aware: SRMS tenants use SRMS API, others use PostgreSQL
+      let list = await fetchColleges(slug);
 
-      const urlParams = new URLSearchParams();
-      if (slug) urlParams.set('tenant', slug);
-      if (tenantId) urlParams.set('tenantId', tenantId);
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
-        ...(slug ? { 'x-tenant-slug': slug } : {}),
-      };
-
-      let res = await fetch(`/api/srms/colleges?${urlParams.toString()}`, {
-        method: 'GET',
-        headers,
-      }).catch(() => null);
-
-      if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/colleges?${urlParams.toString()}`, {
-          method: 'GET',
-          headers,
-        }).catch(() => null);
-      }
-
-      if (!res || !res.ok) {
-        throw new Error(`Failed to load colleges`);
-      }
-
-      const data = await res.json();
-      const list: LiveCollegeItem[] = Array.isArray(data) ? data : data.data || [];
-      const role = typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN').toUpperCase() : 'ADMIN';
-
-      let finalCols = list;
-      if (isSrms) {
-        finalCols = list.filter((c: any) => {
-          const name = (c.colg_name || (c as any).name || '').toLowerCase();
-          const cd = String(c.colg_cd || (c as any).code || '').trim();
+      // Strict isolation: SRMS tenants see only SRMS colleges; others never see SRMS colleges
+      if (srms) {
+        const filtered = list.filter((c: any) => {
+          const name = (c.colg_name || '').toLowerCase();
+          const cd = String(c.colg_cd || '').trim();
           return name.includes('srms') || name.includes('shri ram murti') || ['1','2','3','4','5','6','7','8','9','10','11','12','13','14'].includes(cd);
         });
+        list = filtered.length > 0 ? filtered : list;
       } else {
-        // Strict isolation for non-SRMS tenants: never show any SRMS college
-        finalCols = list.filter((c: any) => {
-          const name = (c.colg_name || (c as any).name || '').toLowerCase();
+        list = list.filter((c: any) => {
+          const name = (c.colg_name || '').toLowerCase();
           const s = (c.slug || '').toLowerCase();
           return !name.includes('srms') && !s.includes('srms') && !name.includes('shri ram murti');
         });
       }
 
-      setColleges(finalCols);
-      const defaultCol = finalCols.find((c: any) => String(c.colg_cd) === String(colg) || String(c.code) === String(colg) || c.slug === slug) || finalCols[0];
+      setColleges(list);
+      const defaultCol = list.find((c: any) => String(c.colg_cd) === String(colg) || c.slug === slug) || list[0];
       if (defaultCol && !selectedColgCd) {
         setSelectedColgCd(defaultCol.colg_cd);
         setSelectedCollege(defaultCol);
@@ -280,8 +230,8 @@ export default function Live3LevelDepartmentCascadingDropdown({
   }, [fetchCoursesForCollege]);
 
   useEffect(() => {
-    fetchColleges();
-  }, [fetchColleges]);
+    fetchCollegesData();
+  }, [fetchCollegesData]);
 
   // ─── CONTROLLED PROPS SYNCHRONIZATION ──────────────────────────────────────
   useEffect(() => {
@@ -395,7 +345,7 @@ export default function Live3LevelDepartmentCascadingDropdown({
             <h4 className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <span>Live 3-Level Cascading Selector</span>
               <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                100% Live SRMS API
+                DB / SRMS Aware
               </span>
             </h4>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">

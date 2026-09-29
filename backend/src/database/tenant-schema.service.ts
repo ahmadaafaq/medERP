@@ -169,7 +169,13 @@ export class TenantSchemaService implements OnApplicationBootstrap {
             CREATE TYPE transaction_status_enum AS ENUM ('PENDING', 'SUCCESS', 'FAILED', 'REFUNDED');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'menu_role_enum') THEN
-            CREATE TYPE menu_role_enum AS ENUM ('SUPERADMIN', 'ADMIN', 'CLERK', 'FACULTY', 'WARDEN', 'STUDENT');
+            CREATE TYPE menu_role_enum AS ENUM ('SUPERADMIN', 'ADMIN', 'CLERK', 'FACULTY', 'WARDEN', 'STUDENT', 'HOD');
+          ELSE
+            BEGIN
+              ALTER TYPE menu_role_enum ADD VALUE IF NOT EXISTS 'HOD';
+            EXCEPTION
+              WHEN others THEN NULL;
+            END;
           END IF;
           IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'applicable_firm_mode_enum') THEN
             CREATE TYPE applicable_firm_mode_enum AS ENUM ('MED', 'NONMED', 'BOTH');
@@ -514,7 +520,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ,
           ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ,
           ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT true,
-          ADD COLUMN IF NOT EXISTS onboarding_step INT DEFAULT 0;
+          ADD COLUMN IF NOT EXISTS onboarding_step INT DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS assigned_roles TEXT;
       `).catch(() => { });
 
         // Alter faculty table to add usr_id, devicecd, loc_cd, employment_status and all HR sync columns if missing

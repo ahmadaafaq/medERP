@@ -17,6 +17,8 @@ export interface JwtPayload {
   emp_id?: string | null;
   loc_cd?: number | null;
   department?: string | null;
+  firm_mode?: string | null;
+  firmMode?: string | null;
   iat?: number;
   exp?: number;
 }

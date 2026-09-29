@@ -1510,9 +1510,43 @@ export class AdminMasterService {
   }
 
   // ─── 5. COMPETENCY / SUB-TOPIC MASTER ──────────────────────────────────────────
-  async listCompetencies(tenantSlug?: string) {
+  async listCompetencies(
+    tenantSlug?: string,
+    topicId?: string,
+    topicCode?: string,
+    unitId?: string,
+    unitCode?: string,
+    subjectId?: string,
+    subjectCode?: string,
+  ) {
     const slug = await this.resolveTenantSlug(tenantSlug);
     const colleges = await this.listColleges();
+
+    const targetTopic = (topicId || topicCode || '').trim();
+    const targetUnit = (unitId || unitCode || '').trim();
+    const targetSub = (subjectId || subjectCode || '').trim();
+
+    const whereConditions: string[] = [];
+    const params: any[] = [];
+    let pIdx = 1;
+
+    if (targetTopic) {
+      whereConditions.push(`(c.topic_id::text = $${pIdx} OR c.topic_code = $${pIdx} OR t.code = $${pIdx} OR t.id::text = $${pIdx})`);
+      params.push(targetTopic);
+      pIdx++;
+    }
+    if (targetUnit) {
+      whereConditions.push(`(c.unit_id::text = $${pIdx} OR c.unit_code = $${pIdx} OR u.code = $${pIdx} OR u.id::text = $${pIdx})`);
+      params.push(targetUnit);
+      pIdx++;
+    }
+    if (targetSub) {
+      whereConditions.push(`(c.subject_id::text = $${pIdx} OR c.subject_code = $${pIdx} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
+      params.push(targetSub);
+      pIdx++;
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     if (slug === 'all') {
       const activeTenants = colleges.filter((c: any) => c.slug);
@@ -1542,6 +1576,7 @@ export class AdminMasterService {
               LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
               LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
               LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
+              ${whereClause}
               ORDER BY c.id
             ) sub
             ORDER BY sub.created_at DESC, sub.code ASC
@@ -1549,6 +1584,7 @@ export class AdminMasterService {
           const rows = await this.tenantSchemaService.queryInTenant(
             col.slug,
             compQuery,
+            params,
           );
           rows.forEach((r: any) => {
             allCompetencies.push({
@@ -1591,6 +1627,7 @@ export class AdminMasterService {
         LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
         LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
         LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
+        ${whereClause}
         ORDER BY c.id
       ) sub
       ORDER BY sub.created_at DESC, sub.code ASC
@@ -1598,6 +1635,7 @@ export class AdminMasterService {
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       compQuery,
+      params,
     );
 
     return rows.map((r: any) => ({

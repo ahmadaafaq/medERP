@@ -21,55 +21,91 @@ export class TimetableService implements OnModuleInit {
       if (Array.isArray(schemasRes)) {
         for (const row of schemasRes) {
           const schemaName = row.schema_name;
-          await this.dataSource.query(`
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS effective_from DATE;
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS effective_until DATE;
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS topic VARCHAR(255);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS competency_codes VARCHAR(255);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS unit_name VARCHAR(255);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS unit_id VARCHAR(100);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS sub_topics VARCHAR(500);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS section VARCHAR(50);
-            ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS description TEXT;
-          `);
-
-          // Auto-link timetable slots that have null subject_id to their respective subjects if table exists
           try {
-            const hasSubjects = await this.dataSource.query(
-              `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'subjects'`,
-              [schemaName],
-            );
-            if (hasSubjects.length > 0) {
-              await this.dataSource.query(`
-                UPDATE "${schemaName}".timetable_slots ts
-                SET subject_id = s.id
-                FROM "${schemaName}".subjects s
-                WHERE ts.subject_id IS NULL
-                  AND (
-                    s.id::text = ts.topic
-                    OR s.code = ts.topic
-                    OR LOWER(s.name) = LOWER(ts.topic)
-                    OR (LOWER(ts.topic) = 'coa' AND (s.name ILIKE '%Computer Organization%' OR s.code ILIKE '%302%'))
-                    OR (LOWER(ts.topic) LIKE '%tc%' AND s.name ILIKE '%Technical Communication%')
-                    OR (LOWER(ts.topic) LIKE '%web technology lab%' AND s.name ILIKE '%Web Technology Lab%')
-                    OR (LOWER(ts.topic) LIKE '%web technology%' AND s.name ILIKE '%Web Technology%')
-                    OR (LOWER(ts.topic) LIKE '%business communication%' AND s.name ILIKE '%Business Communication%')
-                    OR (LOWER(ts.topic) LIKE '%object oriented programming%' AND s.name ILIKE '%Object Oriented Programming in C++%')
-                    OR (LOWER(ts.topic) LIKE '%front end development%' AND s.name ILIKE '%Front End Development%')
-                    OR (LOWER(ts.topic) = 'wt' AND s.name ILIKE '%Web Technology%')
-                    OR (LOWER(ts.topic) = 'dbms' AND s.name ILIKE '%Database Management%')
-                    OR (LOWER(ts.topic) = 'os' AND s.name ILIKE '%Operating System%')
-                  )
-              `);
+            // 1. Ensure timetable_slots table exists before attempting ALTER TABLE
+            await this.dataSource.query(`
+              CREATE TABLE IF NOT EXISTS "${schemaName}".timetable_slots (
+                id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                faculty_id      UUID,
+                subject_id      UUID,
+                department_id   UUID,
+                batch_id        UUID,
+                day_of_week     INT          NOT NULL DEFAULT 1,
+                start_time      TIME         NOT NULL DEFAULT '09:00:00',
+                end_time        TIME         NOT NULL DEFAULT '10:00:00',
+                room            VARCHAR(50),
+                slot_type       VARCHAR(50),
+                effective_from  DATE,
+                effective_until DATE,
+                group_name      VARCHAR(100),
+                topic           VARCHAR(255),
+                competency_codes VARCHAR(255),
+                unit_name       VARCHAR(255),
+                unit_id         VARCHAR(100),
+                sub_topics      VARCHAR(500),
+                colg_cd         VARCHAR(50),
+                course_cd       VARCHAR(50),
+                branch_cd       VARCHAR(50),
+                batch_cd        VARCHAR(50),
+                semester        VARCHAR(50),
+                section         VARCHAR(50),
+                description     TEXT
+              );
+            `);
+
+            // 2. Ensure all columns exist in case it was created with an older schema
+            await this.dataSource.query(`
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS effective_from DATE;
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS effective_until DATE;
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS topic VARCHAR(255);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS competency_codes VARCHAR(255);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS unit_name VARCHAR(255);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS unit_id VARCHAR(100);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS sub_topics VARCHAR(500);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS description TEXT;
+            `);
+
+            // 3. Auto-link timetable slots that have null subject_id to their respective subjects if table exists
+            try {
+              const hasSubjects = await this.dataSource.query(
+                `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'subjects'`,
+                [schemaName],
+              );
+              if (hasSubjects.length > 0) {
+                await this.dataSource.query(`
+                  UPDATE "${schemaName}".timetable_slots ts
+                  SET subject_id = s.id
+                  FROM "${schemaName}".subjects s
+                  WHERE ts.subject_id IS NULL
+                    AND (
+                      s.id::text = ts.topic
+                      OR s.code = ts.topic
+                      OR LOWER(s.name) = LOWER(ts.topic)
+                      OR (LOWER(ts.topic) = 'coa' AND (s.name ILIKE '%Computer Organization%' OR s.code ILIKE '%302%'))
+                      OR (LOWER(ts.topic) LIKE '%tc%' AND s.name ILIKE '%Technical Communication%')
+                      OR (LOWER(ts.topic) LIKE '%web technology lab%' AND s.name ILIKE '%Web Technology Lab%')
+                      OR (LOWER(ts.topic) LIKE '%web technology%' AND s.name ILIKE '%Web Technology%')
+                      OR (LOWER(ts.topic) LIKE '%business communication%' AND s.name ILIKE '%Business Communication%')
+                      OR (LOWER(ts.topic) LIKE '%object oriented programming%' AND s.name ILIKE '%Object Oriented Programming in C++%')
+                      OR (LOWER(ts.topic) LIKE '%front end development%' AND s.name ILIKE '%Front End Development%')
+                      OR (LOWER(ts.topic) = 'wt' AND s.name ILIKE '%Web Technology%')
+                      OR (LOWER(ts.topic) = 'dbms' AND s.name ILIKE '%Database Management%')
+                      OR (LOWER(ts.topic) = 'os' AND s.name ILIKE '%Operating System%')
+                    )
+                `);
+              }
+            } catch {
+              // Ignore subject link errors
             }
-          } catch (e) {
-            // Ignore
+          } catch (schemaErr: any) {
+            this.logger.warn(`Could not auto-migrate timetable_slots in schema ${schemaName}: ${schemaErr?.message}`);
           }
         }
         this.logger.log('Auto-migrated timetable_slots columns and linked subjects across all tenant schemas.');
@@ -110,6 +146,7 @@ export class TimetableService implements OnModuleInit {
              COALESCE(f.name, '') AS faculty_name, f.emp_id AS faculty_code,
              COALESCE(s.name, '') AS subject_name, COALESCE(s.code, '') AS subject_code, COALESCE(s.code, '') AS subject_cd, COALESCE(s.sub_addinfo, '') AS subject_paper_code, COALESCE(s.type, '') AS subject_type,
              COALESCE(d.name, '') AS department_name, d.code AS department_code,
+             COALESCE(d.course_name, '') AS course_name,
              COALESCE(ts.batch_id::text, b.id::text) AS batch_id,
              COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, ts.batch_cd, b.code) AS batch_code,
              COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, ts.batch_cd, b.code) AS batch_name,
@@ -905,7 +942,7 @@ export class TimetableService implements OnModuleInit {
   }
 
   private async checkOverlap(slug: string, dto: CreateTimetableSlotDto, excludeId?: string) {
-    const params = [
+    const params: any[] = [
       dto.dayOfWeek,
       dto.startTime,
       dto.endTime,
@@ -914,88 +951,177 @@ export class TimetableService implements OnModuleInit {
 
     const clauses: string[] = [];
 
-    if (dto.facultyId && this.isUUID(dto.facultyId)) {
-      clauses.push(`(ts.faculty_id::text = $${queryIndex++}::text)`);
+    if (dto.facultyId) {
+      clauses.push(`(ts.faculty_id::text = $${queryIndex}::text OR f.emp_id = $${queryIndex} OR f.id::text = $${queryIndex}::text)`);
       params.push(dto.facultyId);
+      queryIndex++;
     }
     if (dto.room) {
-      clauses.push(`(ts.room = $${queryIndex++} AND ts.room <> '')`);
+      clauses.push(`(ts.room = $${queryIndex} AND ts.room <> '')`);
       params.push(dto.room);
+      queryIndex++;
     }
-    if (dto.batchId && this.isUUID(dto.batchId)) {
-      clauses.push(`(ts.batch_id::text = $${queryIndex++}::text)`);
+    if (dto.batchId) {
+      clauses.push(`(ts.batch_id::text = $${queryIndex}::text OR b.code = $${queryIndex} OR b.batch_cd = $${queryIndex})`);
       params.push(dto.batchId);
+      queryIndex++;
     }
 
     if (clauses.length === 0) return;
 
+    let dateFilter = '';
+    if (dto.effectiveFrom && dto.effectiveUntil) {
+      const effUntilStr = String(dto.effectiveUntil).slice(0, 10);
+      const effFromStr = String(dto.effectiveFrom).slice(0, 10);
+      dateFilter = ` AND (ts.effective_from IS NULL OR ts.effective_from::text = '' OR $${queryIndex}::TEXT IS NULL OR SUBSTRING(ts.effective_from::text FROM 1 FOR 10) <= $${queryIndex}::TEXT)`;
+      params.push(effUntilStr);
+      queryIndex++;
+      dateFilter += ` AND (ts.effective_until IS NULL OR ts.effective_until::text = '' OR $${queryIndex}::TEXT IS NULL OR SUBSTRING(ts.effective_until::text FROM 1 FOR 10) >= $${queryIndex}::TEXT)`;
+      params.push(effFromStr);
+      queryIndex++;
+    }
+
     let sql = `
       SELECT ts.id, ts.room, ts.slot_type, ts.start_time, ts.end_time, ts.day_of_week,
+             ts.effective_from, ts.effective_until,
+             ts.faculty_id, ts.batch_id, ts.department_id, ts.subject_id,
              ts.course_cd, ts.branch_cd, ts.batch_cd, ts.semester, ts.section, ts.topic, ts.description,
-             f.name AS faculty_name, f.emp_id AS faculty_code,
-             sub.name AS subject_name,
-             d.name AS department_name,
-             b.code AS batch_code, b.name AS batch_name
+             COALESCE(f.name, '') AS faculty_name, f.emp_id AS faculty_code, f.id AS faculty_uuid,
+             COALESCE(sub.name, '') AS subject_name,
+             COALESCE(d.name, '') AS department_name,
+             COALESCE(b.name, b.code) AS batch_name, b.code AS batch_code,
+             COALESCE(c.name, '') AS course_name
       FROM timetable_slots ts
       LEFT JOIN faculty f ON f.id::text = ts.faculty_id::text
       LEFT JOIN subjects sub ON sub.id::text = ts.subject_id::text
       LEFT JOIN departments d ON d.id::text = ts.department_id::text
-      LEFT JOIN batches b ON b.id::text = ts.batch_id::text
+      LEFT JOIN batches b ON (CASE WHEN ts.batch_id IS NOT NULL THEN b.id::text = ts.batch_id::text ELSE (b.batch_cd = ts.batch_cd AND (b.course_cd = ts.course_cd OR ts.course_cd IS NULL)) END)
+      LEFT JOIN courses c ON (c.course_cd::text = ts.course_cd::text OR c.code::text = ts.course_cd::text OR c.id::text = ts.course_cd::text)
       WHERE ts.day_of_week = $1
         AND (ts.start_time::TIME < $3::TIME AND ts.end_time::TIME > $2::TIME)
         AND (${clauses.join(' OR ')})
+        ${dateFilter}
     `;
 
     if (excludeId) {
       sql += ` AND ts.id::text <> $${queryIndex}::text`;
       params.push(String(excludeId));
+      queryIndex++;
     }
 
     const conflicts = await this.tenantSchemaService.queryInTenant(slug, sql, params);
-    if (conflicts.length > 0) {
-      const conflict = conflicts[0];
-      const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      const dayName = days[conflict.day_of_week] || `Day ${conflict.day_of_week}`;
-      const timeRange = `${String(conflict.start_time).slice(0, 5)} - ${String(conflict.end_time).slice(0, 5)}`;
+    const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-      const courseName = conflict.course_cd ? (conflict.course_cd === '13' ? 'BCA' : `Course ${conflict.course_cd}`) : (conflict.department_name || 'Academic Course');
-      const batchName = conflict.batch_name || conflict.batch_code || conflict.batch_cd ? `Batch ${conflict.batch_name || conflict.batch_code || conflict.batch_cd}` : 'Batch';
-      const semesterName = conflict.semester ? `Semester ${conflict.semester}` : 'Semester';
-      const sectionName = conflict.section === '1' ? 'Section A' : conflict.section === '2' ? 'Section B' : conflict.section === '3' ? 'Section C' : conflict.section === '4' ? 'Section D' : (conflict.section ? `Section ${conflict.section}` : 'Section');
+    if (conflicts && conflicts.length > 0) {
+      // 1. Prioritize FACULTY conflict check
+      for (const conflict of conflicts) {
+        const isFacultyConflict = Boolean(
+          dto.facultyId && (
+            String(conflict.faculty_id) === String(dto.facultyId) ||
+            String(conflict.faculty_uuid) === String(dto.facultyId) ||
+            String(conflict.faculty_code) === String(dto.facultyId)
+          )
+        );
 
-      const isFacultyConflict = dto.facultyId && (
-        String(conflict.faculty_id) === String(dto.facultyId) || 
-        String(conflict.faculty_code) === String(dto.facultyId)
-      );
+        if (isFacultyConflict) {
+          const dayName = days[conflict.day_of_week] || `Day ${conflict.day_of_week}`;
+          const timeRange = `${String(conflict.start_time).slice(0, 5)} - ${String(conflict.end_time).slice(0, 5)}`;
+          const facultyName = conflict.faculty_name || conflict.faculty_code || 'Faculty member';
+          const courseName = conflict.course_name || (conflict.course_cd ? `Course ${conflict.course_cd}` : (conflict.department_name || 'Academic Course'));
+          const branchName = conflict.department_name ? ` (${conflict.department_name})` : (conflict.branch_cd ? ` (Branch ${conflict.branch_cd})` : '');
+          const rawBatch = conflict.batch_name || conflict.batch_code || conflict.batch_cd || '';
+          const batchName = rawBatch ? (String(rawBatch).toLowerCase().startsWith('batch') ? String(rawBatch) : `Batch ${rawBatch}`) : 'Batch';
+          const semesterName = conflict.semester ? `Semester ${conflict.semester}` : 'Semester';
+          const sectionName = conflict.section === '1' ? 'Section A' : conflict.section === '2' ? 'Section B' : conflict.section === '3' ? 'Section C' : conflict.section === '4' ? 'Section D' : (conflict.section ? `Section ${conflict.section}` : 'Section');
+          const subjectName = conflict.subject_name || conflict.topic || conflict.description || 'another class';
 
-      const isSameClassSlot = (
-        (dto.batchCd && conflict.batch_cd && String(dto.batchCd) === String(conflict.batch_cd)) ||
-        (dto.batchId && conflict.batch_id && String(dto.batchId) === String(conflict.batch_id))
-      ) && (
-        !dto.section || !conflict.section || String(dto.section) === String(conflict.section)
-      );
+          const msg = `${facultyName} is already assigned to ${courseName}${branchName}, ${batchName}, ${semesterName}, ${sectionName} for "${subjectName}" on ${dayName} (${timeRange}). Please select a different time slot or choose another faculty member, or contact the Academic Administrator to resolve the schedule overlap.`;
+          throw new BadRequestException(msg);
+        }
+      }
 
-      const isBatchConflict = !isSameClassSlot && dto.batchId && String(conflict.batch_id) === String(dto.batchId) && (
-        !dto.section || !conflict.section || conflict.section === dto.section || conflict.section === 'All'
-      );
+      // 2. Batch conflict check
+      for (const conflict of conflicts) {
+        const isSameClassSlot = (
+          (dto.batchCd && conflict.batch_cd && String(dto.batchCd) === String(conflict.batch_cd)) ||
+          (dto.batchId && conflict.batch_id && String(dto.batchId) === String(conflict.batch_id))
+        ) && (
+          !dto.section || !conflict.section || String(dto.section) === String(conflict.section)
+        );
 
-      const isGenericRoom = (r?: string) => {
-        if (!r) return true;
-        const norm = r.toLowerCase();
-        return norm === '0' || norm === '' || norm.includes('room 204') || norm.includes('cam #') || norm.includes('web cam') || norm.includes('default');
-      };
+        const isBatchConflict = !isSameClassSlot && (
+          (dto.batchId && String(conflict.batch_id) === String(dto.batchId)) ||
+          (dto.batchCd && String(conflict.batch_cd) === String(dto.batchCd))
+        ) && (
+          !dto.section || !conflict.section || conflict.section === dto.section || conflict.section === 'All'
+        );
 
-      const isRoomConflict = !isSameClassSlot && dto.room && conflict.room && conflict.room === dto.room && !isGenericRoom(conflict.room);
+        if (isBatchConflict) {
+          const dayName = days[conflict.day_of_week] || `Day ${conflict.day_of_week}`;
+          const timeRange = `${String(conflict.start_time).slice(0, 5)} - ${String(conflict.end_time).slice(0, 5)}`;
+          const courseName = conflict.course_name || (conflict.course_cd ? `Course ${conflict.course_cd}` : (conflict.department_name || 'Academic Course'));
+          const batchName = conflict.batch_name || conflict.batch_code || conflict.batch_cd ? `Batch ${conflict.batch_name || conflict.batch_code || conflict.batch_cd}` : 'Batch';
+          const semesterName = conflict.semester ? `Semester ${conflict.semester}` : 'Semester';
+          const sectionName = conflict.section === '1' ? 'Section A' : conflict.section === '2' ? 'Section B' : conflict.section === '3' ? 'Section C' : conflict.section === '4' ? 'Section D' : (conflict.section ? `Section ${conflict.section}` : 'Section');
 
-      if (isFacultyConflict && conflict.faculty_name) {
-        const msg = `${conflict.faculty_name} is already assigned to ${courseName}, ${batchName}, ${semesterName}, ${sectionName} on ${dayName} (${timeRange}). Please select a different time slot or choose another faculty member, or contact the Academic Administrator or Department Clerk to resolve the schedule overlap.`;
-        throw new BadRequestException(msg);
-      } else if (isBatchConflict) {
-        const msg = `${batchName} (${courseName}, ${semesterName}, ${sectionName}) already has a scheduled session (${conflict.subject_name || conflict.topic || 'Subject'}) on ${dayName} (${timeRange}).`;
-        throw new BadRequestException(msg);
-      } else if (isRoomConflict) {
-        const msg = `Room (${conflict.room}) is already occupied on ${dayName} (${timeRange}).`;
-        throw new BadRequestException(msg);
+          const msg = `${batchName} (${courseName}, ${semesterName}, ${sectionName}) already has a scheduled session (${conflict.subject_name || conflict.topic || 'Subject'}) on ${dayName} (${timeRange}).`;
+          throw new BadRequestException(msg);
+        }
+      }
+
+      // 3. Room conflict check
+      for (const conflict of conflicts) {
+        const isSameClassSlot = (
+          (dto.batchCd && conflict.batch_cd && String(dto.batchCd) === String(conflict.batch_cd)) ||
+          (dto.batchId && conflict.batch_id && String(dto.batchId) === String(conflict.batch_id))
+        ) && (
+          !dto.section || !conflict.section || String(dto.section) === String(conflict.section)
+        );
+
+        const isGenericRoom = (r?: string) => {
+          if (!r) return true;
+          const norm = r.toLowerCase();
+          return norm === '0' || norm === '' || norm.includes('room 204') || norm.includes('cam #') || norm.includes('web cam') || norm.includes('default');
+        };
+
+        const isRoomConflict = !isSameClassSlot && dto.room && conflict.room && conflict.room.trim().toLowerCase() === dto.room.trim().toLowerCase() && !isGenericRoom(conflict.room);
+        if (isRoomConflict) {
+          const dayName = days[conflict.day_of_week] || `Day ${conflict.day_of_week}`;
+          const timeRange = `${String(conflict.start_time).slice(0, 5)} - ${String(conflict.end_time).slice(0, 5)}`;
+          const msg = `Room (${conflict.room}) is already occupied on ${dayName} (${timeRange}).`;
+          throw new BadRequestException(msg);
+        }
+      }
+    }
+
+    // 4. Cross-Module Faculty Conflict Check with medical_schedule_entries (if table exists)
+    if (dto.facultyId) {
+      try {
+        const hasMedTable = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'medical_schedule_entries'`,
+        );
+        if (hasMedTable && hasMedTable.length > 0) {
+          const medConflicts = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT id, department_name, professional_year_name, subject_name, day_of_week, start_time, end_time, faculty_name
+             FROM medical_schedule_entries
+             WHERE (faculty_id::text = $1::text OR faculty_emp_id = $1)
+               AND day_of_week = $2
+               AND (start_time::TIME < $4::TIME AND end_time::TIME > $3::TIME)`,
+            [dto.facultyId, dto.dayOfWeek, dto.startTime, dto.endTime],
+          );
+          if (medConflicts && medConflicts.length > 0) {
+            const mc = medConflicts[0];
+            const dayName = days[dto.dayOfWeek] || `Day ${dto.dayOfWeek}`;
+            const timeRange = `${String(mc.start_time).slice(0, 5)} - ${String(mc.end_time).slice(0, 5)}`;
+            const facName = mc.faculty_name || 'This faculty member';
+            const msg = `${facName} is already assigned in Medical Timetable (${mc.department_name || 'Medical'}, ${mc.professional_year_name || 'MBBS'}, Subject: ${mc.subject_name || 'Class'}) on ${dayName} (${timeRange}).`;
+            throw new BadRequestException(msg);
+          }
+        }
+      } catch (medErr) {
+        if (medErr instanceof BadRequestException) throw medErr;
       }
     }
   }

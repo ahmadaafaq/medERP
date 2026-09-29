@@ -28,7 +28,13 @@ export class CreateFirmLicensingTables1710000000000 implements MigrationInterfac
         END IF;
 
         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'menu_role_enum') THEN
-          CREATE TYPE menu_role_enum AS ENUM ('SUPERADMIN', 'ADMIN', 'CLERK', 'FACULTY', 'WARDEN', 'STUDENT');
+          CREATE TYPE menu_role_enum AS ENUM ('SUPERADMIN', 'ADMIN', 'CLERK', 'FACULTY', 'WARDEN', 'STUDENT', 'HOD');
+        ELSE
+          BEGIN
+            ALTER TYPE menu_role_enum ADD VALUE IF NOT EXISTS 'HOD';
+          EXCEPTION
+            WHEN others THEN NULL;
+          END;
         END IF;
 
         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'applicable_firm_mode_enum') THEN
