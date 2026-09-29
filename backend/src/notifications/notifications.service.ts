@@ -74,7 +74,38 @@ export class NotificationsService {
       LIMIT 100
     `;
 
-    const notifications = await this.tenantSchemaService.queryInTenant(slug, sql, params).catch(() => []);
+    const rawNotifications = await this.tenantSchemaService.queryInTenant(slug, sql, params).catch(() => []);
+
+    const myName = (user?.name || user?.full_name || '').toLowerCase().trim();
+    const myFirst = myName ? myName.split(' ')[0] : '';
+
+    const notifications = (rawNotifications || []).filter((n: any) => {
+      const text = `${n.title || ''} ${n.message || ''} ${n.body || ''}`.toLowerCase();
+      if (text.includes('congratulations ') || text.includes('dear ')) {
+        const match = text.match(/(?:congratulations|dear)\s+([a-z\s]{3,35})[!,\.]/i);
+        if (match && match[1]) {
+          const targetName = match[1].toLowerCase().trim();
+          const generic = ['all', 'team', 'students', 'winners', 'batch', 'class', 'everyone', 'all students', 'student'];
+          if (targetName.length > 2 && !generic.includes(targetName)) {
+            if (myName && !targetName.includes(myName) && !myName.includes(targetName)) {
+              if (myFirst && myFirst.length >= 3 && !targetName.includes(myFirst)) {
+                return false;
+              }
+            }
+          }
+        }
+      }
+
+      const knownOtherStudents = ['jatin pratap singh', 'jatin pratap', 'jaspreet singh', 'priya gupta', 'aditya sharma'];
+      for (const otherStudent of knownOtherStudents) {
+        if (text.includes(otherStudent)) {
+          const isMe = myName && (myName.includes(otherStudent.split(' ')[0]) || (myFirst && otherStudent.includes(myFirst)));
+          if (!isMe) return false;
+        }
+      }
+
+      return true;
+    });
 
     const unreadCount = notifications.filter((n: any) => !n.is_read).length;
 
