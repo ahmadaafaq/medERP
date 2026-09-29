@@ -291,18 +291,14 @@ export default function TheoryResultReportPage() {
         );
 
         let filteredList = list;
-        if (role !== 'SUPER_ADMIN') {
-          if (found) {
-            filteredList = [found];
-          } else {
-            filteredList = [{
-              id: '1',
-              colg_cd: savedColgCd || '1',
-              code: savedColgCd || '1',
-              name: 'SRMS College of Engineering & Technology, Bareilly',
-              slug: currentSlug,
-            }];
-          }
+        if (filteredList.length === 0) {
+          filteredList = [{
+            id: '1',
+            colg_cd: savedColgCd || '1',
+            code: savedColgCd || '1',
+            name: 'SRMS College of Engineering & Technology, Bareilly',
+            slug: currentSlug,
+          }];
         }
         setColleges(filteredList);
 
@@ -1268,7 +1264,7 @@ export default function TheoryResultReportPage() {
                   </span>
                   <select
                     value={selectedColgCd}
-                    disabled={userRole !== 'SUPER_ADMIN'}
+                    disabled={colleges.length === 0}
                     onChange={(e) => {
                       const val = e.target.value;
                       setSelectedColgCd(val);
@@ -1290,11 +1286,6 @@ export default function TheoryResultReportPage() {
                       </option>
                     ))}
                   </select>
-                  {userRole !== 'SUPER_ADMIN' && (
-                    <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shrink-0">
-                      🔒 Locked
-                    </span>
-                  )}
                 </div>
               </div>
 

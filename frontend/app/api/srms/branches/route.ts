@@ -4,12 +4,23 @@ import { queryDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-const BACKEND_API = (process.env.BACKEND_BASE_URL ? `${process.env.BACKEND_BASE_URL}/api/v1` : '') || (process.env.NEXT_PUBLIC_API_URL?.startsWith('http') ? process.env.NEXT_PUBLIC_API_URL : 'http://127.0.0.1:8081/api/v1');
+const BACKEND_API = (process.env.BACKEND_BASE_URL ? `${process.env.BACKEND_BASE_URL}/api/v1` : '') || (process.env.NEXT_PUBLIC_API_URL?.startsWith('http') ? process.env.NEXT_PUBLIC_API_URL : 'http://100.63.22.73:8081/api/v1');
 
 const srmsCollegeSlugMap: Record<string, string> = {
   '1': 'srms-cet-bareilly',
   '2': 'srms-cetr-bareilly',
-  '11': 'srms-cet-unnao',
+  '3': 'srms-cet-unnao',
+  '4': 'srms-college-of-law',
+  '5': 'srms-ibs-lucknow',
+  '6': 'srms-iahs-bareilly',
+  '7': 'srms-trust-bareilly',
+  '8': 'srms-nursing-school',
+  '9': 'srms-nursing-college',
+  '10': 'srms-riddhima-bareilly',
+  '11': 'srms-ims',
+  '12': 'srms-college-of-nursing-paramedical-sciences-unnao',
+  '13': 'srms-quiz-panel',
+  '14': 'srms-cricket-academy',
 };
 
 const DEFAULT_COURSE_BRANCHES: Record<string, { branch_cd: string; branch_name: string }[]> = {
@@ -94,7 +105,9 @@ async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: 
   const crs = String(coursecd || '').trim();
 
   let targetSlug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
-  if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
+  if (srmsCollegeSlugMap[cd]) {
+    targetSlug = srmsCollegeSlugMap[cd];
+  } else if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
     try {
       const tRows = await queryDb<any>(`SELECT slug FROM public.tenants WHERE code = $1 OR slug = $1 OR id::text = $1 LIMIT 1`, [cd]);
       if (tRows.length > 0 && tRows[0].slug) {
@@ -102,7 +115,7 @@ async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: 
       }
     } catch {}
     if (!targetSlug) {
-      targetSlug = srmsCollegeSlugMap[cd] || 'srms-cet-bareilly';
+      targetSlug = 'srms-cet-bareilly';
     }
   }
   if (targetSlug === 'srms-cet') targetSlug = 'srms-cet-bareilly';
@@ -110,15 +123,16 @@ async function handleGetBranch(colgcd?: string, coursecd?: string, tenantSlug?: 
   const schema = `tenant_${targetSlug}`;
   const isSrmsTenant = targetSlug.startsWith('srms');
 
-  // 1. Direct PostgreSQL query to tenant's departments table FIRST
+  // 1. Direct PostgreSQL query to tenant's departments table filtered by course
   try {
     const dbBranches = await queryDb<any>(
       `SELECT DISTINCT 
-         d.code::text AS branch_cd, 
+         COALESCE(d.branch_cd, d.code)::text AS branch_cd, 
          d.name::text AS branch_name, 
          $2::text AS colg_cd,
-         (CASE WHEN d.code ~ '^[0-9]+$' THEN d.code::int ELSE 999 END) AS sort_order
+         (CASE WHEN COALESCE(d.branch_cd, d.code) ~ '^[0-9]+$' THEN COALESCE(d.branch_cd, d.code)::int ELSE 999 END) AS sort_order
        FROM "${schema}".departments d
+       WHERE ($1 = '' OR $1 = 'all' OR d.course_cd::text = $1::text)
        ORDER BY sort_order ASC, branch_name ASC`,
       [crs, cd]
     );

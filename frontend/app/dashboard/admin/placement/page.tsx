@@ -266,21 +266,9 @@ export default function AdminPlacementPage() {
       setUserRole(role);
 
       const allColleges = await fetchColleges();
-      let filteredColleges = allColleges;
-      if (role !== 'SUPER_ADMIN') {
-        const myCol = allColleges.find((c: any) => String(c.colg_cd || c.code) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
-        if (myCol) {
-          filteredColleges = [myCol];
-        } else {
-          filteredColleges = [{
-            code: userColg,
-            name: 'SRMS College of Engineering & Technology, Bareilly',
-            slug: userSlug,
-          }];
-        }
-      }
-      setCollegesList(filteredColleges);
-      const activeColCode = role === 'SUPER_ADMIN' ? (filteredColleges[0]?.code || '1') : userColg;
+      setCollegesList(allColleges);
+      const myCol = allColleges.find((c: any) => String(c.colg_cd || c.code) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
+      const activeColCode = myCol ? (myCol.code || (myCol as any).colg_cd) : (allColleges[0]?.code || '1');
       setSelectedCollege(activeColCode);
 
       const courses = await fetchCoursesForCollege(activeColCode);
@@ -871,7 +859,7 @@ export default function AdminPlacementPage() {
                 </span>
                 <select
                   value={selectedCollege}
-                  disabled={userRole !== 'SUPER_ADMIN'}
+                  disabled={collegesList.length === 0}
                   onChange={(e) => handleFilterCollegeChange(e.target.value)}
                   className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer disabled:cursor-not-allowed text-xs max-w-[170px] truncate"
                 >
@@ -881,11 +869,6 @@ export default function AdminPlacementPage() {
                     </option>
                   ))}
                 </select>
-                {userRole !== 'SUPER_ADMIN' && (
-                  <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shrink-0">
-                    🔒 Locked
-                  </span>
-                )}
               </div>
 
               {/* 2. Course Selector */}

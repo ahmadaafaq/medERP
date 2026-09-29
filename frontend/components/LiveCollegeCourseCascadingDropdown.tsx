@@ -121,17 +121,33 @@ export default function LiveCollegeCourseCascadingDropdown({
     setCollegesError(null);
     try {
       const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
+      const tenantId = typeof window !== 'undefined' ? (localStorage.getItem('tenantId') || '') : '';
+      const tenantName = typeof window !== 'undefined' ? (localStorage.getItem('tenantName') || localStorage.getItem('college_name') || '') : '';
+      const colg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+
+      const isSrms = slug.toLowerCase().includes('srms') || tenantName.toLowerCase().includes('srms');
+
+      const urlParams = new URLSearchParams();
+      if (slug) urlParams.set('tenant', slug);
+      if (tenantId) urlParams.set('tenantId', tenantId);
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+        ...(slug ? { 'x-tenant-slug': slug } : {}),
+      };
+
       // 1. Next.js server proxy route
-      let res = await fetch(`/api/srms/colleges?tenant=${encodeURIComponent(slug)}`, {
+      let res = await fetch(`/api/srms/colleges?${urlParams.toString()}`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
       }).catch(() => null);
 
       // Fallback: Backend endpoint
       if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/colleges?tenant=${encodeURIComponent(slug)}`, {
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/colleges?${urlParams.toString()}`, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
         }).catch(() => null);
       }
 
@@ -141,22 +157,30 @@ export default function LiveCollegeCourseCascadingDropdown({
 
       const data = await res.json();
       const list: LiveCollege[] = Array.isArray(data) ? data : data.data || [];
-      const role = typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN').toUpperCase() : 'ADMIN';
-      const colg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
-
-      if (role !== 'SUPER_ADMIN') {
-        const myCol = list.filter((c: any) => String(c.colg_cd) === String(colg) || String(c.code) === String(colg));
-        const finalCols = myCol.length > 0 ? myCol : list;
-        setColleges(finalCols);
-        setSelectedColgCd(colg);
-        const activeCol = finalCols[0];
-        if (activeCol) {
-          setSelectedCollege(activeCol);
-          if (onCollegeSelectRef.current) onCollegeSelectRef.current(activeCol);
-          fetchCoursesForCollege(colg);
-        }
+      let finalCols = list;
+      if (isSrms) {
+        finalCols = list.filter((c: any) => {
+          const name = (c.colg_name || (c as any).name || '').toLowerCase();
+          const cd = String(c.colg_cd || (c as any).code || '').trim();
+          return name.includes('srms') || name.includes('shri ram murti') || ['1','2','3','4','5','6','7','8','9','10','11','12','13','14'].includes(cd);
+        });
       } else {
-        setColleges(list);
+        // Strict isolation for non-SRMS tenants: never show any SRMS college
+        finalCols = list.filter((c: any) => {
+          const name = (c.colg_name || (c as any).name || '').toLowerCase();
+          const s = (c.slug || '').toLowerCase();
+          return !name.includes('srms') && !s.includes('srms') && !name.includes('shri ram murti');
+        });
+      }
+      setColleges(finalCols);
+
+      const targetColg = selectedCollegeCode || colg;
+      const activeCol = finalCols.find((c: any) => String(c.colg_cd) === String(targetColg) || String((c as any).code) === String(targetColg)) || finalCols[0];
+      if (activeCol) {
+        setSelectedColgCd(activeCol.colg_cd);
+        setSelectedCollege(activeCol);
+        if (onCollegeSelectRef.current) onCollegeSelectRef.current(activeCol);
+        fetchCoursesForCollege(activeCol.colg_cd);
       }
     } catch (err: any) {
       console.error('[CascadingDropdown] Fetch Colleges Error:', err);
@@ -258,22 +282,20 @@ export default function LiveCollegeCourseCascadingDropdown({
             <select
               value={selectedColgCd}
               onChange={handleCollegeChange}
-              disabled={collegesLoading || userRole !== 'SUPER_ADMIN'}
+              disabled={collegesLoading || colleges.length === 0}
               className={`w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/80 border rounded-xl font-bold transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/20 ${
                 collegesError
                   ? 'border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300'
                   : 'border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:border-indigo-500'
               } disabled:opacity-60 disabled:cursor-not-allowed`}
             >
-              {userRole === 'SUPER_ADMIN' && (
-                <option value="">
-                  {collegesLoading
-                    ? 'Loading colleges from live API...'
-                    : collegesError
-                    ? 'Failed to load colleges'
-                    : '-- Choose a College Institution --'}
-                </option>
-              )}
+              <option value="">
+                {collegesLoading
+                  ? 'Loading colleges from live API...'
+                  : collegesError
+                  ? 'Failed to load colleges'
+                  : '-- Choose a College Institution --'}
+              </option>
               {colleges.map((col) => (
                 <option key={col.colg_cd} value={col.colg_cd}>
                   [#{col.colg_cd}] {col.colg_name}

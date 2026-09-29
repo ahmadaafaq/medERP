@@ -2220,19 +2220,13 @@ export default function StudentMasterPage() {
               <div>
                 <label className="block text-[10px] font-bold text-[var(--color-ink-500)] uppercase tracking-wider mb-1.5 flex items-center justify-between">
                   <span>College</span>
-                  {(typeof window !== 'undefined' && localStorage.getItem('role') !== 'SUPER_ADMIN') && (
-                    <span className="text-[9px] text-[#5B4BFF] font-black uppercase tracking-widest">Locked</span>
-                  )}
                 </label>
                 <select
                   value={selectedCollege}
                   onChange={(e) => handleFilterCollegeChange(e.target.value)}
-                  disabled={typeof window !== 'undefined' && localStorage.getItem('role') !== 'SUPER_ADMIN'}
-                  className="premium-input w-full disabled:opacity-75 disabled:cursor-not-allowed !h-8 !py-1 !px-2.5 !text-[11px] font-bold"
+                  className="premium-input w-full !h-8 !py-1 !px-2.5 !text-[11px] font-bold cursor-pointer"
                 >
-                  {(typeof window !== 'undefined' && localStorage.getItem('role') === 'SUPER_ADMIN') && (
-                    <option value="all">All Colleges</option>
-                  )}
+                  <option value="all">All Colleges</option>
                   {colleges.map((c) => {
                     const val = c.code || c.colg_cd || c.slug || c.id;
                     return (

@@ -211,15 +211,31 @@ export default function Live3LevelDepartmentCascadingDropdown({
     setCollegesError(null);
     try {
       const slug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '') : '';
-      let res = await fetch(`/api/srms/colleges?tenant=${encodeURIComponent(slug)}`, {
+      const tenantId = typeof window !== 'undefined' ? (localStorage.getItem('tenantId') || '') : '';
+      const tenantName = typeof window !== 'undefined' ? (localStorage.getItem('tenantName') || localStorage.getItem('college_name') || '') : '';
+      const colg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
+
+      const isSrms = slug.toLowerCase().includes('srms') || tenantName.toLowerCase().includes('srms');
+
+      const urlParams = new URLSearchParams();
+      if (slug) urlParams.set('tenant', slug);
+      if (tenantId) urlParams.set('tenantId', tenantId);
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+        ...(slug ? { 'x-tenant-slug': slug } : {}),
+      };
+
+      let res = await fetch(`/api/srms/colleges?${urlParams.toString()}`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
       }).catch(() => null);
 
       if (!res || !res.ok) {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/colleges?tenant=${encodeURIComponent(slug)}`, {
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/college-master/colleges?${urlParams.toString()}`, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
         }).catch(() => null);
       }
 
@@ -230,21 +246,30 @@ export default function Live3LevelDepartmentCascadingDropdown({
       const data = await res.json();
       const list: LiveCollegeItem[] = Array.isArray(data) ? data : data.data || [];
       const role = typeof window !== 'undefined' ? (localStorage.getItem('role') || 'ADMIN').toUpperCase() : 'ADMIN';
-      const colg = typeof window !== 'undefined' ? (localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1') : '1';
 
-      if (role !== 'SUPER_ADMIN') {
-        const myCol = list.filter((c: any) => String(c.colg_cd) === String(colg) || String(c.code) === String(colg) || c.slug === slug);
-        const finalCols = myCol.length > 0 ? myCol : list;
-        setColleges(finalCols);
-        const activeCol = finalCols[0];
-        if (activeCol) {
-          setSelectedColgCd(activeCol.colg_cd);
-          setSelectedCollege(activeCol);
-          if (onCollegeSelectRef.current) onCollegeSelectRef.current(activeCol);
-          fetchCoursesForCollege(activeCol.colg_cd);
-        }
+      let finalCols = list;
+      if (isSrms) {
+        finalCols = list.filter((c: any) => {
+          const name = (c.colg_name || (c as any).name || '').toLowerCase();
+          const cd = String(c.colg_cd || (c as any).code || '').trim();
+          return name.includes('srms') || name.includes('shri ram murti') || ['1','2','3','4','5','6','7','8','9','10','11','12','13','14'].includes(cd);
+        });
       } else {
-        setColleges(list);
+        // Strict isolation for non-SRMS tenants: never show any SRMS college
+        finalCols = list.filter((c: any) => {
+          const name = (c.colg_name || (c as any).name || '').toLowerCase();
+          const s = (c.slug || '').toLowerCase();
+          return !name.includes('srms') && !s.includes('srms') && !name.includes('shri ram murti');
+        });
+      }
+
+      setColleges(finalCols);
+      const defaultCol = finalCols.find((c: any) => String(c.colg_cd) === String(colg) || String(c.code) === String(colg) || c.slug === slug) || finalCols[0];
+      if (defaultCol && !selectedColgCd) {
+        setSelectedColgCd(defaultCol.colg_cd);
+        setSelectedCollege(defaultCol);
+        if (onCollegeSelectRef.current) onCollegeSelectRef.current(defaultCol);
+        fetchCoursesForCollege(defaultCol.colg_cd);
       }
     } catch (err: any) {
       console.error('[Live3LevelCascade] Fetch Colleges Error:', err);

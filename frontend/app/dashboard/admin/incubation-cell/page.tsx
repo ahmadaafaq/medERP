@@ -226,19 +226,46 @@ export default function IncubationCellPage() {
         : '';
       setUserRole(role);
 
-      const activeColCode = userColg || '1';
-      const defaultCollege = {
-        id: activeColCode,
-        code: activeColCode,
-        name: tenantName || 'SRMS College of Engineering & Technology, Bareilly',
-        slug: slug,
-      };
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(`/api/college-master/colleges`, { headers }).catch(() => null);
+      let list = [];
+      if (res && res.ok) {
+        const json = await res.json();
+        list = json.data || json;
+      }
+      if (!Array.isArray(list) || list.length === 0) {
+        const srmsRes = await fetch(`/api/srms/colleges?tenant=${slug}`).catch(() => null);
+        if (srmsRes && srmsRes.ok) {
+          const srmsJson = await srmsRes.json();
+          list = srmsJson.data || srmsJson;
+        }
+      }
 
-      setMetaColleges([defaultCollege]);
-      setSelectedCollege(activeColCode);
-
-      // Load initial courses for this college
-      await fetchCourses(activeColCode);
+      if (Array.isArray(list) && list.length > 0) {
+        const mappedList = list.map((c: any) => ({
+          id: String(c.code || c.colg_cd || c.id || '1'),
+          code: String(c.code || c.colg_cd || c.id || '1'),
+          name: c.name || c.colg_name || '',
+          slug: c.slug || slug,
+        }));
+        setMetaColleges(mappedList);
+        const myCol = mappedList.find((c: any) => String(c.code) === String(userColg) || c.slug === slug);
+        const activeColCode = myCol ? myCol.code : (mappedList[0]?.code || '1');
+        setSelectedCollege(activeColCode);
+        await fetchCourses(activeColCode);
+      } else {
+        const activeColCode = userColg || '1';
+        const defaultCollege = {
+          id: activeColCode,
+          code: activeColCode,
+          name: tenantName || 'SRMS College of Engineering & Technology, Bareilly',
+          slug: slug,
+        };
+        setMetaColleges([defaultCollege]);
+        setSelectedCollege(activeColCode);
+        await fetchCourses(activeColCode);
+      }
     } catch (e) {
       console.error('Failed to load incubation metadata:', e);
     } finally {
@@ -478,19 +505,14 @@ export default function IncubationCellPage() {
                     <Building2 className="w-3.5 h-3.5 text-[#F36C21]" />
                     <span>1. College / Institute *</span>
                   </span>
-                  {userRole !== 'SUPER_ADMIN' && (
-                    <span className="text-[10px] bg-orange-50 dark:bg-orange-950/60 text-[#F36C21] font-black px-1.5 py-0.5 rounded border border-orange-200 dark:border-orange-800/60 shrink-0 inline-flex items-center gap-1">
-                      🔒 Locked
-                    </span>
-                  )}
                 </label>
                 <select
                   value={selectedCollege}
-                  disabled={userRole !== 'SUPER_ADMIN'}
+                  disabled={metaColleges.length === 0}
                   onChange={(e) => handleCollegeChange(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F36C21] disabled:opacity-90 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  {userRole === 'SUPER_ADMIN' && <option value="">Select College</option>}
+                  <option value="">Select College</option>
                   {metaColleges.map((c) => (
                     <option key={c.id || c.code} value={c.code || c.id}>
                       {c.code && !isNaN(Number(c.code)) ? `[#${c.code}] ${c.name}` : c.name}

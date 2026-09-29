@@ -446,15 +446,22 @@ export default function TimetableDesignPage() {
   const [coursesList, setCoursesList] = useState<DropdownItem[]>([]);
   const [branchesList, setBranchesList] = useState<DropdownItem[]>([]);
   const [batchesList, setBatchesList] = useState<Batch[]>([]);
+  const [semestersList, setSemestersList] = useState<DropdownItem[]>([]);
+  const [sectionsList, setSectionsList] = useState<DropdownItem[]>([
+    { id: '1', code: '1', name: 'Section A' },
+    { id: '2', code: '2', name: 'Section B' },
+    { id: '3', code: '3', name: 'Section C' },
+    { id: '4', code: '4', name: 'Section D' },
+  ]);
   const [departmentsList, setDepartmentsList] = useState<DropdownItem[]>([]);
   const [sessionsList, setSessionsList] = useState<DropdownItem[]>([]);
   // Strict 6-Level Hierarchy Selected Codes (Numeric codes only per RestrictAPI.md!)
   const [selectedCollege, setSelectedCollege] = useState('1');
-  const [selectedCourse, setSelectedCourse] = useState('13'); // BCA: 13
-  const [selectedBranch, setSelectedBranch] = useState('1'); // BCA General: 1
-  const [selectedBatch, setSelectedBatch] = useState('2'); // 2025: code 2
+  const [selectedCourse, setSelectedCourse] = useState('1'); // Default Course 1
+  const [selectedBranch, setSelectedBranch] = useState('1'); // Default Branch 1
+  const [selectedBatch, setSelectedBatch] = useState('19'); // Default Batch 19
   const [selectedDept, setSelectedDept] = useState('');
-  const [selectedSemester, setSelectedSemester] = useState('3'); // Semester 3
+  const [selectedSemester, setSelectedSemester] = useState('1'); // Default Semester 1
   const [selectedSection, setSelectedSection] = useState('1'); // Section 1 = A, 2 = B, 3 = C, 4 = D
   const [selectedSession, setSelectedSession] = useState('16'); // Fallback session
 
@@ -670,7 +677,31 @@ export default function TimetableDesignPage() {
     return match || collegesList[0] || null;
   };
 
-  const getActiveTenantSlug = (): string => {
+  const SRMS_COLLEGE_SLUG_MAP: Record<string, string> = {
+    '1': 'srms-cet-bareilly',
+    '2': 'srms-cetr-bareilly',
+    '3': 'srms-cet-unnao',
+    '4': 'srms-college-of-law',
+    '5': 'srms-ibs-lucknow',
+    '6': 'srms-iahs-bareilly',
+    '7': 'srms-trust-bareilly',
+    '8': 'srms-nursing-school',
+    '9': 'srms-nursing-college',
+    '10': 'srms-riddhima-bareilly',
+    '11': 'srms-ims',
+    '12': 'srms-college-of-nursing-paramedical-sciences-unnao',
+    '13': 'srms-quiz-panel',
+    '14': 'srms-cricket-academy',
+  };
+
+  const getActiveTenantSlug = (colgOverride?: string): string => {
+    const targetCol = String(colgOverride || selectedCollege || '').trim();
+    if (SRMS_COLLEGE_SLUG_MAP[targetCol]) {
+      return SRMS_COLLEGE_SLUG_MAP[targetCol];
+    }
+    const col = findMatchingCollege(targetCol);
+    if (col?.slug) return col.slug;
+
     if (typeof window !== 'undefined') {
       const savedSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant');
       if (savedSlug && savedSlug !== 'all') {
@@ -679,8 +710,7 @@ export default function TimetableDesignPage() {
         return savedSlug;
       }
     }
-    const col = findMatchingCollege(selectedCollege);
-    return col?.slug || userTenantSlug || 'srms-cet-bareilly';
+    return userTenantSlug || 'srms-cet-bareilly';
   };
 
   // Helper Memoized Selected Objects
@@ -1400,7 +1430,7 @@ export default function TimetableDesignPage() {
   const fetchCoursesForCollege = async (colgcd: string) => {
     const cd = colgcd || '1';
     try {
-      const activeTenant = getActiveTenantSlug();
+      const activeTenant = getActiveTenantSlug(cd);
       const res = await fetch(`/api/srms/courses?colgcd=${encodeURIComponent(cd)}&tenant=${encodeURIComponent(activeTenant)}`);
       if (res.ok) {
         const list = await res.json();
@@ -1429,7 +1459,7 @@ export default function TimetableDesignPage() {
     const crs = coursecd || '';
     const activeDepts = (knownDepts && knownDepts.length > 0) ? knownDepts : departmentsList;
     try {
-      const activeTenant = getActiveTenantSlug();
+      const activeTenant = getActiveTenantSlug(cd);
       const res = await fetch(`/api/srms/branches?colgcd=${encodeURIComponent(cd)}&coursecd=${encodeURIComponent(crs)}&tenant=${encodeURIComponent(activeTenant)}`);
       if (res.ok) {
         const list = await res.json();
@@ -1488,12 +1518,13 @@ export default function TimetableDesignPage() {
     return [];
   };
 
-  const fetchBatchesForCourse = async (colgcd: string, coursecd: string) => {
+  const fetchBatchesForCourse = async (colgcd: string, coursecd: string, branchcd?: string) => {
     const cd = colgcd || '1';
     const crs = coursecd || '';
+    const br = branchcd || '';
     try {
-      const activeTenant = getActiveTenantSlug();
-      const res = await fetch(`/api/srms/batches?colgcd=${encodeURIComponent(cd)}&coursecd=${encodeURIComponent(crs)}&tenant=${encodeURIComponent(activeTenant)}`);
+      const activeTenant = getActiveTenantSlug(cd);
+      const res = await fetch(`/api/srms/batches?colgcd=${encodeURIComponent(cd)}&coursecd=${encodeURIComponent(crs)}${br ? `&branchcd=${encodeURIComponent(br)}` : ''}&tenant=${encodeURIComponent(activeTenant)}`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -1516,6 +1547,49 @@ export default function TimetableDesignPage() {
     }
     setBatchesList([]);
     return [];
+  };
+
+  const fetchSemestersForCourse = async (colgcd: string, coursecd: string, branchcd?: string, batchcd?: string) => {
+    const cd = colgcd || '1';
+    const crs = coursecd || '1';
+    const br = branchcd || '1';
+    const bat = batchcd || '18';
+    try {
+      const activeTenant = getActiveTenantSlug(cd);
+      const res = await fetch(`/api/srms/semesters?colgcd=${encodeURIComponent(cd)}&coursecd=${encodeURIComponent(crs)}&branchcd=${encodeURIComponent(br)}&batchcd=${encodeURIComponent(bat)}&tenant=${encodeURIComponent(activeTenant)}`);
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped: DropdownItem[] = list.map((s: any) => ({
+            id: String(s.sem_cd || s.code || s.id),
+            code: String(s.sem_cd || s.code || s.id),
+            name: s.SemName || s.name || `Semester ${s.sem_cd || s.code}`,
+          }));
+          setSemestersList(mapped);
+          return mapped;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch semesters:', err);
+    }
+    const fallbackList: DropdownItem[] = [1, 2, 3, 4, 5, 6, 7, 8].map(sem => ({
+      id: String(sem),
+      code: String(sem),
+      name: `Semester ${sem}`,
+    }));
+    setSemestersList(fallbackList);
+    return fallbackList;
+  };
+
+  const fetchSectionsForCourse = async (colgcd?: string, coursecd?: string, branchcd?: string, batchcd?: string, semcd?: string) => {
+    const sections: DropdownItem[] = [
+      { id: '1', code: '1', name: 'Section A' },
+      { id: '2', code: '2', name: 'Section B' },
+      { id: '3', code: '3', name: 'Section C' },
+      { id: '4', code: '4', name: 'Section D' },
+    ];
+    setSectionsList(sections);
+    return sections;
   };
 
   const fetchCameras = async (colgcd: string = selectedCollege) => {
@@ -1558,27 +1632,20 @@ export default function TimetableDesignPage() {
       // 1. Fetch Colleges
       const allColleges = await fetchColleges();
 
-      // Strict Tenant Isolation: Non-SuperAdmins are hard-locked to their assigned college!
       let filteredColleges = allColleges;
-      if (role !== 'SUPER_ADMIN') {
-        const myCol = allColleges.find(c => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
-        if (myCol) {
-          filteredColleges = [myCol];
-        } else if (allColleges.length > 0) {
-          filteredColleges = [allColleges[0]];
-        } else {
-          filteredColleges = [{
-            id: userColg,
-            code: userColg,
-            colg_cd: userColg,
-            name: savedCollegeName || userSlug.toUpperCase(),
-            slug: userSlug
-          }];
-        }
+      if (filteredColleges.length === 0) {
+        filteredColleges = [{
+          id: userColg,
+          code: userColg,
+          colg_cd: userColg,
+          name: savedCollegeName || userSlug.toUpperCase(),
+          slug: userSlug
+        }];
       }
       setCollegesList(filteredColleges);
 
-      const activeColCode = role === 'SUPER_ADMIN' ? (filteredColleges[0]?.code || '1') : (filteredColleges[0]?.code || userColg);
+      const myCol = filteredColleges.find(c => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
+      const activeColCode = myCol ? (myCol.code || myCol.colg_cd) : (filteredColleges[0]?.code || '1');
       setSelectedCollege(activeColCode);
 
       // Fetch Cameras for active college
@@ -1633,32 +1700,42 @@ export default function TimetableDesignPage() {
         setAllFaculties(extractArray(fJson));
       }
 
-      // 4. Fetch Courses for active college
+      // 4. Cascade Level 2: Fetch Courses for active college
       const courses = await fetchCoursesForCollege(activeColCode);
       const initialCourse = courses[0];
-      const initialCourseCd = initialCourse ? initialCourse.code : '';
-      if (initialCourseCd) {
-        setSelectedCourse(initialCourseCd);
-      }
+      const initialCourseCd = initialCourse ? initialCourse.code : '1';
+      setSelectedCourse(initialCourseCd);
 
       if (loadedDepts.length > 0 && initialCourseCd) {
         const matchedDept = loadedDepts.find((d: any) => String(d.course_cd) === String(initialCourseCd)) || loadedDepts[0];
         if (matchedDept) setSelectedDept(matchedDept.id || matchedDept.code);
       }
 
-      // 5. Fetch Branches for active college + course with live departments matching
+      // 5. Cascade Level 3: Fetch Branches for active college + course with live departments matching
       const branches = await fetchBranchesForCourse(activeColCode, initialCourseCd, loadedDepts);
-      const initialBranchCd = branches[0]?.code || '';
-      if (initialBranchCd) {
-        setSelectedBranch(initialBranchCd);
-      }
+      const initialBranchCd = branches[0]?.code || '1';
+      setSelectedBranch(initialBranchCd);
 
-      // 6. Fetch Batches for active college + course
-      const batches = await fetchBatchesForCourse(activeColCode, initialCourseCd);
-      const initialBatchCd = batches[0]?.code || '';
-      if (initialBatchCd) {
-        setSelectedBatch(initialBatchCd);
-      }
+      // 6. Cascade Level 4: Fetch Batches for active college + course + branch
+      const batches = await fetchBatchesForCourse(activeColCode, initialCourseCd, initialBranchCd);
+      const activeBatch = batches.find(b => b.code === '19' || b.code === '18' || b.name === '2026' || b.name === '2025') || batches[0];
+      const initialBatchCd = activeBatch ? activeBatch.code : (batches[0]?.code || '1');
+      setSelectedBatch(initialBatchCd);
+
+      // 7. Cascade Level 5: Fetch Semesters for active college + course + branch + batch
+      const semesters = await fetchSemestersForCourse(activeColCode, initialCourseCd, initialBranchCd, initialBatchCd);
+      const preferredSem = semesters.find(s => s.code === '3') || semesters[0];
+      const initialSemCd = preferredSem ? preferredSem.code : '1';
+      setSelectedSemester(initialSemCd);
+
+      // 8. Cascade Level 6: Fetch Sections
+      await fetchSectionsForCourse(activeColCode, initialCourseCd, initialBranchCd, initialBatchCd, initialSemCd);
+      const initialSecCd = '1';
+      setSelectedSection(initialSecCd);
+
+      // 9. Initial Load of Timetable Slots & Subjects
+      fetchSrmsSubjects(initialCourseCd, initialBranchCd, initialBatchCd, initialSemCd, initialSecCd, activeColCode);
+      fetchSrmsSchedule(initialCourseCd, initialBranchCd, initialBatchCd, initialSemCd, initialSecCd, activeColCode, currentDate);
     } catch (err) {
       console.error('Failed to load master metadata:', err);
     } finally {
@@ -1683,7 +1760,7 @@ export default function TimetableDesignPage() {
       const sem = semCd || selectedSemester || '3';
       const sec = secCd || selectedSection || '1';
       const colg = colgCd || selectedCollege || '1';
-      const tenantSlug = getActiveTenantSlug();
+      const tenantSlug = getActiveTenantSlug(colg);
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
       const res = await fetch(
@@ -1917,7 +1994,7 @@ export default function TimetableDesignPage() {
       const sem = Number(semCd || selectedSemester || 3);
       const sec = Number(secCd || selectedSection || 1);
       const colg = Number(colgCd || selectedCollege || 1);
-      const tenantSlug = getActiveTenantSlug();
+      const tenantSlug = getActiveTenantSlug(String(colg));
 
       const res = await fetch(`/api/srms/timetable-subjects?course=${crs}&branch=${br}&batch=${bat}&semester=${sem}&section=${sec}&colgcd=${colg}&tenant=${tenantSlug}`);
       if (res.ok) {
@@ -1961,21 +2038,27 @@ export default function TimetableDesignPage() {
   ) => {
     setLoading(true);
     try {
-      const tenantSlug = getActiveTenantSlug();
+      const crs = courseCd || selectedCourse || '1';
+      const br = branchCd || selectedBranch || '1';
+      const bat = batchCd || selectedBatch || '19';
+      const sem = semCd || selectedSemester || '1';
+      const sec = secCd || selectedSection || '1';
+      const colg = colgCd || selectedCollege || '1';
+      const tenantSlug = getActiveTenantSlug(colg);
       const isSrms = Boolean(tenantSlug && tenantSlug.toLowerCase().includes('srms'));
 
       // 1. Fetch subjects (for non-SRMS, queries PostgreSQL subjects table; for SRMS, queries SRMS ASMX)
-      await fetchSrmsSubjects(courseCd, branchCd, batchCd, semCd, secCd, colgCd);
+      await fetchSrmsSubjects(crs, br, bat, sem, sec, colg);
 
       // 2. Fetch timetable schedule:
       // /api/srms/timetable-schedule automatically checks tenant slug:
       // - If SRMS tenant: queries SRMS portal + PostgreSQL and combines with topics/units
       // - If non-SRMS tenant: queries strictly PostgreSQL timetable_slots and projects into calendar week
-      const scheduleSlots = await fetchSrmsSchedule(courseCd, branchCd, batchCd, semCd, secCd, colgCd, targetDate);
+      const scheduleSlots = await fetchSrmsSchedule(crs, br, bat, sem, sec, colg, targetDate);
 
       // 3. Fallback: if non-SRMS and scheduleSlots is empty, attempt direct backend timetable query
       if (!isSrms && (!scheduleSlots || scheduleSlots.length === 0)) {
-        await fetchPostgresSlots(courseCd, branchCd, batchCd, semCd, secCd, colgCd, targetDate);
+        await fetchPostgresSlots(crs, br, bat, sem, sec, colg, targetDate);
       }
     } catch (err) {
       console.error('Failed to fetch timetable slots', err);
@@ -1991,65 +2074,118 @@ export default function TimetableDesignPage() {
 
   // Cascading Handlers
   const handleFilterCollegeChange = async (colgCd: string) => {
-    if (userRole !== 'SUPER_ADMIN') return;
     setSelectedCollege(colgCd);
+    const newSlug = getActiveTenantSlug(colgCd);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('colg_cd', colgCd);
+      localStorage.setItem('colgCd', colgCd);
+      localStorage.setItem('tenantSlug', newSlug);
+      localStorage.setItem('selectedTenant', newSlug);
+    }
+
+    // 1. Refresh peripheral camera and sessions
+    fetchCameras(colgCd);
+    fetchSessionsForCollege(colgCd);
+
+    // 2. Cascade Level 2: Fetch Courses for this college
     const courses = await fetchCoursesForCollege(colgCd);
-    const firstCourse = courses.find(c => c.code === '13') || courses[0];
+    const firstCourse = courses[0];
     const newCourseCd = firstCourse ? firstCourse.code : '1';
     setSelectedCourse(newCourseCd);
 
+    // 3. Cascade Level 3: Fetch Branches for this college + course
     const branches = await fetchBranchesForCourse(colgCd, newCourseCd, departmentsList);
-    const newBranchCd = branches[0]?.code || '1';
-    if (branches.length > 0) {
-      setSelectedBranch(newBranchCd);
+    const firstBranch = branches[0];
+    const newBranchCd = firstBranch ? firstBranch.code : '1';
+    setSelectedBranch(newBranchCd);
+
+    // 4. Cascade Level 4: Fetch Batches for this college + course + branch
+    const batches = await fetchBatchesForCourse(colgCd, newCourseCd, newBranchCd);
+    const activeBatch = batches.find(b => b.code === '19' || b.code === '18' || b.name === '2026' || b.name === '2025') || batches[0];
+    const newBatchCd = activeBatch ? activeBatch.code : (batches[0]?.code || '1');
+    setSelectedBatch(newBatchCd);
+
+    // 5. Cascade Level 5: Fetch Semesters for this college + course + branch + batch
+    const semesters = await fetchSemestersForCourse(colgCd, newCourseCd, newBranchCd, newBatchCd);
+    const preferredSem = semesters.find(s => s.code === '3') || semesters[0];
+    const newSemCd = preferredSem ? preferredSem.code : '1';
+    setSelectedSemester(newSemCd);
+
+    // 6. Cascade Level 6: Set Sections
+    await fetchSectionsForCourse(colgCd, newCourseCd, newBranchCd, newBatchCd, newSemCd);
+    const newSecCd = '1';
+    setSelectedSection(newSecCd);
+
+    // 7. Update matching department for format designer
+    const matchingDept = departmentsList.find((d: any) => String(d.course_cd) === String(newCourseCd) || d.course_code === newCourseCd);
+    if (matchingDept) {
+      setSelectedDept(matchingDept.id || matchingDept.code);
     }
 
-    const batches = await fetchBatchesForCourse(colgCd, newCourseCd);
-    const curBatch = batches.find(b => b.name === '2025' || b.year === 2025 || b.code === '2') || batches[0];
-    const newBatchCd = curBatch?.code || '2';
-    if (curBatch) {
-      setSelectedBatch(newBatchCd);
-    }
-
-    fetchSrmsSubjects(newCourseCd, newBranchCd, newBatchCd, selectedSemester, selectedSection, colgCd);
-    fetchSrmsSchedule(newCourseCd, newBranchCd, newBatchCd, selectedSemester, selectedSection, colgCd, currentDate);
+    // 8. Refresh schedule and subjects with the fully cascaded parameters
+    fetchSrmsSubjects(newCourseCd, newBranchCd, newBatchCd, newSemCd, newSecCd, colgCd);
+    fetchSrmsSchedule(newCourseCd, newBranchCd, newBatchCd, newSemCd, newSecCd, colgCd, currentDate);
   };
 
   const handleFilterCourseChange = async (courseCd: string) => {
     setSelectedCourse(courseCd);
 
+    // Cascade Level 3: Fetch Branches for selected college + new course
     const branches = await fetchBranchesForCourse(selectedCollege, courseCd, departmentsList);
-    const newBranchCd = branches[0]?.code || '1';
-    if (branches.length > 0) {
-      setSelectedBranch(newBranchCd);
-    }
+    const firstBranch = branches[0];
+    const newBranchCd = firstBranch ? firstBranch.code : '1';
+    setSelectedBranch(newBranchCd);
 
-    const batches = await fetchBatchesForCourse(selectedCollege, courseCd);
-    const curBatch = batches.find(b => b.name === '2025' || b.year === 2025 || b.code === '2') || batches[0];
-    const newBatchCd = curBatch?.code || '2';
-    if (curBatch) {
-      setSelectedBatch(newBatchCd);
-    }
+    // Cascade Level 4: Fetch Batches for selected college + new course + branch
+    const batches = await fetchBatchesForCourse(selectedCollege, courseCd, newBranchCd);
+    const activeBatch = batches.find(b => b.code === '19' || b.code === '18' || b.name === '2026' || b.name === '2025') || batches[0];
+    const newBatchCd = activeBatch ? activeBatch.code : (batches[0]?.code || '1');
+    setSelectedBatch(newBatchCd);
+
+    // Cascade Level 5: Fetch Semesters for selected college + new course + branch + batch
+    const semesters = await fetchSemestersForCourse(selectedCollege, courseCd, newBranchCd, newBatchCd);
+    const preferredSem = semesters.find(s => s.code === '3') || semesters[0];
+    const newSemCd = preferredSem ? preferredSem.code : '1';
+    setSelectedSemester(newSemCd);
+
+    // Cascade Level 6: Sections
+    await fetchSectionsForCourse(selectedCollege, courseCd, newBranchCd, newBatchCd, newSemCd);
+    const newSecCd = '1';
+    setSelectedSection(newSecCd);
 
     const matchingDept = departmentsList.find((d: any) => String(d.course_cd) === String(courseCd) || d.course_code === courseCd);
     if (matchingDept) {
       setSelectedDept(matchingDept.id || matchingDept.code);
     }
 
-    fetchSrmsSubjects(courseCd, newBranchCd, newBatchCd, selectedSemester, selectedSection, selectedCollege);
-    fetchSrmsSchedule(courseCd, newBranchCd, newBatchCd, selectedSemester, selectedSection, selectedCollege, currentDate);
+    fetchSrmsSubjects(courseCd, newBranchCd, newBatchCd, newSemCd, newSecCd, selectedCollege);
+    fetchSrmsSchedule(courseCd, newBranchCd, newBatchCd, newSemCd, newSecCd, selectedCollege, currentDate);
   };
 
-  const handleFilterBranchChange = (branchCd: string) => {
+  const handleFilterBranchChange = async (branchCd: string) => {
     setSelectedBranch(branchCd);
-    fetchSrmsSubjects(selectedCourse, branchCd, selectedBatch, selectedSemester, selectedSection, selectedCollege);
-    fetchSrmsSchedule(selectedCourse, branchCd, selectedBatch, selectedSemester, selectedSection, selectedCollege, currentDate);
+
+    // Re-fetch semesters if dependent on branch
+    const semesters = await fetchSemestersForCourse(selectedCollege, selectedCourse, branchCd, selectedBatch);
+    const currentSemValid = semesters.some(s => s.code === selectedSemester);
+    const newSemCd = currentSemValid ? selectedSemester : (semesters[0]?.code || '1');
+    if (!currentSemValid) setSelectedSemester(newSemCd);
+
+    fetchSrmsSubjects(selectedCourse, branchCd, selectedBatch, newSemCd, selectedSection, selectedCollege);
+    fetchSrmsSchedule(selectedCourse, branchCd, selectedBatch, newSemCd, selectedSection, selectedCollege, currentDate);
   };
 
-  const handleFilterBatchChange = (batchCd: string) => {
+  const handleFilterBatchChange = async (batchCd: string) => {
     setSelectedBatch(batchCd);
-    fetchSrmsSubjects(selectedCourse, selectedBranch, batchCd, selectedSemester, selectedSection, selectedCollege);
-    fetchSrmsSchedule(selectedCourse, selectedBranch, batchCd, selectedSemester, selectedSection, selectedCollege, currentDate);
+
+    // Re-fetch semesters if dependent on batch
+    const semesters = await fetchSemestersForCourse(selectedCollege, selectedCourse, selectedBranch, batchCd);
+    const currentSemValid = semesters.some(s => s.code === selectedSemester);
+    const newSemCd = currentSemValid ? selectedSemester : (semesters[0]?.code || '1');
+    if (!currentSemValid) setSelectedSemester(newSemCd);
+
+    fetchSrmsSubjects(selectedCourse, selectedBranch, batchCd, newSemCd, selectedSection, selectedCollege);
+    fetchSrmsSchedule(selectedCourse, selectedBranch, batchCd, newSemCd, selectedSection, selectedCollege, currentDate);
   };
 
   const handleFilterSemesterChange = (semCd: string) => {
@@ -2072,8 +2208,10 @@ export default function TimetableDesignPage() {
 
   // Re-fetch slots whenever filters change
   useEffect(() => {
-    fetchTimetableSlots();
-    fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege);
+    if (selectedCollege && selectedCourse) {
+      fetchTimetableSlots(currentDate, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege);
+      fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege);
+    }
   }, [selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection]);
 
 
@@ -2964,7 +3102,7 @@ export default function TimetableDesignPage() {
                 </span>
                 <select
                   value={selectedCollege}
-                  disabled={userRole !== 'SUPER_ADMIN'}
+                  disabled={collegesList.length === 0}
                   onChange={(e) => handleFilterCollegeChange(e.target.value)}
                   className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer disabled:cursor-not-allowed text-xs max-w-[240px] truncate"
                 >
@@ -2974,11 +3112,6 @@ export default function TimetableDesignPage() {
                     </option>
                   ))}
                 </select>
-                {userRole !== 'SUPER_ADMIN' && (
-                  <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shrink-0">
-                    🔒 Locked
-                  </span>
-                )}
               </div>
 
               {/* 2. Course Selector */}
@@ -3040,16 +3173,16 @@ export default function TimetableDesignPage() {
               {/* 5. Semester Selector */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
                 <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
-                  <span>📖</span> Semester:
+                  <span>📖</span> Semester <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({semestersList.length})</span>:
                 </span>
                 <select
                   value={selectedSemester}
                   onChange={(e) => handleFilterSemesterChange(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[150px] truncate"
                 >
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                    <option key={sem} value={String(sem)} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                      [#{sem}] Semester {sem}
+                  {semestersList.map((sem, idx) => (
+                    <option key={sem.code || idx} value={sem.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      [#{sem.code}] {sem.name}
                     </option>
                   ))}
                 </select>
@@ -3058,17 +3191,18 @@ export default function TimetableDesignPage() {
               {/* 6. Section Selector (1 = A, 2 = B, 3 = C, 4 = D) */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
                 <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
-                  <span>🔠</span> Section:
+                  <span>🔠</span> Section <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({sectionsList.length})</span>:
                 </span>
                 <select
                   value={selectedSection}
                   onChange={(e) => handleFilterSectionChange(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[130px] truncate"
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
                 >
-                  <option value="1" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">[#1] Section A</option>
-                  <option value="2" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">[#2] Section B</option>
-                  <option value="3" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">[#3] Section C</option>
-                  <option value="4" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">[#4] Section D</option>
+                  {sectionsList.map((sec, idx) => (
+                    <option key={sec.code || idx} value={sec.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      [#{sec.code}] {sec.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 

@@ -286,22 +286,19 @@ export default function CollegeMasterPage() {
 
   // ─── TENANT SLUG RESOLVER ────────────────────────────────────────────────────
   const getActiveTenantSlug = (): string => {
-    if (userRole !== 'SUPER_ADMIN') {
-      return userTenantSlug || 'srms-cet-bareilly';
-    }
     if (selectedCollegeFilter !== 'all') {
-      return colleges.find((c) => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter)?.slug || '';
+      const match = colleges.find((c) => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter);
+      if (match?.slug) return match.slug;
     }
-    return colleges[0]?.slug || 'srms-cet-bareilly';
+    return userTenantSlug || colleges[0]?.slug || 'srms-cet-bareilly';
   };
 
   const getFormCollegeSlug = (): string => {
-    if (userRole !== 'SUPER_ADMIN') {
-      return userTenantSlug || 'srms-cet-bareilly';
+    if (formData.collegeId) {
+      const match = colleges.find((c) => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId);
+      if (match?.slug) return match.slug;
     }
-    return colleges.find((c) => c.id === formData.collegeId || c.code === formData.collegeId || c.slug === formData.collegeId)?.slug
-      || colleges[0]?.slug
-      || 'srms-cet-bareilly';
+    return userTenantSlug || colleges[0]?.slug || 'srms-cet-bareilly';
   };
 
   // ─── SYNC FROM SRMS PORTAL API ───────────────────────────────────────────────
@@ -309,16 +306,38 @@ export default function CollegeMasterPage() {
     setSyncing(true);
     setSyncMessage('');
     try {
-      const res = await fetch(`${API_BASE}/colleges/sync-external`, {
+      const activeTenant = userTenantSlug || 'srms-cet-bareilly';
+      const isSrmsTenant = activeTenant.toLowerCase().includes('srms');
+      const urlParams = new URLSearchParams({ tenant: activeTenant, sync: 'true', include_inactive: 'true' });
+      if (userTenantId) urlParams.set('tenantId', userTenantId);
+
+      // 1. Direct Next.js sync to PostgreSQL
+      const res = await fetch(`/api/srms/colleges?${urlParams.toString()}`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(userTenantId ? { 'x-tenant-id': userTenantId } : {}),
+          ...(activeTenant ? { 'x-tenant-slug': activeTenant } : {}),
+        },
+        body: JSON.stringify({ tenant: activeTenant, tenantId: userTenantId, sync: true }),
       });
+
+      // 2. Also trigger backend sync
+      fetch(`${API_BASE}/colleges/sync-external?${urlParams.toString()}`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          ...(userTenantId ? { 'x-tenant-id': userTenantId } : {}),
+          ...(activeTenant ? { 'x-tenant-slug': activeTenant } : {}),
+        },
+      }).catch(() => {});
+
       if (res.ok) {
-        const data = await res.json();
-        const list: College[] = (data.data || []).map((t: any) => ({
-          id: t.id,
-          code: t.code || '',
-          name: t.name,
+        const raw = await res.json();
+        let list: College[] = (Array.isArray(raw) ? raw : []).map((t: any) => ({
+          id: t.id || t.code,
+          code: t.code || t.colg_cd || '',
+          name: t.name || t.colg_name,
           slug: t.slug,
           domain: t.domain || '',
           plan: t.plan || 'enterprise',
@@ -327,11 +346,25 @@ export default function CollegeMasterPage() {
           schema_provisioned: t.schema_provisioned ?? false,
           created_at: t.created_at,
         }));
+        if (isSrmsTenant) {
+          list = list.filter((c) => {
+            const name = (c.name || '').toLowerCase();
+            const slug = (c.slug || '').toLowerCase();
+            const cd = String(c.code || '').trim();
+            return slug.includes('srms') || name.includes('srms') || name.includes('shri ram murti') || ['1','2','3','4','5','6','7','8','9','10','11','12','13','14'].includes(cd);
+          });
+        }
         setColleges(list);
-        setSyncMessage(`Synced ${list.length} SRMS Colleges from Portal API ✅`);
+        setSyncMessage(`Synced ${list.length} Colleges from Portal & saved to PostgreSQL under ${activeTenant} ✅`);
         setTimeout(() => setSyncMessage(''), 5000);
       } else {
-        setSyncMessage('Failed to sync colleges from portal API.');
+        const fallbackList = await fetchCollegesFromDb(activeTenant, userTenantId);
+        if (fallbackList.length > 0) {
+          setColleges(fallbackList);
+          setSyncMessage(`Loaded ${fallbackList.length} Colleges from PostgreSQL database ✅`);
+        } else {
+          setSyncMessage('Failed to sync colleges from portal API.');
+        }
       }
     } catch (err: any) {
       console.error('[CollegeMaster] Sync error:', err);
@@ -545,6 +578,96 @@ export default function CollegeMasterPage() {
     }
   };
 
+  // ─── HELPER: Fetch Colleges directly from PostgreSQL Database ────────────
+  const fetchCollegesFromDb = async (tenantSlug: string, tenantId?: string): Promise<College[]> => {
+    const isSrmsTenant = (tenantSlug || '').toLowerCase().includes('srms');
+    const urlParams = new URLSearchParams({
+      tenant: tenantSlug,
+      include_inactive: 'true',
+    });
+    if (tenantId) urlParams.set('tenantId', tenantId);
+
+    // 1. Direct Next.js proxy route (connects directly to PostgreSQL tenant schema)
+    try {
+      const res = await fetch(`/api/srms/colleges?${urlParams.toString()}`, {
+        headers: {
+          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...(tenantSlug ? { 'x-tenant-slug': tenantSlug } : {}),
+        },
+      });
+      if (res.ok) {
+        const raw = await res.json();
+        if (Array.isArray(raw) && raw.length > 0) {
+          let list: College[] = raw.map((t: any) => ({
+            id: t.id || t.code,
+            code: t.code || t.colg_cd || '',
+            name: t.name || t.colg_name,
+            slug: t.slug,
+            domain: t.domain || '',
+            plan: t.plan || 'enterprise',
+            primary_color: t.primary_color || '#6366F1',
+            is_active: t.is_active ?? true,
+            schema_provisioned: t.schema_provisioned ?? false,
+            created_at: t.created_at,
+          }));
+          if (isSrmsTenant) {
+            list = list.filter((c) => {
+              const name = (c.name || '').toLowerCase();
+              const slug = (c.slug || '').toLowerCase();
+              const cd = String(c.code || '').trim();
+              return slug.includes('srms') || name.includes('srms') || name.includes('shri ram murti') || ['1','2','3','4','5','6','7','8','9','10','11','12','13','14'].includes(cd);
+            });
+          }
+          if (list.length > 0) return list;
+        }
+      }
+    } catch (e) {
+      console.warn('[CollegeMaster] /api/srms/colleges fetch error:', e);
+    }
+
+    // 2. Fallback to backend API
+    try {
+      const bRes = await fetch(`${API_BASE}/colleges?${urlParams.toString()}`, {
+        headers: {
+          ...getAuthHeaders(),
+          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...(tenantSlug ? { 'x-tenant-slug': tenantSlug } : {}),
+        },
+      });
+      if (bRes.ok) {
+        const data = await bRes.json();
+        const rawList = data.data || (Array.isArray(data) ? data : []);
+        if (Array.isArray(rawList) && rawList.length > 0) {
+          let list: College[] = rawList.map((t: any) => ({
+            id: t.id || t.code,
+            code: t.code || t.colg_cd || '',
+            name: t.name,
+            slug: t.slug,
+            domain: t.domain || '',
+            plan: t.plan || 'enterprise',
+            primary_color: t.primary_color || '#6366F1',
+            is_active: t.is_active ?? true,
+            schema_provisioned: t.schema_provisioned ?? false,
+            created_at: t.created_at,
+          }));
+          if (isSrmsTenant) {
+            list = list.filter((c) => {
+              const name = (c.name || '').toLowerCase();
+              const slug = (c.slug || '').toLowerCase();
+              const cd = String(c.code || '').trim();
+              return slug.includes('srms') || name.includes('srms') || name.includes('shri ram murti') || ['1','2','3','4','5','6','7','8','9','10','11','12','13','14'].includes(cd);
+            });
+          }
+          if (list.length > 0) return list;
+        }
+      }
+    } catch (e) {
+      console.warn('[CollegeMaster] Backend API colleges fetch error:', e);
+    }
+
+    return [];
+  };
+
   // ─── ON MOUNT: Load colleges from public.tenants (PostgreSQL) ───────────────
   useEffect(() => {
     ['mederp_colleges', 'mederp_courses', 'mederp_batches', 'mederp_branches', 'mederp_sessions', 'mederp_residencies', 'mederp_professionals']
@@ -553,47 +676,30 @@ export default function CollegeMasterPage() {
     const loadColleges = async () => {
       try {
         let role = 'ADMIN';
-        let userColg = '1';
-        let userSlug = 'srms-cet-bareilly';
+        let userColg = '';
+        let userSlug = '';
         let uTenantId = '';
+        let storedCollegeName = '';
         if (typeof window !== 'undefined') {
           role = (localStorage.getItem('role') || 'ADMIN').toUpperCase();
-          userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
-          userSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
+          userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '';
+          userSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || localStorage.getItem('tenant_slug') || '';
           uTenantId = localStorage.getItem('tenantId') || '';
+          storedCollegeName = localStorage.getItem('collegeName') || localStorage.getItem('tenantName') || '';
           setUserRole(role);
           setUserColgCd(userColg);
           setUserTenantSlug(userSlug);
           setUserTenantId(uTenantId);
         }
 
-        const res = await fetch(`${API_BASE}/colleges`, { headers: getAuthHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          const list: College[] = (data.data || data || []).map((t: any) => ({
-            id: t.id,
-            code: t.code || '',
-            name: t.name,
-            slug: t.slug,
-            domain: t.domain || '',
-            plan: t.plan || 'standard',
-            primary_color: t.primary_color || '#6366F1',
-            is_active: t.is_active ?? true,
-            schema_provisioned: t.schema_provisioned ?? false,
-            created_at: t.created_at,
-          }));
-
-          if (role !== 'SUPER_ADMIN') {
-            const myCol = list.find((c: any) => String(c.code) === String(userColg) || c.slug === userSlug || (uTenantId && c.id === uTenantId));
-            const scopedList = myCol ? [myCol] : [{ id: userColg, code: userColg, name: 'SHRI RAM MURTI SMARAK COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY', slug: userSlug, is_active: true }];
-            setColleges(scopedList);
-            setSelectedCollegeFilter(scopedList[0].id || scopedList[0].code || userColg);
-          } else {
-            setColleges(list);
-          }
-          console.log(`[CollegeMaster] Loaded colleges for role ${role} ✅`);
+        const activeTenant = userSlug || userTenantSlug || 'srms-cet-bareilly';
+        const list = await fetchCollegesFromDb(activeTenant, uTenantId);
+        if (list.length > 0) {
+          setColleges(list);
+          setSelectedCollegeFilter('all');
+          console.log(`[CollegeMaster] Loaded ${list.length} colleges for tenant ${activeTenant} from PostgreSQL ✅`);
         } else {
-          console.error('[CollegeMaster] Failed to load colleges from API');
+          console.error('[CollegeMaster] Failed to load colleges from DB');
         }
       } catch (err) {
         console.error('[CollegeMaster] Error loading colleges:', err);
@@ -607,28 +713,10 @@ export default function CollegeMasterPage() {
     if (tab === 'colleges') {
       setLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/colleges`, { headers: getAuthHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          const list: College[] = (data.data || data || []).map((t: any) => ({
-            id: t.id,
-            code: t.code || '',
-            name: t.name,
-            slug: t.slug,
-            domain: t.domain || '',
-            plan: t.plan || 'standard',
-            primary_color: t.primary_color || '#6366F1',
-            is_active: t.is_active ?? true,
-            schema_provisioned: t.schema_provisioned ?? false,
-            created_at: t.created_at,
-          }));
-          if (userRole !== 'SUPER_ADMIN') {
-            const myCol = list.find((c: any) => String(c.code) === String(userColgCd) || c.slug === userTenantSlug || (userTenantId && c.id === userTenantId));
-            const scopedList = myCol ? [myCol] : [{ id: userColgCd, code: userColgCd, name: 'SHRI RAM MURTI SMARAK COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY', slug: userTenantSlug, is_active: true }];
-            setColleges(scopedList);
-          } else {
-            setColleges(list);
-          }
+        const targetTenant = getActiveTenantSlug() || userTenantSlug || 'srms-cet-bareilly';
+        const list = await fetchCollegesFromDb(targetTenant, userTenantId);
+        if (list.length > 0) {
+          setColleges(list);
         }
       } catch (err) {
         console.error('[CollegeMaster] Error fetching colleges:', err);
@@ -672,15 +760,23 @@ export default function CollegeMasterPage() {
       const list = data.data || (Array.isArray(data) ? data : []);
       if (Array.isArray(list)) {
         if (tab === 'courses') {
-          setCourses(list.map((c: any) => ({
-            ...c,
-            degree_level: c.degree_level || c.degreeLevel || 'UG',
-            academic_system: c.academic_system || c.academicSystem || (c.college_slug === 'srms-ims' || c.slug === 'srms-ims' ? 'professional' : 'semester'),
-            college_id: c.college_id || c.collegeId || colleges[0]?.id,
-            college_name: c.college_name || colleges.find(col => col.id === (c.college_id || c.collegeId))?.name || 'SRMS Institution',
-            college_code: c.college_code || colleges.find(col => col.id === (c.college_id || c.collegeId))?.code || '',
-            college_slug: c.college_slug || colleges.find(col => col.id === (c.college_id || c.collegeId))?.slug || '',
-          })));
+          setCourses(list.map((c: any) => {
+            const matchedCol = colleges.find(col =>
+              col.id === (c.college_id || c.collegeId) ||
+              (c.college_code && col.code === c.college_code) ||
+              (c.college_slug && col.slug === c.college_slug) ||
+              (c.code && col.code === c.code)
+            );
+            return {
+              ...c,
+              degree_level: c.degree_level || c.degreeLevel || 'UG',
+              academic_system: c.academic_system || c.academicSystem || (c.college_slug === 'srms-ims' || c.slug === 'srms-ims' || matchedCol?.code === '11' ? 'professional' : 'semester'),
+              college_id: matchedCol?.id || c.college_id || c.collegeId || colleges[0]?.id,
+              college_name: matchedCol?.name || c.college_name || 'SRMS Institution',
+              college_code: matchedCol?.code || c.college_code || '',
+              college_slug: matchedCol?.slug || c.college_slug || '',
+            };
+          }));
         }
         if (tab === 'batches') setBatches(list);
         if (tab === 'branches') setBranches(list);
@@ -1578,9 +1674,9 @@ export default function CollegeMasterPage() {
     const method = isEdit ? 'PUT' : 'POST';
     const recordId = editingItem?.id || editingItem?.slug || '';
 
-    // Colleges → public schema endpoint, no tenant slug needed
+    // Colleges → tenant schema endpoint
     if (activeTab === 'colleges') {
-      const url = isEdit ? `${API_BASE}/colleges/${recordId}` : `${API_BASE}/colleges`;
+      const slug = getActiveTenantSlug() || userTenantSlug || 'srms-cet-bareilly';
       const bodyPayload: Record<string, any> = {
         code: formData.code?.trim() || undefined,
         name: formData.name?.trim(),
@@ -1588,20 +1684,39 @@ export default function CollegeMasterPage() {
         domain: formData.domain?.trim() || '',
         plan: formData.plan || 'enterprise',
         primaryColor: formData.primaryColor || formData.primary_color || '#6366F1',
+        tenant: slug,
+        tenantId: userTenantId,
+        action: isEdit ? 'update' : 'create',
+        id: recordId,
       };
       if (isEdit) {
         bodyPayload.isActive = formData.isActive ?? formData.is_active ?? true;
       }
       try {
-        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyPayload) });
-        if (res.ok) {
-          console.log('[CollegeMaster] College saved to public.tenants ✅');
-          await fetchData('colleges');
-        } else {
-          const errText = await res.text();
-          console.error('[CollegeMaster] College save failed:', errText);
-          alert(`Save failed: ${errText}`);
-        }
+        // 1. Direct Next.js DB write
+        await fetch('/api/srms/colleges', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyPayload),
+        });
+
+        // 2. Also write to backend API
+        const url = isEdit
+          ? `${API_BASE}/colleges/${recordId}?tenant=${encodeURIComponent(slug)}${userTenantId ? `&tenantId=${userTenantId}` : ''}`
+          : `${API_BASE}/colleges?tenant=${encodeURIComponent(slug)}${userTenantId ? `&tenantId=${userTenantId}` : ''}`;
+        await fetch(url, {
+          method,
+          headers: {
+            ...getAuthHeaders(),
+            ...(userTenantId ? { 'x-tenant-id': userTenantId } : {}),
+            ...(slug ? { 'x-tenant-slug': slug } : {}),
+          },
+          body: JSON.stringify(bodyPayload),
+        }).catch(() => {});
+
+        console.log('[CollegeMaster] College saved under tenant schema ✅');
+        const refreshed = await fetchCollegesFromDb(slug, userTenantId);
+        if (refreshed.length > 0) setColleges(refreshed);
       } catch (err) {
         console.error('[CollegeMaster] Network error:', err);
       }
@@ -1814,18 +1929,75 @@ export default function CollegeMasterPage() {
     }
   };
 
-  // Delete Record
+  // Restore / Reactivate College
+  const handleRestore = async (col: College) => {
+    const slug = getActiveTenantSlug() || userTenantSlug || 'srms-cet-bareilly';
+    const targetId = col.id || col.code || col.slug;
+    try {
+      // 1. Direct Next.js DB update
+      await fetch('/api/srms/colleges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant: slug,
+          tenantId: userTenantId,
+          action: 'restore',
+          id: targetId,
+        }),
+      });
+
+      // 2. Also backend update
+      const urlParams = new URLSearchParams({ tenant: slug });
+      if (userTenantId) urlParams.set('tenantId', userTenantId);
+      await fetch(`${API_BASE}/colleges/${col.id}/restore?${urlParams.toString()}`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          ...(userTenantId ? { 'x-tenant-id': userTenantId } : {}),
+          ...(slug ? { 'x-tenant-slug': slug } : {}),
+        },
+      }).catch(() => {});
+
+      setColleges((prev) => prev.map((c) => (c.id === col.id || c.code === col.code || c.slug === col.slug ? { ...c, is_active: true } : c)));
+    } catch (err) {
+      console.error('[CollegeMaster] Restore college error:', err);
+    }
+  };
+
+  // Delete / Deactivate Record
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this record?')) return;
+    if (!confirm('Are you sure you want to deactivate this record?')) return;
 
     if (activeTab === 'colleges') {
-      // Colleges are in public.tenants — no tenant slug
+      const slug = getActiveTenantSlug() || userTenantSlug || 'srms-cet-bareilly';
       try {
-        await fetch(`${API_BASE}/colleges/${id}`, { method: 'DELETE' });
+        // 1. Direct Next.js DB update
+        await fetch('/api/srms/colleges', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant: slug,
+            tenantId: userTenantId,
+            action: 'deactivate',
+            id,
+          }),
+        });
+
+        // 2. Also backend update
+        const urlParams = new URLSearchParams({ tenant: slug });
+        if (userTenantId) urlParams.set('tenantId', userTenantId);
+        await fetch(`${API_BASE}/colleges/${id}?${urlParams.toString()}`, {
+          method: 'DELETE',
+          headers: {
+            ...getAuthHeaders(),
+            ...(userTenantId ? { 'x-tenant-id': userTenantId } : {}),
+            ...(slug ? { 'x-tenant-slug': slug } : {}),
+          },
+        }).catch(() => {});
       } catch (err) {
         console.error('[CollegeMaster] Delete college error:', err);
       }
-      setColleges((prev) => prev.filter((c) => c.id !== id));
+      setColleges((prev) => prev.map((c) => (c.id === id || c.code === id || c.slug === id ? { ...c, is_active: false } : c)));
       return;
     }
 
@@ -1878,16 +2050,46 @@ export default function CollegeMasterPage() {
     }
   };
 
-  // Helper filter by search term AND selected college filter
+  // Helper filter by selected college filter (handles ID, Code, Slug seamlessly)
   const isMatchCollege = (itemCollegeId?: string, itemCollegeCode?: string, itemCollegeSlug?: string) => {
-    if (userRole !== 'SUPER_ADMIN') return true;
-    if (selectedCollegeFilter === 'all') return true;
-    return (
-      !itemCollegeId ||
+    if (!selectedCollegeFilter || selectedCollegeFilter === 'all') return true;
+
+    // Resolve the target filter college object from state if available
+    const selectedCol = colleges.find(
+      (c) => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter
+    );
+
+    const filterId = selectedCol?.id || selectedCollegeFilter;
+    const filterCode = selectedCol?.code || (selectedCollegeFilter.length <= 4 ? selectedCollegeFilter : undefined);
+    const filterSlug = selectedCol?.slug;
+
+    // 1. Exact match against filter ID
+    if (filterId && itemCollegeId === filterId) return true;
+
+    // 2. Match against college code (e.g. '1', '2', etc.)
+    if (filterCode && (itemCollegeCode === filterCode || itemCollegeId === filterCode)) return true;
+
+    // 3. Match against college slug (e.g. 'srms-cet-bareilly')
+    if (filterSlug && (itemCollegeSlug === filterSlug || itemCollegeId === filterSlug)) return true;
+
+    // 4. Fallback direct equality against selectedCollegeFilter
+    if (
       itemCollegeId === selectedCollegeFilter ||
       itemCollegeCode === selectedCollegeFilter ||
       itemCollegeSlug === selectedCollegeFilter
-    );
+    ) {
+      return true;
+    }
+
+    // 5. If item has a foreign college ID, look up its code in colleges array and compare to filterCode
+    if (itemCollegeId && (filterCode || filterSlug)) {
+      const parentCol = colleges.find((c) => c.id === itemCollegeId);
+      if (parentCol && ((filterCode && parentCol.code === filterCode) || (filterSlug && parentCol.slug === filterSlug))) {
+        return true;
+      }
+    }
+
+    return false;
   };
 
   const { isAllowed } = useRolePermissions();
@@ -1976,8 +2178,10 @@ export default function CollegeMasterPage() {
               onCollegeSelect={async (colg) => {
                 if (colg) {
                   const matched = colleges.find((c) => c.code === colg.colg_cd);
-                  if (matched && matched.id !== selectedCollegeFilter) {
-                    setSelectedCollegeFilter(matched.id);
+                  if (matched) {
+                    if (matched.id !== selectedCollegeFilter) {
+                      setSelectedCollegeFilter(matched.id);
+                    }
                     await syncBranchesForCollege(matched, true);
                   }
                 } else if (selectedCollegeFilter !== 'all') {
@@ -1987,13 +2191,17 @@ export default function CollegeMasterPage() {
             />
           ) : (
             <LiveCollegeCourseCascadingDropdown
-              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || userColgCd || ''}
+              selectedCollegeCode={colleges.find(c => c.id === selectedCollegeFilter)?.code || (selectedCollegeFilter !== 'all' ? selectedCollegeFilter : '') || userColgCd || ''}
               onCollegeSelect={async (colg) => {
                 if (colg) {
-                  const matched = colleges.find((c) => c.code === colg.colg_cd);
-                  if (matched && matched.id !== selectedCollegeFilter) {
-                    setSelectedCollegeFilter(matched.id);
-                    await syncCoursesForCollege(matched, true);
+                  const matched = colleges.find((c) => c.code === colg.colg_cd || c.id === colg.colg_cd || c.slug === colg.colg_cd);
+                  if (matched) {
+                    if (matched.id !== selectedCollegeFilter) {
+                      setSelectedCollegeFilter(matched.id);
+                    }
+                    if (activeTab === 'courses') {
+                      await syncCoursesForCollege(matched, true);
+                    }
                   }
                 } else if (selectedCollegeFilter !== 'all') {
                   setSelectedCollegeFilter('all');
@@ -2006,28 +2214,23 @@ export default function CollegeMasterPage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-1">
               {/* College Filter Selector */}
+              {/* College Filter Selector */}
               <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs shadow-sm shrink-0">
-                <span className="text-slate-500 dark:text-slate-600 dark:text-slate-400 font-semibold flex items-center gap-1">
+                <span className="text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1">
                   <span>🏛️</span> College:
                 </span>
                 <select
                   value={selectedCollegeFilter}
-                  disabled={userRole !== 'SUPER_ADMIN'}
                   onChange={(e) => handleCollegeFilterSelect(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-slate-900 dark:text-white font-bold focus:outline-none cursor-pointer disabled:cursor-not-allowed"
+                  className="bg-transparent text-slate-900 dark:text-white font-bold focus:outline-none cursor-pointer"
                 >
-                  {userRole === 'SUPER_ADMIN' && <option value="all">All Registered Colleges ({colleges.length})</option>}
+                  <option value="all">All Campuses ({colleges.length})</option>
                   {colleges.map((col) => (
                     <option key={col.id} value={col.id}>
                       {col.code ? `[#${col.code}] ` : ''}{col.name}
                     </option>
                   ))}
                 </select>
-                {userRole !== 'SUPER_ADMIN' && (
-                  <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 shrink-0 ml-1">
-                    🔒 Locked
-                  </span>
-                )}
               </div>
 
               {/* Search Bar */}
@@ -2057,7 +2260,7 @@ export default function CollegeMasterPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {activeTab === 'colleges' && (
+              {activeTab === 'colleges' && (userTenantSlug || getActiveTenantSlug() || '').toLowerCase().includes('srms') && (
                 <button
                   onClick={syncFromExternalApi}
                   disabled={syncing}
@@ -2073,7 +2276,7 @@ export default function CollegeMasterPage() {
                 <button
                   onClick={() => {
                     if (selectedCollegeFilter !== 'all') {
-                      const col = colleges.find(c => c.id === selectedCollegeFilter);
+                      const col = colleges.find(c => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter);
                       if (col) syncCoursesForCollege(col, true);
                     } else {
                       syncCoursesFromExternalApi();
@@ -2088,7 +2291,7 @@ export default function CollegeMasterPage() {
                     {syncing
                       ? 'Syncing Courses...'
                       : selectedCollegeFilter !== 'all'
-                        ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter)?.code : ''} Courses`
+                        ? `Sync ${colleges.find(c => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter)?.code ? '#' + colleges.find(c => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter)?.code : ''} Courses`
                         : 'Sync All from GetCourse'}
                   </span>
                 </button>
@@ -2419,7 +2622,21 @@ export default function CollegeMasterPage() {
                               </span>
                             </td>
                             <td className="p-4 text-right whitespace-nowrap min-w-[140px]">
-                              <ActionButtons onEdit={() => handleEdit(col)} onDelete={() => handleDelete(col.id)} />
+                              {!col.is_active ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestore(col)}
+                                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all inline-flex items-center gap-1.5 shadow-sm"
+                                  title="Restore / Reactivate College"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                  Restore
+                                </button>
+                              ) : (
+                                <ActionButtons onEdit={() => handleEdit(col)} onDelete={() => handleDelete(col.id)} />
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -2427,14 +2644,14 @@ export default function CollegeMasterPage() {
                     {/* 2. COURSES */}
                     {activeTab === 'courses' &&
                       courses
-                        .filter((c) => isMatchCollege(c.college_id))
+                        .filter((c) => isMatchCollege(c.college_id, c.college_code || (c as any).colg_cd || (c as any).code, c.college_slug))
                         .filter((c) =>
                           (c.name || (c as any).course_name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (c.code || (c as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (c.college_name || '').toLowerCase().includes((searchTerm || '').toLowerCase())
                         )
                         .map((crs) => {
-                          const col = colleges.find((c) => c.id === crs.college_id);
+                          const col = colleges.find((c) => c.id === crs.college_id || c.code === crs.college_code || c.slug === crs.college_slug);
                           const colName = col?.name || crs.college_name || 'SRMS Institution';
                           const colCode = col?.code || crs.college_code || '';
                           const isProf = crs.academic_system === 'professional';
@@ -2498,7 +2715,7 @@ export default function CollegeMasterPage() {
                     {activeTab === 'professionals' &&
                       getGroupedAcademicYears(
                         professionals
-                          .filter((p) => isMatchCollege(p.college_id))
+                          .filter((p) => isMatchCollege(p.college_id, p.college_code, p.college_slug))
                           .filter((p) =>
                             (p.phase_name || (p as any).name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                             (p.course_code || (p as any).course_cd || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
@@ -2509,16 +2726,16 @@ export default function CollegeMasterPage() {
                           <td className="p-4 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
                               <span>🏛️</span>
-                              <span className="font-semibold">{colleges.find((c) => c.id === grp.college_id)?.name || grp.college_name}</span>
+                              <span className="font-semibold">{colleges.find((c) => c.id === grp.college_id || c.code === grp.college_code || c.slug === grp.college_slug)?.name || grp.college_name}</span>
                             </div>
                           </td>
                           <td className="p-4 font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
-                            <span className="px-2.5 py-1 rounded bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 font-bold text-[11px] inline-flex items-center gap-1">
+                            <span className="px-2.5 py-1 rounded bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 font-bold text-[11px] inline-flex items-center gap-1.5">
                               🎓 {grp.course_name || grp.course_code}
                             </span>
                           </td>
                           <td className="p-4 font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                            <span className="px-2.5 py-1 rounded bg-slate-500/10 text-slate-700 dark:text-slate-300 border border-slate-500/20 font-bold text-[11px] inline-flex items-center gap-1">
+                            <span className="px-2.5 py-1 rounded bg-slate-500/10 text-slate-700 dark:text-slate-300 border border-slate-500/20 font-bold text-[11px] inline-flex items-center gap-1.5">
                               🏢 {grp.branch_name}
                             </span>
                           </td>
@@ -2584,7 +2801,7 @@ export default function CollegeMasterPage() {
                     {/* 4. BATCHES */}
                     {activeTab === 'batches' &&
                       batches
-                        .filter((b) => isMatchCollege(b.college_id))
+                        .filter((b) => isMatchCollege(b.college_id, b.college_code, b.college_slug))
                         .filter((b) =>
                           (b.code || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (b.course_code || (b as any).course_cd || (b as any).course_name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
@@ -2640,7 +2857,7 @@ export default function CollegeMasterPage() {
                     {/* 5. BRANCHES / DEPARTMENTS & SPECIALTIES */}
                     {activeTab === 'branches' &&
                       branches
-                        .filter((br) => isMatchCollege(br.college_id))
+                        .filter((br) => isMatchCollege(br.college_id, br.college_code, br.college_slug))
                         .filter((br) =>
                           (br.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (br.code || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
@@ -2651,7 +2868,7 @@ export default function CollegeMasterPage() {
                             <td className="p-4 font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <span>🏛️</span>
-                                <span>{colleges.find((c) => c.id === br.college_id)?.name || br.college_name || 'SRMS Institution'}</span>
+                                <span>{colleges.find((c) => c.id === br.college_id || c.code === br.college_code || c.slug === br.college_slug)?.name || br.college_name || 'SRMS Institution'}</span>
                               </div>
                             </td>
                             <td className="p-4 text-purple-600 dark:text-purple-300 font-bold font-mono whitespace-nowrap">
@@ -2688,7 +2905,7 @@ export default function CollegeMasterPage() {
                     {/* 6. GROUPS */}
                     {activeTab === 'groups' &&
                       groups
-                        .filter((g) => isMatchCollege(g.college_id))
+                        .filter((g) => isMatchCollege(g.college_id, (g as any).college_code, (g as any).college_slug))
                         .filter((g) =>
                           (g.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (g.code || '').toLowerCase().includes((searchTerm || '').toLowerCase())
@@ -2699,7 +2916,7 @@ export default function CollegeMasterPage() {
                             c.code === grp.course_id ||
                             c.course_cd === grp.course_id ||
                             c.code === (grp as any).course_code ||
-                            c.course_cd === (grp as any).course_cd ||
+                            c.course_cd === (grp as any).course_code ||
                             c.code === (grp as any).batch_course_cd ||
                             c.course_cd === (grp as any).batch_course_cd
                           );
@@ -2725,7 +2942,7 @@ export default function CollegeMasterPage() {
                               <td className="p-4 font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                 <div className="flex items-center gap-1.5">
                                   <span>🏛️</span>
-                                  <span>{colleges.find((c) => c.id === grp.college_id)?.name || grp.college_name || 'SRMS Institution'}</span>
+                                  <span>{colleges.find((c) => c.id === grp.college_id || c.code === (grp as any).college_code || c.slug === (grp as any).college_slug)?.name || grp.college_name || 'SRMS Institution'}</span>
                                 </div>
                               </td>
                               <td className="p-4 whitespace-nowrap">
@@ -2766,7 +2983,7 @@ export default function CollegeMasterPage() {
                     {/* 7. SESSIONS */}
                     {activeTab === 'sessions' &&
                       sessions
-                        .filter((s) => isMatchCollege(s.college_id))
+                        .filter((s) => isMatchCollege(s.college_id, (s as any).college_code, (s as any).college_slug))
                         .filter((s) =>
                           (s.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (s.session_cd ? String(s.session_cd).toLowerCase().includes((searchTerm || '').toLowerCase()) : false) ||
@@ -2782,7 +2999,7 @@ export default function CollegeMasterPage() {
                             <td className="p-4 font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <span>🏛️</span>
-                                <span>{colleges.find((c) => c.id === ses.college_id)?.name || ses.college_name || 'SRMS Institution'}</span>
+                                <span>{colleges.find((c) => c.id === ses.college_id || c.code === (ses as any).college_code || c.slug === (ses as any).college_slug)?.name || ses.college_name || 'SRMS Institution'}</span>
                               </div>
                             </td>
                             <td className="p-4 font-bold text-slate-900 dark:text-white">{ses.name || ses.session_name}</td>
@@ -2809,7 +3026,7 @@ export default function CollegeMasterPage() {
                     {/* 8. RESIDENCY / HOSTELLER / DAY SCHOLAR */}
                     {activeTab === 'residencies' &&
                       residencies
-                        .filter((r) => isMatchCollege(r.college_id))
+                        .filter((r) => isMatchCollege(r.college_id, (r as any).college_code, (r as any).college_slug))
                         .filter((r) =>
                           (r.category_name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                           (r.residency_type || '').toLowerCase().includes((searchTerm || '').toLowerCase())

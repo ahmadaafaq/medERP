@@ -190,6 +190,46 @@ const DEFAULT_COLLEGES: College[] = [
       card_radius: '20px',
     },
   },
+  {
+    code: 'rmribar',
+    colg_cd: 'rmribar',
+    name: 'Rajshree Medical Research Institute & Hospital Bareilly',
+    slug: 'rmribar',
+    domain: 'rajshreemri.in',
+    plan: 'enterprise',
+    primary_color: '#5B4BFF',
+    theme_config: {
+      primary_color: '#5B4BFF',
+      secondary_color: '#7867FF',
+      accent_color: '#F36C21',
+      sidebar_bg: '#2D2575',
+      header_bg: '#2D2575',
+      page_bg: '#F6F8FC',
+      card_bg: '#FFFFFF',
+      card_radius: '22px',
+      theme_mode: 'LIGHT',
+    },
+  },
+  {
+    code: 'rimt-bareilly',
+    colg_cd: 'rimt-bareilly',
+    name: 'Rajshree Institute Of Management And Technology',
+    slug: 'rimt-bareilly',
+    domain: 'rimt.mederp.app',
+    plan: 'enterprise',
+    primary_color: '#5B4BFF',
+    theme_config: {
+      primary_color: '#5B4BFF',
+      secondary_color: '#7867FF',
+      accent_color: '#F36C21',
+      sidebar_bg: '#2D2575',
+      header_bg: '#2D2575',
+      page_bg: '#F6F8FC',
+      card_bg: '#FFFFFF',
+      card_radius: '22px',
+      theme_mode: 'LIGHT',
+    },
+  },
 ];
 
 export default function LoginPage() {
@@ -284,8 +324,20 @@ export default function LoginPage() {
         applyRolePreset(urlRole.toUpperCase() as any);
       }
 
+      const matchCollege = (key: string | null) => {
+        if (!key) return null;
+        const k = key.toLowerCase().trim();
+        return DEFAULT_COLLEGES.find(
+          (c) =>
+            c.slug.toLowerCase() === k ||
+            String(c.code).toLowerCase() === k ||
+            String(c.colg_cd).toLowerCase() === k ||
+            (k.includes('rajshree') && (c.slug === 'rmribar' || c.slug === 'rimt-bareilly'))
+        );
+      };
+
       if (urlCollege) {
-        const found = DEFAULT_COLLEGES.find((c) => c.slug === urlCollege || String(c.code) === urlCollege);
+        const found = matchCollege(urlCollege);
         if (found) {
           setSelectedCollege(found);
           localStorage.setItem('colg_cd', String(found.colg_cd || found.code));
@@ -298,22 +350,28 @@ export default function LoginPage() {
       const savedColgCd = localStorage.getItem('colg_cd');
       const savedSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant');
       if (savedColgCd || savedSlug) {
-        const found = DEFAULT_COLLEGES.find(
-          (c) => String(c.colg_cd || c.code) === savedColgCd || c.slug === savedSlug
-        );
-        if (found) setSelectedCollege(found);
-      } else {
-        setSelectedCollege(DEFAULT_COLLEGES[0]);
-        localStorage.setItem('colg_cd', '1');
-        localStorage.setItem('tenantSlug', 'srms-cet-bareilly');
-        localStorage.setItem('selectedTenant', 'srms-cet-bareilly');
+        const found = matchCollege(savedSlug) || matchCollege(savedColgCd);
+        if (found) {
+          setSelectedCollege(found);
+          return;
+        }
       }
+
+      setSelectedCollege(DEFAULT_COLLEGES[0]);
+      localStorage.setItem('colg_cd', '1');
+      localStorage.setItem('tenantSlug', 'srms-cet-bareilly');
+      localStorage.setItem('selectedTenant', 'srms-cet-bareilly');
     }
   };
 
   const fetchCollegesList = async () => {
     try {
       const map = new Map<string, College>();
+
+      // 0. Seed with DEFAULT_COLLEGES so all primary colleges (SRMS, Rajshree, etc.) are always present immediately
+      DEFAULT_COLLEGES.forEach((c) => {
+        map.set(c.slug, c);
+      });
 
       // 1. Fetch active institutions from /api/college-master/colleges
       try {
@@ -361,7 +419,10 @@ export default function LoginPage() {
               : [];
           firmsList.forEach((f) => {
             if (f.status === 'SUSPENDED' || f.status === 'INACTIVE' || f.is_active === false) {
-              map.delete(f.slug);
+              // Never delete default primary colleges
+              if (!DEFAULT_COLLEGES.some((dc) => dc.slug === f.slug)) {
+                map.delete(f.slug);
+              }
               return;
             }
             if (f.slug && f.title) {
@@ -504,6 +565,10 @@ export default function LoginPage() {
           localStorage.setItem('college_name', institutionName);
           localStorage.setItem('colg_name', institutionName);
           localStorage.setItem('tenantName', institutionName);
+          if (authData.user?.tenantId) {
+            localStorage.setItem('tenantId', authData.user.tenantId);
+            document.cookie = `auth_tenant_id=${authData.user.tenantId}; path=/; max-age=604800; SameSite=Lax`;
+          }
 
           // Set cookie for Next.js Middleware route guard
           document.cookie = `auth_token=${authData.accessToken}; path=/; max-age=604800; SameSite=Lax`;

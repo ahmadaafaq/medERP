@@ -813,6 +813,34 @@ export class TenantSchemaService implements OnApplicationBootstrap {
           END $$;
         `).catch(() => { });
 
+        // ── Colleges (added in tenant institutional migration) ───────────────
+        await runner.query(`
+          CREATE TABLE IF NOT EXISTS "${schema}".colleges (
+            id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+            code          VARCHAR(50),
+            colg_cd       VARCHAR(50),
+            name          VARCHAR(255) NOT NULL,
+            slug          VARCHAR(100),
+            domain        VARCHAR(255),
+            plan          VARCHAR(50)  DEFAULT 'enterprise',
+            primary_color VARCHAR(50)  DEFAULT '#5B4BFF',
+            logo_url      TEXT,
+            is_active     BOOLEAN      DEFAULT true,
+            created_at    TIMESTAMPTZ  DEFAULT NOW(),
+            updated_at    TIMESTAMPTZ  DEFAULT NOW()
+          );
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS slug VARCHAR(100);
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS domain VARCHAR(255);
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'enterprise';
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS primary_color VARCHAR(50) DEFAULT '#5B4BFF';
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS logo_url TEXT;
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+          ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+        `).catch(() => { });
+
         // ── Courses (added in later migration) ───────────────────────────────
         await runner.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".courses (
@@ -1472,6 +1500,34 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         updated_at          TIMESTAMPTZ  DEFAULT NOW()
       )
     `);
+
+    // ── Colleges (Tenant Institutional Master) ─────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".colleges (
+        id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        code          VARCHAR(50),
+        colg_cd       VARCHAR(50),
+        name          VARCHAR(255) NOT NULL,
+        slug          VARCHAR(100),
+        domain        VARCHAR(255),
+        plan          VARCHAR(50)  DEFAULT 'enterprise',
+        primary_color VARCHAR(50)  DEFAULT '#5B4BFF',
+        logo_url      TEXT,
+        is_active     BOOLEAN      DEFAULT true,
+        created_at    TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ  DEFAULT NOW()
+      );
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS slug VARCHAR(100);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS domain VARCHAR(255);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'enterprise';
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS primary_color VARCHAR(50) DEFAULT '#5B4BFF';
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS logo_url TEXT;
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    `).catch(() => { });
 
     // ── Departments ────────────────────────────────────────────────────────
     await runner.query(`

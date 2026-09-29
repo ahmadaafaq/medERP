@@ -153,25 +153,11 @@ export default function StaffAdminPage() {
         const colJson = await colRes.json();
         const colList = colJson.data || colJson;
         if (Array.isArray(colList)) {
-          if (role !== 'SUPER_ADMIN') {
-            const myCol = colList.find((c: any) => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
-            const storedColgName =
-              typeof window !== 'undefined'
-                ? localStorage.getItem('college_name') ||
-                  localStorage.getItem('tenantName') ||
-                  localStorage.getItem('collegeName')
-                : '';
-            const fallbackColgName =
-              storedColgName ||
-              (userSlug.includes('rimt') || userSlug.includes('rajshree')
-                ? 'Rajshree Institute of Management & Technology'
-                : userSlug.includes('srms')
-                ? 'SRMS CET, Bareilly'
-                : 'College Administration');
-            loadedColleges = myCol ? [myCol] : [{ id: userColg, code: userColg, name: fallbackColgName, slug: userSlug }];
-            setSelectedCollegeFilter(loadedColleges[0].code || loadedColleges[0].id || '1');
+          loadedColleges = colList;
+          const myCol = colList.find((c: any) => String(c.colg_cd) === String(userColg) || String(c.code) === String(userColg) || c.slug === userSlug);
+          if (myCol) {
+            setSelectedCollegeFilter(myCol.code || myCol.id || 'all');
           } else {
-            loadedColleges = colList;
             setSelectedCollegeFilter('all');
           }
           setColleges(loadedColleges);
@@ -689,14 +675,14 @@ export default function StaffAdminPage() {
               <div className="relative flex items-center">
                 <select
                   value={selectedCollegeFilter}
-                  disabled={userRole !== 'SUPER_ADMIN'}
+                  disabled={colleges.length === 0}
                   onChange={(e) => {
                     setSelectedCollegeFilter(e.target.value);
                     setSelectedDeptFilter('all');
                   }}
                   className="w-full h-11 px-3.5 pr-8 text-xs font-bold rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-800 dark:text-white shadow-sm disabled:cursor-not-allowed appearance-none cursor-pointer truncate"
                 >
-                  {userRole === 'SUPER_ADMIN' && <option value="all">🏛️ All Colleges ({colleges.length})</option>}
+                  <option value="all">🏛️ All Colleges ({colleges.length})</option>
                   {colleges.map((col) => (
                     <option key={col.id} value={col.code || col.id}>
                       🏛️ [#{col.code || col.id}] {col.name}
@@ -704,16 +690,9 @@ export default function StaffAdminPage() {
                   ))}
                 </select>
                 <div className="absolute right-3 pointer-events-none flex items-center gap-1">
-                  {userRole !== 'SUPER_ADMIN' ? (
-                    <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
-                      <span>🔒</span>
-                      <span>Locked</span>
-                    </span>
-                  ) : (
-                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                    </svg>
-                  )}
+                  <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
                 </div>
               </div>
 

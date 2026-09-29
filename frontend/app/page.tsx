@@ -76,6 +76,32 @@ const FEATURED_DEMO_INSTITUTIONS: TenantInstitution[] = [
     courses: ['M.B.B.S. (NMC)', 'M.D. General Medicine', 'M.S. General Surgery', 'M.D. Radio-Diagnosis', 'Super Specialty'],
     is_active: true,
   },
+  {
+    code: 'rmribar',
+    name: 'Rajshree Medical Research Institute & Hospital Bareilly',
+    shortName: 'RMRI Bareilly',
+    location: 'Bareilly, Uttar Pradesh',
+    category: 'MED',
+    type: 'Medical University & Hospital',
+    icon: '🏥',
+    slug: 'rmribar',
+    domain: 'rajshreemri.in',
+    courses: ['M.B.B.S. (NMC)', 'M.D. / M.S.', 'Clinical Postings'],
+    is_active: true,
+  },
+  {
+    code: 'rimt-bareilly',
+    name: 'Rajshree Institute of Management and Technology',
+    shortName: 'RIMT Bareilly',
+    location: 'Bareilly, Uttar Pradesh',
+    category: 'NONMED',
+    type: 'Engineering & Higher Education',
+    icon: '⚙️',
+    slug: 'rimt-bareilly',
+    domain: 'rimt.mederp.app',
+    courses: ['B.Tech Computer Science', 'Polytechnic Diploma', 'MBA', 'BBA'],
+    is_active: true,
+  },
 ];
 
 export default function UniCampusBrandHomePage() {
@@ -131,6 +157,11 @@ export default function UniCampusBrandHomePage() {
     try {
       const map = new Map<string, TenantInstitution>();
 
+      // Pre-seed demo/primary institutions
+      FEATURED_DEMO_INSTITUTIONS.forEach((inst) => {
+        map.set(inst.slug, inst);
+      });
+
       // 1. Fetch from college-master
       try {
         const res = await fetch('/api/college-master/colleges');
@@ -149,6 +180,7 @@ export default function UniCampusBrandHomePage() {
               slug.includes('nursing') ||
               slug.includes('iahs') ||
               slug.includes('hospital') ||
+              slug === 'rmribar' ||
               item.name?.toLowerCase().includes('medical');
 
             const logoUrl = item.logo_url || (slug.startsWith('srms') ? '/srms-logo.png' : undefined);
@@ -193,7 +225,9 @@ export default function UniCampusBrandHomePage() {
               : [];
           firmsList.forEach((f) => {
             if (f.status === 'SUSPENDED' || f.status === 'INACTIVE' || f.is_active === false) {
-              map.delete(f.slug);
+              if (!FEATURED_DEMO_INSTITUTIONS.some((inst) => inst.slug === f.slug)) {
+                map.delete(f.slug);
+              }
               return;
             }
             if (f.slug && f.title) {

@@ -27,7 +27,7 @@ function formatSrmsMediaUrl(rawPath: string | null | undefined): string | null {
   return null;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8081';
+const BACKEND_URL = process.env.BACKEND_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '') : 'http://100.63.22.73:8081');
 
 async function fetchFromPostgres(tenantSlug: string, colg: string, searchvalue: string) {
   try {

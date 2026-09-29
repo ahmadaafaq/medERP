@@ -379,18 +379,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
       const found = list.find((c: College) => String(c.code || c.id) === savedColgCd || c.slug === currentSlug || c.code === currentSlug);
 
       let filteredList = list;
-      if (roleVal !== 'SUPER_ADMIN') {
-        if (found) {
-          filteredList = [found];
-        } else {
-          filteredList = [{
-            id: '1',
-            code: savedColgCd || '1',
-            name: 'SRMS College of Engineering & Technology, Bareilly',
-            slug: currentSlug,
-          }];
-        }
-      } else if (filteredList.length === 0) {
+      if (filteredList.length === 0) {
         filteredList = [{
           id: '1',
           code: savedColgCd || '1',
@@ -1082,9 +1071,9 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                 <div className="relative flex items-center">
                   <select
                     value={selectedCollege}
-                    disabled={userRole !== 'SUPER_ADMIN'}
+                    disabled={colleges.length === 0}
                     onChange={(e) => handleCollegeChange(e.target.value)}
-                    className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF] disabled:cursor-not-allowed appearance-none cursor-pointer truncate pr-14"
+                    className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F6F8FC] dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-[#5B4BFF] disabled:cursor-not-allowed appearance-none cursor-pointer truncate pr-8"
                   >
                     {colleges.map((c) => (
                       <option key={c.code || c.slug || c.id} value={String(c.code || c.id || '1')}>
@@ -1093,14 +1082,7 @@ export default function LogbookLeaderboardView({ role = 'admin' }: { role?: 'adm
                     ))}
                   </select>
                   <div className="absolute right-2 pointer-events-none flex items-center gap-1">
-                    {userRole !== 'SUPER_ADMIN' ? (
-                      <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
-                        <span>🔒</span>
-                        <span>Locked</span>
-                      </span>
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                    )}
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                   </div>
                 </div>
               </div>

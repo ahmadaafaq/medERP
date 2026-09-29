@@ -31,47 +31,103 @@ export class CollegeMasterController {
   // ─── 1. COLLEGES ──────────────────────────────────────────────────────────
   @Public()
   @Get('colleges')
-  @ApiOperation({ summary: 'List Colleges (Tenants) — public or user-scoped' })
-  async listColleges(@CurrentUser() user?: JwtPayload) {
-    const data = await this.collegeMasterService.listColleges(user);
+  @ApiOperation({ summary: 'List Colleges (Tenants) — tenant-scoped' })
+  async listColleges(
+    @TenantSlug() tenant: string,
+    @CurrentUser() user?: JwtPayload,
+    @Query('include_inactive') includeInactive?: string,
+    @Query('tenantId') tenantIdQuery?: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('x-tenant-slug') tenantSlugHeader?: string,
+  ) {
+    const targetTenant = (tenantIdQuery || tenantIdHeader || tenant || tenantSlugHeader || user?.tenantId || user?.tenantSlug || undefined);
+    const data = await this.collegeMasterService.listColleges(user, targetTenant, includeInactive === 'true');
     return { success: true, data };
   }
 
   @Post('colleges/sync-external')
   @ApiOperation({ summary: 'Sync Colleges from SRMS ERP portal API' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
-  async syncExternalCollegesPost() {
-    const data = await this.collegeMasterService.syncExternalColleges();
-    return { success: true, message: 'Colleges synced successfully from SRMS portal API', data };
+  async syncExternalCollegesPost(
+    @TenantSlug() tenant: string,
+    @CurrentUser() user?: JwtPayload,
+    @Query('tenantId') tenantIdQuery?: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+  ) {
+    const targetTenant = (tenantIdQuery || tenantIdHeader || tenant || user?.tenantId || user?.tenantSlug || undefined);
+    const data = await this.collegeMasterService.syncExternalColleges(targetTenant);
+    return { success: true, message: 'Colleges synced successfully from SRMS portal API and saved to PostgreSQL under tenant', data };
   }
 
   @Get('colleges/sync-external')
   @ApiOperation({ summary: 'Sync Colleges from SRMS ERP portal API (GET trigger)' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
-  async syncExternalCollegesGet() {
-    const data = await this.collegeMasterService.syncExternalColleges();
-    return { success: true, message: 'Colleges synced successfully from SRMS portal API', data };
+  async syncExternalCollegesGet(
+    @TenantSlug() tenant: string,
+    @CurrentUser() user?: JwtPayload,
+    @Query('tenantId') tenantIdQuery?: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+  ) {
+    const targetTenant = (tenantIdQuery || tenantIdHeader || tenant || user?.tenantId || user?.tenantSlug || undefined);
+    const data = await this.collegeMasterService.syncExternalColleges(targetTenant);
+    return { success: true, message: 'Colleges synced successfully from SRMS portal API and saved to PostgreSQL under tenant', data };
   }
 
   @Post('colleges')
-  @ApiOperation({ summary: 'Create new College' })
+  @ApiOperation({ summary: 'Create new College under tenant' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
-  async createCollege(@Body() dto: CreateCollegeDto) {
-    return this.collegeMasterService.createCollege(dto);
+  async createCollege(
+    @Body() dto: CreateCollegeDto,
+    @TenantSlug() tenant: string,
+    @Query('tenantId') tenantIdQuery?: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const targetTenant = (tenantIdQuery || tenantIdHeader || tenant || user?.tenantId || user?.tenantSlug || undefined);
+    return this.collegeMasterService.createCollege(dto, targetTenant);
   }
 
   @Put('colleges/:id')
-  @ApiOperation({ summary: 'Update College' })
+  @ApiOperation({ summary: 'Update College under tenant' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
-  async updateCollege(@Param('id') id: string, @Body() dto: UpdateCollegeDto) {
-    return this.collegeMasterService.updateCollege(id, dto);
+  async updateCollege(
+    @Param('id') id: string,
+    @Body() dto: UpdateCollegeDto,
+    @TenantSlug() tenant: string,
+    @Query('tenantId') tenantIdQuery?: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const targetTenant = (tenantIdQuery || tenantIdHeader || tenant || user?.tenantId || user?.tenantSlug || undefined);
+    return this.collegeMasterService.updateCollege(id, dto, targetTenant);
   }
 
   @Delete('colleges/:id')
-  @ApiOperation({ summary: 'Delete College (Soft Delete)' })
-  @Roles(UserRole.SUPER_ADMIN)
-  async deleteCollege(@Param('id') id: string) {
-    return this.collegeMasterService.deleteCollege(id);
+  @ApiOperation({ summary: 'Remove College from tenant (does NOT delete globally)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async deleteCollege(
+    @Param('id') id: string,
+    @TenantSlug() tenant: string,
+    @Query('tenantId') tenantIdQuery?: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const targetTenant = (tenantIdQuery || tenantIdHeader || tenant || user?.tenantId || user?.tenantSlug || undefined);
+    return this.collegeMasterService.deleteCollege(id, targetTenant);
+  }
+
+  @Post('colleges/:id/restore')
+  @ApiOperation({ summary: 'Restore / Reactivate College under tenant' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async restoreCollege(
+    @Param('id') id: string,
+    @TenantSlug() tenant: string,
+    @Query('tenantId') tenantIdQuery?: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const targetTenant = (tenantIdQuery || tenantIdHeader || tenant || user?.tenantId || user?.tenantSlug || undefined);
+    return this.collegeMasterService.restoreCollege(id, targetTenant);
   }
 
   // Live Portal Proxy Endpoints

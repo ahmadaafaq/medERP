@@ -18,6 +18,15 @@ import {
 } from './dto/college-master.dto';
 import { UserRole } from '../common/enums/role.enum';
 
+export interface ResolvedTenantContext {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  tenantCode: string;
+  isSrms: boolean;
+  isActive: boolean;
+}
+
 export const SRMS_FIRM_LOCATIONS = [
   { locid: '1', name: 'SRMS IMS, BAREILLY', code: '1', slug: 'srms-ims' },
   { locid: '2', name: 'SRMS FIMC, LUCKNOW', code: '2', slug: 'srms-fimc' },
@@ -254,6 +263,120 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     }, 5000);
   }
 
+  async resolveTenantContext(user?: any, identifier?: string | null): Promise<ResolvedTenantContext | null> {
+    const raw = (identifier || user?.tenantId || user?.tenantSlug || '').trim();
+    if (!raw || raw === 'all') return null;
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
+    const resolvedSlug = this.tenantSchemaService.resolveTenantSlug(raw);
+
+    let rows: any[] = [];
+    if (isUuid) {
+      rows = await this.ds.query(
+        `SELECT id, name, slug, code, domain, is_active FROM public.tenants WHERE id::text = $1 LIMIT 1`,
+        [raw],
+      ).catch(() => []);
+    } else {
+      rows = await this.ds.query(
+        `SELECT id, name, slug, code, domain, is_active FROM public.tenants
+         WHERE LOWER(slug) = LOWER($1) OR LOWER(slug) = LOWER($2) OR LOWER(code) = LOWER($1)
+         LIMIT 1`,
+        [raw, resolvedSlug],
+      ).catch(() => []);
+    }
+
+    if (rows.length === 0) {
+      const firmRes = await this.ds.query(
+        `SELECT id, title AS name, slug, code, domain, (status = 'ACTIVE') AS is_active FROM public.firms
+         WHERE id::text = $1 OR LOWER(slug) = LOWER($1) OR LOWER(slug) = LOWER($2) OR LOWER(code) = LOWER($1)
+         LIMIT 1`,
+        [raw, resolvedSlug],
+      ).catch(() => []);
+      rows = firmRes;
+    }
+
+    if (rows.length === 0) {
+      if (user?.tenantId || user?.tenantSlug) {
+        rows = await this.ds.query(
+          `SELECT id, name, slug, code, domain, is_active FROM public.tenants
+           WHERE id::text = $1 OR LOWER(slug) = LOWER($2)
+           LIMIT 1`,
+          [user.tenantId || null, user.tenantSlug || null],
+        ).catch(() => []);
+      }
+    }
+
+    if (rows.length === 0) {
+      const cleanSlug = raw.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/(^-|-$)/g, '');
+      const cleanName = user?.collegeName || user?.tenantName || cleanSlug.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      rows = await this.ds.query(
+        `INSERT INTO public.tenants (name, slug, code, domain, plan, is_active, schema_provisioned)
+         VALUES ($1, $2, $2, $3, 'enterprise', true, true)
+         ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id, name, slug, code, domain, is_active`,
+        [cleanName, cleanSlug, `${cleanSlug}.mederp.app`],
+      ).catch(() => []);
+    }
+
+    if (rows.length === 0) return null;
+
+    const row = rows[0];
+    const nameLower = (row.name || '').toLowerCase();
+    const slugLower = (row.slug || '').toLowerCase();
+    const isSrms = nameLower.includes('srms') || slugLower.includes('srms') || nameLower.includes('shri ram murti');
+
+    return {
+      tenantId: row.id,
+      tenantName: row.name,
+      tenantSlug: row.slug,
+      tenantCode: row.code || '',
+      isSrms,
+      isActive: row.is_active ?? true,
+    };
+  }
+
+  async seedSrmsCollegesForTenant(schema: string, tenantId?: string): Promise<void> {
+    for (const c of FALLBACK_SRMS_COLLEGES) {
+      const cd = String(c.colg_cd).trim();
+      const name = String(c.colg_name).trim();
+      const slug = generateCollegeSlug(cd, name);
+      const domain = slug === 'srms-ims' ? 'srms.mederp.app' : `${slug}.mederp.app`;
+
+      const existing = await this.ds.query(
+        `SELECT id FROM "${schema}".colleges WHERE code = $1 OR colg_cd = $1 OR slug = $2 LIMIT 1`,
+        [cd, slug],
+      ).catch(() => []);
+
+      if (existing.length === 0) {
+        await this.ds.query(
+          `INSERT INTO "${schema}".colleges (tenant_id, code, colg_cd, name, slug, domain, plan, primary_color, is_active)
+           VALUES ($1, $2, $2, $3, $4, $5, 'enterprise', '#5B4BFF', true)`,
+          [tenantId || null, cd, name, slug, domain],
+        ).catch(() => {});
+      }
+    }
+  }
+
+  async seedNonSrmsCollegeForTenant(schema: string, ctx: ResolvedTenantContext): Promise<void> {
+    const cd = ctx.tenantCode || ctx.tenantSlug;
+    const name = ctx.tenantName || 'Main Campus';
+    const slug = ctx.tenantSlug;
+    const domain = `${slug}.mederp.app`;
+
+    const existing = await this.ds.query(
+      `SELECT id FROM "${schema}".colleges WHERE code = $1 OR colg_cd = $1 OR slug = $2 LIMIT 1`,
+      [cd, slug],
+    ).catch(() => []);
+
+    if (existing.length === 0) {
+      await this.ds.query(
+        `INSERT INTO "${schema}".colleges (tenant_id, code, colg_cd, name, slug, domain, plan, primary_color, is_active)
+         VALUES ($1, $2, $2, $3, $4, $5, 'enterprise', '#5B4BFF', true)`,
+        [ctx.tenantId || null, cd, name, slug, domain],
+      ).catch(() => {});
+    }
+  }
+
   private async resolveTenantSlug(collegeIdOrSlug?: string): Promise<string> {
     if (!collegeIdOrSlug || collegeIdOrSlug === 'all') return 'srms-ims';
     const clean = String(collegeIdOrSlug).trim();
@@ -280,15 +403,17 @@ export class CollegeMasterService implements OnApplicationBootstrap {
   }
 
   // ─── 1. COLLEGES (PUBLIC.TENANTS) ─────────────────────────────────────────
-  async syncExternalColleges(): Promise<any[]> {
-    this.logger.log('Syncing colleges from external SRMS ERP API (https://myportal.srms.ac.in/SRMSERP/Home/GetCollege)...');
+  async syncExternalColleges(targetTenantIdentifier?: string | null): Promise<any[]> {
+    const ctx = await this.resolveTenantContext(undefined, targetTenantIdentifier);
+    if (!ctx || !ctx.isSrms) {
+      this.logger.warn(`syncExternalColleges skipped: tenant ${targetTenantIdentifier} is not an SRMS tenant.`);
+      return ctx ? this.listColleges(undefined, ctx.tenantSlug, true) : [];
+    }
 
-    // 1. Ensure column 'code' exists on public.tenants
-    await this.ds.query(`
-      ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS code VARCHAR(50);
-    `).catch(() => {});
+    const schema = `tenant_${ctx.tenantSlug}`;
+    await this.ensureCollegesTable(schema);
 
-    // 2. Fetch external colleges
+    // Fetch external SRMS colleges
     let externalList: Array<{ colg_cd: string; colg_name: string }> = [];
     try {
       const controller = new AbortController();
@@ -311,50 +436,40 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       externalList = FALLBACK_SRMS_COLLEGES;
     }
 
-    // 3. Upsert each college into public.tenants
     for (const item of externalList) {
       const cd = String(item.colg_cd).trim();
       const name = String(item.colg_name).trim();
       const slug = generateCollegeSlug(cd, name);
       const domain = slug === 'srms-ims' ? 'srms.mederp.app' : `${slug}.mederp.app`;
-      const isPrimary = slug === 'srms-ims';
 
-      const existing = await this.ds.query(
-        `SELECT id, slug, code, schema_provisioned FROM public.tenants WHERE code = $1 OR slug = $2 LIMIT 1`,
+      const existingInTenant = await this.ds.query(
+        `SELECT id FROM "${schema}".colleges WHERE code = $1 OR colg_cd = $1 OR slug = $2 LIMIT 1`,
         [cd, slug],
-      );
+      ).catch(() => []);
 
-      if (existing.length > 0) {
+      if (existingInTenant.length > 0) {
         await this.ds.query(
-          `UPDATE public.tenants
+          `UPDATE "${schema}".colleges
            SET name = $1,
                code = $2,
+               colg_cd = $2,
                slug = $3,
                domain = COALESCE(domain, $4),
-               plan = COALESCE(plan, 'enterprise'),
-               primary_color = COALESCE(primary_color, '#6366F1'),
-               is_active = true,
-               schema_provisioned = CASE WHEN $5 = true THEN true ELSE schema_provisioned END,
                updated_at = NOW()
-           WHERE id = $6`,
-          [name, cd, slug, domain, isPrimary, existing[0].id],
-        );
+           WHERE id = $5`,
+          [name, cd, slug, domain, existingInTenant[0].id],
+        ).catch(() => {});
       } else {
         await this.ds.query(
-          `INSERT INTO public.tenants (name, code, slug, domain, plan, primary_color, is_active, schema_provisioned)
-           VALUES ($1, $2, $3, $4, 'enterprise', '#6366F1', true, $5)`,
-          [name, cd, slug, domain, isPrimary],
-        );
+          `INSERT INTO "${schema}".colleges (tenant_id, name, code, colg_cd, slug, domain, plan, primary_color, is_active)
+           VALUES ($1, $2, $3, $3, $4, $5, 'enterprise', '#5B4BFF', true)`,
+          [ctx.tenantId || null, name, cd, slug, domain],
+        ).catch(() => {});
       }
     }
 
-    // 4. Remove any stale dummy tenants without code (except srms-ims)
-    await this.ds.query(`
-      DELETE FROM public.tenants WHERE (code IS NULL OR code = '') AND slug NOT IN ('srms-ims', 'srms');
-    `).catch(() => {});
-
-    this.logger.log(`Successfully synced ${externalList.length} SRMS colleges into public.tenants.`);
-    return this.listColleges();
+    this.logger.log(`Successfully synced ${externalList.length} SRMS colleges into ${schema}.colleges.`);
+    return this.listColleges(undefined, ctx.tenantSlug, true);
   }
 
   async fetchLiveColleges(): Promise<any[]> {
@@ -1095,78 +1210,199 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return allSyncedEmployees;
   }
 
-  async listColleges(user?: any): Promise<any[]> {
+  async ensureCollegesTable(schema: string): Promise<void> {
+    await this.ds.query(`CREATE SCHEMA IF NOT EXISTS "${schema}";`).catch(() => {});
+    await this.ds.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".colleges (
+        id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id     UUID,
+        code          VARCHAR(50),
+        colg_cd       VARCHAR(50),
+        name          VARCHAR(255) NOT NULL,
+        slug          VARCHAR(100),
+        domain        VARCHAR(255),
+        plan          VARCHAR(50)  DEFAULT 'enterprise',
+        primary_color VARCHAR(50)  DEFAULT '#5B4BFF',
+        logo_url      TEXT,
+        is_active     BOOLEAN      DEFAULT true,
+        created_at    TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ  DEFAULT NOW()
+      );
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS tenant_id UUID;
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS slug VARCHAR(100);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS domain VARCHAR(255);
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'enterprise';
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS primary_color VARCHAR(50) DEFAULT '#5B4BFF';
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS logo_url TEXT;
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+      ALTER TABLE "${schema}".colleges ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    `).catch(() => {});
+  }
+
+  async listColleges(user?: any, tenantIdentifier?: string | null, includeInactive = false): Promise<any[]> {
     await this.ds.query(`
       ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS code VARCHAR(50);
       ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS logo_url TEXT;
     `).catch(() => {});
     const isSuperAdmin = user && (user.role === UserRole.SUPER_ADMIN || user.role === 'SUPER_ADMIN' || user.role === 'owner');
-    if (user && user.role && !isSuperAdmin && user.tenantSlug) {
-      const rows = await this.ds.query(
-        `SELECT t.id, t.code, t.name, t.slug, t.domain, t.plan, t.primary_color,
+
+    const effectiveTenant = (user && !isSuperAdmin && (user.tenantId || user.tenantSlug))
+      ? (user.tenantId || user.tenantSlug)
+      : (tenantIdentifier || user?.tenantId || user?.tenantSlug);
+
+    if (effectiveTenant && effectiveTenant !== 'all') {
+      const ctx = await this.resolveTenantContext(user, effectiveTenant);
+      if (ctx) {
+        const schema = `tenant_${ctx.tenantSlug}`;
+        await this.ensureCollegesTable(schema);
+
+        // Check count
+        const countRes = await this.ds.query(`SELECT COUNT(*)::int as count FROM "${schema}".colleges`).catch(() => [{ count: 0 }]);
+        const rowCount = Number(countRes[0]?.count || 0);
+
+        if (rowCount === 0) {
+          if (ctx.isSrms) {
+            await this.seedSrmsCollegesForTenant(schema, ctx.tenantId);
+          } else {
+            await this.seedNonSrmsCollegeForTenant(schema, ctx);
+          }
+        }
+
+        const activeFilter = includeInactive ? '' : 'WHERE is_active = true';
+        let tenantRows = await this.ds.query(
+          `SELECT id, code, colg_cd, name, slug, domain, plan, primary_color, logo_url, is_active, tenant_id, created_at
+           FROM "${schema}".colleges
+           ${activeFilter}
+           ORDER BY CAST(NULLIF(regexp_replace(code, '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, name ASC`
+        ).catch(() => []);
+
+        let rows = (tenantRows || []).map((r: any) => ({
+          ...r,
+          code: r.code || r.colg_cd,
+          colg_cd: r.colg_cd || r.code,
+        }));
+
+        if (ctx.isSrms) {
+          rows = rows.filter((r: any) => {
+            const nameLower = (r.name || '').toLowerCase();
+            const slugLower = (r.slug || '').toLowerCase();
+            const cd = String(r.code || r.colg_cd || '').trim();
+            return slugLower.includes('srms') || nameLower.includes('srms') || nameLower.includes('shri ram murti') || ['1','2','3','4','5','6','7','8','9','10','11','12','13','14'].includes(cd);
+          });
+        } else {
+          // Strictly exclude any SRMS college for non-SRMS tenants
+          rows = rows.filter((r: any) => {
+            const nameLower = (r.name || '').toLowerCase();
+            const slugLower = (r.slug || '').toLowerCase();
+            return !slugLower.includes('srms') && !nameLower.includes('srms') && !nameLower.includes('shri ram murti');
+          });
+        }
+
+        return rows;
+      }
+    }
+
+    if (user && (user.tenantId || user.tenantSlug) && !isSuperAdmin) {
+      return this.listColleges(user, user.tenantId || user.tenantSlug, includeInactive);
+    }
+
+    // Only SUPER_ADMIN with tenant='all' or public portal queries public.tenants
+    const whereClause = includeInactive ? '' : 'WHERE t.is_active = true';
+    const firmWhereClause = includeInactive ? '' : "WHERE f.status IN ('ACTIVE', 'TRIAL')";
+    let rows = await this.ds.query(
+      `SELECT DISTINCT ON (slug) id, code, name, slug, domain, plan, primary_color, logo_url, is_active, schema_provisioned, created_at
+       FROM (
+         SELECT t.id, COALESCE(t.code, t.slug) AS code, t.name, t.slug, t.domain, t.plan, t.primary_color,
                 COALESCE(t.logo_url, f.logo_url) AS logo_url,
                 t.is_active, t.schema_provisioned, t.created_at
          FROM public.tenants t
          LEFT JOIN public.firms f ON LOWER(f.slug) = LOWER(t.slug)
-         WHERE (LOWER(t.slug) = LOWER($1) OR t.code = $2) AND t.is_active = true
-         LIMIT 1`,
-        [user.tenantSlug, user.colgCd || '1'],
-      );
-      if (rows.length > 0) return rows;
-    }
-    const whereClause = isSuperAdmin ? '' : 'WHERE t.is_active = true';
-    const rows = await this.ds.query(
-      `SELECT DISTINCT ON (t.code) t.id, t.code, t.name, t.slug, t.domain, t.plan, t.primary_color,
-              COALESCE(t.logo_url, f.logo_url) AS logo_url,
-              t.is_active, t.schema_provisioned, t.created_at
-       FROM public.tenants t
-       LEFT JOIN public.firms f ON LOWER(f.slug) = LOWER(t.slug)
-       ${whereClause}
-       ORDER BY t.code, CAST(NULLIF(regexp_replace(t.code, '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, t.name ASC`,
+         ${whereClause}
+
+         UNION ALL
+
+         SELECT f.id, f.slug AS code, f.title AS name, f.slug, f.domain, f.level_type::text AS plan, f.theme_color AS primary_color,
+                f.logo_url, (f.status = 'ACTIVE' OR f.status = 'TRIAL') AS is_active, true AS schema_provisioned, f.created_at
+         FROM public.firms f
+         ${firmWhereClause}
+       ) combined
+       ORDER BY slug, (CASE WHEN code ~ '^[0-9]+$' THEN 0 ELSE 1 END), is_active DESC`,
     );
-    if (rows.length === 0 && isSuperAdmin) {
-      return this.syncExternalColleges();
+
+    const isSrmsTenantContext = (effectiveTenant && effectiveTenant.toLowerCase().includes('srms')) || (user?.tenantSlug && user.tenantSlug.toLowerCase().includes('srms'));
+    if (isSrmsTenantContext) {
+      rows = rows.filter((r: any) => {
+        const nameLower = (r.name || '').toLowerCase();
+        const slugLower = (r.slug || '').toLowerCase();
+        const cd = String(r.code || '').trim();
+        return slugLower.includes('srms') || nameLower.includes('srms') || nameLower.includes('shri ram murti') || ['1','2','3','4','5','6','7','8','9','10','11','12','13','14'].includes(cd);
+      });
     }
-    return rows.sort((a: any, b: any) => (parseInt(a.code, 10) || 0) - (parseInt(b.code, 10) || 0));
+
+    return rows.sort((a: any, b: any) => {
+      const aNum = parseInt(a.code, 10);
+      const bNum = parseInt(b.code, 10);
+      if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+      if (!isNaN(aNum)) return -1;
+      if (!isNaN(bNum)) return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
   }
 
-  async createCollege(dto: CreateCollegeDto) {
-    await this.ds.query(`ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS code VARCHAR(50);`).catch(() => {});
+  async createCollege(dto: CreateCollegeDto, tenantIdentifier?: string | null) {
+    const ctx = await this.resolveTenantContext(undefined, tenantIdentifier);
+    if (!ctx) {
+      throw new BadRequestException('Invalid tenant context for creating college');
+    }
+    const schema = `tenant_${ctx.tenantSlug}`;
+    await this.ensureCollegesTable(schema);
+
+    const code = (dto.code || '').trim();
+    const slug = (dto.slug || '').toLowerCase().trim();
+    const name = dto.name.trim();
+
     const existing = await this.ds.query(
-      `SELECT id FROM public.tenants WHERE slug = $1 OR (code IS NOT NULL AND code = $2)`,
-      [dto.slug.toLowerCase(), dto.code || ''],
+      `SELECT id FROM "${schema}".colleges WHERE (slug = $1 AND slug != '') OR (code IS NOT NULL AND code != '' AND code = $2)`,
+      [slug, code],
     );
     if (existing.length > 0) {
-      throw new BadRequestException(`College with slug '${dto.slug}' or code '${dto.code}' already exists.`);
+      throw new BadRequestException(`College with slug '${slug}' or code '${code}' already exists under tenant '${ctx.tenantSlug}'.`);
     }
 
     const rows = await this.ds.query(
-      `INSERT INTO public.tenants (code, name, slug, domain, plan, primary_color, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
+      `INSERT INTO "${schema}".colleges (tenant_id, code, colg_cd, name, slug, domain, plan, primary_color, is_active)
+       VALUES ($1, $2, $2, $3, $4, $5, $6, $7, true)
        RETURNING *`,
-      [dto.code || null, dto.name, dto.slug.toLowerCase(), dto.domain || null, dto.plan || 'standard', dto.primaryColor || '#6366F1'],
+      [ctx.tenantId || null, code || null, name, slug, dto.domain || null, dto.plan || 'enterprise', dto.primaryColor || '#5B4BFF'],
     );
-
-    // Auto-provision schema for new college if needed
-    await this.tenantSchemaService.provisionSchema(dto.slug.toLowerCase()).catch(() => {});
 
     return rows[0];
   }
 
-  async updateCollege(idOrSlug: string, dto: UpdateCollegeDto) {
-    await this.ds.query(`ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS code VARCHAR(50);`).catch(() => {});
+  async updateCollege(idOrSlug: string, dto: UpdateCollegeDto, tenantIdentifier?: string | null) {
+    const ctx = await this.resolveTenantContext(undefined, tenantIdentifier);
+    if (!ctx) {
+      throw new BadRequestException('Invalid tenant context for updating college');
+    }
+    const schema = `tenant_${ctx.tenantSlug}`;
+    await this.ensureCollegesTable(schema);
+
     const rows = await this.ds.query(
-      `SELECT * FROM public.tenants WHERE id::text = $1 OR slug = $1 OR code = $1`,
+      `SELECT * FROM "${schema}".colleges WHERE id::text = $1 OR slug = $1 OR code = $1 OR colg_cd = $1`,
       [idOrSlug],
     );
-    if (rows.length === 0) throw new NotFoundException('College not found');
+    if (rows.length === 0) {
+      throw new NotFoundException('College not found under tenant ' + ctx.tenantSlug);
+    }
 
     const targetId = rows[0].id;
-    const targetSlug = rows[0].slug;
-
     const updated = await this.ds.query(
-      `UPDATE public.tenants
+      `UPDATE "${schema}".colleges
        SET code = COALESCE($1, code),
+           colg_cd = COALESCE($1, colg_cd),
            name = COALESCE($2, name),
            domain = COALESCE($3, domain),
            plan = COALESCE($4, plan),
@@ -1175,32 +1411,75 @@ export class CollegeMasterService implements OnApplicationBootstrap {
            updated_at = NOW()
        WHERE id = $7
        RETURNING *`,
-      [dto.code, dto.name, dto.domain, dto.plan, dto.primaryColor || dto.primary_color, dto.isActive ?? dto.is_active, targetId],
+      [dto.code, dto.name, dto.domain, dto.plan, dto.primaryColor || (dto as any).primary_color, dto.isActive ?? dto.is_active, targetId],
     );
-
-    if (dto.isActive !== undefined || dto.is_active !== undefined) {
-      const activeVal = dto.isActive ?? dto.is_active;
-      const firmStatus = activeVal ? 'ACTIVE' : 'SUSPENDED';
-      await this.ds.query(
-        `UPDATE public.firms SET status = $1, updated_at = NOW() WHERE LOWER(slug) = LOWER($2) OR id = $3`,
-        [firmStatus, targetSlug, targetId],
-      ).catch(() => {});
-    }
 
     return updated[0];
   }
 
-  async deleteCollege(idOrSlug: string) {
+  async deleteCollege(idOrSlug: string, tenantIdentifier?: string | null) {
+    const ctx = await this.resolveTenantContext(undefined, tenantIdentifier);
+    if (!ctx) {
+      throw new BadRequestException('Invalid tenant context for deleting college');
+    }
+    const schema = `tenant_${ctx.tenantSlug}`;
+    await this.ensureCollegesTable(schema);
+
+    // If schema.colleges has 0 rows, seed it first so the target row exists
+    const countRes = await this.ds.query(`SELECT COUNT(*)::int as count FROM "${schema}".colleges`).catch(() => [{ count: 0 }]);
+    if (Number(countRes[0]?.count || 0) === 0) {
+      if (ctx.isSrms) {
+        await this.seedSrmsCollegesForTenant(schema, ctx.tenantId);
+      } else {
+        await this.seedNonSrmsCollegeForTenant(schema, ctx);
+      }
+    }
+
     const rows = await this.ds.query(
-      `SELECT id, slug FROM public.tenants WHERE id::text = $1 OR slug = $1 OR code = $1`,
+      `SELECT id, slug, name FROM "${schema}".colleges WHERE id::text = $1 OR slug = $1 OR code = $1 OR colg_cd = $1`,
       [idOrSlug],
     );
-    if (rows.length === 0) throw new NotFoundException('College not found');
 
-    await this.ds.query(`UPDATE public.tenants SET is_active = false, updated_at = NOW() WHERE id = $1`, [rows[0].id]);
-    await this.ds.query(`UPDATE public.firms SET status = 'SUSPENDED', updated_at = NOW() WHERE LOWER(slug) = LOWER($1) OR id = $2`, [rows[0].slug, rows[0].id]).catch(() => {});
+    if (rows.length === 0) {
+      throw new NotFoundException(`College ${idOrSlug} not found under tenant ${ctx.tenantSlug}`);
+    }
 
-    return { success: true, message: `College ${rows[0].slug} deactivated successfully.` };
+    // STRICT PER-TENANT ISOLATION:
+    // Update ONLY this tenant's colleges table.
+    // NEVER update another tenant's schema or public.tenants or public.firms!
+    await this.ds.query(
+      `UPDATE "${schema}".colleges SET is_active = false, updated_at = NOW() WHERE id = $1`,
+      [rows[0].id],
+    );
+
+    return { success: true, message: `College ${rows[0].name} deactivated for tenant ${ctx.tenantSlug} successfully.` };
+  }
+
+  async restoreCollege(idOrSlug: string, tenantIdentifier?: string | null) {
+    const ctx = await this.resolveTenantContext(undefined, tenantIdentifier);
+    if (!ctx) {
+      throw new BadRequestException('Invalid tenant context for restoring college');
+    }
+    const schema = `tenant_${ctx.tenantSlug}`;
+    await this.ensureCollegesTable(schema);
+
+    const rows = await this.ds.query(
+      `SELECT id, slug, name, code, colg_cd FROM "${schema}".colleges WHERE id::text = $1 OR slug = $1 OR code = $1 OR colg_cd = $1`,
+      [idOrSlug],
+    );
+
+    if (rows.length === 0) {
+      throw new NotFoundException(`College ${idOrSlug} not found under tenant ${ctx.tenantSlug}`);
+    }
+
+    // STRICT PER-TENANT ISOLATION:
+    // Update ONLY this tenant's colleges table.
+    await this.ds.query(
+      `UPDATE "${schema}".colleges SET is_active = true, updated_at = NOW() WHERE id = $1`,
+      [rows[0].id],
+    );
+
+    return { success: true, message: `College ${rows[0].name} reactivated for tenant ${ctx.tenantSlug} successfully.`, data: rows[0] };
   }
 
   // ─── 2. COURSES ────────────────────────────────────────────────────────────

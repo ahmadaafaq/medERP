@@ -105,8 +105,28 @@ export async function GET(request: NextRequest) {
 
     const tenantParam = searchParams.get('tenant') || searchParams.get('tenantSlug') || '';
     const tenantHeader = request.headers.get('x-tenant-id') || request.headers.get('x-tenant') || request.headers.get('x-tenant-slug') || '';
+    const srmsCollegeSlugMap: Record<string, string> = {
+      '1': 'srms-cet-bareilly',
+      '2': 'srms-cetr-bareilly',
+      '3': 'srms-cet-unnao',
+      '4': 'srms-college-of-law',
+      '5': 'srms-ibs-lucknow',
+      '6': 'srms-iahs-bareilly',
+      '7': 'srms-trust-bareilly',
+      '8': 'srms-nursing-school',
+      '9': 'srms-nursing-college',
+      '10': 'srms-riddhima-bareilly',
+      '11': 'srms-ims',
+      '12': 'srms-college-of-nursing-paramedical-sciences-unnao',
+      '13': 'srms-quiz-panel',
+      '14': 'srms-cricket-academy',
+    };
     let slug = (tenantParam || tenantHeader).replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
-    if (!slug) slug = colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly';
+    if (srmsCollegeSlugMap[colgcd]) {
+      slug = srmsCollegeSlugMap[colgcd];
+    } else if (!slug) {
+      slug = 'srms-cet-bareilly';
+    }
     const schema = `tenant_${slug}`;
     const isSrms = slug.toLowerCase().includes('srms');
 
