@@ -62,22 +62,25 @@ export default function HODQPApprovalsPage() {
   const filters = ['PENDING_HOD_APPROVAL', 'HOD_APPROVED', 'HOD_REJECTED', 'DRAFT'];
 
   return (
-    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 font-sans">
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans">
       <Sidebar role="hod" />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header title="Question Paper Approvals" />
-        <main className="p-6 space-y-6 max-w-7xl mx-auto w-full">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full flex-1">
 
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl font-black text-[#1B1E28] dark:text-white">Question Paper Review Queue</h1>
-              <p className="text-sm text-slate-500">Approve or reject papers submitted by department clerk</p>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] px-2 py-0.5 rounded bg-[#5B4BFF]/10 text-[#5B4BFF] font-mono font-bold uppercase tracking-wider">HOD APPROVAL QUEUE</span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-[#1B1E28] dark:text-white">Question Paper Review Queue</h1>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">Approve or reject papers submitted by department clerk</p>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
               {filters.map((f) => (
                 <button key={f} onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${filter === f ? 'bg-[#5B4BFF] text-white' : 'bg-white dark:bg-slate-900 text-slate-500 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/50'}`}>
+                  className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${filter === f ? 'bg-[#5B4BFF] text-white shadow-md shadow-[#5B4BFF]/25' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/50'}`}>
                   {STATUS_LABEL[f] || f}
                 </button>
               ))}

@@ -99,6 +99,17 @@ export class ExaminationController {
     return this.examinationService.createTimetableDraft(tenantSlug, user, dto);
   }
 
+  /** Clerk: Submit timetable draft for HOD approval */
+  @Public()
+  @Post('timetable-drafts/submit-for-approval')
+  async submitTimetableDraftForApproval(
+    @Tenant() tenantSlug: string,
+    @CurrentUser() user: any,
+    @Body() body: { draftId: string; notes?: string },
+  ) {
+    return this.examinationService.submitTimetableDraftForApproval(tenantSlug, user, body.draftId, body.notes);
+  }
+
   /** Clerk / HOD: List timetable drafts */
   @Public()
   @Get('timetable-drafts')

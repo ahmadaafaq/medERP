@@ -16,6 +16,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     @InjectDataSource() private readonly dataSource: DataSource,
   ) { }
 
+  public getDataSource(): DataSource {
+    return this.dataSource;
+  }
+
   public resolveTenantSlug(slug?: string): string {
     if (!slug) return '';
     const s = slug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
@@ -2045,6 +2049,28 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS practical_mark NUMERIC(6,2) DEFAULT 0;`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS eval_status VARCHAR(50) DEFAULT 'EVALUATED';`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".student_results ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`).catch(() => { });
+
+    // ── Timetable Drafts (HOD Workflow) ──────────────────────────────────
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".timetable_drafts (
+        id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        title          VARCHAR(255) NOT NULL,
+        department_id  UUID,
+        batch_id       UUID,
+        semester       VARCHAR(50),
+        academic_year  VARCHAR(50),
+        slots          JSONB        DEFAULT '[]'::jsonb,
+        status         VARCHAR(50)  DEFAULT 'DRAFT',
+        notes          TEXT,
+        hod_remarks    TEXT,
+        created_by     UUID,
+        created_at     TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at     TIMESTAMPTZ  DEFAULT NOW()
+      )
+    `).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS hod_remarks TEXT;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'DRAFT';`).catch(() => { });
 
     // ── Competency Results ─────────────────────────────────────────────────
     await runner.query(`

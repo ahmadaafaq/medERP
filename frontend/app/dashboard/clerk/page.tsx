@@ -48,7 +48,7 @@ export default function ClerkDashboardPage() {
           {/* Quick Action Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-5">
             <Link
-              href="/dashboard/admin/staff-master"
+              href="/dashboard/clerk/staff-master"
               className="p-5 rounded-2xl bg-white dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/50 transition-all group shadow-sm hover:shadow-lg space-y-3"
             >
               <div className="w-10 h-10 rounded-xl bg-[#5B4BFF]/10 text-[#5B4BFF] group-hover:bg-[#5B4BFF] group-hover:text-white flex items-center justify-center transition-all">
@@ -63,7 +63,7 @@ export default function ClerkDashboardPage() {
             </Link>
 
             <Link
-              href="/dashboard/admin/student-master"
+              href="/dashboard/clerk/student-master"
               className="p-5 rounded-2xl bg-white dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-emerald-500/50 transition-all group shadow-sm hover:shadow-lg space-y-3"
             >
               <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white flex items-center justify-center transition-all">

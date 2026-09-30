@@ -14,10 +14,10 @@ function getH() {
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const STATUS_BADGE: Record<string, { cls: string; label: string }> = {
-  DRAFT: { cls: 'bg-slate-100 text-slate-600', label: 'Draft' },
-  PENDING_HOD_APPROVAL: { cls: 'bg-amber-100 text-amber-700', label: '⏳ Pending HOD' },
-  HOD_APPROVED: { cls: 'bg-emerald-100 text-emerald-700', label: '✅ Live — HOD Approved' },
-  HOD_REJECTED: { cls: 'bg-rose-100 text-rose-700', label: '❌ Rejected' },
+  DRAFT: { cls: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300', label: 'Draft' },
+  PENDING_HOD_APPROVAL: { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400', label: '⏳ Pending HOD Approval' },
+  HOD_APPROVED: { cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400', label: '✅ Live — HOD Approved' },
+  HOD_REJECTED: { cls: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400', label: '❌ Rejected by HOD' },
 };
 
 interface Slot { dayOfWeek: number; startTime: string; endTime: string; subjectName: string; facultyName: string; room: string; }
@@ -68,27 +68,21 @@ export default function ClerkTimetableDesignerPage() {
     setSending(draftId);
     try {
       const { slug, headers } = getH();
-      await fetch(`${API_BASE}/exams/timetable-drafts?tenant=${slug}&id=${draftId}`, {
-        method: 'POST', headers,
+      await fetch(`${API_BASE}/exams/timetable-drafts/submit-for-approval?tenant=${slug}`, {
+        method: 'POST',
+        headers,
         body: JSON.stringify({ draftId }),
       });
-      // Submit for approval by updating status - use a patch or separate call
-      // We'll call a status update using a workaround here
-      await fetch(`${API_BASE}/exams/timetable-drafts/hod-action?tenant=${slug}`, {
-        method: 'POST', headers,
-        body: JSON.stringify({ draftId, action: 'submit' }),
-      }).catch(() => {});
-      // Actually update status to PENDING_HOD_APPROVAL by creating new entry
       await load();
     } catch { } finally { setSending(null); }
   };
 
   return (
-    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 font-sans">
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans">
       <Sidebar role="clerk" />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header title="Timetable Designer" />
-        <main className="p-6 space-y-6 max-w-6xl mx-auto w-full">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full flex-1">
 
           <div className="flex items-center justify-between">
             <div>

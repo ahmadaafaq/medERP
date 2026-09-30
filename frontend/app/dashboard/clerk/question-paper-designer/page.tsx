@@ -68,11 +68,11 @@ export default function ClerkQPDesignerPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 font-sans">
+    <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-slate-950 text-[#1B1E28] dark:text-slate-100 font-sans">
       <Sidebar role="clerk" />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header title="Question Paper Designer" />
-        <main className="p-6 space-y-6 max-w-6xl mx-auto w-full">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full flex-1">
 
           <div className="flex items-center justify-between">
             <div>

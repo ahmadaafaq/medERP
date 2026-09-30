@@ -388,6 +388,7 @@ export class AuthService {
       if (dto.role) {
         const reqRole = dto.role.toUpperCase();
         if (reqRole === 'ADMIN' || reqRole === 'COLLEGE_ADMIN') mappedRole = UserRole.COLLEGE_ADMIN;
+        else if (reqRole === 'HOD') mappedRole = UserRole.HOD;
         else if (reqRole === 'CLERK') mappedRole = UserRole.CLERK;
         else if (reqRole === 'WARDEN') mappedRole = UserRole.WARDEN;
         else if (reqRole === 'FACULTY') mappedRole = UserRole.FACULTY;
@@ -409,13 +410,15 @@ export class AuthService {
 
       // Upsert user in tenant schema
       const existingUsers = await this.ds.query(
-        `SELECT id, email, role, is_active FROM "${schema}".users 
+        `SELECT id, email, role, assigned_roles, is_active FROM "${schema}".users 
          WHERE LOWER(email) = LOWER($1) OR usr_id = $2 OR LOWER(COALESCE(emp_id, '')) = LOWER($3)
          LIMIT 1`,
         [emailToUse, srmsRecord.usr_id, empIdToUse],
       );
 
       let userId: string;
+      const existingAssignedRoles = existingUsers[0]?.assigned_roles || null;
+
       if (existingUsers.length > 0) {
         userId = existingUsers[0].id;
         await this.ds.query(
@@ -495,6 +498,7 @@ export class AuthService {
         email: emailToUse,
         password_hash: passwordHash,
         role: mappedRole,
+        assigned_roles: existingAssignedRoles,
         is_active: true,
         must_change_password: false,
         failed_login_count: 0,
@@ -588,8 +592,10 @@ export class AuthService {
     // Auto self-heal teaching faculty role if incorrectly marked as CLERK
     if (isValid && user && (user.role === 'CLERK' || user.role === 'STAFF') && schema.startsWith('tenant_')) {
       const facCheck = await this.ds.query(
-        `SELECT id, designation, payroll_category FROM "${schema}".faculty 
+        `SELECT id, designation, payroll_category, category FROM "${schema}".faculty 
          WHERE (user_id::text = $1::text OR emp_id = $2)
+           AND (category IS NULL OR category NOT ILIKE '%NON-TEACH%')
+           AND (designation NOT ILIKE '%Supporting%' AND designation NOT ILIKE '%Clerk%' AND designation NOT ILIKE '%Assistant%' AND designation NOT ILIKE '%Staff%')
            AND (payroll_category ILIKE '%TEACH%' 
                 OR designation ILIKE '%Faculty%' 
                 OR designation ILIKE '%Professor%' 
@@ -657,6 +663,20 @@ export class AuthService {
       }
     }
 
+    // Auto-detect non-teaching / clerk staff permissions
+    const isNonTeachingClerkStaff =
+      (user.emp_id && String(user.emp_id).toUpperCase().startsWith('NT/')) ||
+      (user.designation && (
+        String(user.designation).toUpperCase().includes('CLERK') ||
+        String(user.designation).toUpperCase().includes('SUPPORTING') ||
+        String(user.designation).toUpperCase().includes('ADMINISTRATIVE') ||
+        String(user.designation).toUpperCase().includes('NON-TEACH')
+      ));
+
+    if (isNonTeachingClerkStaff) {
+      userAllowedRoles.add('CLERK');
+    }
+
     if (requestedRole) {
       // 1. SUPER_ADMIN privilege: can access any staff or admin portal
       if (userAllowedRoles.has('SUPER_ADMIN') || primaryUserRole === 'SUPER_ADMIN') {
@@ -696,6 +716,9 @@ export class AuthService {
             );
           }
           user.role = UserRole.COLLEGE_ADMIN;
+          if (schema.startsWith('tenant_')) {
+            await this.ds.query(`UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`, [UserRole.COLLEGE_ADMIN, user.id]).catch(() => {});
+          }
         } else if (canAccessFaculty) {
           if (!hasFacultyRights) {
             throw new ForbiddenException(
@@ -703,6 +726,9 @@ export class AuthService {
             );
           }
           user.role = UserRole.FACULTY;
+          if (schema.startsWith('tenant_')) {
+            await this.ds.query(`UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`, [UserRole.FACULTY, user.id]).catch(() => {});
+          }
         } else if (canAccessHod) {
           if (!hasHodRights) {
             throw new ForbiddenException(
@@ -710,6 +736,9 @@ export class AuthService {
             );
           }
           user.role = UserRole.HOD;
+          if (schema.startsWith('tenant_')) {
+            await this.ds.query(`UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`, [UserRole.HOD, user.id]).catch(() => {});
+          }
         } else if (canAccessClerk) {
           if (!hasClerkRights) {
             throw new ForbiddenException(
@@ -717,6 +746,13 @@ export class AuthService {
             );
           }
           user.role = UserRole.CLERK;
+          if (schema.startsWith('tenant_')) {
+            const currentAssigned = user.assigned_roles ? (user.assigned_roles.includes('CLERK') ? user.assigned_roles : `${user.assigned_roles},CLERK`) : `${primaryUserRole || 'FACULTY'},CLERK`;
+            await this.ds.query(
+              `UPDATE "${schema}".users SET role = $1, assigned_roles = $2, updated_at = NOW() WHERE id = $3`,
+              [UserRole.CLERK, currentAssigned, user.id],
+            ).catch(() => {});
+          }
         } else if (canAccessWarden) {
           if (!hasWardenRights) {
             throw new ForbiddenException(
@@ -724,6 +760,9 @@ export class AuthService {
             );
           }
           user.role = UserRole.WARDEN;
+          if (schema.startsWith('tenant_')) {
+            await this.ds.query(`UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`, [UserRole.WARDEN, user.id]).catch(() => {});
+          }
         } else if (requestedRole === 'STUDENT') {
           throw new ForbiddenException(
             'Access Denied: Staff accounts cannot access the Student portal.',
@@ -1329,13 +1368,24 @@ export class AuthService {
       if (profile && (rows[0]?.role === 'CLERK' || rows[0]?.role === 'STAFF') && schema.startsWith('tenant_')) {
         const desig = String(profile.designation || '').toUpperCase();
         const payroll = String(profile.payroll_category || '').toUpperCase();
+        const category = String(profile.category || '').toUpperCase();
+        const empId = String(profile.emp_id || '').toUpperCase();
+
+        const isNonTeaching =
+          empId.startsWith('NT/') ||
+          category.includes('NON-TEACH') ||
+          desig.includes('SUPPORTING') ||
+          desig.includes('CLERK') ||
+          desig.includes('ASSISTANT') ||
+          payroll.includes('ADMINISTRATIVE');
+
         if (
-          payroll.includes('TEACH') ||
+          !isNonTeaching &&
+          (payroll.includes('TEACH') ||
           desig.includes('FACULTY') ||
           desig.includes('PROFESSOR') ||
           desig.includes('LECTURER') ||
-          desig.includes('TEACH') ||
-          desig.includes('HOD')
+          desig.includes('HOD'))
         ) {
           const fixedRole = desig.includes('HOD') ? 'HOD' : 'FACULTY';
           rows[0].role = fixedRole;

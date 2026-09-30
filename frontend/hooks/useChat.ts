@@ -131,31 +131,7 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
             (u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : '') ||
             (p.firstName ? `${p.firstName} ${p.lastName || ''}`.trim() : '') ||
             userName;
-          let currentRole = (u.role || userRole || '').toUpperCase();
-          const desig = String(p.designation || u.designation || '').toUpperCase();
-          const payroll = String(p.payroll_category || u.payroll_category || '').toUpperCase();
-          const staffType = String(p.staff_type || u.staff_type || '').toUpperCase();
-          const isFacultyMember =
-            role === 'FACULTY' ||
-            desig.includes('FACULTY') ||
-            desig.includes('PROFESSOR') ||
-            desig.includes('LECTURER') ||
-            desig.includes('TEACH') ||
-            desig.includes('INSTRUCTOR') ||
-            desig.includes('TUTOR') ||
-            payroll.includes('TEACH') ||
-            staffType === 'FACULTY' ||
-            (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/faculty'));
-
-          if (isFacultyMember && (currentRole === 'CLERK' || currentRole === 'STAFF' || currentRole === 'USER')) {
-            currentRole = desig.includes('HOD') ? 'HOD' : 'FACULTY';
-            u.role = currentRole;
-            try {
-              localStorage.setItem('user', JSON.stringify(u));
-              localStorage.setItem('role', currentRole);
-            } catch {}
-          }
-          userRole = currentRole;
+          userRole = (u.role || userRole || '').toUpperCase();
           userAvatar = u.photo_url || p.photo_url || p.avatar_url || p.photoUrl || '';
         }
       } catch {}
@@ -382,31 +358,7 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
           const p = currentUser.profile || currentUser;
           senderId = currentUser.id || currentUser.sub || p.registration_no || p.rollno || senderId;
           senderName = currentUser.name || p.name || senderName;
-          let currentSenderRole = (currentUser.role || senderRole || '').toUpperCase();
-          const desig = String(p.designation || currentUser.designation || '').toUpperCase();
-          const payroll = String(p.payroll_category || currentUser.payroll_category || '').toUpperCase();
-          const staffType = String(p.staff_type || currentUser.staff_type || '').toUpperCase();
-          const isFacultyMember =
-            role === 'FACULTY' ||
-            desig.includes('FACULTY') ||
-            desig.includes('PROFESSOR') ||
-            desig.includes('LECTURER') ||
-            desig.includes('TEACH') ||
-            desig.includes('INSTRUCTOR') ||
-            desig.includes('TUTOR') ||
-            payroll.includes('TEACH') ||
-            staffType === 'FACULTY' ||
-            (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/faculty'));
-
-          if (isFacultyMember && (currentSenderRole === 'CLERK' || currentSenderRole === 'STAFF' || currentSenderRole === 'USER')) {
-            currentSenderRole = desig.includes('HOD') ? 'HOD' : 'FACULTY';
-            currentUser.role = currentSenderRole;
-            try {
-              localStorage.setItem('user', JSON.stringify(currentUser));
-              localStorage.setItem('role', currentSenderRole);
-            } catch {}
-          }
-          senderRole = currentSenderRole;
+          senderRole = (currentUser.role || senderRole || '').toUpperCase();
           senderAvatar = currentUser.photo_url || p.photo_url || p.avatar_url || '';
         }
       } catch {}

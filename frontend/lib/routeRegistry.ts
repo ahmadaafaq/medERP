@@ -110,12 +110,9 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/admin/staff-master': [
     { role: 'ADMIN', menuKey: 'admin_staff_master', label: 'Staff Master' },
-    { role: 'CLERK', menuKey: 'clerk_staff_master', label: 'Staff & Faculty Master' },
   ],
   '/dashboard/admin/student-master': [
     { role: 'ADMIN', menuKey: 'admin_student_master', label: 'Student Master' },
-    { role: 'CLERK', menuKey: 'clerk_student_master', label: 'Student Roster Master' },
-    { role: 'WARDEN', menuKey: 'warden_student_master', label: 'Resident Student Roster' },
   ],
   '/dashboard/admin/subject-linker': [
     { role: 'ADMIN', menuKey: 'admin_subject_linker', label: 'Subject Linker' },
@@ -152,6 +149,23 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/clerk/placement': [
     { role: 'CLERK', menuKey: 'clerk_placement', label: 'Placement Drive Assistance' },
+  ],
+  '/dashboard/clerk/staff-master': [
+    { role: 'CLERK', menuKey: 'clerk_staff_master', label: 'Staff & Faculty Master' },
+    { role: 'CLERK', menuKey: 'clerk_staff', label: 'Staff & Faculty Master' },
+  ],
+  '/dashboard/clerk/student-master': [
+    { role: 'CLERK', menuKey: 'clerk_student_master', label: 'Student Roster Master' },
+    { role: 'CLERK', menuKey: 'clerk_student', label: 'Student Roster Master' },
+  ],
+  '/dashboard/clerk/question-paper-designer': [
+    { role: 'CLERK', menuKey: 'clerk_qp_designer', label: 'QP Designer (Submit HOD)' },
+  ],
+  '/dashboard/clerk/qp-designer': [
+    { role: 'CLERK', menuKey: 'clerk_qp_designer', label: 'QP Designer (Submit HOD)' },
+  ],
+  '/dashboard/clerk/timetable-designer': [
+    { role: 'CLERK', menuKey: 'clerk_timetable_designer', label: 'Timetable Designer (Submit HOD)' },
   ],
 
   // === FACULTY PORTAL ROUTES ===
@@ -260,15 +274,6 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/admin/qp-print': [
     { role: 'ADMIN', menuKey: 'admin_qp_print', label: 'QP Print Center' },
-  ],
-  '/dashboard/clerk/question-paper-designer': [
-    { role: 'CLERK', menuKey: 'clerk_qp_designer', label: 'Question Paper Designer' },
-  ],
-  '/dashboard/clerk/qp-designer': [
-    { role: 'CLERK', menuKey: 'clerk_qp_designer', label: 'Question Paper Designer' },
-  ],
-  '/dashboard/clerk/timetable-designer': [
-    { role: 'CLERK', menuKey: 'clerk_timetable_designer', label: 'Timetable Designer' },
   ],
 
   // === STUDENT PORTAL ROUTES ===
@@ -600,7 +605,7 @@ export function verifyRouteAccess({
   }
 
   // 4. Check role namespace boundaries
-  if (roleUpper === 'STUDENT' && (normPath.startsWith('/dashboard/admin') || normPath.startsWith('/dashboard/faculty') || normPath.startsWith('/dashboard/clerk') || normPath.startsWith('/dashboard/warden'))) {
+  if (roleUpper === 'STUDENT' && (normPath.startsWith('/dashboard/admin') || normPath.startsWith('/dashboard/faculty') || normPath.startsWith('/dashboard/clerk') || normPath.startsWith('/dashboard/warden') || normPath.startsWith('/dashboard/hod'))) {
     return {
       allowed: false,
       reason: 'Your Student account does not have access to administrative or faculty portals.',
@@ -612,6 +617,22 @@ export function verifyRouteAccess({
     return {
       allowed: false,
       reason: 'Your Faculty account does not have access to student or administrative consoles.',
+      moduleLabel: 'Portal Section',
+    };
+  }
+
+  if (roleUpper === 'CLERK' && (normPath.startsWith('/dashboard/admin') || normPath.startsWith('/dashboard/student') || normPath.startsWith('/dashboard/faculty') || normPath.startsWith('/dashboard/warden') || normPath.startsWith('/dashboard/hod'))) {
+    return {
+      allowed: false,
+      reason: 'Your Clerk account does not have access to admin, faculty, or student portals.',
+      moduleLabel: 'Portal Section',
+    };
+  }
+
+  if (roleUpper === 'WARDEN' && (normPath.startsWith('/dashboard/admin') || normPath.startsWith('/dashboard/student') || normPath.startsWith('/dashboard/faculty') || normPath.startsWith('/dashboard/clerk') || normPath.startsWith('/dashboard/hod'))) {
+    return {
+      allowed: false,
+      reason: 'Your Warden account does not have access to admin, faculty, clerk, or student portals.',
       moduleLabel: 'Portal Section',
     };
   }
