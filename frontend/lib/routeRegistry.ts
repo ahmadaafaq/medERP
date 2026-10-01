@@ -167,6 +167,9 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   '/dashboard/clerk/timetable-designer': [
     { role: 'CLERK', menuKey: 'clerk_timetable_designer', label: 'Timetable Designer (Submit HOD)' },
   ],
+  '/dashboard/clerk/timetable-design': [
+    { role: 'CLERK', menuKey: 'clerk_timetable_designer', label: 'Timetable Designer (Submit HOD)' },
+  ],
 
   // === FACULTY PORTAL ROUTES ===
   '/dashboard/faculty': [
@@ -501,33 +504,73 @@ export async function getRolePermissionsForTenant(
   }
 
   try {
-    const res = await fetch(`/api/firms/${cleanSlug}/role-permissions?role=${targetRole}&_t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        Pragma: 'no-cache',
-      },
+    const rolesToFetch = targetRole === 'HOD' ? ['HOD', 'FACULTY'] : [targetRole];
+    const responses = await Promise.all(
+      rolesToFetch.map(r =>
+        fetch(`/api/firms/${cleanSlug}/role-permissions?role=${r}&_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+          },
+        }).then(res => (res.ok ? res.json() : null)).catch(() => null)
+      )
+    );
+
+    let combinedList: any[] = [];
+    responses.forEach(json => {
+      if (!json) return;
+      const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
+      combinedList = combinedList.concat(list);
     });
 
-    if (res.ok) {
-      const json = await res.json();
-      const list = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
-      const expandedKeys = expandPermissionKeys(list);
+    const expandedKeys = expandPermissionKeys(combinedList);
 
-      const cacheEntry = { keys: expandedKeys, timestamp: Date.now() };
-      permissionsMemoryCache[cacheKey] = cacheEntry;
-
-      if (typeof window !== 'undefined') {
-        try {
-          sessionStorage.setItem(
-            `med_perms_${cacheKey}`,
-            JSON.stringify({ keys: Array.from(expandedKeys), timestamp: Date.now() })
-          );
-        } catch {}
-      }
-
-      return expandedKeys;
+    // If HOD, ensure all shared faculty keys and HOD keys are always enabled
+    if (targetRole === 'HOD') {
+      [
+        'faculty_profile',
+        'faculty_students',
+        'faculty_department_faculty',
+        'faculty_dept',
+        'faculty_schedule',
+        'faculty_attendance',
+        'faculty_attendance_mark',
+        'faculty_attendance_biometric',
+        'faculty_biometric',
+        'faculty_marks',
+        'faculty_assessment',
+        'faculty_lessons',
+        'faculty_library',
+        'faculty_logbook',
+        'faculty_reports',
+        'faculty_medical_schedule',
+        'faculty_medical_logbook',
+        'faculty_chat',
+        'faculty_notices',
+        'faculty_placement',
+        'faculty_repository',
+        'hod_overview',
+        'hod_qp_approvals',
+        'hod_timetable_approvals',
+        'hod_question_bank',
+        'hod_chat',
+      ].forEach(k => expandedKeys.add(k));
     }
+
+    const cacheEntry = { keys: expandedKeys, timestamp: Date.now() };
+    permissionsMemoryCache[cacheKey] = cacheEntry;
+
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(
+          `med_perms_${cacheKey}`,
+          JSON.stringify({ keys: Array.from(expandedKeys), timestamp: Date.now() })
+        );
+      } catch {}
+    }
+
+    return expandedKeys;
   } catch (err) {
     console.warn(`[routeRegistry] Could not fetch permissions for ${cacheKey}:`, err);
   }
@@ -645,8 +688,8 @@ export function verifyRouteAccess({
     };
   }
 
-  // HOD specific routes are always permitted for HOD
-  if (roleUpper === 'HOD' && normPath.startsWith('/dashboard/hod')) {
+  // HOD specific and shared faculty routes are always permitted for HOD
+  if (roleUpper === 'HOD' && (normPath.startsWith('/dashboard/hod') || normPath.startsWith('/dashboard/faculty'))) {
     return { allowed: true };
   }
 

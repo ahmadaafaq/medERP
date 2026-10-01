@@ -56,7 +56,7 @@ export default function DashboardRootLayout({
       const cleanPath = (pathname || '').split('?')[0].split('#')[0].toLowerCase().trim();
       if (
         (roleUpper === 'ADMIN' && (cleanPath === '/dashboard/admin' || cleanPath === '/dashboard')) ||
-        (roleUpper === 'HOD' && (cleanPath === '/dashboard/hod' || cleanPath === '/dashboard/faculty' || cleanPath === '/dashboard')) ||
+        (roleUpper === 'HOD' && (cleanPath.startsWith('/dashboard/hod') || cleanPath.startsWith('/dashboard/faculty') || cleanPath === '/dashboard')) ||
         (roleUpper === 'FACULTY' && (cleanPath === '/dashboard/faculty' || cleanPath === '/dashboard')) ||
         (roleUpper === 'STUDENT' && (cleanPath === '/dashboard/student' || cleanPath === '/dashboard')) ||
         (roleUpper === 'CLERK' && (cleanPath === '/dashboard/clerk' || cleanPath === '/dashboard')) ||
