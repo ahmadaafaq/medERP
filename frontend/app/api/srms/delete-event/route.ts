@@ -99,7 +99,20 @@ export async function POST(req: NextRequest) {
     const tenantParam = req.nextUrl?.searchParams?.get('tenant') || body.tenant || body.tenantSlug || '';
     const tenantHeader = req.headers.get('x-tenant-id') || req.headers.get('x-tenant') || req.headers.get('x-tenant-slug') || '';
     let slug = (tenantParam || tenantHeader).replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
-    if (!slug) slug = colgcd === '1' ? 'srms-cet-bareilly' : 'srms-cet-bareilly';
+    const srmsCollegeSlugMap: Record<string, string> = {
+      '1': 'srms-cet-bareilly',
+      '2': 'srms-cetr-bareilly',
+      '3': 'srms-cet-unnao',
+      '4': 'srms-law',
+      '5': 'srms-ibs-lucknow',
+      '6': 'srms-iahs-bareilly',
+      '11': 'srms-ims',
+    };
+    if (!slug && srmsCollegeSlugMap[colgcd]) {
+      slug = srmsCollegeSlugMap[colgcd];
+    } else if (!slug) {
+      slug = 'srms-cet-bareilly';
+    }
     const schema = `tenant_${slug}`;
 
     const numId = Number(eventId);
@@ -305,6 +318,54 @@ export async function POST(req: NextRequest) {
           ${discoveredDay && discoveredTime ? `OR (day_of_week = ${discoveredDay} AND start_time::text LIKE '${discoveredTime}%' AND colg_cd = '${colgcd}')` : ''}`,
       [idArray]
     ).catch(() => {});
+
+    // Delete matching slot from all drafts in timetable_drafts
+    try {
+      const draftsWithSlots = await queryDb(
+        `SELECT id, slots FROM "${schema}".timetable_drafts WHERE slots IS NOT NULL AND jsonb_array_length(slots) > 0`
+      ).catch(() => []);
+
+      for (const d of draftsWithSlots || []) {
+        const raw = typeof d.slots === 'string' ? JSON.parse(d.slots || '[]') : (d.slots || []);
+        if (Array.isArray(raw) && raw.length > 0) {
+          const filtered = raw.filter((s: any) => {
+            const sId = String(s.id || s.postgres_id || '');
+            if (idArray.includes(sId)) return false;
+            const sDay = Number(s.dayOfWeek ?? s.day_of_week ?? 0);
+            const sTime = String(s.startTime || s.start_time || '').slice(0, 5);
+            if (discoveredDay && discoveredTime && sDay === discoveredDay && sTime === discoveredTime) {
+              return false;
+            }
+            return true;
+          });
+          if (filtered.length !== raw.length) {
+            if (filtered.length === 0) {
+              // All lectures deleted from draft -> Remove it completely from DB
+              await queryDb(
+                `DELETE FROM "${schema}".timetable_drafts WHERE id::text = $1`,
+                [String(d.id)]
+              ).catch(() => {});
+            } else {
+              await queryDb(
+                `UPDATE "${schema}".timetable_drafts SET slots = $1::jsonb, updated_at = NOW() WHERE id::text = $2`,
+                [JSON.stringify(filtered), String(d.id)]
+              ).catch(() => {});
+            }
+          }
+        }
+      }
+
+      // Sweep: remove any draft from DB that has empty lectures list
+      await queryDb(`
+        DELETE FROM "${schema}".timetable_drafts 
+        WHERE slots IS NULL 
+           OR jsonb_array_length(slots) = 0 
+           OR slots::text = '[]' 
+           OR slots::text = 'null'
+      `).catch(() => {});
+    } catch (draftErr: any) {
+      console.warn('[delete-event draft cleanup warning]:', draftErr.message);
+    }
 
     const isExplicitlyDeleted = !!(srmsResult?.d && !srmsResult.d.toLowerCase().includes('unable'));
     const isUpdateSuccess = srmsUpdateResult?.success === true || srmsDeleteResult?.success === true;

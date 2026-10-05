@@ -110,7 +110,7 @@ export default function DigitalLibraryPortal({ role = 'student' }: { role?: stri
           : 'srms-cet-bareilly';
 
       // Call backend sync endpoint directly or via Next API
-      const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://100.63.22.73:8081/api/v1').replace(/\/$/, '');
+      const apiBase = (process.env.NEXT_PUBLIC_API_URL || '/api/v1').replace(/\/$/, '');
       const res = await fetch(`${apiBase}/library/books/sync`, {
         method: 'POST',
         headers: {

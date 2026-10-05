@@ -566,7 +566,7 @@ function OwnerDashboardContent() {
 
       // Resilient fallback to direct API URL if Next.js proxy rewrite returned an error
       if (!res.ok && typeof window !== 'undefined') {
-        const backendBase = process.env.NEXT_PUBLIC_API_URL || 'http://100.63.22.73:8081/api/v1';
+        const backendBase = process.env.NEXT_PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8081/api/v1`;
         try {
           const directRes = await fetch(`${backendBase}/firms/${selectedFirmId}/role-permissions`, {
             method: 'PUT',

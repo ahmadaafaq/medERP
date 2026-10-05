@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { srmsPostDirect, isSrmsTenant } from '@/lib/srms-client';
+import { srmsPostDirect, isSrmsTenant, fetchSrmsLoadSubjects, resolveSrmsSubjectLink } from '@/lib/srms-client';
 import { queryDb } from '@/lib/db';
 
 function formatToSrmsTimetblDate(dateStr?: string, defaultTime: string = '08:30'): { formatted: string; date: Date; iso: string; dayOfWeek: number; timeStr: string } {
@@ -122,6 +122,54 @@ export async function POST(req: NextRequest) {
     // Determines whether this college should sync to the SRMS portal (strictly tenants with srms)
     const callSrmsApi = isSrmsTenant(slug);
 
+    // 1.5 Check if this exact slot is ALREADY synchronized in srms_timetable_events with a valid srms_id
+    if (callSrmsApi) {
+      try {
+        const alreadySynced = await queryDb(
+          `SELECT id, srms_id, title, description, start_time, end_time, start_str, end_str, day_of_week, linkcd, electiveflg, txt_g, txt_sec, empid, colg_cd, course_cd, branch_cd, batch_cd, sem_cd, camera_link, unit_id, unit_name, topic, sub_topics, competency_codes, raw_payload
+           FROM "${schema}".srms_timetable_events
+           WHERE day_of_week = $1
+             AND (start_str LIKE '%' || $2 || '%' OR start_time::TIME = $3::TIME)
+             AND (colg_cd = $4 OR colg_cd IS NULL)
+             AND (course_cd = $5 OR course_cd IS NULL)
+             AND (branch_cd = $6 OR branch_cd IS NULL)
+             AND (batch_cd = $7 OR batch_cd IS NULL)
+             AND (sem_cd = $8 OR sem_cd IS NULL)
+             AND (txt_sec = $9 OR txt_sec IS NULL)
+             AND (empid = $10 OR empid IS NULL)
+             AND srms_id IS NOT NULL AND (srms_id > 0 OR srms_id::text != '')
+             AND id::text NOT IN (SELECT event_id FROM "${schema}".deleted_timetable_events)
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [
+            startMeta.dayOfWeek,
+            startMeta.timeStr.slice(0, 5),
+            startMeta.timeStr,
+            colgcd,
+            courseCd,
+            branchCd,
+            batchCd,
+            semCd,
+            txtSec,
+            empid,
+          ]
+        ).catch(() => []);
+
+        if (alreadySynced && alreadySynced.length > 0) {
+          const ev = alreadySynced[0];
+          return NextResponse.json({
+            success: true,
+            message: 'Lecture already synchronized with SRMS.',
+            id: Number(ev.srms_id) || ev.srms_id,
+            event: ev,
+            srms_data: { success: true, id: ev.srms_id, message: 'Already synchronized with SRMS.' }
+          });
+        }
+      } catch (checkErr: any) {
+        console.warn('[add-event check-already-synced]:', checkErr.message);
+      }
+    }
+
     // 2. Pre-Validation: Faculty Overlap Validation across All Departments & Courses for the SAME DAY & TIME SLOT
     const facIdentifier = empid || linkcd;
     if (facIdentifier) {
@@ -139,8 +187,8 @@ export async function POST(req: NextRequest) {
 
       const excludeId = String(improperEvent.excludeId || improperEvent.editingSlotId || improperEvent.id || '').trim();
 
-      // Check BOTH timetable_slots and srms_timetable_events for conflicts on this day of week and overlapping time
-      const [slotClashes, eventClashes] = await Promise.all([
+      // Check timetable_slots, srms_timetable_events, and timetable_drafts for conflicts on this day of week and overlapping time
+      const [slotClashes, eventClashes, draftClashes] = await Promise.all([
         queryDb(
           `SELECT ts.id, ts.start_time, ts.end_time, ts.day_of_week, ts.topic, ts.description,
                   ts.course_cd, ts.branch_cd, ts.batch_cd, ts.semester, ts.section,
@@ -205,10 +253,45 @@ export async function POST(req: NextRequest) {
             `%${targetFacName}%`,
             excludeId
           ]
+        ).catch(() => []),
+
+        queryDb(
+          `SELECT td.id, td.title, td.course_cd, td.branch_cd, td.batch_cd, td.semester, td.section,
+                  slot->>'startTime' AS start_time, slot->>'endTime' AS end_time,
+                  COALESCE(slot->>'dayOfWeek', slot->>'day_of_week')::int AS day_of_week,
+                  COALESCE(slot->>'subjectName', slot->>'subject_name', slot->>'topic') AS subject_name,
+                  COALESCE(slot->>'facultyName', slot->>'faculty_name') AS faculty_name,
+                  COALESCE(slot->>'facultyEmpId', slot->>'faculty_code', slot->>'empid') AS faculty_code
+           FROM "${schema}".timetable_drafts td,
+                jsonb_array_elements(td.slots) slot
+           WHERE (slot->>'dayOfWeek' = $1::text OR slot->>'day_of_week' = $1::text)
+             AND ((slot->>'startTime')::time < $3::time AND (slot->>'endTime')::time > $2::time)
+             AND ($7::text = '' OR (slot->>'id' <> $7::text AND td.id::text <> $7::text))
+             AND (
+               slot->>'facultyEmpId' = $5
+               OR slot->>'faculty_code' = $5
+               OR slot->>'empid' = $5
+               OR slot->>'facultyId' = $4
+               OR slot->>'faculty_id' = $4
+               OR slot->>'facultyName' ILIKE $6
+               OR slot->>'faculty_name' ILIKE $6
+             )
+           LIMIT 1`,
+          [
+            startMeta.dayOfWeek,
+            startMeta.timeStr,
+            endMeta.timeStr,
+            targetFacId || '00000000-0000-0000-0000-000000000000',
+            targetEmpId || '',
+            `%${targetFacName}%`,
+            excludeId
+          ]
         ).catch(() => [])
       ]);
 
-      const clash = (slotClashes && slotClashes.length > 0) ? slotClashes[0] : (eventClashes && eventClashes.length > 0 ? eventClashes[0] : null);
+      const clash = (slotClashes && slotClashes.length > 0)
+        ? slotClashes[0]
+        : ((eventClashes && eventClashes.length > 0) ? eventClashes[0] : ((draftClashes && draftClashes.length > 0) ? draftClashes[0] : null));
 
       if (clash) {
         const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -257,19 +340,61 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 2.5 Resolve Authentic SRMS linkcd (linkcd in SRMS is the integer link ID, NOT the subject code)
+    let resolvedLinkcd = linkcd;
+    let resolvedEmpid = empid;
+
+    if (callSrmsApi) {
+      const subCode = String(improperEvent.subjectCode || improperEvent.subject_code || improperEvent.sub_cd || '').trim();
+      const subName = String(improperEvent.subjectName || improperEvent.subject_name || title || description || '').trim();
+      const facName = String(improperEvent.facultyName || improperEvent.faculty_name || '').trim();
+
+      try {
+        const loadSubs = await fetchSrmsLoadSubjects({
+          course: courseCd,
+          branch: branchCd,
+          batch: batchCd,
+          semester: semCd,
+          section: txtSec,
+          colgcd: colgcd,
+        });
+
+        if (loadSubs && loadSubs.length > 0) {
+          const match = resolveSrmsSubjectLink(loadSubs, {
+            linkcd,
+            subjectCode: subCode || linkcd,
+            subjectName: subName,
+            facultyName: facName,
+            empid,
+          });
+
+          if (match?.linkcd) {
+            resolvedLinkcd = match.linkcd;
+            if (!resolvedEmpid && match.empid) {
+              resolvedEmpid = match.empid;
+            }
+          }
+        }
+      } catch (resolveErr: any) {
+        console.warn('[add-event resolve linkcd warning]:', resolveErr.message);
+      }
+    }
+
     // 3. New SRMS AddEvent API Payload (https://myportal.srms.ac.in/srmserp/Timetbl/AddEvent)
     const srmsPayload = {
       title,
       description,
       start: startMeta.formatted,
       end: endMeta.formatted,
-      linkcd,
+      linkcd: resolvedLinkcd,
       electiveflg,
       txtG,
       txtSec,
-      empid,
+      empid: resolvedEmpid,
       colgcd,
       CameraLink: cameraLink,
+      Cancel_flg: '0',
+      cancelflg: '0',
     };
 
     let srmsResponse: any = null;
@@ -495,11 +620,11 @@ export async function POST(req: NextRequest) {
         startMeta.formatted,
         endMeta.formatted,
         startMeta.dayOfWeek,
-        linkcd,
+        resolvedLinkcd,
         electiveflg,
         txtG,
         txtSec,
-        empid,
+        resolvedEmpid,
         colgcd,
         courseCd,
         branchCd,

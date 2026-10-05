@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
 import { srmsPost } from '@/lib/srms-client';
+import { getBackendApiUrl } from '@/lib/backend-config';
 
 export const dynamic = 'force-dynamic';
-
-const BACKEND_API = (process.env.BACKEND_BASE_URL ? `${process.env.BACKEND_BASE_URL}/api/v1` : '') || (process.env.NEXT_PUBLIC_API_URL?.startsWith('http') ? process.env.NEXT_PUBLIC_API_URL : 'http://100.63.22.73:8081/api/v1');
 
 const srmsCollegeSlugMap: Record<string, string> = {
   '1': 'srms-cet-bareilly',
@@ -90,7 +89,7 @@ async function handleGetSemesters(
   // 1. Try Backend API: /attendance/portal/semesters
   try {
     const res = await fetch(
-      `${BACKEND_API}/attendance/portal/semesters?colgcd=${encodeURIComponent(cd)}&coursecd=${encodeURIComponent(crs)}&ddl_branch=${encodeURIComponent(br)}&ddl_batch=${encodeURIComponent(bat)}&tenant=${encodeURIComponent(targetSlug)}`,
+      `${getBackendApiUrl()}/attendance/portal/semesters?colgcd=${encodeURIComponent(cd)}&coursecd=${encodeURIComponent(crs)}&ddl_branch=${encodeURIComponent(br)}&ddl_batch=${encodeURIComponent(bat)}&tenant=${encodeURIComponent(targetSlug)}`,
       { cache: 'no-store' }
     );
     if (res.ok) {

@@ -235,6 +235,9 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.HOD, menu_key: 'hod_faculty_assessment', menu_label: 'Assessment & Grading', route_path: '/dashboard/faculty/assessment', sort_order: 80, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.HOD, menu_key: 'hod_faculty_marks', menu_label: 'Marks Entry & Grading', route_path: '/dashboard/faculty/marks', sort_order: 90, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.HOD, menu_key: 'hod_faculty_reports', menu_label: 'Department MIS Reports', route_path: '/dashboard/faculty/reports', sort_order: 100, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_reports_attendance', menu_label: 'Dept Attendance Report', route_path: '/dashboard/faculty/reports/attendance', parent_menu_key: 'hod_faculty_reports', sort_order: 101, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_reports_theory_result', menu_label: 'Dept Theory Result', route_path: '/dashboard/faculty/reports/theory-result', parent_menu_key: 'hod_faculty_reports', sort_order: 102, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.HOD, menu_key: 'hod_reports_logbook', menu_label: 'Dept Academic Portfolio (Logbook)', route_path: '/dashboard/faculty/reports/logbook', parent_menu_key: 'hod_faculty_reports', sort_order: 103, applicable_firm_mode: ApplicableFirmMode.BOTH },
 
       // ═══════════════════════════ STUDENT ═══════════════════════════
       { role: MenuRole.STUDENT, menu_key: 'student_overview', menu_label: 'Student Dashboard', route_path: '/dashboard/student', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },

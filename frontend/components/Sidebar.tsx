@@ -813,13 +813,6 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              <Link href="/dashboard/admin/qp-print" data-active={isLinkActive('/dashboard/admin/qp-print') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/qp-print')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-orange-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                </svg>
-                <span>QP Print Center (Approved)</span>
-              </Link>
-
               {isAllowed('admin_medical_logbook') &&
                 (
                   isAllowed('admin_medical_logbook_data_directory') ||
@@ -1520,6 +1513,81 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </svg>
                 <span>Batch & Dept Chat</span>
               </Link>
+
+              {/* ─── HOD: Dept MIS Reports Accordion ────────────────── */}
+              {(isAllowed('hod_faculty_reports', '/dashboard/faculty/reports') ||
+                isAllowed('hod_reports_attendance', '/dashboard/faculty/reports/attendance') ||
+                isAllowed('hod_reports_theory_result', '/dashboard/faculty/reports/theory-result') ||
+                isAllowed('hod_reports_logbook', '/dashboard/faculty/reports/logbook')) && (
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setMisReportsOpen(!misReportsOpen)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-r-xl font-bold transition-all group ${
+                      pathname?.startsWith('/dashboard/faculty/reports')
+                        ? 'text-[#F36C21] bg-[#F36C21]/10 border-l-4 border-[#F36C21] shadow-xs'
+                        : 'text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border-l-4 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span>Dept MIS Reports</span>
+                    </div>
+                    <span className="w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-800 text-[#11141A] dark:text-white font-black flex items-center justify-center text-xs">
+                      {misReportsOpen ? '−' : '+'}
+                    </span>
+                  </button>
+
+                  {misReportsOpen && (
+                    <div className="pl-6 pr-1 space-y-1 pt-1 border-l-2 border-slate-200 dark:border-slate-800 ml-3">
+                      {(isAllowed('hod_reports_attendance', '/dashboard/faculty/reports/attendance') || isAllowed('hod_faculty_reports')) && (
+                        <Link
+                          href="/dashboard/faculty/reports"
+                          data-active={isLinkActive('/dashboard/faculty/reports') ? 'true' : undefined}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                            pathname === '/dashboard/faculty/reports' || pathname === '/dashboard/faculty/reports/attendance'
+                              ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                              : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#F36C21]"></span>
+                          <span>1. Attendance Report</span>
+                        </Link>
+                      )}
+                      {isAllowed('hod_reports_theory_result', '/dashboard/faculty/reports/theory-result') && (
+                        <Link
+                          href="/dashboard/faculty/reports/theory-result"
+                          data-active={isLinkActive('/dashboard/faculty/reports/theory-result') ? 'true' : undefined}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                            pathname === '/dashboard/faculty/reports/theory-result'
+                              ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                              : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#FFB020]"></span>
+                          <span>2. Theory Result</span>
+                        </Link>
+                      )}
+                      {isAllowed('hod_reports_logbook', '/dashboard/faculty/reports/logbook') && (
+                        <Link
+                          href="/dashboard/faculty/reports/logbook"
+                          data-active={isLinkActive('/dashboard/faculty/reports/logbook') ? 'true' : undefined}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+                            pathname === '/dashboard/faculty/reports/logbook'
+                              ? 'font-black text-[#F36C21] bg-[#F36C21]/12 shadow-sm'
+                              : 'font-medium text-[#475467] dark:text-slate-300 hover:text-[#11141A] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#0E9F6E]"></span>
+                          <span>3. Academic Portfolio</span>
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           ) : role === 'warden' ? (
             <>

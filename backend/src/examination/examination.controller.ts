@@ -32,14 +32,16 @@ export class ExaminationController {
     @Tenant() tenantSlug: string,
     @Query('status') status?: string,
     @Query('departmentId') departmentId?: string,
+    @Query('colgCd') colgCd?: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+    @Query('batchCd') batchCd?: string,
+    @Query('semester') semester?: string,
+    @Query('section') section?: string,
   ) {
-    return this.examinationService.getPapers(tenantSlug, { status, departmentId });
-  }
-
-  @Public()
-  @Delete('papers/:id')
-  async deletePaper(@Tenant() tenantSlug: string, @Param('id') id: string) {
-    return this.examinationService.deletePaper(tenantSlug, id);
+    return this.examinationService.getPapers(tenantSlug, {
+      status, departmentId, colgCd, courseCd, branchCd, batchCd, semester, section,
+    });
   }
 
   // ─── HOD Approval — Question Papers ─────────────────────────────────────
@@ -61,14 +63,26 @@ export class ExaminationController {
   async getPendingQPForHod(
     @Tenant() tenantSlug: string,
     @Query('departmentId') departmentId?: string,
+    @Query('status') statusFilter?: string,
   ) {
-    return this.examinationService.getPendingQPForHod(tenantSlug, departmentId);
+    return this.examinationService.getPendingQPForHod(tenantSlug, departmentId, statusFilter);
   }
 
   /** HOD: Approve or reject a question paper */
   @Public()
   @Post('papers/hod-action')
   async hodQPAction(
+    @Tenant() tenantSlug: string,
+    @CurrentUser() user: any,
+    @Body() dto: HodApproveQPDto,
+  ) {
+    return this.examinationService.hodQPAction(tenantSlug, user, dto);
+  }
+
+  /** Admin: Add review remarks or approve a question paper */
+  @Public()
+  @Post('papers/admin-review')
+  async adminQPReview(
     @Tenant() tenantSlug: string,
     @CurrentUser() user: any,
     @Body() dto: HodApproveQPDto,
@@ -84,6 +98,18 @@ export class ExaminationController {
     @Query('departmentId') departmentId?: string,
   ) {
     return this.examinationService.getApprovedPapers(tenantSlug, departmentId);
+  }
+
+  @Public()
+  @Get('papers/:id')
+  async getPaperById(@Tenant() tenantSlug: string, @Param('id') id: string) {
+    return this.examinationService.getPaperById(tenantSlug, id);
+  }
+
+  @Public()
+  @Delete('papers/:id')
+  async deletePaper(@Tenant() tenantSlug: string, @Param('id') id: string) {
+    return this.examinationService.deletePaper(tenantSlug, id);
   }
 
   // ─── Timetable Draft Workflow (Clerk → HOD → Live) ──────────────────────
@@ -153,6 +179,16 @@ export class ExaminationController {
     return this.examinationService.getApprovedTimetable(tenantSlug, departmentId, batchId);
   }
 
+  /** Clerk / Admin: Delete a timetable draft */
+  @Public()
+  @Delete('timetable-drafts/:id')
+  async deleteTimetableDraft(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+  ) {
+    return this.examinationService.deleteTimetableDraft(tenantSlug, id);
+  }
+
   // ─── Results & Marks ────────────────────────────────────────────────────
 
   @Public()
@@ -218,9 +254,16 @@ export class ExaminationController {
     @Query('topic') topic?: string,
     @Query('competencyId') competencyId?: string,
     @Query('competencyCode') competencyCode?: string,
+    @Query('colgCd') colgCd?: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+    @Query('batchCd') batchCd?: string,
+    @Query('semester') semester?: string,
+    @Query('section') section?: string,
   ) {
     return this.examinationService.getQuestions(tenantSlug, {
       departmentId, subjectId, mode, professionalPhase, topicId, topic, competencyId, competencyCode,
+      colgCd, courseCd, branchCd, batchCd, semester, section,
     });
   }
 

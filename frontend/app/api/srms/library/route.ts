@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getBackendBaseUrl } from '@/lib/backend-config';
 
 function formatSrmsMediaUrl(rawPath: string | null | undefined): string | null {
   if (!rawPath || rawPath === '0' || rawPath.trim() === '') return null;
@@ -27,7 +28,7 @@ function formatSrmsMediaUrl(rawPath: string | null | undefined): string | null {
   return null;
 }
 
-const BACKEND_URL = process.env.BACKEND_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '') : 'http://100.63.22.73:8081');
+const BACKEND_URL = getBackendBaseUrl();
 
 async function fetchFromPostgres(tenantSlug: string, colg: string, searchvalue: string) {
   try {

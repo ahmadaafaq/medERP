@@ -144,6 +144,16 @@ export class CreateTimetableSlotDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ example: 'APPROVED', enum: ['DRAFT', 'APPROVED', 'REJECTED'] })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({ example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15' })
+  @IsOptional()
+  @IsString()
+  draftId?: string;
 }
 
 export class UpdateTimetableSlotDto extends PartialType(CreateTimetableSlotDto) { }

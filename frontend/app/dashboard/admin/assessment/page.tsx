@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import { useRolePermissions } from '../../../../lib/useRolePermissions';
+import QuestionPaperReviewModal, { QuestionRemarkItem } from '../../../../components/exam/QuestionPaperReviewModal';
 
 interface College {
   id: string;
@@ -551,6 +552,8 @@ export default function AssessmentMasterPage() {
   const [publishFilterSubject, setPublishFilterSubject] = useState<string>('all');
   const [publishFilterBatch, setPublishFilterBatch] = useState<string>('all');
   const [previewPaper, setPreviewPaper] = useState<any | null>(null);
+  const [reviewPaper, setReviewPaper] = useState<any | null>(null);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
 
   const { isAllowed } = useRolePermissions();
 
@@ -846,6 +849,7 @@ export default function AssessmentMasterPage() {
         const published = papersList
           .filter((p: any) => p.status === 'Published' || p.is_active || p.exam_date)
           .map((p: any) => ({
+            ...p,
             id: p.id,
             paperCode: p.code || p.paper_code || '',
             paperName: p.name || p.title || 'Exam Paper',
@@ -860,6 +864,8 @@ export default function AssessmentMasterPage() {
             maxMarks: p.max_marks || 40,
             duration: p.duration_minutes || 60,
             status: 'PUBLISHED',
+            sections: p.sections,
+            type: p.type,
           }));
         setPublishedExams(published);
       }
@@ -1751,7 +1757,9 @@ export default function AssessmentMasterPage() {
       maxMarks: paperTotals.grandTotalMarks || 40,
       passingMarks: Number(paperPassingMarks) || 20,
       subjectId: selectedSubject || null,
-      type: paperTotals.practicalMarks > 0 ? 'THEORY_PRACTICAL' : 'THEORY',
+      type: paperTotals.practicalMarks > 0
+        ? ((paperTotals.mcqMarks > 0 || paperTotals.descMarks > 0) ? 'THEORY_PRACTICAL' : 'PRACTICAL')
+        : 'THEORY',
       sections: sections.map(s => ({
         id: s.id,
         title: s.title,
@@ -1847,6 +1855,71 @@ export default function AssessmentMasterPage() {
     }
   };
 
+  // Admin Review Handlers
+  const handleAdminApprovePaper = async (paperId: string, remarks: string, version: number) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    try {
+      const res = await fetch(`${API_BASE}/exams/papers/admin-review?tenant=${selectedCollegeSlug}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-slug': selectedCollegeSlug,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          paperId,
+          action: 'approve',
+          remarks,
+          version,
+        }),
+      });
+      if (res.ok) {
+        setAlert({ type: 'success', message: 'Question paper officially approved!' });
+        fetchMetadata(selectedCollegeSlug);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setAlert({ type: 'error', message: err.message || 'Failed to approve paper.' });
+      }
+    } catch (e: any) {
+      setAlert({ type: 'error', message: e.message || 'Error approving paper.' });
+    }
+  };
+
+  const handleAdminRequestChanges = async (
+    paperId: string,
+    generalRemarks: string,
+    questionRemarks: Record<string, QuestionRemarkItem>,
+    version: number,
+  ) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    try {
+      const res = await fetch(`${API_BASE}/exams/papers/admin-review?tenant=${selectedCollegeSlug}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-slug': selectedCollegeSlug,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          paperId,
+          action: 'changes_requested',
+          remarks: generalRemarks,
+          questionRemarks,
+          version,
+        }),
+      });
+      if (res.ok) {
+        setAlert({ type: 'success', message: 'Revisions & question remarks submitted to Clerk!' });
+        fetchMetadata(selectedCollegeSlug);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setAlert({ type: 'error', message: err.message || 'Failed to submit change requests.' });
+      }
+    } catch (e: any) {
+      setAlert({ type: 'error', message: e.message || 'Error submitting change requests.' });
+    }
+  };
+
   // Publish Examination (Tab 3)
   const handlePublishExam = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1860,20 +1933,77 @@ export default function AssessmentMasterPage() {
       };
       // Find selected paper
       const selectedPaper = designedPapers.find(p => p.code === paperCode || p.id === paperCode);
+      if (selectedPaper && selectedPaper.status !== 'HOD_APPROVED' && selectedPaper.status !== 'PUBLISHED') {
+        setAlert({
+          type: 'error',
+          message: `🔒 Cannot publish: HOD approval is mandatory before publishing. Current status: ${selectedPaper.status || 'DRAFT'}.`,
+        });
+        setSaving(false);
+        return;
+      }
       if (selectedPaper) {
-        await fetch(`${API_BASE}/exams/publish?tenant=${selectedCollegeSlug}`, {
+        const finalBatch = selectedBatchCd || publishTargetBatch || selectedPaper.batch_cd || '';
+        // 1. Persist cascading attributes on paper
+        try {
+          await fetch(`${API_BASE}/exams/papers?tenant=${selectedCollegeSlug}`, {
+            method: 'POST',
+            headers: h,
+            body: JSON.stringify({
+              id: selectedPaper.id,
+              code: selectedPaper.code,
+              name: selectedPaper.name,
+              maxMarks: selectedPaper.max_marks || 40,
+              passingMarks: selectedPaper.passing_marks || 20,
+              colgCd: selectedColgCd || selectedPaper.colg_cd || '1',
+              courseCd: selectedCourseCd || selectedPaper.course_cd || '',
+              branchCd: selectedBranchCd || selectedPaper.branch_cd || '',
+              batchCd: finalBatch,
+              semester: selectedSemCd || selectedPaper.semester || '',
+              examDate: publishDate,
+              status: 'PUBLISHED',
+            }),
+          });
+        } catch {}
+
+        // 2. Publish examination paper with validated fields
+        const publishPayload: any = {
+          paperId: selectedPaper.id,
+          examDate: publishDate,
+          startTime: publishStartTime,
+          endTime: publishEndTime,
+        };
+        if (finalBatch) {
+          publishPayload.batchId = finalBatch;
+          publishPayload.batchCd = finalBatch;
+        }
+        if (selectedColgCd) publishPayload.colgCd = selectedColgCd;
+        if (selectedCourseCd) publishPayload.courseCd = selectedCourseCd;
+        if (selectedBranchCd) publishPayload.branchCd = selectedBranchCd;
+        if (selectedSemCd) publishPayload.semester = selectedSemCd;
+
+        let publishRes = await fetch(`${API_BASE}/exams/publish?tenant=${selectedCollegeSlug}`, {
           method: 'POST',
           headers: h,
-          body: JSON.stringify({
-            paperId: selectedPaper.id,
-            target_batch: publishTargetBatch,
-            examDate: publishDate,
-            startTime: publishStartTime,
-            endTime: publishEndTime,
-          }),
+          body: JSON.stringify(publishPayload),
         }).catch(() => null);
+
+        // Fallback: If remote backend has strict DTO rejecting extra keys, retry with core whitelist
+        if (!publishRes || !publishRes.ok) {
+          await fetch(`${API_BASE}/exams/publish?tenant=${selectedCollegeSlug}`, {
+            method: 'POST',
+            headers: h,
+            body: JSON.stringify({
+              paperId: selectedPaper.id,
+              batchId: finalBatch || undefined,
+              examDate: publishDate,
+              startTime: publishStartTime,
+              endTime: publishEndTime,
+            }),
+          }).catch(() => null);
+        }
       }
       const newExam = {
+        ...selectedPaper,
         id: selectedPaper?.id || Date.now().toString(),
         paperCode: selectedPaper?.code || paperCode,
         paperName: selectedPaper?.name || paperTitle,
@@ -1881,6 +2011,8 @@ export default function AssessmentMasterPage() {
         date: publishDate,
         time: `${publishStartTime} - ${publishEndTime}`,
         status: 'PUBLISHED',
+        sections: selectedPaper?.sections,
+        type: selectedPaper?.type || 'THEORY',
       };
       setPublishedExams(prev => [newExam, ...prev.filter(ex => ex.paperCode !== paperCode)]);
       setAlert({ type: 'success', message: `Exam [${selectedPaper?.code || paperCode}] published to student portal for batch ${publishTargetBatch}!` });
@@ -3291,9 +3423,30 @@ export default function AssessmentMasterPage() {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20 text-[10px]">
+                          <span className={`px-2.5 py-1 rounded-full font-bold border text-[10px] uppercase ${
+                            dp.status === 'HOD_APPROVED'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                              : dp.status === 'CHANGES_REQUESTED'
+                              ? 'bg-rose-500/10 text-rose-600 border-rose-500/20'
+                              : dp.status === 'PENDING_HOD_APPROVAL'
+                              ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                              : dp.status === 'PUBLISHED'
+                              ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                              : 'bg-slate-500/10 text-slate-600 border-slate-500/20'
+                          }`}>
                             {dp.status || 'READY'}
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewPaper(dp);
+                              setReviewModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-300 font-bold text-[10px] flex items-center gap-1 border border-amber-500/20 shadow-sm transition"
+                            title="Add remarks to questions, request revisions, or approve paper"
+                          >
+                            <span>📝 Review / Remarks</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => setPreviewPaper(dp)}
@@ -3449,25 +3602,59 @@ export default function AssessmentMasterPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={saving || !paperCode}
-                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {saving ? (
-                        <>
-                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span>Publishing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>🚀</span>
-                          <span>Publish Exam & Notify Students</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  {(() => {
+                    const targetPaper = designedPapers.find(p => p.code === paperCode || p.id === paperCode);
+                    const isApproved = targetPaper ? (targetPaper.status === 'HOD_APPROVED' || targetPaper.status === 'PUBLISHED') : false;
+
+                    return (
+                      <>
+                        {targetPaper && !isApproved && (
+                          <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 space-y-1.5">
+                            <div className="flex items-center gap-2 font-black text-xs text-amber-800 dark:text-amber-300">
+                              <span>🔒 HOD APPROVAL IS MANDATORY TO PUBLISH</span>
+                            </div>
+                            <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">
+                              This examination paper is currently in <b>&lsquo;{targetPaper.status || 'DRAFT'}&rsquo;</b> status. Under university policy, question papers must be reviewed and officially approved by the Department Head before an examination schedule can be published.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReviewPaper(targetPaper);
+                                setReviewModalOpen(true);
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] shadow-sm flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <span>📝 Open Review / Remarks Modal &rarr;</span>
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="flex justify-end">
+                          <button
+                            type="submit"
+                            disabled={saving || !paperCode || (targetPaper && !isApproved)}
+                            className={`px-6 py-2.5 rounded-xl text-white text-xs font-extrabold shadow-md transition-all flex items-center gap-2 ${
+                              targetPaper && isApproved
+                                ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20 cursor-pointer'
+                                : 'bg-slate-400 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            {saving ? (
+                              <>
+                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                <span>Publishing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>🚀</span>
+                                <span>Publish Exam &amp; Notify Students</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </form>
               </div>
 
@@ -3679,28 +3866,40 @@ export default function AssessmentMasterPage() {
 
                     {/* 2. Metadata Bar (Course, Subject, Batch, Duration, Max Theory Marks, Student Roll No) */}
                     {(() => {
-                      // Extract sections from paper (filtering out PRACTICAL)
-                      const rawSections = previewPaper.sections
-                        ? (typeof previewPaper.sections === 'string' ? JSON.parse(previewPaper.sections) : previewPaper.sections)
-                        : (sections || []);
+                      // Extract sections from paper (strictly filtering out PRACTICAL for Theory Paper)
+                      let rawSections: any[] = [];
+                      if (previewPaper.sections) {
+                        try {
+                          rawSections = typeof previewPaper.sections === 'string'
+                            ? JSON.parse(previewPaper.sections)
+                            : previewPaper.sections;
+                        } catch {
+                          rawSections = [];
+                        }
+                      }
+                      if (!Array.isArray(rawSections)) {
+                        rawSections = [];
+                      }
 
-                      const theorySections: PaperSection[] = Array.isArray(rawSections)
-                        ? rawSections.filter((s: any) => s.type !== 'PRACTICAL')
-                        : [];
+                      // Strictly exclude practical sections from theory question paper
+                      const theorySections: PaperSection[] = rawSections.filter(
+                        (s: any) => s.type !== 'PRACTICAL' && !String(s.title || '').toLowerCase().includes('practical')
+                      );
 
                       // Calculate Theory Max Marks
                       let theoryMaxMarks = 0;
                       theorySections.forEach(s => {
-                        const qList = s.selectedQuestions || (s as any).questions || [];
+                        const qList = (s.selectedQuestions || (s as any).questions || [])
+                          .filter((q: any) => q.mode !== 'PRACTICAL' && !q.is_practical && q.type !== 'PRACTICAL');
                         theoryMaxMarks += qList.reduce((acc: number, q: any) => acc + Number(q.marks || 0), 0);
                       });
-                      if (theoryMaxMarks === 0) {
-                        theoryMaxMarks = previewPaper.max_marks || previewPaper.maxMarks || 40;
+                      if (theoryMaxMarks === 0 && theorySections.length > 0) {
+                        theoryMaxMarks = previewPaper.max_marks || previewPaper.maxMarks || 0;
                       }
 
-                      const subjName = previewPaper.subjectName || previewPaper.subject_name || allSubjects.find(s => String(s.id) === String(previewPaper.subject_id))?.name || 'Computer Organization';
+                      const subjName = previewPaper.subjectName || previewPaper.subject_name || allSubjects.find(s => String(s.id) === String(previewPaper.subject_id))?.name || previewPaper.name || previewPaper.title || 'Course Subject';
                       const durationMins = previewPaper.duration_minutes || previewPaper.duration || 60;
-                      const batchName = previewPaper.batch || previewPaper.target_batch || 'Batch 2025 (BCA)';
+                      const batchName = previewPaper.batch || previewPaper.target_batch || 'All Batches';
 
                       return (
                         <>
@@ -3728,7 +3927,7 @@ export default function AssessmentMasterPage() {
                             <div className="space-y-0.5">
                               <span className="font-bold text-black uppercase text-[11px]">General Instructions:</span>
                               <ul className="list-disc list-inside text-[11px] text-slate-700 space-y-0.5">
-                                <li>Attempt all questions from Section A and Section B.</li>
+                                <li>Attempt all questions from the configured theory sections.</li>
                                 <li>Figures to the right indicate full marks for each question.</li>
                                 <li>Use of mobile phones or electronic communication devices is strictly prohibited.</li>
                               </ul>
@@ -3739,83 +3938,22 @@ export default function AssessmentMasterPage() {
                             </div>
                           </div>
 
-                          {/* 3. Render Theory Sections (Section A: MCQs & Section B: Descriptive) */}
+                          {/* 3. Render Theory Sections (Excludes Practical Part) */}
                           {theorySections.length === 0 ? (
-                            /* Fallback: If paper has no embedded sections, render standard questions for this subject */
-                            <div className="space-y-6 pt-2">
-                              {/* Section A */}
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between border-b border-black pb-1">
-                                  <h3 className="font-bold text-xs uppercase text-black font-sans">
-                                    SECTION A: MULTIPLE CHOICE QUESTIONS (MCQs)
-                                  </h3>
-                                  <span className="font-mono font-bold text-xs">[20 x 1.0 = 20 Marks]</span>
-                                </div>
-                                <p className="text-xs italic text-slate-600 font-sans">
-                                  Choose the correct option for each question. Each question carries 1.0 mark.
-                                </p>
-
-                                <div className="space-y-2.5 font-sans text-xs">
-                                  {questions.filter(q => q.mode === 'MCQ').slice(0, 10).map((q, idx) => (
-                                    <div key={q.id || idx} className="space-y-1">
-                                      <div className="flex items-start justify-between gap-2">
-                                        <p className="font-bold text-black">
-                                          Q{idx + 1}. {q.question_text}
-                                        </p>
-                                        <span className="font-mono text-[10px] text-slate-500 font-bold shrink-0">[1.0]</span>
-                                      </div>
-                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pl-4 text-[11px] text-slate-800">
-                                        <span>(A) {q.option_a || 'Option A'}</span>
-                                        <span>(B) {q.option_b || 'Option B'}</span>
-                                        <span>(C) {q.option_c || 'Option C'}</span>
-                                        <span>(D) {q.option_d || 'Option D'}</span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-
-                              {/* Section B */}
-                              <div className="space-y-3 pt-3 border-t border-slate-300">
-                                <div className="flex items-center justify-between border-b border-black pb-1">
-                                  <h3 className="font-bold text-xs uppercase text-black font-sans">
-                                    SECTION B: LONG DESCRIPTIVE QUESTIONS &amp; SUB-PARTS
-                                  </h3>
-                                  <span className="font-mono font-bold text-xs">[4 x 10.0 = 40 Marks]</span>
-                                </div>
-                                <p className="text-xs italic text-slate-600 font-sans">
-                                  Answer all questions with detailed explanations, architectural diagrams, and code snippets.
-                                </p>
-
-                                <div className="space-y-3 font-sans text-xs">
-                                  {questions.filter(q => q.mode === 'DESC').slice(0, 4).map((q, idx) => (
-                                    <div key={q.id || idx} className="space-y-1">
-                                      <div className="flex items-start justify-between gap-2">
-                                        <p className="font-bold text-black">
-                                          Q{idx + 1}. {q.question_text}
-                                        </p>
-                                        <span className="font-mono text-[10px] text-slate-500 font-bold shrink-0">[10.0]</span>
-                                      </div>
-                                      {q.sub_questions && Array.isArray(q.sub_questions) && (
-                                        <div className="pl-4 space-y-1 text-[11px] text-slate-800">
-                                          {q.sub_questions.map((sq, sIdx) => (
-                                            <div key={sIdx} className="flex items-start justify-between">
-                                              <span><strong>{sq.label}</strong> {sq.questionText}</span>
-                                              <span className="font-mono text-slate-500 font-bold ml-2">[{sq.marks} M]</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
+                            <div className="py-12 text-center text-slate-500 font-sans space-y-2 border border-dashed border-slate-300 rounded-xl my-4 bg-slate-50/50">
+                              <p className="font-bold text-sm text-slate-700">No theory questions configured for this question paper.</p>
+                              <p className="text-xs text-slate-500">
+                                {rawSections.some((s: any) => s.type === 'PRACTICAL' || (s.practicalComponents && s.practicalComponents.length > 0))
+                                  ? 'This examination paper contains Practical/Lab assessment components, which are strictly excluded from the Theory question paper printout.'
+                                  : 'Questions selected during paper design will appear here. No theory questions have been selected yet.'}
+                              </p>
                             </div>
                           ) : (
                             /* Render Actual Designed Sections */
                             <div className="space-y-6 pt-2">
                               {theorySections.map((sec, secIdx) => {
-                                const qList = sec.selectedQuestions || (sec as any).questions || [];
+                                const qList = (sec.selectedQuestions || (sec as any).questions || [])
+                                  .filter((q: any) => q.mode !== 'PRACTICAL' && !q.is_practical && q.type !== 'PRACTICAL');
                                 const secTotal = qList.reduce((acc: number, q: any) => acc + Number(q.marks || 0), 0);
 
                                 return (
@@ -3918,6 +4056,22 @@ export default function AssessmentMasterPage() {
 
               </div>
             </div>
+          )}
+
+          {/* Review / Remarks / Approval Modal for Admin */}
+          {reviewModalOpen && reviewPaper && (
+            <QuestionPaperReviewModal
+              paper={reviewPaper}
+              isOpen={reviewModalOpen}
+              onClose={() => {
+                setReviewModalOpen(false);
+                setReviewPaper(null);
+              }}
+              mode="review"
+              userRole="Admin"
+              onApprove={handleAdminApprovePaper}
+              onRequestChanges={handleAdminRequestChanges}
+            />
           )}
 
           {/* ═════════════════════════════════════════════════════════════════════════════ */}

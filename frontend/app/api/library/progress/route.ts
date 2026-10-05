@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { queryDb } from '@/lib/db';
+import { getBackendApiUrl } from '@/lib/backend-config';
 
 function resolveTenantSchema(slug?: string | null): string {
   if (!slug) return 'tenant_srms-cet-bareilly';
@@ -20,8 +21,7 @@ export async function GET(req: NextRequest) {
     const schema = resolveTenantSchema(headerTenant);
 
     // Dynamic backend base URL for live public IP or docker deployment
-    const rawBackend = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://100.63.22.73:8081/api/v1';
-    const backendApi = rawBackend.replace(/\/+$/, '').replace(/\/api\/v1$/, '') + '/api/v1';
+    const backendApi = getBackendApiUrl();
 
     // Try backend proxy first if auth header exists
     if (authHeader) {
@@ -79,8 +79,7 @@ export async function POST(req: NextRequest) {
     const schema = resolveTenantSchema(headerTenant);
 
     // Dynamic backend base URL for live public IP or docker deployment
-    const rawBackend = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://100.63.22.73:8081/api/v1';
-    const backendApi = rawBackend.replace(/\/+$/, '').replace(/\/api\/v1$/, '') + '/api/v1';
+    const backendApi = getBackendApiUrl();
 
     // If backend proxy is available
     if (authHeader) {

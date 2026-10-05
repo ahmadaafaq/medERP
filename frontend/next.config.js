@@ -1,5 +1,13 @@
 /** @type {import('next').NextConfig} */
-let rawBackend = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8081/api/v1';
+const publicApi = (process.env.NEXT_PUBLIC_API_URL || '').trim();
+const hasPublicIp = publicApi && !publicApi.includes('localhost') && !publicApi.includes('127.0.0.1');
+
+const backendHost = process.env.BACKEND_HOST || '100.63.22.73';
+const backendPort = process.env.BACKEND_PORT || process.env.PORT || '8081';
+const defaultBase = `http://${backendHost}:${backendPort}`;
+
+// When NEXT_PUBLIC_API_URL is configured (e.g. http://100.63.22.73:8081/api/v1), prioritize it!
+let rawBackend = (hasPublicIp ? publicApi : null) || process.env.BACKEND_INTERNAL_URL || publicApi || `${defaultBase}/api/v1`;
 
 if (rawBackend.endsWith('/:path*')) {
   // already formatted
@@ -9,9 +17,9 @@ if (rawBackend.endsWith('/:path*')) {
   rawBackend = rawBackend.replace(/\/+$/, '') + '/api/v1/:path*';
 }
 
-let backendBase = process.env.BACKEND_BASE_URL || (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '') : 'http://127.0.0.1:8081');
+let backendBase = (hasPublicIp ? publicApi.replace(/\/api\/v1\/?$/, '') : null) || process.env.BACKEND_BASE_URL || (publicApi ? publicApi.replace(/\/api\/v1\/?$/, '') : defaultBase);
 
-// Normalize localhost to IPv4 127.0.0.1 for server-side proxying to prevent Windows Node IPv6 ::1 ECONNREFUSED
+// Only if user explicitly passed localhost:8081, normalize to 127.0.0.1 for server-side proxying to prevent Windows Node IPv6 ::1 ECONNREFUSED
 if (rawBackend.includes('localhost:8081')) {
   rawBackend = rawBackend.replace('localhost:8081', '127.0.0.1:8081');
 }

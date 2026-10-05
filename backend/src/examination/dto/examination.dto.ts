@@ -45,6 +45,81 @@ export class CreateExamPaperDto {
   @IsString()
   @IsOptional()
   status?: string;
+
+  @IsString()
+  @IsOptional()
+  departmentId?: string;
+
+  @IsString()
+  @IsOptional()
+  department_id?: string;
+
+  @IsString()
+  @IsOptional()
+  colgCd?: string;
+
+  @IsString()
+  @IsOptional()
+  colg_cd?: string;
+
+  @IsString()
+  @IsOptional()
+  courseCd?: string;
+
+  @IsString()
+  @IsOptional()
+  course_cd?: string;
+
+  @IsString()
+  @IsOptional()
+  branchCd?: string;
+
+  @IsString()
+  @IsOptional()
+  branch_cd?: string;
+
+  @IsString()
+  @IsOptional()
+  batchCd?: string;
+
+  @IsString()
+  @IsOptional()
+  batch_cd?: string;
+
+  @IsString()
+  @IsOptional()
+  semester?: string;
+
+  @IsString()
+  @IsOptional()
+  section?: string;
+
+  @IsString()
+  @IsOptional()
+  academicYear?: string;
+
+  @IsString()
+  @IsOptional()
+  academic_year?: string;
+
+  @IsNumber()
+  @IsOptional()
+  version?: number;
+
+  @IsString()
+  @IsOptional()
+  hodRemarks?: string;
+
+  @IsOptional()
+  questionRemarks?: any;
+
+  @IsString()
+  @IsOptional()
+  createdBy?: string;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
 }
 
 export class SubmitResultDto {
@@ -169,6 +244,42 @@ export class CreateQuestionDto {
   @IsNumber()
   @IsOptional()
   maxMarks?: number;
+
+  @IsString()
+  @IsOptional()
+  colgCd?: string;
+
+  @IsString()
+  @IsOptional()
+  courseCd?: string;
+
+  @IsString()
+  @IsOptional()
+  branchCd?: string;
+
+  @IsString()
+  @IsOptional()
+  batchCd?: string;
+
+  @IsString()
+  @IsOptional()
+  semester?: string;
+
+  @IsString()
+  @IsOptional()
+  section?: string;
+
+  @IsString()
+  @IsOptional()
+  unitCode?: string;
+
+  @IsString()
+  @IsOptional()
+  unitName?: string;
+
+  @IsString()
+  @IsOptional()
+  subTopicCode?: string;
 }
 
 export class CreatePaperDesignDto {
@@ -210,7 +321,31 @@ export class PublishPaperDto {
 
   @IsString()
   @IsOptional()
+  colgCd?: string;
+
+  @IsString()
+  @IsOptional()
+  courseCd?: string;
+
+  @IsString()
+  @IsOptional()
+  branchCd?: string;
+
+  @IsString()
+  @IsOptional()
   batchId?: string;
+
+  @IsString()
+  @IsOptional()
+  batchCd?: string;
+
+  @IsString()
+  @IsOptional()
+  target_batch?: string;
+
+  @IsString()
+  @IsOptional()
+  semester?: string;
 
   @IsString()
   @IsOptional()
@@ -223,6 +358,10 @@ export class PublishPaperDto {
   @IsString()
   @IsOptional()
   endTime?: string;
+
+  @IsString()
+  @IsOptional()
+  room?: string;
 }
 
 // ─── HOD Approval Workflow DTOs ──────────────────────────────────────────────
@@ -235,11 +374,34 @@ export class HodApproveQPDto {
 
   @IsString()
   @IsNotEmpty()
-  action: string; // 'approve' | 'reject'
+  action: string; // 'approve' | 'reject' | 'changes_requested'
 
   @IsString()
   @IsOptional()
   remarks?: string;
+
+  @IsString()
+  @IsOptional()
+  hodRemarks?: string;
+
+  @IsString()
+  @IsOptional()
+  hod_remarks?: string;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+
+  @IsString()
+  @IsOptional()
+  reason?: string;
+
+  @IsOptional()
+  questionRemarks?: any;
+
+  @IsNumber()
+  @IsOptional()
+  version?: number;
 }
 
 /** HOD approves or rejects a timetable draft */
@@ -255,6 +417,14 @@ export class HodApproveTimetableDto {
   @IsString()
   @IsOptional()
   remarks?: string;
+
+  @IsString()
+  @IsOptional()
+  hodRemarks?: string;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
 }
 
 /** Clerk creates a timetable draft for HOD approval */
@@ -288,6 +458,30 @@ export class CreateTimetableDraftDto {
 
   @IsString()
   @IsOptional()
+  id?: string;
+
+  @IsString()
+  @IsOptional()
   notes?: string;
+
+  @IsString()
+  @IsOptional()
+  colgCd?: string;
+
+  @IsString()
+  @IsOptional()
+  courseCd?: string;
+
+  @IsString()
+  @IsOptional()
+  branchCd?: string;
+
+  @IsString()
+  @IsOptional()
+  batchCd?: string;
+
+  @IsString()
+  @IsOptional()
+  section?: string;
 }
 

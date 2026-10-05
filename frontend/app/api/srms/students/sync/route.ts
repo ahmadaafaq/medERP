@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { srmsPost } from '@/lib/srms-client';
-
-const BACKEND_API = (process.env.BACKEND_BASE_URL ? `${process.env.BACKEND_BASE_URL}/api/v1` : '') || (process.env.NEXT_PUBLIC_API_URL || 'http://100.63.22.73:8081/api/v1').replace(/\/$/, '');
+import { getBackendApiUrl } from '@/lib/backend-config';
 
 export async function POST(req: NextRequest) {
   try {
@@ -174,7 +173,7 @@ export async function POST(req: NextRequest) {
 
     // Forward to backend to persist into PostgreSQL
     try {
-      await fetch(`${BACKEND_API}/student-master/sync-live?tenant=${tenant}`, {
+      await fetch(`${getBackendApiUrl()}/student-master/sync-live?tenant=${tenant}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ students: mappedStudents }),

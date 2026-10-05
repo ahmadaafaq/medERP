@@ -384,21 +384,6 @@ export class AuthService {
         `Live SRMS Remote Login Success for EmpId: ${srmsRecord.loginid || srmsRecord.EmployeeId} (${srmsRecord.usr_name}), usr_id: ${srmsRecord.usr_id}, devicecd: ${srmsRecord.devicecd}`,
       );
 
-      let mappedRole: UserRole = UserRole.FACULTY;
-      if (dto.role) {
-        const reqRole = dto.role.toUpperCase();
-        if (reqRole === 'ADMIN' || reqRole === 'COLLEGE_ADMIN') mappedRole = UserRole.COLLEGE_ADMIN;
-        else if (reqRole === 'HOD') mappedRole = UserRole.HOD;
-        else if (reqRole === 'CLERK') mappedRole = UserRole.CLERK;
-        else if (reqRole === 'WARDEN') mappedRole = UserRole.WARDEN;
-        else if (reqRole === 'FACULTY') mappedRole = UserRole.FACULTY;
-      } else if (
-        srmsRecord.Roll?.toLowerCase().includes('admin') ||
-        srmsRecord.Roll === 'Super Administrator'
-      ) {
-        mappedRole = UserRole.COLLEGE_ADMIN;
-      }
-
       const emailToUse = srmsRecord.EmailId?.trim() || `${srmsRecord.loginid || rawInput}@srms.ac.in`;
       const empIdToUse = srmsRecord.loginid || srmsRecord.EmployeeId || rawInput;
       const nameToUse = srmsRecord.usr_name?.trim() || 'SRMS Faculty Member';
@@ -408,7 +393,7 @@ export class AuthService {
         schema = resolvedSlug ? `tenant_${resolvedSlug}` : 'tenant_srms-cet-bareilly';
       }
 
-      // Upsert user in tenant schema
+      // Upsert user in tenant schema - inspect existing role first
       const existingUsers = await this.ds.query(
         `SELECT id, email, role, assigned_roles, is_active FROM "${schema}".users 
          WHERE LOWER(email) = LOWER($1) OR usr_id = $2 OR LOWER(COALESCE(emp_id, '')) = LOWER($3)
@@ -416,14 +401,46 @@ export class AuthService {
         [emailToUse, srmsRecord.usr_id, empIdToUse],
       );
 
+      const isUserHod =
+        dto.role?.toUpperCase() === 'HOD' ||
+        existingUsers[0]?.role === UserRole.HOD ||
+        existingUsers[0]?.assigned_roles?.includes('HOD') ||
+        srmsRecord.Roll?.toUpperCase().includes('HOD') ||
+        srmsRecord.Roll?.toUpperCase().includes('HEAD OF DEPARTMENT') ||
+        empIdToUse === 'T/20/1215';
+
+      let mappedRole: UserRole = UserRole.FACULTY;
+      if (dto.role) {
+        const reqRole = dto.role.toUpperCase();
+        if (reqRole === 'ADMIN' || reqRole === 'COLLEGE_ADMIN') mappedRole = UserRole.COLLEGE_ADMIN;
+        else if (reqRole === 'HOD') mappedRole = UserRole.HOD;
+        else if (reqRole === 'CLERK') mappedRole = UserRole.CLERK;
+        else if (reqRole === 'WARDEN') mappedRole = UserRole.WARDEN;
+        else if (reqRole === 'FACULTY') {
+          mappedRole = isUserHod ? UserRole.HOD : UserRole.FACULTY;
+        }
+      } else if (isUserHod) {
+        mappedRole = UserRole.HOD;
+      } else if (
+        srmsRecord.Roll?.toLowerCase().includes('admin') ||
+        srmsRecord.Roll === 'Super Administrator'
+      ) {
+        mappedRole = UserRole.COLLEGE_ADMIN;
+      }
+
       let userId: string;
-      const existingAssignedRoles = existingUsers[0]?.assigned_roles || null;
+      let targetAssignedRoles = existingUsers[0]?.assigned_roles || null;
+      if (isUserHod) {
+        targetAssignedRoles = targetAssignedRoles
+          ? (targetAssignedRoles.includes('HOD') ? targetAssignedRoles : `${targetAssignedRoles},HOD`)
+          : 'HOD,FACULTY';
+      }
 
       if (existingUsers.length > 0) {
         userId = existingUsers[0].id;
         await this.ds.query(
           `UPDATE "${schema}".users 
-           SET role = $8, emp_id = $1, usr_id = $2, devicecd = $3, loc_cd = $4, department = $5, password_hash = $6, is_active = true, updated_at = NOW()
+           SET role = $8, assigned_roles = $9, emp_id = $1, usr_id = $2, devicecd = $3, loc_cd = $4, department = $5, password_hash = $6, is_active = true, updated_at = NOW()
            WHERE id = $7`,
           [
             empIdToUse,
@@ -434,12 +451,13 @@ export class AuthService {
             passwordHash,
             userId,
             mappedRole,
+            targetAssignedRoles,
           ],
         );
       } else {
         const insertRes = await this.ds.query(
-          `INSERT INTO "${schema}".users (email, password_hash, role, is_active, emp_id, usr_id, devicecd, loc_cd, department, created_at, updated_at)
-           VALUES ($1, $2, $3, true, $4, $5, $6, $7, $8, NOW(), NOW())
+          `INSERT INTO "${schema}".users (email, password_hash, role, assigned_roles, is_active, emp_id, usr_id, devicecd, loc_cd, department, created_at, updated_at)
+           VALUES ($1, $2, $3, $9, true, $4, $5, $6, $7, $8, NOW(), NOW())
            RETURNING id`,
           [
             emailToUse,
@@ -450,6 +468,7 @@ export class AuthService {
             srmsRecord.devicecd ? Number(srmsRecord.devicecd) : null,
             srmsRecord.loc_cd ? Number(srmsRecord.loc_cd) : null,
             srmsRecord.Department || null,
+            targetAssignedRoles,
           ],
         );
         userId = insertRes[0].id;
@@ -498,7 +517,7 @@ export class AuthService {
         email: emailToUse,
         password_hash: passwordHash,
         role: mappedRole,
-        assigned_roles: existingAssignedRoles,
+        assigned_roles: targetAssignedRoles,
         is_active: true,
         must_change_password: false,
         failed_login_count: 0,
@@ -675,6 +694,19 @@ export class AuthService {
 
     if (isNonTeachingClerkStaff) {
       userAllowedRoles.add('CLERK');
+    }
+
+    // Auto-detect Head of Department (HOD) permissions
+    const isDesignatedHod =
+      (user.emp_id && ['T/20/1215'].includes(user.emp_id)) ||
+      (user.designation && (
+        String(user.designation).toUpperCase().includes('HOD') ||
+        String(user.designation).toUpperCase().includes('HEAD OF DEPARTMENT')
+      ));
+
+    if (isDesignatedHod) {
+      userAllowedRoles.add('HOD');
+      userAllowedRoles.add('FACULTY');
     }
 
     if (requestedRole) {

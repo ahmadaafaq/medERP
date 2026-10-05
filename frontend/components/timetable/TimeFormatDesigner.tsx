@@ -18,11 +18,13 @@ interface TimeFormatDesignerProps {
   initialSlots?: TimeSlotConfig[];
   selectedCollege?: string;
   selectedCourse?: string;
+  selectedBranch?: string;
   selectedDept?: string;
   selectedBatch?: string;
   collegeName?: string;
   courseName?: string;
   deptName?: string;
+  tenantSlug?: string;
   onSaveTimeFormat: (slots: TimeSlotConfig[]) => void;
   onSwitchToDesignTab?: () => void;
 }
@@ -130,14 +132,42 @@ export default function TimeFormatDesigner({
   initialSlots,
   selectedCollege = '1',
   selectedCourse = '13',
+  selectedBranch = '1',
   selectedDept = '',
   selectedBatch = '2',
   collegeName,
   courseName = 'BCA',
   deptName = 'BCA DEPARTMENT',
+  tenantSlug,
   onSaveTimeFormat,
   onSwitchToDesignTab,
 }: TimeFormatDesignerProps) {
+  // Safe resolution of tenantSlug, preventing fallback to non-existent 'default' schema
+  const activeTenantSlug = useMemo(() => {
+    if (tenantSlug && tenantSlug !== 'default' && tenantSlug !== 'all') {
+      return tenantSlug.replace(/^tenant_/, '');
+    }
+    if (typeof window !== 'undefined') {
+      const s = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant');
+      if (s && s !== 'default' && s !== 'all') return s.replace(/^tenant_/, '');
+    }
+    const colSlugMap: Record<string, string> = {
+      '1': 'srms-cet-bareilly',
+      '2': 'srms-cetr-bareilly',
+      '3': 'srms-cet-unnao',
+      '11': 'srms-ims',
+    };
+    return colSlugMap[String(selectedCollege || '1')] || 'srms-cet-bareilly';
+  }, [tenantSlug, selectedCollege]);
+
+  // Ensure branchCd is always numeric (e.g. '1', '2', '3') matching colgCd and courseCd
+  const numericBranch = useMemo(() => {
+    if (selectedBranch && selectedBranch !== '0' && !selectedBranch.includes('-') && !isNaN(Number(selectedBranch))) {
+      return String(selectedBranch);
+    }
+    return '1';
+  }, [selectedBranch]);
+
   const resolvedCollegeName =
     collegeName ||
     (typeof window !== 'undefined'
@@ -192,39 +222,62 @@ export default function TimeFormatDesigner({
   const dayEndMins = useMemo(() => timeToMinutes(dayEndTime), [dayEndTime]);
   const dayTotalMins = useMemo(() => Math.max(60, dayEndMins - dayStartMins), [dayStartMins, dayEndMins]);
 
-  // Load Saved Time Format for active College + Course + Dept from localStorage
+  // Load Saved Time Format for active College + Course + Dept from DB or localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storageKey = `srms_time_format_${selectedCollege}_${selectedCourse}_${selectedDept || 'all'}`;
-      const saved = localStorage.getItem(storageKey) || localStorage.getItem('srms_time_format_default');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setConfiguredSlots(parsed);
-            // Update day start and end based on slots
-            const firstSlot = parsed[0];
-            const lastSlot = parsed[parsed.length - 1];
-            if (firstSlot?.start) setDayStartTime(firstSlot.start.slice(0, 5));
-            if (lastSlot?.end) setDayEndTime(lastSlot.end.slice(0, 5));
+    let isCancelled = false;
+    const loadFormat = async () => {
+      try {
+        const res = await fetch(
+          `/api/v1/exams/timetable-format?colgcd=${selectedCollege}&course=${selectedCourse}&branch=${numericBranch}&dept=${selectedDept || ''}&tenant=${activeTenantSlug}`,
+          { headers: { 'x-tenant-slug': activeTenantSlug }, cache: 'no-store' }
+        );
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0 && !isCancelled) {
+          applySlotConfig(json.data);
+          return;
+        }
+      } catch (err) {
+        console.warn('Failed to load format from API:', err);
+      }
 
-            const tea = parsed.find(s => s.isBreak && s.type === 'Tea Break');
-            if (tea) {
-              setTeaBreakStart(tea.start.slice(0, 5));
-              setTeaBreakEnd(tea.end.slice(0, 5));
+      if (typeof window !== 'undefined' && !isCancelled) {
+        const storageKey = `srms_time_format_${selectedCollege}_${selectedCourse}_${numericBranch}`;
+        const saved = localStorage.getItem(storageKey) || localStorage.getItem('srms_time_format_default');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              applySlotConfig(parsed);
             }
-            const lunch = parsed.find(s => s.isBreak && s.type === 'Lunch Break');
-            if (lunch) {
-              setLunchBreakStart(lunch.start.slice(0, 5));
-              setLunchBreakEnd(lunch.end.slice(0, 5));
-            }
+          } catch (e) {
+            console.warn('Failed to parse saved time format', e);
           }
-        } catch (e) {
-          console.warn('Failed to parse saved time format', e);
         }
       }
-    }
-  }, [selectedCollege, selectedCourse, selectedDept]);
+    };
+
+    const applySlotConfig = (parsed: TimeSlotConfig[]) => {
+      setConfiguredSlots(parsed);
+      const firstSlot = parsed[0];
+      const lastSlot = parsed[parsed.length - 1];
+      if (firstSlot?.start) setDayStartTime(firstSlot.start.slice(0, 5));
+      if (lastSlot?.end) setDayEndTime(lastSlot.end.slice(0, 5));
+
+      const tea = parsed.find(s => s.isBreak && s.type === 'Tea Break');
+      if (tea) {
+        setTeaBreakStart(tea.start.slice(0, 5));
+        setTeaBreakEnd(tea.end.slice(0, 5));
+      }
+      const lunch = parsed.find(s => s.isBreak && s.type === 'Lunch Break');
+      if (lunch) {
+        setLunchBreakStart(lunch.start.slice(0, 5));
+        setLunchBreakEnd(lunch.end.slice(0, 5));
+      }
+    };
+
+    loadFormat();
+    return () => { isCancelled = true; };
+  }, [selectedCollege, selectedCourse, selectedDept, numericBranch, activeTenantSlug]);
 
   // Sort slots by start time
   const sortedSlots = useMemo(() => {
@@ -408,16 +461,54 @@ export default function TimeFormatDesigner({
     showToast('success', `Added ${newSlot.name} (${formatTimeDisplay(startStr)} - ${formatTimeDisplay(endStr)})`);
   };
 
+  // When Day Start Time is updated in header input, proportionally shift all periods
+  const handleDayStartTimeChange = (newStartTime: string) => {
+    setDayStartTime(newStartTime);
+    if (!newStartTime) return;
+    const newStartMins = timeToMinutes(newStartTime);
+    const sorted = [...configuredSlots].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    if (sorted.length === 0) return;
+    const currentFirstMins = timeToMinutes(sorted[0].start);
+    const deltaMins = newStartMins - currentFirstMins;
+    if (deltaMins === 0) return;
+
+    // Shift all slots proportionally by deltaMins
+    const shifted = sorted.map(s => {
+      const sStart = Math.max(0, timeToMinutes(s.start) + deltaMins);
+      const sEnd = Math.max(sStart + 15, timeToMinutes(s.end) + deltaMins);
+      const startStr = minutesToTimeStr(sStart);
+      const endStr = minutesToTimeStr(sEnd);
+      return {
+        ...s,
+        start: startStr,
+        end: endStr,
+        label: formatTimeRange(startStr, endStr),
+      };
+    });
+    setConfiguredSlots(shifted);
+    if (shifted.length > 0) {
+      const lastEndMins = timeToMinutes(shifted[shifted.length - 1].end);
+      setDayEndTime(minutesToTimeStr(lastEndMins).slice(0, 5));
+    }
+  };
+
   // Update specific field of a slot
   const handleUpdateSlotField = (id: string, updates: Partial<TimeSlotConfig>) => {
-    setConfiguredSlots(prev => prev.map(s => {
-      if (s.id !== id) return s;
-      const updated = { ...s, ...updates };
-      if (updates.start || updates.end) {
-        updated.label = formatTimeRange(updated.start, updated.end);
+    setConfiguredSlots(prev => {
+      const updatedList = prev.map(s => {
+        if (s.id !== id) return s;
+        const updated = { ...s, ...updates };
+        if (updates.start || updates.end) {
+          updated.label = formatTimeRange(updated.start, updated.end);
+        }
+        return updated;
+      }).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+
+      if (updatedList.length > 0 && updatedList[0].start) {
+        setDayStartTime(updatedList[0].start.slice(0, 5));
       }
-      return updated;
-    }).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start)));
+      return updatedList;
+    });
   };
 
   // Delete a slot
@@ -437,21 +528,42 @@ export default function TimeFormatDesigner({
     showToast('success', `Applied preset: "${preset.name}"`);
   };
 
-  // Save Config & Persist
-  const handleSaveAndApply = () => {
+  // Save Config & Persist to Database & LocalStorage
+  const handleSaveAndApply = async () => {
     if (configuredSlots.length === 0) {
       showToast('error', 'Please configure at least one time slot before saving.');
       return;
     }
 
     if (typeof window !== 'undefined') {
-      const storageKey = `srms_time_format_${selectedCollege}_${selectedCourse}_${selectedDept || 'all'}`;
+      const storageKey = `srms_time_format_${selectedCollege}_${selectedCourse}_${numericBranch}`;
       localStorage.setItem(storageKey, JSON.stringify(sortedSlots));
       localStorage.setItem('srms_time_format_default', JSON.stringify(sortedSlots));
     }
 
+    // Persist to PostgreSQL database for cross-role visibility (Clerk -> HOD -> Admin)
+    try {
+      const res = await fetch(`/api/v1/exams/timetable-format?tenant=${activeTenantSlug}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-slug': activeTenantSlug },
+        body: JSON.stringify({
+          colgCd: selectedCollege || '1',
+          courseCd: selectedCourse || '13',
+          branchCd: numericBranch,
+          departmentId: selectedDept || '',
+          slots: sortedSlots,
+        }),
+      });
+      const resData = await res.json().catch(() => ({}));
+      if (!resData.success) {
+        console.warn('Server failed to save timetable format:', resData.message);
+      }
+    } catch (apiErr) {
+      console.warn('Failed to persist timetable format to server:', apiErr);
+    }
+
     onSaveTimeFormat(sortedSlots);
-    showToast('success', 'Time Format saved! Timetable Grid is now synchronized with this structure.');
+    showToast('success', 'Time Format saved & published! Timetable Grid and HOD/Admin views are now synchronized.');
 
     if (onSwitchToDesignTab) {
       setTimeout(() => {
@@ -643,7 +755,7 @@ export default function TimeFormatDesigner({
             <input
               type="time"
               value={dayStartTime}
-              onChange={(e) => setDayStartTime(e.target.value)}
+              onChange={(e) => handleDayStartTimeChange(e.target.value)}
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-black text-slate-900 dark:text-white"
             />
           </div>

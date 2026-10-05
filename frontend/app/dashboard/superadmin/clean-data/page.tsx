@@ -137,7 +137,7 @@ const CLEANABLE_MODULES = [
   },
 ];
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://100.63.22.73:8081/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export default function SuperAdminCleanDataPage() {
   const [firms, setFirms] = useState<TenantFirm[]>([]);

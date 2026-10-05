@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { srmsPost } from '@/lib/srms-client';
 import { queryDb } from '@/lib/db';
+import { getBackendApiUrl } from '@/lib/backend-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const BACKEND_API = (process.env.BACKEND_BASE_URL ? `${process.env.BACKEND_BASE_URL}/api/v1` : '') || (process.env.NEXT_PUBLIC_API_URL?.startsWith('http') ? process.env.NEXT_PUBLIC_API_URL : 'http://100.63.22.73:8081/api/v1');
 
 function resolveTenantFromReq(req: NextRequest, bodyOrParamTenant?: string): string {
   if (bodyOrParamTenant && bodyOrParamTenant.trim() && bodyOrParamTenant !== 'undefined' && bodyOrParamTenant !== 'null') {
@@ -105,7 +104,7 @@ async function handleGetAllSubjectDetail(
 
   // 2. Dynamic Fallback to PostgreSQL via NestJS backend
   try {
-    const res = await fetch(`${BACKEND_API}/admin-master/subjects?tenant=${encodeURIComponent(targetSlug)}`, {
+    const res = await fetch(`${getBackendApiUrl()}/admin-master/subjects?tenant=${encodeURIComponent(targetSlug)}`, {
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
     });

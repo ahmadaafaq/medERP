@@ -150,27 +150,48 @@ export default function AdminQPPrintPage() {
                       <span>Duration: {selected.duration_minutes || 60} min</span>
                     </div>
 
-                    {sections.length > 0 ? (
-                      sections.map((sec: any, si: number) => (
-                        <div key={si} className="space-y-3">
-                          <p className="font-extrabold text-sm text-[#1B1E28] dark:text-white underline">Section {String.fromCharCode(65 + si)}: {sec.title || sec.name || ''}</p>
-                          {(sec.questions || []).map((q: any, qi: number) => (
-                            <div key={qi} className="pl-4 space-y-1">
-                              <p className="text-sm font-semibold text-[#1B1E28] dark:text-white">Q{qi + 1}. {q.questionText || q.text} {q.marks ? `[${q.marks}M]` : ''}</p>
-                              {(q.options || [q.optionA, q.optionB, q.optionC, q.optionD].filter(Boolean)).length > 0 && (
-                                <ul className="pl-4 space-y-0.5">
-                                  {(q.options || [q.optionA, q.optionB, q.optionC, q.optionD].filter(Boolean)).map((opt: string, oi: number) => (
-                                    <li key={oi} className="text-sm text-slate-600 dark:text-slate-400">{String.fromCharCode(65 + oi)}. {opt}</li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-400 italic text-center py-8">No structured sections defined. Raw paper content to be added by HOD.</p>
-                    )}
+                    {(() => {
+                      const isTheory = (selected.type || '').toUpperCase() === 'THEORY';
+                      const printableSections = sections.filter((sec: any) => {
+                        if (isTheory && (sec.type === 'PRACTICAL' || String(sec.title || '').toLowerCase().includes('practical'))) {
+                          return false;
+                        }
+                        return true;
+                      });
+
+                      if (printableSections.length === 0) {
+                        return (
+                          <p className="text-sm text-slate-400 italic text-center py-8">
+                            {isTheory ? 'No theory sections defined for this paper.' : 'No structured sections defined. Raw paper content to be added by HOD.'}
+                          </p>
+                        );
+                      }
+
+                      return printableSections.map((sec: any, si: number) => {
+                        const qList = (sec.questions || []).filter((q: any) => !isTheory || (q.mode !== 'PRACTICAL' && !q.is_practical && q.type !== 'PRACTICAL'));
+                        return (
+                          <div key={si} className="space-y-3">
+                            <p className="font-extrabold text-sm text-[#1B1E28] dark:text-white underline">Section {String.fromCharCode(65 + si)}: {sec.title || sec.name || ''}</p>
+                            {qList.length === 0 ? (
+                              <p className="pl-4 text-xs text-slate-400 italic">No questions added in this section.</p>
+                            ) : (
+                              qList.map((q: any, qi: number) => (
+                                <div key={qi} className="pl-4 space-y-1">
+                                  <p className="text-sm font-semibold text-[#1B1E28] dark:text-white">Q{qi + 1}. {q.questionText || q.text} {q.marks ? `[${q.marks}M]` : ''}</p>
+                                  {(q.options || [q.optionA, q.optionB, q.optionC, q.optionD].filter(Boolean)).length > 0 && (
+                                    <ul className="pl-4 space-y-0.5">
+                                      {(q.options || [q.optionA, q.optionB, q.optionC, q.optionD].filter(Boolean)).map((opt: string, oi: number) => (
+                                        <li key={oi} className="text-sm text-slate-600 dark:text-slate-400">{String.fromCharCode(65 + oi)}. {opt}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               )}

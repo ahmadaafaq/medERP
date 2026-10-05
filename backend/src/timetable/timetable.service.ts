@@ -49,7 +49,9 @@ export class TimetableService implements OnModuleInit {
                 batch_cd        VARCHAR(50),
                 semester        VARCHAR(50),
                 section         VARCHAR(50),
-                description     TEXT
+                description     TEXT,
+                status          VARCHAR(50)  DEFAULT 'APPROVED',
+                draft_id        UUID
               );
             `);
 
@@ -70,6 +72,8 @@ export class TimetableService implements OnModuleInit {
               ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
               ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS section VARCHAR(50);
               ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS description TEXT;
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'APPROVED';
+              ALTER TABLE "${schemaName}".timetable_slots ADD COLUMN IF NOT EXISTS draft_id UUID;
             `);
 
             // 3. Auto-link timetable slots that have null subject_id to their respective subjects if table exists
@@ -132,6 +136,8 @@ export class TimetableService implements OnModuleInit {
       semester?: string;
       section?: string;
       sessionId?: string;
+      status?: string;
+      isStudent?: boolean;
     },
   ) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
@@ -142,7 +148,7 @@ export class TimetableService implements OnModuleInit {
              ts.day_of_week, ts.start_time, ts.end_time, ts.room, ts.slot_type,
              ts.effective_from, ts.effective_until, ts.group_name, ts.topic, ts.competency_codes,
              ts.unit_name, ts.unit_id, ts.sub_topics, ts.colg_cd, ts.course_cd, ts.branch_cd, ts.batch_cd,
-             ts.semester, ts.section, ts.description,
+             ts.semester, ts.section, ts.description, COALESCE(ts.status, 'APPROVED') AS status, ts.draft_id,
              COALESCE(f.name, '') AS faculty_name, f.emp_id AS faculty_code,
              COALESCE(s.name, '') AS subject_name, COALESCE(s.code, '') AS subject_code, COALESCE(s.code, '') AS subject_cd, COALESCE(s.sub_addinfo, '') AS subject_paper_code, COALESCE(s.type, '') AS subject_type,
              COALESCE(d.name, '') AS department_name, d.code AS department_code,
@@ -292,6 +298,14 @@ export class TimetableService implements OnModuleInit {
       params.push(Number(query.dayOfWeek));
       sql += ` AND ts.day_of_week = $${params.length}`;
     }
+
+    if (query.status && query.status !== 'all') {
+      params.push(query.status);
+      sql += ` AND (ts.status = $${params.length})`;
+    } else if (query.isStudent) {
+      sql += ` AND (ts.status = 'APPROVED' OR ts.status IS NULL)`;
+    }
+
     sql += ` ORDER BY ts.day_of_week ASC, ts.start_time ASC`;
 
     const slots = await this.tenantSchemaService.queryInTenant(slug, sql, params);
@@ -603,7 +617,7 @@ export class TimetableService implements OnModuleInit {
       section?: string;
     },
   ) {
-    const slots = await this.listSlots(tenantSlug, filters);
+    const slots = await this.listSlots(tenantSlug, { ...filters, status: 'APPROVED', isStudent: true });
     const now = new Date();
     const jsDay = now.getDay();
     const currentDayOfWeek = jsDay === 0 ? 7 : jsDay;
@@ -747,8 +761,9 @@ export class TimetableService implements OnModuleInit {
          faculty_id, subject_id, department_id, batch_id, day_of_week,
          start_time, end_time, room, slot_type, effective_from, effective_until,
          group_name, topic, competency_codes, unit_name, unit_id, sub_topics,
-         colg_cd, course_cd, branch_cd, batch_cd, semester, section, description
-       ) VALUES ($1, $2, $3, $4, $5, $6::TIME, $7::TIME, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+         colg_cd, course_cd, branch_cd, batch_cd, semester, section, description,
+         status, draft_id
+       ) VALUES ($1, $2, $3, $4, $5, $6::TIME, $7::TIME, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
        RETURNING *`,
       [
         resolvedFacultyId,
@@ -775,6 +790,8 @@ export class TimetableService implements OnModuleInit {
         dto.semester || null,
         dto.section || null,
         dto.description || null,
+        dto.status || 'APPROVED',
+        dto.draftId || null,
       ],
     );
     return rows[0];

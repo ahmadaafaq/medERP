@@ -43,6 +43,22 @@ export const MODULE_SUB_TABS: Record<string, { key: string; label: string }[]> =
     { key: 'faculty_medical_logbook_ug_logbook', label: '2. UG LogBook' },
     { key: 'faculty_medical_logbook_pg_logbook', label: '3. PG LogBook' },
   ],
+  // ── MIS Reports sub-tabs (per role) ──────────────────────────────────────
+  admin_reports: [
+    { key: 'admin_reports_attendance', label: '📊 Attendance Report' },
+    { key: 'admin_reports_theory_result', label: '📝 Theory Result' },
+    { key: 'admin_reports_logbook', label: '📋 Academic Portfolio (Logbook)' },
+  ],
+  faculty_reports: [
+    { key: 'faculty_reports_attendance', label: '📊 Attendance Report' },
+    { key: 'faculty_reports_theory_result', label: '📝 Theory Result' },
+    { key: 'faculty_reports_logbook', label: '📋 Academic Portfolio (Logbook)' },
+  ],
+  hod_faculty_reports: [
+    { key: 'hod_reports_attendance', label: '📊 Dept Attendance Report' },
+    { key: 'hod_reports_theory_result', label: '📝 Dept Theory Result' },
+    { key: 'hod_reports_logbook', label: '📋 Dept Academic Portfolio (Logbook)' },
+  ],
 };
 
 export const ALL_SUB_TAB_KEYS = new Set<string>(

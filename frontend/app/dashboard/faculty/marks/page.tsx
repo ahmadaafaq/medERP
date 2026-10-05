@@ -60,6 +60,12 @@ interface QuestionDetail {
   subQuestions?: QuestionSubPart[];
 }
 
+interface PracticalComponent {
+  id: string;
+  name: string;
+  marks: number;
+}
+
 interface PaperSection {
   id: string;
   name: string;
@@ -67,6 +73,7 @@ interface PaperSection {
   description?: string;
   questions: QuestionDetail[];
   practicalMarks?: number;
+  practicalComponents?: PracticalComponent[];
 }
 
 interface ExamPaper {
@@ -256,6 +263,7 @@ export default function FacultyMarksPage() {
   const [questionMarksMap, setQuestionMarksMap] = useState<{ [qId: string]: number }>({});
   const [subPartMarksMap, setSubPartMarksMap] = useState<{ [subId: string]: number }>({});
   const [practicalSectionMark, setPracticalSectionMark] = useState<number>(0);
+  const [practicalComponentMarksMap, setPracticalComponentMarksMap] = useState<{ [compId: string]: number }>({});
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -468,10 +476,16 @@ export default function FacultyMarksPage() {
   const mapRawSections = (rawSections: any[]): PaperSection[] => {
     return rawSections.map((sec: any) => ({
       id: sec.id || `sec-${Math.random()}`,
-      name: sec.name || 'Section',
+      name: sec.name || sec.title || 'Section',
       type: sec.type || 'DESC',
-      description: sec.description || '',
-      practicalMarks: sec.practicalMarks || 0,
+      description: sec.description || sec.instructions || '',
+      practicalMarks: Number(
+        sec.practicalMarks ||
+        (Array.isArray(sec.practicalComponents) && sec.practicalComponents.length > 0
+          ? sec.practicalComponents.reduce((acc: number, c: any) => acc + (Number(c.marks) || 0), 0)
+          : (sec.type === 'PRACTICAL' ? 20 : 0))
+      ),
+      practicalComponents: Array.isArray(sec.practicalComponents) ? sec.practicalComponents : [],
       questions: Array.isArray(sec.questions) ? sec.questions.map((q: any) => ({
         questionId: q.questionId || q.id || `q-${Math.random()}`,
         questionText: q.questionText || q.question_text || '',
@@ -591,9 +605,13 @@ export default function FacultyMarksPage() {
         const json = await res.json();
         const rawList: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
         if (rawList.length > 0) {
-          const theoryMax = activePaper?.max_marks || 40;
-          const practicalMax = 10;
-          const maxM = theoryMax + practicalMax; // 40 Theory + 10 Practical = 50 Total Marks
+          const practicalSec = activePaper?.sections?.find(s => s.type === 'PRACTICAL');
+          const hasPractical = Boolean(practicalSec);
+          const practicalMaxMarks = Number(
+            practicalSec?.practicalMarks ||
+            (practicalSec?.practicalComponents?.length ? practicalSec.practicalComponents.reduce((acc: number, c: any) => acc + (Number(c.marks) || 0), 0) : (hasPractical ? 20 : 0))
+          );
+          const maxM = Number(activePaper?.max_marks || (hasPractical ? (40 + practicalMaxMarks) : 40));
 
           const mapped: StudentRow[] = rawList.map((st: any, idx: number) => {
             const stId = st.id || `st-${idx + 1}`;
@@ -640,6 +658,10 @@ export default function FacultyMarksPage() {
 
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId) || null, [students, selectedStudentId]);
 
+  const hasPracticalSec = useMemo(() => {
+    return Boolean(activePaper?.sections?.some(s => s.type === 'PRACTICAL'));
+  }, [activePaper]);
+
   // Reset / populate marks when selected student or paper changes
   useEffect(() => {
     if (!selectedStudent || !activePaper?.sections) return;
@@ -666,8 +688,12 @@ export default function FacultyMarksPage() {
 
     setQuestionMarksMap(qMarks);
     setSubPartMarksMap(subMarks);
-    setPracticalSectionMark(selectedStudent.evaluated ? (selectedStudent.practicalMark ?? 18) : 0);
-  }, [selectedStudentId, selectedPaperId, selectedStudent?.evaluated]);
+    setPracticalSectionMark(
+      hasPracticalSec
+        ? (selectedStudent.evaluated ? Number(selectedStudent.practicalMark ?? 0) : 0)
+        : 0
+    );
+  }, [selectedStudentId, selectedPaperId, selectedStudent?.evaluated, hasPracticalSec]);
 
   const handleUpdateQMark = (qId: string, mark: number) => setQuestionMarksMap(prev => ({ ...prev, [qId]: mark }));
   const handleUpdateSubMark = (subId: string, mark: number) => setSubPartMarksMap(prev => ({ ...prev, [subId]: mark }));
@@ -675,8 +701,9 @@ export default function FacultyMarksPage() {
   const calculatedStudentTotal = useMemo(() => {
     const qTotal = Object.values(questionMarksMap).reduce((a, b) => a + Number(b || 0), 0);
     const subTotal = Object.values(subPartMarksMap).reduce((a, b) => a + Number(b || 0), 0);
-    return qTotal + subTotal + Number(practicalSectionMark || 0);
-  }, [questionMarksMap, subPartMarksMap, practicalSectionMark]);
+    const total = qTotal + subTotal + (hasPracticalSec ? Number(practicalSectionMark || 0) : 0);
+    return Math.round(total * 100) / 100;
+  }, [questionMarksMap, subPartMarksMap, practicalSectionMark, hasPracticalSec]);
 
   const handleSaveStudentEvaluation = async () => {
     if (!selectedStudent || !activePaper) return;
@@ -695,7 +722,7 @@ export default function FacultyMarksPage() {
           marksObtained: calculatedStudentTotal,
           questionMarks: questionMarksMap,
           subPartMarks: subPartMarksMap,
-          practicalMark: practicalSectionMark,
+          practicalMark: hasPracticalSec ? practicalSectionMark : 0,
         }),
       });
     } catch (err) {
@@ -725,7 +752,7 @@ export default function FacultyMarksPage() {
         max_marks: maxM,
         questionMarks: questionMarksMap,
         subPartMarks: subPartMarksMap,
-        practicalMark: practicalSectionMark,
+        practicalMark: hasPracticalSec ? practicalSectionMark : 0,
         competencyScores: compScores,
         is_pass: calculatedStudentTotal >= (maxM * 0.4)
       };
@@ -1104,24 +1131,74 @@ export default function FacultyMarksPage() {
 
                           {/* Practical Section OSPE */}
                           {sec.type === 'PRACTICAL' ? (
-                            <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-800 shadow-sm">
-                              <div>
-                                <p className="text-xs font-black text-[#1B1E28] dark:text-white">🧪 Practical Spotting, OSPE Stations &amp; Viva Voce</p>
-                                <span className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">Max Weightage: {sec.practicalMarks || 20} Marks</span>
+                            <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-800 shadow-sm space-y-3">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-100 dark:border-purple-900/40 pb-2.5">
+                                <div>
+                                  <p className="text-xs font-black text-[#1B1E28] dark:text-white flex items-center gap-1.5">
+                                    <span>🧪</span>
+                                    <span>{sec.name || 'Practical & Viva Voce Assessment'}</span>
+                                  </p>
+                                  <span className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">
+                                    {sec.description || 'OSPE Spotting, procedure execution, and oral viva voce evaluation.'} · Max Weightage: {sec.practicalMarks || 20} Marks
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-[#4E5969] dark:text-slate-300">Total Awarded Marks:</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={sec.practicalMarks || 20}
+                                    step="any"
+                                    value={practicalSectionMark}
+                                    onChange={e => setPracticalSectionMark(parseFloat(e.target.value) || 0)}
+                                    className="w-20 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border-2 border-purple-400 text-purple-700 dark:text-purple-300 font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-purple-400 shadow-sm"
+                                  />
+                                  <span className="text-xs text-[#7B8794] font-bold">/ {sec.practicalMarks || 20}</span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-[#4E5969] dark:text-slate-300">Awarded Marks:</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={sec.practicalMarks || 20}
-                                  step={0.5}
-                                  value={practicalSectionMark}
-                                  onChange={e => setPracticalSectionMark(Number(e.target.value))}
-                                  className="w-20 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-purple-400 text-purple-700 dark:text-purple-300 font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-purple-400 shadow-sm"
-                                />
-                                <span className="text-xs text-[#7B8794] font-bold">/ {sec.practicalMarks || 20}</span>
-                              </div>
+
+                              {/* Station Breakdown if practicalComponents are defined */}
+                              {Array.isArray(sec.practicalComponents) && sec.practicalComponents.length > 0 && (
+                                <div className="space-y-2 pt-1">
+                                  <span className="text-[10px] font-extrabold uppercase text-purple-700 dark:text-purple-300 block">
+                                    Station-Wise Rubric Scoring (Auto-Sums into Total):
+                                  </span>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {sec.practicalComponents.map((comp: any, cIdx: number) => {
+                                      const compKey = comp.id || `comp_${cIdx}`;
+                                      const compMax = Number(comp.marks || 5);
+                                      return (
+                                        <div key={compKey} className="flex items-center justify-between p-2 rounded-lg bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 text-xs">
+                                          <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
+                                            <span className="font-mono font-bold text-purple-600 text-[10px]">#{cIdx + 1}</span>
+                                            <span className="font-medium text-[#1B1E28] dark:text-slate-200 truncate">{comp.name}</span>
+                                          </div>
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              max={compMax}
+                                              step="any"
+                                              value={practicalComponentMarksMap[compKey] !== undefined ? practicalComponentMarksMap[compKey] : ''}
+                                              placeholder="0"
+                                              onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0;
+                                                const updated: Record<string, number> = { ...practicalComponentMarksMap, [compKey]: val };
+                                                setPracticalComponentMarksMap(updated);
+                                                const numValues = Object.values(updated) as number[];
+                                                const newTotal = Math.round(numValues.reduce((a: number, b: number) => a + (Number(b) || 0), 0) * 100) / 100;
+                                                setPracticalSectionMark(newTotal);
+                                              }}
+                                              className="w-14 px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 font-mono text-center font-bold text-purple-700 dark:text-purple-300 text-xs"
+                                            />
+                                            <span className="text-[10px] text-[#7B8794] font-bold">/ {compMax}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="space-y-3.5">

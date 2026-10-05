@@ -2014,6 +2014,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS duration_minutes INT DEFAULT 60;`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS sections JSONB DEFAULT '[]'::jsonb;`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'DRAFT';`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS department_id UUID;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS semester VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS section VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS academic_year VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS version INT DEFAULT 1;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS hod_remarks TEXT;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS question_remarks JSONB DEFAULT '{}'::jsonb;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS created_by UUID;`).catch(() => { });
 
     // ── Examination Competencies ───────────────────────────────────────────
     await runner.query(`
@@ -2071,6 +2084,11 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS hod_remarks TEXT;`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'DRAFT';`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".timetable_drafts ADD COLUMN IF NOT EXISTS section VARCHAR(50);`).catch(() => { });
 
     // ── Competency Results ─────────────────────────────────────────────────
     await runner.query(`
@@ -2110,6 +2128,15 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`
       DO $$ BEGIN
         ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS topic VARCHAR(250);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_code VARCHAR(100);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_name VARCHAR(250);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS sub_topic_code VARCHAR(100);
       EXCEPTION WHEN OTHERS THEN NULL; END $$;
     `).catch(() => { });
 
@@ -2845,6 +2872,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
       ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS topic VARCHAR(255);
       ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS competency_codes VARCHAR(255);
+      ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'APPROVED';
+      ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS draft_id UUID;
     `);
 
     // Seed default leave types
