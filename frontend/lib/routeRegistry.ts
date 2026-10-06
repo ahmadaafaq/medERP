@@ -558,6 +558,29 @@ export async function getRolePermissionsForTenant(
       ].forEach(k => expandedKeys.add(k));
     }
 
+    // If CLERK, ensure clerk workspace keys are always enabled
+    if (targetRole === 'CLERK') {
+      [
+        'clerk_overview',
+        'clerk_assessment',
+        'clerk_attendance',
+        'clerk_attendance_mark',
+        'clerk_attendance_biometric',
+        'clerk_biometric',
+        'clerk_internships',
+        'clerk_library',
+        'clerk_notices',
+        'clerk_placement',
+        'clerk_staff_master',
+        'clerk_staff',
+        'clerk_student_master',
+        'clerk_student',
+        'clerk_qp_designer',
+        'clerk_timetable_designer',
+        'clerk_timetable_design',
+      ].forEach(k => expandedKeys.add(k));
+    }
+
     const cacheEntry = { keys: expandedKeys, timestamp: Date.now() };
     permissionsMemoryCache[cacheKey] = cacheEntry;
 
@@ -690,6 +713,11 @@ export function verifyRouteAccess({
 
   // HOD specific and shared faculty routes are always permitted for HOD
   if (roleUpper === 'HOD' && (normPath.startsWith('/dashboard/hod') || normPath.startsWith('/dashboard/faculty'))) {
+    return { allowed: true };
+  }
+
+  // Clerk specific routes are always permitted for Clerk
+  if (roleUpper === 'CLERK' && normPath.startsWith('/dashboard/clerk')) {
     return { allowed: true };
   }
 

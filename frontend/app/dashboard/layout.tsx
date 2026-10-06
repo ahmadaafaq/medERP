@@ -59,7 +59,7 @@ export default function DashboardRootLayout({
         (roleUpper === 'HOD' && (cleanPath.startsWith('/dashboard/hod') || cleanPath.startsWith('/dashboard/faculty') || cleanPath === '/dashboard')) ||
         (roleUpper === 'FACULTY' && (cleanPath === '/dashboard/faculty' || cleanPath === '/dashboard')) ||
         (roleUpper === 'STUDENT' && (cleanPath === '/dashboard/student' || cleanPath === '/dashboard')) ||
-        (roleUpper === 'CLERK' && (cleanPath === '/dashboard/clerk' || cleanPath === '/dashboard')) ||
+        (roleUpper === 'CLERK' && (cleanPath.startsWith('/dashboard/clerk') || cleanPath === '/dashboard')) ||
         (roleUpper === 'WARDEN' && (cleanPath === '/dashboard/warden' || cleanPath === '/dashboard'))
       ) {
         setAuthStatus('authorized');

@@ -3616,13 +3616,14 @@ export default function TimetableDesignView({
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
+            width: calc(100% - 2px) !important;
+            max-width: calc(100% - 2px) !important;
             height: auto !important;
             border: none !important;
             box-shadow: none !important;
-            padding: 0 !important;
+            padding: 0 1px !important;
             margin: 0 !important;
+            box-sizing: border-box !important;
             background: #ffffff !important;
             color: #000000 !important;
             display: block !important;
@@ -3640,6 +3641,8 @@ export default function TimetableDesignView({
             margin-bottom: 4px !important;
             padding-bottom: 2px !important;
             border-bottom: 1.5px solid #0f172a !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .print-compact-header h2 {
             font-size: 11pt !important;
@@ -3672,20 +3675,27 @@ export default function TimetableDesignView({
             display: block !important;
             margin-bottom: 3px !important;
             overflow: visible !important;
+            box-sizing: border-box !important;
           }
           #timetable-print-area table.timetable-main-grid {
             width: 100% !important;
             border-collapse: collapse !important;
+            border-spacing: 0 !important;
             border: 1.5px solid #000000 !important;
             table-layout: fixed !important;
             font-size: 6.5pt !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
             empty-cells: show !important;
+            box-sizing: border-box !important;
           }
+          #timetable-print-area table.timetable-main-grid thead th,
+          #timetable-print-area table.timetable-main-grid tbody td,
           #timetable-print-area table.timetable-main-grid th, 
           #timetable-print-area table.timetable-main-grid td {
             border: 1.5px solid #000000 !important;
+            border-width: 1.5px !important;
+            border-style: solid !important;
             border-color: #000000 !important;
             padding: 1.5px 2px !important;
             vertical-align: top !important;
@@ -3693,6 +3703,13 @@ export default function TimetableDesignView({
             box-sizing: border-box !important;
             empty-cells: show !important;
           }
+          #timetable-print-area table.timetable-main-grid tr th:last-child,
+          #timetable-print-area table.timetable-main-grid tr td:last-child,
+          #timetable-print-area table.timetable-main-grid thead th:last-child,
+          #timetable-print-area table.timetable-main-grid tbody td:last-child {
+            border-right: 1.5px solid #000000 !important;
+          }
+          #timetable-print-area table.timetable-main-grid thead th,
           #timetable-print-area table.timetable-main-grid th {
             background-color: #f1f5f9 !important;
             color: #000000 !important;
@@ -3738,13 +3755,16 @@ export default function TimetableDesignView({
             letter-spacing: 0.15em !important;
           }
           #timetable-print-area .slot-cell,
-          #timetable-print-area td.slot-cell {
+          #timetable-print-area td.slot-cell,
+          #timetable-print-area table.timetable-main-grid td.slot-cell {
             height: 42px !important;
             min-height: 42px !important;
             padding: 1.5px 2px !important;
             vertical-align: top !important;
-            background-color: #ffffff !important;
+            background-color: transparent !important;
             border: 1.5px solid #000000 !important;
+            border-width: 1.5px !important;
+            border-style: solid !important;
             border-color: #000000 !important;
             box-sizing: border-box !important;
             empty-cells: show !important;
@@ -3757,6 +3777,7 @@ export default function TimetableDesignView({
             align-items: center !important;
             justify-content: center !important;
             box-sizing: border-box !important;
+            border: none !important;
           }
           #timetable-print-area .slot-card {
             border: 1px solid #475569 !important;
@@ -3819,27 +3840,39 @@ export default function TimetableDesignView({
           }
           /* Print Registry Footer */
           .print-registry-box {
-            border: 1.5px solid #0f172a !important;
+            border: 1.5px solid #000000 !important;
             border-radius: 3px !important;
             margin-top: 3px !important;
             font-size: 5.5pt !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .print-registry-title {
             background-color: #f1f5f9 !important;
             font-size: 6pt !important;
             font-weight: 900 !important;
             padding: 1px 2px !important;
-            border-bottom: 1.5px solid #0f172a !important;
+            border-bottom: 1.5px solid #000000 !important;
             text-align: center !important;
             text-transform: uppercase !important;
             letter-spacing: 0.5px !important;
+            box-sizing: border-box !important;
+          }
+          .print-registry-box > div {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            box-sizing: border-box !important;
+          }
+          .print-registry-box > div > div:first-child {
+            border-right: 1.5px solid #000000 !important;
           }
           .print-registry-row {
             padding: 1px 2px !important;
             font-size: 5.5pt !important;
             line-height: 1.1 !important;
+            box-sizing: border-box !important;
           }
           /* Signatures Footer */
           .print-signatures {
@@ -3853,6 +3886,8 @@ export default function TimetableDesignView({
             color: #0f172a !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .print-signatures .sig-line {
             width: 140px !important;
