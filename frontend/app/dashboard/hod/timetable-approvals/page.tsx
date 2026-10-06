@@ -207,10 +207,11 @@ export default function HODTimetableApprovalsPage() {
 
             let authenticLinkcd = String(sl.linkcd || sl.srmsPayload?.improperEvent?.linkcd || '0');
             if ((!authenticLinkcd || authenticLinkcd === '0' || authenticLinkcd === subCode) && liveSubjects.length > 0) {
+              const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
               const matched = liveSubjects.find((s: any) =>
-                (subCode && String(s.sub_cd) === subCode) ||
-                (facEmpId && String(s.empid) === facEmpId) ||
-                (subName && s.sub_name && s.sub_name.toLowerCase().includes(subName.toLowerCase()))
+                (subCode && String(s.sub_cd || s.code).trim() === subCode.trim()) ||
+                (facEmpId && String(s.empid).trim() === facEmpId.trim()) ||
+                (subName && s.sub_name && (norm(s.sub_name).includes(norm(subName)) || norm(subName).includes(norm(s.sub_name))))
               );
               if (matched?.linkcd) {
                 authenticLinkcd = String(matched.linkcd);
@@ -218,16 +219,17 @@ export default function HODTimetableApprovalsPage() {
               }
             }
 
+            const cleanSubTitle = sl.subject_name || sl.subjectName || subName || 'Subject';
             const srmsPayload = sl.srmsPayload || {
               improperEvent: {
-                title: sl.topic ? `${sl.subject_name || sl.subjectName || 'Subject'} - ${sl.topic}` : (sl.subject_name || sl.subjectName || 'Subject Session'),
-                description: sl.description || sl.subjectDescription || `${sl.subject_name || sl.subjectName || ''} ${sl.faculty_name || sl.facultyName || ''}`.trim(),
+                title: cleanSubTitle,
+                description: sl.description || sl.subjectDescription || `${cleanSubTitle}${facName ? ' ' + facName : ''}`.trim(),
                 start: `${ymd} ${(sl.startTime || sl.start_time || '09:00').slice(0, 5)} `,
                 end: `${ymd} ${(sl.endTime || sl.end_time || '10:00').slice(0, 5)} `,
                 linkcd: authenticLinkcd,
                 subjectCode: subCode,
                 subject_code: subCode,
-                subjectName: subName,
+                subjectName: cleanSubTitle,
                 facultyName: facName,
                 electiveflg: String(sl.srmsPayload?.improperEvent?.electiveflg || sl.electiveflg || 'N'),
                 txtG: String(sl.srmsPayload?.improperEvent?.txtG || sl.groupValue || '0'),
@@ -252,6 +254,11 @@ export default function HODTimetableApprovalsPage() {
               srmsPayload.improperEvent.subject_code = subCode;
               srmsPayload.improperEvent.subjectName = subName;
               srmsPayload.improperEvent.facultyName = facName;
+              srmsPayload.improperEvent.draftId = String(draftId);
+              srmsPayload.improperEvent.excludeDraftId = String(draftId);
+              srmsPayload.improperEvent.isApproval = true;
+              srmsPayload.improperEvent.isDraftApproval = true;
+              srmsPayload.improperEvent.excludeId = String(sl.id || '');
             }
 
             try {
@@ -262,7 +269,15 @@ export default function HODTimetableApprovalsPage() {
                   'x-tenant-slug': slug,
                   'x-tenant-id': slug,
                 },
-                body: JSON.stringify({ ...srmsPayload, tenant: slug, tenantSlug: slug }),
+                body: JSON.stringify({
+                  ...srmsPayload,
+                  draftId: String(draftId),
+                  excludeDraftId: String(draftId),
+                  isApproval: true,
+                  isDraftApproval: true,
+                  tenant: slug,
+                  tenantSlug: slug,
+                }),
               });
               const sJson = await sRes.json().catch(() => null);
               if (!sRes.ok || !sJson?.success) {

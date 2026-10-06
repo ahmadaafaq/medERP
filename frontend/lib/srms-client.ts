@@ -256,6 +256,86 @@ export async function fetchSrmsLoadSubjects(params: {
   }
 }
 
+export async function fetchSrmsLoadFaculty(params: {
+  course: string | number;
+  branch?: string | number;
+  batch?: string | number;
+  semester?: string | number;
+  section?: string | number;
+  subject?: string | number;
+  start?: string;
+  end?: string;
+  colgcd?: string | number;
+}): Promise<any[]> {
+  const c = String(params.course || '1');
+  const br = Number(params.branch) || 1;
+  const bat = Number(params.batch) || 17;
+  const sem = Number(params.semester) || 5;
+  const sec = Number(params.section) || 1;
+  const subj = String(params.subject || '');
+  const start = params.start || '2026-10-06 08:00:00';
+  const end = params.end || '2026-10-06 09:00:00';
+  const colg = String(params.colgcd || '1');
+
+  try {
+    const postData = JSON.stringify({
+      course: c,
+      branch: br,
+      batch: bat,
+      semester: sem,
+      section: sec,
+      subject: subj,
+      start,
+      end,
+      colgcd: colg,
+    });
+
+    const res: any = await new Promise((resolve) => {
+      const req = https.request(
+        {
+          hostname: 'myportal.srms.ac.in',
+          port: 443,
+          path: '/timetable/services/EmployeeInfo.asmx/LoadFaculty',
+          method: 'POST',
+          agent: _srmsAgent,
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Length': Buffer.byteLength(postData),
+            'X-Requested-With': 'XMLHttpRequest',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+          rejectUnauthorized: false,
+          timeout: 10000,
+        },
+        (httpRes) => {
+          let data = '';
+          httpRes.on('data', (chunk) => (data += chunk));
+          httpRes.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              const list = typeof json.d === 'string' ? JSON.parse(json.d) : json.d;
+              resolve(list || []);
+            } catch {
+              resolve([]);
+            }
+          });
+        }
+      );
+      req.on('error', () => resolve([]));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve([]);
+      });
+      req.write(postData);
+      req.end();
+    });
+
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
+  }
+}
+
 export function getAcronym(str: string): string {
   const stopWords = new Set(['and', '&', 'of', 'in', 'the', 'for', 'to']);
   return (str || '')
@@ -287,21 +367,21 @@ export function resolveSrmsSubjectLink(
     if (byLink) return { linkcd: String(byLink.linkcd), sub_cd: byLink.sub_cd, empid: byLink.empid, sub_name: byLink.sub_name };
   }
 
-  // 2. Match if linkcd or subjectCode matches sub_cd
+  // 2. Match if linkcd or subjectCode matches sub_cd or sub_addinfo
   const codeCandidate = options.subjectCode || (linkStr !== '0' ? linkStr : '');
   if (codeCandidate) {
-    const bySubCd = subjects.find((s) => String(s.sub_cd) === String(codeCandidate));
+    const bySubCd = subjects.find((s) => String(s.sub_cd) === String(codeCandidate) || String(s.sub_addinfo).trim() === String(codeCandidate).trim());
     if (bySubCd) return { linkcd: String(bySubCd.linkcd), sub_cd: bySubCd.sub_cd, empid: bySubCd.empid, sub_name: bySubCd.sub_name };
   }
 
   const cleanName = (options.subjectName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const acronym = getAcronym(options.subjectName || '');
-  const cleanEmpid = String(options.empid || '').trim();
+  const cleanEmpid = String(options.empid || '').trim().toLowerCase();
   const cleanFacName = (options.facultyName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // 3. Match by empid AND subject title/type
   if (cleanEmpid) {
-    const facMatches = subjects.filter((s) => String(s.empid).trim() === cleanEmpid);
+    const facMatches = subjects.filter((s) => String(s.empid).trim().toLowerCase() === cleanEmpid);
     if (facMatches.length === 1) {
       return { linkcd: String(facMatches[0].linkcd), sub_cd: facMatches[0].sub_cd, empid: facMatches[0].empid, sub_name: facMatches[0].sub_name };
     }
@@ -342,7 +422,7 @@ export function resolveSrmsSubjectLink(
   // 5. Match by faculty name
   if (cleanFacName) {
     for (const s of subjects) {
-      const sEmp = (s.EmpName || s.sub_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const sEmp = (s.empname || s.EmpName || s.sub_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
       if (sEmp && (sEmp.includes(cleanFacName) || cleanFacName.includes(sEmp))) {
         return { linkcd: String(s.linkcd), sub_cd: s.sub_cd, empid: s.empid, sub_name: s.sub_name };
       }

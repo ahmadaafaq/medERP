@@ -181,6 +181,15 @@ const DEFAULT_TIME_SLOTS: TimeSlotConfig[] = [
   { id: 'ts_7', start: '15:50:00', end: '16:50:00', label: '03.50-04.50', name: 'Period 7', type: 'Lecture' },
 ];
 
+const DEFAULT_CAMERAS: CameraItem[] = [
+  { camera_id: 1, classroom: 'Web Cam', camera_ip: '0' },
+  { camera_id: 2, classroom: 'Lecture Hall 1', camera_ip: '0' },
+  { camera_id: 3, classroom: 'Lecture Hall 2', camera_ip: '0' },
+  { camera_id: 4, classroom: 'Computer Lab 1', camera_ip: '0' },
+  { camera_id: 5, classroom: 'Computer Lab 2', camera_ip: '0' },
+  { camera_id: 6, classroom: 'Seminar Hall', camera_ip: '0' },
+];
+
 const DAYS_OF_WEEK = [
   { value: 1, name: 'MONDAY' },
   { value: 2, name: 'TUESDAY' },
@@ -724,10 +733,6 @@ export default function TimetableDesignView({
 
 
   const handleAddNewLectureModal = () => {
-    if (activeDraft?.status === 'HOD_APPROVED') {
-      showAlert('warning', 'This timetable has already been approved by HOD and is locked for edits.');
-      return;
-    }
     handleGridCellClick(1, '09:00:00', '10:00:00');
   };
 
@@ -890,7 +895,7 @@ export default function TimetableDesignView({
   const [syncingTimetable, setSyncingTimetable] = useState(false);
 
   // Live SRMS Cameras from EmployeeInfo.asmx/LoadCamera
-  const [camerasList, setCamerasList] = useState<CameraItem[]>([]);
+  const [camerasList, setCamerasList] = useState<CameraItem[]>(DEFAULT_CAMERAS);
   const [cameraLoading, setCameraLoading] = useState(false);
 
   // Load custom time format template from Database (with localStorage fallback) when college/course/dept changes
@@ -1431,20 +1436,22 @@ export default function TimetableDesignView({
   }, [srmsTimetableSubjects, subjects, selectedCourseObj, selectedCourse]);
 
   // Dynamically compute Available Units based on Selected Subject
+  // Dynamically compute Available Units based strictly on Selected Subject from Admin Master
   const availableSubjectUnits = useMemo(() => {
     const subVal = formData.subjectId || formData.subjectCode;
     const matched = availableFormSubjects.find(s => String(s.id) === subVal || String(s.code) === subVal || String(s.linkcd) === subVal);
     const subCode = matched?.code || formData.subjectCode || '';
     const subId = matched?.id || formData.subjectId || '';
-    const subName = (matched?.name || matched?.raw_name || '').toLowerCase();
+    const subName = (matched?.name || matched?.raw_name || '').toLowerCase().trim();
 
     // 1. Search in allDbUnits by subject_id or subject_code or subject_name
     const filtered = (allDbUnits || []).filter(u => {
       if (!u) return false;
+      const uSubName = (u.subject_name || '').toLowerCase().trim();
       return (
         (subId && String(u.subject_id) === String(subId)) ||
-        (subCode && String(u.subject_code) === String(subCode)) ||
-        (subName && u.subject_name && u.subject_name.toLowerCase().includes(subName))
+        (subCode && String(u.subject_code || u.code) === String(subCode)) ||
+        (subName && uSubName && (uSubName.includes(subName) || subName.includes(uSubName)))
       );
     });
 
@@ -1457,24 +1464,17 @@ export default function TimetableDesignView({
       }));
     }
 
-    // Default Academic Syllabus Units (1 through 5) based on Subject Name
-    const sName = matched?.name || matched?.raw_name || 'Subject';
-    return [
-      { id: 'unit_1', code: 'UNIT-1', name: `Unit 1: Fundamentals & Concepts of ${sName}`, description: `Foundations and Core Principles` },
-      { id: 'unit_2', code: 'UNIT-2', name: `Unit 2: Core Architecture & Methods`, description: `Structural Breakdown and Methodologies` },
-      { id: 'unit_3', code: 'UNIT-3', name: `Unit 3: Advanced Implementation & Features`, description: `Practical Execution and Standards` },
-      { id: 'unit_4', code: 'UNIT-4', name: `Unit 4: Systems, Libraries & Frameworks`, description: `Systems, Frameworks and Protocols` },
-      { id: 'unit_5', code: 'UNIT-5', name: `Unit 5: Applications, Optimization & Case Studies`, description: `Performance Evaluation and Case Analysis` },
-    ];
+    // Return empty list if Admin has not added units for this subject yet
+    return [];
   }, [formData.subjectId, formData.subjectCode, availableFormSubjects, allDbUnits]);
 
-  // Dynamically compute Available Topics based on Selected Subject & Unit
+  // Dynamically compute Available Topics based strictly on Selected Subject & Unit from Admin Master
   const availableSubjectTopics = useMemo(() => {
     const subVal = formData.subjectId || formData.subjectCode;
     const matchedSub = availableFormSubjects.find(s => String(s.id) === subVal || String(s.code) === subVal || String(s.linkcd) === subVal);
     const subCode = matchedSub?.code || formData.subjectCode || '';
     const subId = matchedSub?.id || formData.subjectId || '';
-    const subName = (matchedSub?.name || matchedSub?.raw_name || '').toLowerCase();
+    const subName = (matchedSub?.name || matchedSub?.raw_name || '').toLowerCase().trim();
 
     const selectedUnitObj = availableSubjectUnits.find(u =>
       String(u.id) === String(formData.unitId) ||
@@ -1483,20 +1483,22 @@ export default function TimetableDesignView({
     );
     const unitId = selectedUnitObj?.id || formData.unitId || '';
     const unitCode = selectedUnitObj?.code || '';
-    const unitName = (selectedUnitObj?.name || formData.unitName || '').toLowerCase();
+    const unitName = (selectedUnitObj?.name || formData.unitName || '').toLowerCase().trim();
 
     // 1. Filter allDbTopics by subject AND unit
     const filteredByUnit = (allDbTopics || []).filter(t => {
       if (!t) return false;
+      const tSubName = (t.subject_name || '').toLowerCase().trim();
       const matchSub = (subId && String(t.subject_id) === String(subId)) ||
                        (subCode && String(t.subject_code) === String(subCode)) ||
-                       (subName && t.subject_name && t.subject_name.toLowerCase().includes(subName));
+                       (subName && tSubName && (tSubName.includes(subName) || subName.includes(tSubName)));
       if (!matchSub) return false;
 
       // Check unit match
+      const tUnitName = (t.unit_name || '').toLowerCase().trim();
       const matchUnit = (unitId && (String(t.unit_id) === String(unitId) || String(t.unit_id) === String(unitCode))) ||
                         (unitCode && (t.unit_code === unitCode || t.code?.includes(unitCode))) ||
-                        (unitName && t.unit_name && t.unit_name.toLowerCase().includes(unitName));
+                        (unitName && tUnitName && (tUnitName.includes(unitName) || unitName.includes(tUnitName)));
       return matchUnit;
     });
 
@@ -1509,16 +1511,18 @@ export default function TimetableDesignView({
       }));
     }
 
-    // If DB topics exist for this subject and no unit-specific topics found
+    // 2. If no unit-specific filter, match all topics for this subject
     const filteredBySub = (allDbTopics || []).filter(t => {
       if (!t) return false;
+      const tSubName = (t.subject_name || '').toLowerCase().trim();
       return (
         (subId && String(t.subject_id) === String(subId)) ||
-        (subCode && String(t.subject_code) === String(subCode))
+        (subCode && String(t.subject_code) === String(subCode)) ||
+        (subName && tSubName && (tSubName.includes(subName) || subName.includes(tSubName)))
       );
     });
 
-    if (filteredBySub.length > 0 && (!unitCode || unitCode === 'UNIT-1' || unitName.includes('unit 1') || unitName.includes('co1'))) {
+    if (filteredBySub.length > 0) {
       return filteredBySub.map(t => ({
         id: String(t.id || t.code),
         code: t.code || 'TOPIC',
@@ -1527,190 +1531,35 @@ export default function TimetableDesignView({
       }));
     }
 
-    // 2. Dynamic curriculum topics based on unit number / name and subject category
-    let unitNum = 1;
-    if (unitCode.includes('2') || unitName.includes('unit 2') || unitName.includes('co2')) unitNum = 2;
-    else if (unitCode.includes('3') || unitName.includes('unit 3') || unitName.includes('co3')) unitNum = 3;
-    else if (unitCode.includes('4') || unitName.includes('unit 4') || unitName.includes('co4')) unitNum = 4;
-    else if (unitCode.includes('5') || unitName.includes('unit 5') || unitName.includes('co5')) unitNum = 5;
-
-    if (subName.includes('c++') || subName.includes('object oriented') || subName.includes('oop')) {
-      const oopTopicsByUnit: Record<number, { code: string; name: string }[]> = {
-        1: [
-          { code: 'T1.1', name: 'Principles of OOP: Abstraction, Encapsulation, Modularity' },
-          { code: 'T1.2', name: 'Classes and Objects Definition, Access Specifiers' },
-          { code: 'T1.3', name: 'Scope Resolution Operator & Inline Functions' },
-          { code: 'T1.4', name: 'Static Data Members and Static Member Functions' },
-        ],
-        2: [
-          { code: 'T2.1', name: 'Default, Parameterized & Copy Constructors' },
-          { code: 'T2.2', name: 'Destructors and Dynamic Memory Allocation with new/delete' },
-          { code: 'T2.3', name: 'Operator Overloading: Unary and Binary Operators' },
-          { code: 'T2.4', name: 'Friend Functions and Friend Classes' },
-        ],
-        3: [
-          { code: 'T3.1', name: 'Inheritance: Single, Multilevel, Multiple and Hierarchical' },
-          { code: 'T3.2', name: 'Virtual Base Classes & Diamond Problem Resolution' },
-          { code: 'T3.3', name: 'Pointers to Derived Classes and Base Class Pointers' },
-          { code: 'T3.4', name: 'Virtual Functions, Pure Virtual Functions & Abstract Classes' },
-        ],
-        4: [
-          { code: 'T4.1', name: 'C++ Stream Classes, Console I/O Operations' },
-          { code: 'T4.2', name: 'File Handling: ifstream, ofstream, fstream & File Pointers' },
-          { code: 'T4.3', name: 'Function Templates and Class Templates with Multiple Parameters' },
-          { code: 'T4.4', name: 'Exception Handling: try, catch, throw and Standard Exceptions' },
-        ],
-        5: [
-          { code: 'T5.1', name: 'Standard Template Library (STL): Containers (vector, list, map)' },
-          { code: 'T5.2', name: 'STL Iterators and Iterator Categories' },
-          { code: 'T5.3', name: 'STL Algorithms: Sorting, Searching, Transforming' },
-          { code: 'T5.4', name: 'Object-Oriented Design Case Study & Mini Project Implementation' },
-        ],
-      };
-      return (oopTopicsByUnit[unitNum] || oopTopicsByUnit[1]).map(t => ({ id: `t_oop_${unitNum}_${t.code}`, ...t }));
-    }
-
-    if (subName.includes('python')) {
-      const pythonTopicsByUnit: Record<number, { code: string; name: string }[]> = {
-        1: [
-          { code: 'T1.1', name: 'Python Basics, Variables, Expressions and Data Types' },
-          { code: 'T1.2', name: 'Conditional Branching (if-elif-else) and Loops (for, while)' },
-          { code: 'T1.3', name: 'Functions, Default Arguments and Scope Rules' },
-          { code: 'T1.4', name: 'String Operations, Slicing and Formatting' },
-        ],
-        2: [
-          { code: 'T2.1', name: 'Lists, Tuples, Dictionaries and Sets Operations' },
-          { code: 'T2.2', name: 'List Comprehensions and Generator Expressions' },
-          { code: 'T2.3', name: 'File I/O: Reading and Writing Text and CSV Files' },
-          { code: 'T2.4', name: 'Exception Handling and Custom Exceptions in Python' },
-        ],
-        3: [
-          { code: 'T3.1', name: 'Object-Oriented Python: Classes, Objects and __init__' },
-          { code: 'T3.2', name: 'Inheritance, Method Overriding and super()' },
-          { code: 'T3.3', name: 'Encapsulation, Name Mangling and Property Decorators' },
-          { code: 'T3.4', name: 'Magic Methods and Operator Overloading' },
-        ],
-        4: [
-          { code: 'T4.1', name: 'Python Standard Library: math, os, sys, datetime' },
-          { code: 'T4.2', name: 'Regular Expressions (re module) and Pattern Matching' },
-          { code: 'T4.3', name: 'GUI Programming with Tkinter: Widgets and Events' },
-          { code: 'T4.4', name: 'Database Connectivity with SQLite and PostgreSQL in Python' },
-        ],
-        5: [
-          { code: 'T5.1', name: 'NumPy Arrays, Indexing and Mathematical Operations' },
-          { code: 'T5.2', name: 'Pandas DataFrames, Series and Data Cleaning' },
-          { code: 'T5.3', name: 'Data Visualization with Matplotlib and Seaborn' },
-          { code: 'T5.4', name: 'Capstone Project: Python Application Development' },
-        ],
-      };
-      return (pythonTopicsByUnit[unitNum] || pythonTopicsByUnit[1]).map(t => ({ id: `t_py_${unitNum}_${t.code}`, ...t }));
-    }
-
-    if (subName.includes('web tech') || subName.includes('web') || subName.includes('internet')) {
-      const wtTopicsByUnit: Record<number, { code: string; name: string }[]> = {
-        1: [
-          { code: 'T1.1', name: 'HTML5 Semantic Elements, Forms and Multimedia' },
-          { code: 'T1.2', name: 'CSS3 Selectors, Box Model and Typography' },
-          { code: 'T1.3', name: 'CSS Flexbox and CSS Grid Responsive Layouts' },
-          { code: 'T1.4', name: 'Web Standards, Accessibility (a11y) and SEO Principles' },
-        ],
-        2: [
-          { code: 'T2.1', name: 'JavaScript Fundamentals: Data Types, Operators and Functions' },
-          { code: 'T2.2', name: 'DOM Tree Manipulation, Traversal and Node Selection' },
-          { code: 'T2.3', name: 'Event Handling, Bubbling, Capturing and Delegation' },
-          { code: 'T2.4', name: 'Client-Side Form Validation with Regex' },
-        ],
-        3: [
-          { code: 'T3.1', name: 'Asynchronous JavaScript: Callbacks, Promises and Async/Await' },
-          { code: 'T3.2', name: 'Fetch API, AJAX and JSON Data Parsing' },
-          { code: 'T3.3', name: 'Client Storage: LocalStorage, SessionStorage and Cookies' },
-          { code: 'T3.4', name: 'Modern ES6+ Features: Destructuring, Modules, Spread' },
-        ],
-        4: [
-          { code: 'T4.1', name: 'Server-side Web Architecture & RESTful API Principles' },
-          { code: 'T4.2', name: 'Node.js & Express Fundamentals: Routes and Middlewares' },
-          { code: 'T4.3', name: 'Database Integration and CRUD Operations' },
-          { code: 'T4.4', name: 'Web Security: CORS, CSRF, XSS Prevention and HTTPS' },
-        ],
-        5: [
-          { code: 'T5.1', name: 'Single Page Applications (SPA) Architecture' },
-          { code: 'T5.2', name: 'Frontend Framework Introduction (React/Next.js)' },
-          { code: 'T5.3', name: 'State Management and Component Lifecycle' },
-          { code: 'T5.4', name: 'Full-Stack Web Application Deployment and CI/CD' },
-        ],
-      };
-      return (wtTopicsByUnit[unitNum] || wtTopicsByUnit[1]).map(t => ({ id: `t_wt_${unitNum}_${t.code}`, ...t }));
-    }
-
-    if (subName.includes('computer org') || subName.includes('architecture') || subName.includes('coa')) {
-      const coaTopicsByUnit: Record<number, { code: string; name: string }[]> = {
-        1: [
-          { code: 'T1.1', name: 'Digital Logic Gates, Combinational and Sequential Circuits' },
-          { code: 'T1.2', name: 'Register Transfer Language (RTL) and Bus Architecture' },
-          { code: 'T1.3', name: 'Arithmetic, Logic and Shift Micro-operations' },
-          { code: 'T1.4', name: 'Basic Computer Organization, Instruction Codes & Cycle' },
-        ],
-        2: [
-          { code: 'T2.1', name: 'Instruction Formats (Zero, One, Two, Three Address)' },
-          { code: 'T2.2', name: 'Addressing Modes: Immediate, Direct, Indirect, Relative' },
-          { code: 'T2.3', name: 'Central Processing Unit: General Register Organization' },
-          { code: 'T2.4', name: 'Stack Organization and Microprogrammed Control Unit' },
-        ],
-        3: [
-          { code: 'T3.1', name: 'Computer Arithmetic: Addition and Subtraction Hardware' },
-          { code: 'T3.2', name: 'Multiplication Algorithms: Booth Multiplication' },
-          { code: 'T3.3', name: 'Division Algorithms: Restoring and Non-Restoring' },
-          { code: 'T3.4', name: 'Floating-Point Arithmetic Operations (IEEE 754)' },
-        ],
-        4: [
-          { code: 'T4.1', name: 'Memory Hierarchy: Cache, Main Memory and Secondary Storage' },
-          { code: 'T4.2', name: 'Cache Memory Mapping: Direct, Associative and Set-Associative' },
-          { code: 'T4.3', name: 'Virtual Memory, Paging, Segmentation and Page Replacement' },
-          { code: 'T4.4', name: 'Memory Management Hardware and Write Policies' },
-        ],
-        5: [
-          { code: 'T5.1', name: 'Input-Output Organization: Peripheral Devices and Interfaces' },
-          { code: 'T5.2', name: 'Asynchronous Data Transfer: Strobe Control & Handshaking' },
-          { code: 'T5.3', name: 'Modes of Transfer: Programmed I/O, Interrupt-Driven, DMA' },
-          { code: 'T5.4', name: 'Pipelining, Instruction Hazards and Parallel Processing' },
-        ],
-      };
-      return (coaTopicsByUnit[unitNum] || coaTopicsByUnit[1]).map(t => ({ id: `t_coa_${unitNum}_${t.code}`, ...t }));
-    }
-
-    // Generic dynamic unit topics for any academic subject
-    const subjectDisplayName = matchedSub?.name || 'Subject';
-    return [
-      { id: `t_gen_${unitNum}_1`, code: `T${unitNum}.1`, name: `Unit ${unitNum}: Foundational Principles & Core Concepts of ${subjectDisplayName}` },
-      { id: `t_gen_${unitNum}_2`, code: `T${unitNum}.2`, name: `Unit ${unitNum}: Methodological Framework & Analytical Models` },
-      { id: `t_gen_${unitNum}_3`, code: `T${unitNum}.3`, name: `Unit ${unitNum}: Implementation Procedures & Case Applications` },
-      { id: `t_gen_${unitNum}_4`, code: `T${unitNum}.4`, name: `Unit ${unitNum}: Evaluation, Standards & Advanced Problem Solving` },
-    ];
+    // Return empty list if Admin has not added topics for this subject/unit yet
+    return [];
   }, [formData.subjectId, formData.subjectCode, formData.unitId, formData.unitName, availableFormSubjects, availableSubjectUnits, allDbTopics]);
 
-  // Dynamically compute Available Sub Topics / Competencies based on Selected Topic
+  // Dynamically compute Available Sub Topics / Competencies based strictly on Admin Master
   const availableSubjectSubTopics = useMemo(() => {
     const subVal = formData.subjectId || formData.subjectCode;
     const matchedSub = availableFormSubjects.find(s => String(s.id) === subVal || String(s.code) === subVal || String(s.linkcd) === subVal);
     const subCode = matchedSub?.code || formData.subjectCode || '';
     const subId = matchedSub?.id || formData.subjectId || '';
 
-    const currentTopic = formData.topic || '';
+    const currentTopic = (formData.topic || '').trim();
     const currentTopicLower = currentTopic.toLowerCase();
 
-    // 1. Search in allDbCompetencies by topic match
+    // 1. Search in allDbCompetencies by subject and topic match
     const filteredByTopic = (allDbCompetencies || []).filter(c => {
       if (!c) return false;
       const matchSub = (subId && String(c.subject_id) === String(subId)) ||
                        (subCode && String(c.subject_code) === String(subCode));
       if (!matchSub) return false;
 
-      const matchTopic = (currentTopic && (
+      if (!currentTopic) return true;
+
+      const matchTopic = (
         (c.topic_code && currentTopic.includes(c.topic_code)) ||
         (c.topic_name && currentTopicLower.includes(c.topic_name.toLowerCase())) ||
         (c.topic_id && currentTopic.includes(String(c.topic_id))) ||
         (c.name && currentTopicLower.includes(c.name.toLowerCase()))
-      ));
+      );
       return matchTopic;
     });
 
@@ -1722,66 +1571,8 @@ export default function TimetableDesignView({
       }));
     }
 
-    // 2. Generate granular sub-topics based on current topic keywords
-    if (currentTopicLower.includes('construct') || currentTopicLower.includes('destruct')) {
-      return [
-        { id: 'st_c1', code: 'ST1', name: 'Default Constructors and Compiler Synthesis' },
-        { id: 'st_c2', code: 'ST2', name: 'Parameterized Constructors & Member Initializer Lists' },
-        { id: 'st_c3', code: 'ST3', name: 'Copy Constructors & Deep vs Shallow Copy' },
-        { id: 'st_c4', code: 'ST4', name: 'Destructors and Resource Acquisition (RAII)' },
-        { id: 'st_c5', code: 'ST5', name: 'Dynamic Memory Management with new and delete' },
-      ];
-    } else if (currentTopicLower.includes('inherit') || currentTopicLower.includes('poly')) {
-      return [
-        { id: 'st_i1', code: 'ST1', name: 'Access Controls: Public, Protected and Private Inheritance' },
-        { id: 'st_i2', code: 'ST2', name: 'Method Overriding and Virtual Function Table (vtable)' },
-        { id: 'st_i3', code: 'ST3', name: 'Virtual Base Classes & Solving the Diamond Problem' },
-        { id: 'st_i4', code: 'ST4', name: 'Pure Virtual Functions and Abstract Interfaces' },
-        { id: 'st_i5', code: 'ST5', name: 'Runtime Type Information (RTTI) and dynamic_cast' },
-      ];
-    } else if (currentTopicLower.includes('dom') || currentTopicLower.includes('event')) {
-      return [
-        { id: 'st_d1', code: 'ST1', name: 'DOM Tree Structure & Node Selection (querySelector)' },
-        { id: 'st_d2', code: 'ST2', name: 'Event Listeners, Event Object & Target Properties' },
-        { id: 'st_d3', code: 'ST3', name: 'Event Bubbling, Capturing and Event Delegation' },
-        { id: 'st_d4', code: 'ST4', name: 'Dynamic Element Creation, Mutation and Removal' },
-        { id: 'st_d5', code: 'ST5', name: 'Custom Events and Event Dispatching' },
-      ];
-    } else if (currentTopicLower.includes('async') || currentTopicLower.includes('promise') || currentTopicLower.includes('fetch')) {
-      return [
-        { id: 'st_a1', code: 'ST1', name: 'JavaScript Event Loop, Call Stack and Microtask Queue' },
-        { id: 'st_a2', code: 'ST2', name: 'Promise States: Pending, Fulfilled and Rejected' },
-        { id: 'st_a3', code: 'ST3', name: 'Chaining Promises with .then(), .catch() and .finally()' },
-        { id: 'st_a4', code: 'ST4', name: 'Async / Await Syntax, Error Handling with try-catch' },
-        { id: 'st_a5', code: 'ST5', name: 'Fetch API: Headers, HTTP Methods and JSON Parsing' },
-      ];
-    } else if (currentTopicLower.includes('addressing') || currentTopicLower.includes('instruction')) {
-      return [
-        { id: 'st_coa1', code: 'ST1', name: 'Immediate and Direct Addressing Modes' },
-        { id: 'st_coa2', code: 'ST2', name: 'Indirect, Register and Register Indirect Modes' },
-        { id: 'st_coa3', code: 'ST3', name: 'Relative and Indexed Addressing Computations' },
-        { id: 'st_coa4', code: 'ST4', name: 'Instruction Word Length & Field Partitioning' },
-        { id: 'st_coa5', code: 'ST5', name: 'Effective Address Calculation & Cycle Timing' },
-      ];
-    } else if (currentTopicLower.includes('cache') || currentTopicLower.includes('memory')) {
-      return [
-        { id: 'st_m1', code: 'ST1', name: 'Cache Placement: Direct Mapping and Tag Calculation' },
-        { id: 'st_m2', code: 'ST2', name: 'Associative and Set-Associative Cache Organization' },
-        { id: 'st_m3', code: 'ST3', name: 'Cache Replacement Policies: LRU, FIFO, Random' },
-        { id: 'st_m4', code: 'ST4', name: 'Write Strategies: Write-Through vs Write-Back' },
-        { id: 'st_m5', code: 'ST5', name: 'Virtual Memory Paging and Translation Lookaside Buffer (TLB)' },
-      ];
-    }
-
-    // Fallback granular learning objectives for the chosen topic
-    const topicTitle = currentTopic || 'Current Topic';
-    return [
-      { id: 'st_gen_1', code: 'ST1', name: `${topicTitle} — Core Definitions & Fundamental Syntax` },
-      { id: 'st_gen_2', code: 'ST2', name: `${topicTitle} — Structural Rules & Architectural Schema` },
-      { id: 'st_gen_3', code: 'ST3', name: `${topicTitle} — Implementation Patterns & Code Walkthrough` },
-      { id: 'st_gen_4', code: 'ST4', name: `${topicTitle} — Edge Cases, Diagnostics & Error Handling` },
-      { id: 'st_gen_5', code: 'ST5', name: `${topicTitle} — Practical Exercises & Verification Lab` },
-    ];
+    // Return empty list if Admin has not added subtopics/competencies yet
+    return [];
   }, [formData.subjectId, formData.subjectCode, formData.topic, availableFormSubjects, allDbCompetencies]);
 
   // Clean, deduplicated faculty options for Autocomplete dropdown
@@ -2166,7 +1957,7 @@ export default function TimetableDesignView({
       const res = await fetch(`/api/srms/load-camera?colgcd=${cd}`);
       if (res.ok) {
         const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           setCamerasList(json.data);
           return json.data;
         }
@@ -2176,7 +1967,8 @@ export default function TimetableDesignView({
     } finally {
       setCameraLoading(false);
     }
-    return [];
+    setCamerasList(DEFAULT_CAMERAS);
+    return DEFAULT_CAMERAS;
   };
 
   const fetchMasterData = async () => {
@@ -2902,7 +2694,6 @@ export default function TimetableDesignView({
       }
     }
 
-    const defaultUnit = `Unit 1: Fundamentals of ${subTitle || 'Subject'}`;
     const defaultDesc = autoFacName ? `${subTitle} (${autoFacName})` : subTitle;
 
     setFormData(prev => ({
@@ -2916,8 +2707,8 @@ export default function TimetableDesignView({
       linkcd: linkcdVal || prev.linkcd,
       electiveflg: electiveSts,
       subjectDescription: defaultDesc,
-      unitName: defaultUnit,
-      unitId: 'unit_1',
+      unitName: '',
+      unitId: '',
       topic: '',
       subTopics: '',
     }));
@@ -3055,14 +2846,6 @@ export default function TimetableDesignView({
     };
 
     if (mode === 'clerk') {
-      if (activeDraft?.status === 'HOD_APPROVED') {
-        const err = 'This timetable has already been approved by HOD and is locked for edits.';
-        showAlert('error', err);
-        setModalError(err);
-        setLoading(false);
-        return;
-      }
-
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
         const headers: any = {
@@ -3128,6 +2911,11 @@ export default function TimetableDesignView({
         };
 
         let currentDraft = activeDraft;
+        let draftIdToUse = currentDraft?.id;
+        if (currentDraft?.status === 'HOD_APPROVED') {
+          draftIdToUse = undefined;
+        }
+
         let existingSlots: any[] = [];
         if (currentDraft) {
           existingSlots = typeof currentDraft.slots === 'string'
@@ -3144,6 +2932,8 @@ export default function TimetableDesignView({
 
         const draftPayload = {
           ...(currentDraft || {}),
+          id: draftIdToUse,
+          status: 'DRAFT',
           title: currentDraft?.title && currentDraft.title !== 'Untitled Draft'
             ? currentDraft.title
             : `${selectedCourseObj?.name || 'Academic'} Sem ${selectedSemester} Sec ${selectedSection === '1' ? 'A' : selectedSection === '2' ? 'B' : selectedSection === '3' ? 'C' : 'D'} Timetable Draft`,
@@ -3692,8 +3482,9 @@ export default function TimetableDesignView({
     setSelectedCompetencies([]);
     setCompetencySearchTerm('');
 
-    const defaultCam = camerasList.length > 0 ? String(camerasList[0].camera_id) : '0';
-    const defaultCamObj = camerasList.find(c => String(c.camera_id) === defaultCam);
+    const activeList = camerasList && camerasList.length > 0 ? camerasList : DEFAULT_CAMERAS;
+    const defaultCam = activeList.length > 0 ? String(activeList[0].camera_id) : '1';
+    const defaultCamObj = activeList.find(c => String(c.camera_id) === defaultCam) || activeList[0] || DEFAULT_CAMERAS[0];
 
     setFormData({
       dayOfWeek: dayVal,
@@ -3706,7 +3497,7 @@ export default function TimetableDesignView({
       facultyId: '',
       facultyEmpId: '',
       facultyName: '',
-      room: defaultCamObj?.classroom || '',
+      room: defaultCamObj?.classroom || 'Web Cam',
       cameraId: defaultCam,
       slotType: 'Lecture',
       groupName: 'All Group',
@@ -3745,7 +3536,11 @@ export default function TimetableDesignView({
     const resolvedSubjectId = matchedSub 
       ? String(matchedSub.id || matchedSub.code || matchedSub.linkcd || matchedSub.sub_cd || '') 
       : String(slot.subject_id || '');
-    const defaultCam = camerasList.length > 0 ? String(camerasList[0].camera_id) : '0';
+    
+    const activeList = camerasList && camerasList.length > 0 ? camerasList : DEFAULT_CAMERAS;
+    const rawCamId = (slot.camera_id || slot.cameraId || (slot as any).CameraLink);
+    const defaultCam = (rawCamId && String(rawCamId) !== '0') ? String(rawCamId) : (activeList[0] ? String(activeList[0].camera_id) : '1');
+    const defaultCamObj = activeList.find(c => String(c.camera_id) === String(defaultCam)) || activeList[0] || DEFAULT_CAMERAS[0];
 
     setFormData({
       dayOfWeek: slot.day_of_week,
@@ -3758,7 +3553,7 @@ export default function TimetableDesignView({
       facultyId: slot.faculty_id || matchedSub?.empid || '',
       facultyEmpId: (slot as any).faculty_code || matchedSub?.empid || slot.faculty_id || '',
       facultyName: (slot.faculty_name && slot.faculty_name !== 'Faculty Member') ? slot.faculty_name : (matchedSub?.faculty_name || matchedSub?.EmpName || ''),
-      room: slot.room || '',
+      room: slot.room || defaultCamObj?.classroom || 'Web Cam',
       cameraId: defaultCam,
       slotType: slot.slot_type || slot.slotType || 'Lecture',
       groupName: slot.group_name || 'All Group',
@@ -4457,9 +4252,8 @@ export default function TimetableDesignView({
                       <button
                         type="button"
                         onClick={handleAddNewLectureModal}
-                        disabled={activeDraft?.status === 'HOD_APPROVED'}
-                        className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4a3cf5] text-white text-xs font-extrabold transition-all shadow-md shadow-indigo-500/25 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
-                        title={activeDraft?.status === 'HOD_APPROVED' ? 'Locked' : 'Add lecture to active draft'}
+                        className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4a3cf5] text-white text-xs font-extrabold transition-all shadow-md shadow-indigo-500/25 cursor-pointer flex items-center gap-1.5"
+                        title="Add lecture to draft"
                       >
                         <span>➕</span>
                         <span>Add Lecture</span>
@@ -6000,15 +5794,16 @@ export default function TimetableDesignView({
                         )}
                       </label>
                       <SearchableDropdown
-                        options={camerasList.map(c => ({
+                        options={(camerasList && camerasList.length > 0 ? camerasList : DEFAULT_CAMERAS).map(c => ({
                           value: String(c.camera_id),
                           label: c.classroom,
                           badge: `ID ${c.camera_id}`,
                           sublabel: c.camera_ip && c.camera_ip !== '0' ? c.camera_ip : undefined,
                         }))}
-                        value={formData.cameraId}
+                        value={formData.cameraId && formData.cameraId !== '0' ? formData.cameraId : ((camerasList && camerasList[0]) ? String(camerasList[0].camera_id) : '1')}
                         onChange={(val) => {
-                          const camObj = camerasList.find(c => String(c.camera_id) === val);
+                          const activeList = camerasList && camerasList.length > 0 ? camerasList : DEFAULT_CAMERAS;
+                          const camObj = activeList.find(c => String(c.camera_id) === val);
                           setFormData(prev => ({
                             ...prev,
                             cameraId: val,
@@ -6175,8 +5970,8 @@ export default function TimetableDesignView({
                       <div>
                         <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
                           <span>1. Unit *</span>
-                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
-                            {availableSubjectUnits.length} units available
+                          <span className={`text-[10px] font-semibold ${availableSubjectUnits.length > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                            {availableSubjectUnits.length > 0 ? `${availableSubjectUnits.length} units from Admin Master` : 'No units in Admin Master'}
                           </span>
                         </label>
                         <SearchableDropdown
@@ -6192,13 +5987,13 @@ export default function TimetableDesignView({
                             setFormData(prev => ({
                               ...prev,
                               unitName: matchedU?.name || val,
-                              unitId: matchedU?.id || 'unit_1',
-                              topic: '', // Reset topic when unit changes per requirement
-                              subTopics: '', // Reset subtopic when unit changes per requirement
+                              unitId: matchedU?.id || '',
+                              topic: '', // Reset topic when unit changes
+                              subTopics: '', // Reset subtopic when unit changes
                             }));
                             setSelectedCompetencies([]);
                           }}
-                          placeholder="-- Search or select Unit --"
+                          placeholder={availableSubjectUnits.length > 0 ? "-- Search or select Unit from Admin Master --" : "-- No units defined in Admin Master (type or select) --"}
                           searchPlaceholder="Search unit by code or title..."
                           allowCustom={true}
                           required
@@ -6209,8 +6004,8 @@ export default function TimetableDesignView({
                       <div>
                         <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
                           <span>2. Topic (Filtered by Unit) *</span>
-                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
-                            {availableSubjectTopics.length} topics
+                          <span className={`text-[10px] font-semibold ${availableSubjectTopics.length > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                            {availableSubjectTopics.length > 0 ? `${availableSubjectTopics.length} topics from Admin Master` : 'No topics in Admin Master'}
                           </span>
                         </label>
                         <SearchableDropdown
@@ -6224,11 +6019,11 @@ export default function TimetableDesignView({
                             setFormData(prev => ({
                               ...prev,
                               topic: val,
-                              subTopics: '', // Reset subtopic when topic changes per requirement
+                              subTopics: '', // Reset subtopic when topic changes
                             }));
                             setSelectedCompetencies([]);
                           }}
-                          placeholder="-- Search or select Topic --"
+                          placeholder={availableSubjectTopics.length > 0 ? "-- Search or select Topic from Admin Master --" : "-- No topics defined in Admin Master (type below) --"}
                           searchPlaceholder="Search topic for this unit..."
                           allowCustom={true}
                         />
@@ -6306,7 +6101,7 @@ export default function TimetableDesignView({
                     <button
                       type="button"
                       onClick={handleDelete}
-                      disabled={loading || (mode === 'clerk' && activeDraft?.status === 'HOD_APPROVED')}
+                      disabled={loading}
                       className="px-4 py-2.5 rounded-xl bg-rose-500/10 text-rose-600 border border-rose-500/30 hover:bg-rose-500/20 font-bold transition-all disabled:opacity-50 cursor-pointer"
                     >
                       {mode === 'clerk' ? 'Delete Draft Lecture' : 'Delete Session'}
@@ -6324,8 +6119,16 @@ export default function TimetableDesignView({
                     </button>
                     <button
                       type="submit"
-                      disabled={loading || (mode === 'clerk' && activeDraft?.status === 'HOD_APPROVED') || Boolean(liveClash)}
-                      className="px-5 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4a3cf5] text-white font-bold shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                      disabled={loading || Boolean(liveClash)}
+                      className={`px-5 py-2.5 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 ${
+                        liveClash
+                          ? 'bg-rose-500/20 text-rose-600 border border-rose-500/40 cursor-not-allowed opacity-60'
+                          : loading
+                          ? 'bg-orange-400 text-white opacity-75 cursor-wait'
+                          : mode === 'clerk'
+                          ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25 cursor-pointer active:scale-[0.98]'
+                          : 'bg-[#5B4BFF] hover:bg-[#4a3cf5] text-white shadow-indigo-500/20 cursor-pointer active:scale-[0.98]'
+                      }`}
                     >
                       {loading && (
                         <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { srmsPostDirect, isSrmsTenant, fetchSrmsLoadSubjects, resolveSrmsSubjectLink } from '@/lib/srms-client';
+import { srmsPostDirect, isSrmsTenant, fetchSrmsLoadSubjects, fetchSrmsLoadFaculty, resolveSrmsSubjectLink } from '@/lib/srms-client';
 import { queryDb } from '@/lib/db';
 
 function formatToSrmsTimetblDate(dateStr?: string, defaultTime: string = '08:30'): { formatted: string; date: Date; iso: string; dayOfWeek: number; timeStr: string } {
@@ -186,6 +186,8 @@ export async function POST(req: NextRequest) {
       const targetFacName = facRows[0]?.name || title.match(/\(([^)]+)\)/)?.[1] || description.match(/\(([^)]+)\)/)?.[1] || empid || 'Faculty Member';
 
       const excludeId = String(improperEvent.excludeId || improperEvent.editingSlotId || improperEvent.id || '').trim();
+      const excludeDraftId = String(improperEvent.excludeDraftId || improperEvent.draftId || body.excludeDraftId || body.draftId || '').trim();
+      const isDraftApproval = Boolean(improperEvent.isDraftApproval || improperEvent.isApproval || body.isDraftApproval || body.isApproval || excludeDraftId);
 
       // Check timetable_slots, srms_timetable_events, and timetable_drafts for conflicts on this day of week and overlapping time
       const [slotClashes, eventClashes, draftClashes] = await Promise.all([
@@ -204,6 +206,7 @@ export async function POST(req: NextRequest) {
            WHERE ts.day_of_week = $1
              AND (ts.start_time::TIME < $3::TIME AND ts.end_time::TIME > $2::TIME)
              AND ($7::text = '' OR ts.id::text <> $7::text)
+             AND ($8::text = '' OR ts.draft_id IS NULL OR ts.draft_id::text <> $8::text)
              AND (
                ts.faculty_id::text = $4
                OR f.emp_id = $5
@@ -211,7 +214,16 @@ export async function POST(req: NextRequest) {
                OR ts.description ILIKE $6
              )
            LIMIT 1`,
-          [startMeta.dayOfWeek, startMeta.timeStr, endMeta.timeStr, targetFacId || '00000000-0000-0000-0000-000000000000', targetEmpId || '', `%${targetFacName}%`, excludeId]
+          [
+            startMeta.dayOfWeek,
+            startMeta.timeStr,
+            endMeta.timeStr,
+            targetFacId || '00000000-0000-0000-0000-000000000000',
+            targetEmpId || '',
+            `%${targetFacName}%`,
+            excludeId,
+            excludeDraftId
+          ]
         ).catch(() => []),
 
         queryDb(
@@ -255,7 +267,8 @@ export async function POST(req: NextRequest) {
           ]
         ).catch(() => []),
 
-        queryDb(
+        // When approving a draft into live schedule, do not check unapproved drafts for clashes
+        isDraftApproval ? Promise.resolve([]) : queryDb(
           `SELECT td.id, td.title, td.course_cd, td.branch_cd, td.batch_cd, td.semester, td.section,
                   slot->>'startTime' AS start_time, slot->>'endTime' AS end_time,
                   COALESCE(slot->>'dayOfWeek', slot->>'day_of_week')::int AS day_of_week,
@@ -267,6 +280,7 @@ export async function POST(req: NextRequest) {
            WHERE (slot->>'dayOfWeek' = $1::text OR slot->>'day_of_week' = $1::text)
              AND ((slot->>'startTime')::time < $3::time AND (slot->>'endTime')::time > $2::time)
              AND ($7::text = '' OR (slot->>'id' <> $7::text AND td.id::text <> $7::text))
+             AND ($8::text = '' OR td.id::text <> $8::text)
              AND (
                slot->>'facultyEmpId' = $5
                OR slot->>'faculty_code' = $5
@@ -284,7 +298,8 @@ export async function POST(req: NextRequest) {
             targetFacId || '00000000-0000-0000-0000-000000000000',
             targetEmpId || '',
             `%${targetFacName}%`,
-            excludeId
+            excludeId,
+            excludeDraftId
           ]
         ).catch(() => [])
       ]);
@@ -343,12 +358,11 @@ export async function POST(req: NextRequest) {
     // 2.5 Resolve Authentic SRMS linkcd (linkcd in SRMS is the integer link ID, NOT the subject code)
     let resolvedLinkcd = linkcd;
     let resolvedEmpid = empid;
+    const subCode = String(improperEvent.subjectCode || improperEvent.subject_code || improperEvent.sub_cd || '').trim();
+    const subName = String(improperEvent.subjectName || improperEvent.subject_name || title || description || '').trim();
+    const facName = String(improperEvent.facultyName || improperEvent.faculty_name || '').trim();
 
     if (callSrmsApi) {
-      const subCode = String(improperEvent.subjectCode || improperEvent.subject_code || improperEvent.sub_cd || '').trim();
-      const subName = String(improperEvent.subjectName || improperEvent.subject_name || title || description || '').trim();
-      const facName = String(improperEvent.facultyName || improperEvent.faculty_name || '').trim();
-
       try {
         const loadSubs = await fetchSrmsLoadSubjects({
           course: courseCd,
@@ -375,15 +389,45 @@ export async function POST(req: NextRequest) {
             }
           }
         }
+
+        // If linkcd is still 0, call LoadFaculty API with subject code to retrieve precise linkcd
+        if ((!resolvedLinkcd || resolvedLinkcd === '0') && (subCode || linkcd)) {
+          const facList = await fetchSrmsLoadFaculty({
+            course: courseCd,
+            branch: branchCd,
+            batch: batchCd,
+            semester: semCd,
+            section: txtSec,
+            subject: subCode || linkcd,
+            start: rawStart || '2026-10-06 08:00:00',
+            end: rawEnd || '2026-10-06 09:00:00',
+            colgcd: colgcd,
+          });
+          if (facList && facList.length > 0) {
+            const fMatch = facList.find((f: any) =>
+              (empid && String(f.empid).trim().toLowerCase() === empid.toLowerCase()) ||
+              (facName && (f.empname || '').toLowerCase().includes(facName.toLowerCase())) ||
+              (subCode && String(f.sub_cd).trim() === subCode.trim())
+            ) || facList[0];
+            if (fMatch?.linkcd) {
+              resolvedLinkcd = String(fMatch.linkcd);
+              if (fMatch.empid && !resolvedEmpid) resolvedEmpid = String(fMatch.empid);
+            }
+          }
+        }
       } catch (resolveErr: any) {
         console.warn('[add-event resolve linkcd warning]:', resolveErr.message);
       }
     }
 
+    const cleanSubTitle = improperEvent.subjectName || improperEvent.subject_name || (title.includes(' - Unit') ? title.split(' - Unit')[0].trim() : title);
+    const srmsTitle = cleanSubTitle || title || 'Lecture';
+    const srmsDesc = description || `${srmsTitle}${facName ? ' ' + facName : ''}`;
+
     // 3. New SRMS AddEvent API Payload (https://myportal.srms.ac.in/srmserp/Timetbl/AddEvent)
     const srmsPayload = {
-      title,
-      description,
+      title: srmsTitle,
+      description: srmsDesc,
       start: startMeta.formatted,
       end: endMeta.formatted,
       linkcd: resolvedLinkcd,

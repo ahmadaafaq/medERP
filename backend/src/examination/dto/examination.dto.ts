@@ -425,6 +425,9 @@ export class HodApproveTimetableDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsOptional()
+  slots?: any;
 }
 
 /** Clerk creates a timetable draft for HOD approval */
