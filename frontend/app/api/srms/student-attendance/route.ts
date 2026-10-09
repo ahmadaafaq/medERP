@@ -9,7 +9,7 @@ import fs from 'fs';
 import path from 'path';
 
 // ─── DATE NORMALIZER (Accepts DD-MM-YYYY or YYYY-MM-DD) ───
-export function normalizeDateToIso(d: any): string | null {
+function normalizeDateToIso(d: any): string | null {
   if (!d) return null;
   const s = String(d).trim();
   const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
@@ -30,7 +30,7 @@ export function normalizeDateToIso(d: any): string | null {
 }
 
 // ─── AUTHENTIC FACULTY MAPPINGS FOR B.TECH CSE (BATCH 17, SEM 5) ───
-export const BTECH_CSE_FACULTY_MAP: Record<
+const BTECH_CSE_FACULTY_MAP: Record<
   string,
   { faculty_name: string; emp_id: string; designation: string; paper_code: string; sub_full_name: string; sub_type: string }
 > = {
@@ -124,7 +124,7 @@ export const BTECH_CSE_FACULTY_MAP: Record<
   },
 };
 
-export const BTECH_CSE_SUBJECT_LIST = [
+const BTECH_CSE_SUBJECT_LIST = [
   { sub_cd: '88621', sub_name: 'COI', paper_code: 'BNC501', faculty: 'ASHOK KUMAR', faculty_name: 'ASHOK KUMAR', faculty_emp_id: '202011033', faculty_designation: 'Assistant Professor' },
   { sub_cd: '88622', sub_name: 'DA', paper_code: 'BCS052', faculty: 'SHOBHA BHARTI', faculty_name: 'SHOBHA BHARTI', faculty_emp_id: '202516124', faculty_designation: 'Assistant Professor' },
   { sub_cd: '88623', sub_name: 'MLT', paper_code: 'BCS055', faculty: 'ANU SAXENA', faculty_name: 'ANU SAXENA', faculty_emp_id: '202213072', faculty_designation: 'Assistant Professor' },
@@ -138,7 +138,7 @@ export const BTECH_CSE_SUBJECT_LIST = [
   { sub_cd: '88631', sub_name: 'MINI PROJECT LAB', paper_code: 'BCS554', faculty: 'SHOBHA BHARTI', faculty_name: 'SHOBHA BHARTI', faculty_emp_id: '202516124', faculty_designation: 'Assistant Professor' },
 ];
 
-export const BTECH_CSE_SUBJECT_COLUMNS = BTECH_CSE_SUBJECT_LIST.map((s) => s.sub_name);
+const BTECH_CSE_SUBJECT_COLUMNS = BTECH_CSE_SUBJECT_LIST.map((s) => s.sub_name);
 
 let cachedBTechCseJson: any = null;
 
@@ -233,7 +233,7 @@ async function persistSyncToDatabase(
     }
 
     const normTdt = normalizeDateToIso(meta.tdt) || new Date().toISOString().split('T')[0];
-    for (const [code, subId] of subMap.entries()) {
+    for (const [code, subId] of Array.from(subMap.entries())) {
       const sessDate = normTdt;
       const existingSession = await queryDb(
         `SELECT id FROM "${schema}".attendance_sessions
