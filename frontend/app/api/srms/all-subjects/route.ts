@@ -32,30 +32,162 @@ async function handleGetAllSubjectDetail(
   batchcd?: string,
   semcd?: string,
   tenantSlug?: string,
+  seccd?: string,
 ) {
-  const cd = colgcd || '1';
-  const crs = coursecd || '';
-  const br = branchcd || '';
-  const bat = batchcd || '';
-  const sem = semcd || '';
-
   let targetSlug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
   if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
-    try {
-      const tRows = await queryDb<any>(`SELECT slug FROM public.tenants WHERE code = $1 OR slug = $1 OR id::text = $1 LIMIT 1`, [cd]);
-      if (tRows.length > 0 && tRows[0].slug) {
-        targetSlug = tRows[0].slug;
-      }
-    } catch {}
-    if (!targetSlug) {
-      targetSlug = 'srms-cet-bareilly';
+    if (colgcd === '2' || targetSlug === '2') targetSlug = 'srms-cetr-bareilly';
+    else if (colgcd === '11' || targetSlug === '11') targetSlug = 'srms-ims';
+    else targetSlug = 'srms-cet-bareilly';
+  }
+  const isSrmsTenant = targetSlug.includes('srms');
+  const schema = `tenant_${targetSlug}`;
+
+  // Sanitize colgcd to clean numeric code for SRMS portal
+  let cleanColgCd = '1';
+  const rawCd = String(colgcd || '').trim();
+  if (rawCd && /^\d+$/.test(rawCd)) {
+    cleanColgCd = rawCd;
+  } else if (targetSlug.includes('cetr')) {
+    cleanColgCd = '2';
+  } else if (targetSlug.includes('ims')) {
+    cleanColgCd = '11';
+  } else if (targetSlug.includes('unnao')) {
+    cleanColgCd = '3';
+  } else if (targetSlug.includes('law')) {
+    cleanColgCd = '4';
+  } else if (targetSlug.includes('ibs')) {
+    cleanColgCd = '5';
+  } else if (targetSlug.includes('iahs')) {
+    cleanColgCd = '6';
+  } else if (targetSlug.includes('nursing-school')) {
+    cleanColgCd = '8';
+  } else if (targetSlug.includes('nursing')) {
+    cleanColgCd = '9';
+  } else {
+    cleanColgCd = '1';
+  }
+
+  // Sanitize coursecd
+  let cleanCourseCd = '1';
+  const rawCrs = String(coursecd || '').trim();
+  const crsDigits = rawCrs.match(/\d+/);
+  if (crsDigits && !rawCrs.includes('-')) {
+    cleanCourseCd = crsDigits[0];
+  }
+
+  // Sanitize branchcd
+  let cleanBranchCd = '1';
+  const rawBr = String(branchcd || '').trim();
+  const brDigits = rawBr.match(/\d+/);
+  if (brDigits && !rawBr.includes('-')) {
+    cleanBranchCd = brDigits[0];
+  }
+
+  // Sanitize batchcd (Batch 2024 is code 17 for CET B.Tech)
+  let cleanBatchCd = '17';
+  const rawBat = String(batchcd || '').trim();
+  if (rawBat === '2024') {
+    cleanBatchCd = '17';
+  } else {
+    const batDigits = rawBat.match(/\d+/);
+    if (batDigits && !rawBat.includes('-')) {
+      cleanBatchCd = batDigits[0];
     }
   }
-  const schema = `tenant_${targetSlug}`;
-  const isSrmsTenant = targetSlug.startsWith('srms');
 
-  // 1. Direct PostgreSQL query to tenant's subjects table FIRST
+  // Sanitize semcd
+  let cleanSemCd = '5';
+  const rawSem = String(semcd || '').trim();
+  const semDigits = rawSem.match(/\d+/);
+  if (semDigits) {
+    cleanSemCd = semDigits[0];
+  }
+
+  // Sanitize seccd
+  let cleanSecCd = '1';
+  const rawSec = String(seccd || '').trim();
+  const secDigits = rawSec.match(/\d+/);
+  if (secDigits) {
+    cleanSecCd = secDigits[0];
+  }
+
+  // 1. Live SRMS ERP API: ONLY for SRMS tenants!
+  if (isSrmsTenant) {
+    try {
+      const payload = {
+        colgcd: cleanColgCd,
+        coursecd: cleanCourseCd,
+        branchcd: cleanBranchCd,
+        batchcd: cleanBatchCd,
+        semcd: cleanSemCd,
+      };
+      const data = await srmsPost('AdminAttendance/GetAllSubjectDetail', payload);
+      if (Array.isArray(data) && data.length > 0) {
+        return NextResponse.json(data);
+      }
+    } catch (error: any) {
+      console.warn('[API /api/srms/all-subjects] SRMS live portal fetch error:', error?.message);
+    }
+  }
+
+  // 2. For Non-SRMS Tenants: Query Subject Linker (faculty_subjects) and Master subjects
   try {
+    const linkedRows = await queryDb<any>(
+      `SELECT DISTINCT ON (s.id)
+         s.id,
+         COALESCE(s.code, s.subject_code, s.id::text)::text AS sub_cd,
+         s.name AS sub_name,
+         CASE 
+           WHEN f.name IS NOT NULL THEN s.name || ' (' || COALESCE(s.code, '') || ' - Linked: ' || f.name || ')'
+           ELSE s.name || ' (' || COALESCE(s.code, '') || ')'
+         END AS mst_sub_name,
+         COALESCE(s.code, s.subject_code, s.id::text)::text AS sub_addinfo,
+         COALESCE(s.type, 'THEORY') AS type,
+         s.course_cd,
+         s.branch_cd,
+         s.department_id,
+         s.semester,
+         s.sem_cd,
+         s.is_active,
+         f.name AS faculty_name
+       FROM "${schema}".subjects s
+       LEFT JOIN "${schema}".faculty_subjects fs ON fs.subject_id::text = s.id::text AND fs.is_active = true
+       LEFT JOIN "${schema}".faculty f ON f.id::text = fs.faculty_id::text
+       WHERE ($1 = '' OR s.course_cd::text = $1::text OR s.course_id::text = $1::text)
+         AND ($2 = '' OR s.branch_cd::text = $2::text OR s.department_id::text = $2::text)
+         AND ($3 = '' OR s.semester::text = $3::text OR s.semester::text = ('Semester ' || $3) OR s.semester::text = ('Sem ' || $3) OR s.sem_cd::text = $3::text)
+       ORDER BY s.id, fs.created_at DESC`,
+      [cleanCourseCd, cleanBranchCd, cleanSemCd]
+    ).catch(() => []);
+
+    if (Array.isArray(linkedRows) && linkedRows.length > 0) {
+      const mapped = linkedRows.map((s: any) => ({
+        colg_cd: Number(cleanColgCd) || 1,
+        sub_cd: String(s.sub_cd || s.id),
+        sub_name: s.sub_name,
+        mst_sub_name: s.mst_sub_name || `${s.sub_name} ${s.type || 'THEORY'}`,
+        sub_addinfo: s.sub_addinfo || s.sub_cd,
+        course_cd: Number(cleanCourseCd) || 1,
+        branch_cd: Number(cleanBranchCd) || 1,
+        batch_cd: Number(cleanBatchCd) || 17,
+        sem_cd: Number(cleanSemCd) || 5,
+        elective_flg: 0,
+        active_flg: s.is_active ? 1 : 0,
+        Sub_flg: 1,
+        course_name: s.course_name || '',
+        batch_name: cleanBatchCd || '',
+        branch_name: s.department_name || '',
+        semester_name: String(cleanSemCd || s.semester || ''),
+        ElectiveSts: 'N',
+        ActiveSts: s.is_active ? 'Y' : 'N',
+        SubTyp: s.type || 'THEORY',
+        faculty_name: s.faculty_name,
+      }));
+      return NextResponse.json(mapped);
+    }
+
+    // Direct fallback to tenant's subjects table with strict semester filtering
     const dbSubjects = await queryDb<any>(
       `SELECT DISTINCT
          s.id,
@@ -66,32 +198,34 @@ async function handleGetAllSubjectDetail(
          s.branch_cd,
          s.department_id,
          s.semester,
+         s.sem_cd,
          s.is_active
        FROM "${schema}".subjects s
        WHERE ($1 = '' OR s.course_cd::text = $1::text OR s.course_id::text = $1::text)
          AND ($2 = '' OR s.branch_cd::text = $2::text OR s.department_id::text = $2::text)
+         AND ($3 = '' OR s.semester::text = $3::text OR s.semester::text = ('Semester ' || $3) OR s.semester::text = ('Sem ' || $3) OR s.sem_cd::text = $3::text)
        ORDER BY sub_name ASC`,
-      [crs, br]
-    );
+      [cleanCourseCd, cleanBranchCd, cleanSemCd]
+    ).catch(() => []);
 
     if (Array.isArray(dbSubjects) && dbSubjects.length > 0) {
       const mapped = dbSubjects.map((s: any) => ({
-        colg_cd: Number(cd) || 1,
+        colg_cd: Number(cleanColgCd) || 1,
         sub_cd: String(s.sub_cd || s.id),
         sub_name: s.sub_name,
         mst_sub_name: `${s.sub_name} ${s.type || 'THEORY'}`,
         sub_addinfo: s.sub_cd,
-        course_cd: Number(crs) || 1,
-        branch_cd: Number(br) || 1,
-        batch_cd: Number(bat) || 1,
-        sem_cd: Number(sem) || 1,
+        course_cd: Number(cleanCourseCd) || 1,
+        branch_cd: Number(cleanBranchCd) || 1,
+        batch_cd: Number(cleanBatchCd) || 17,
+        sem_cd: Number(cleanSemCd) || 5,
         elective_flg: 0,
         active_flg: s.is_active ? 1 : 0,
         Sub_flg: 1,
         course_name: s.course_name || '',
-        batch_name: bat || '',
+        batch_name: cleanBatchCd || '',
         branch_name: s.department_name || '',
-        semester_name: String(sem || s.semester || ''),
+        semester_name: String(cleanSemCd || s.semester || ''),
         ElectiveSts: 'N',
         ActiveSts: s.is_active ? 'Y' : 'N',
         SubTyp: s.type || 'THEORY',
@@ -99,10 +233,10 @@ async function handleGetAllSubjectDetail(
       return NextResponse.json(mapped);
     }
   } catch (dbErr: any) {
-    console.warn(`[API /api/srms/all-subjects] PostgreSQL direct query error on ${schema}:`, dbErr?.message);
+    console.warn(`[API /api/srms/all-subjects] PostgreSQL query error on ${schema}:`, dbErr?.message);
   }
 
-  // 2. Dynamic Fallback to PostgreSQL via NestJS backend
+  // 3. Dynamic Fallback to PostgreSQL via NestJS backend (filtered strictly by semester)
   try {
     const res = await fetch(`${getBackendApiUrl()}/admin-master/subjects?tenant=${encodeURIComponent(targetSlug)}`, {
       cache: 'no-store',
@@ -112,27 +246,30 @@ async function handleGetAllSubjectDetail(
       const json = await res.json();
       const list = json.data || json;
       if (Array.isArray(list) && list.length > 0) {
-        const filtered = list.filter((s: any) =>
-          (!crs || String(s.course_cd) === String(crs) || String(s.course_id) === String(crs)) &&
-          (!br || String(s.branch_cd) === String(br) || String(s.department_id) === String(br))
-        );
-        const mapped = (filtered.length > 0 ? filtered : list).map((s: any) => ({
-          colg_cd: Number(cd) || 1,
+        const filtered = list.filter((s: any) => {
+          const courseOk = !cleanCourseCd || String(s.course_cd) === String(cleanCourseCd) || String(s.course_id) === String(cleanCourseCd);
+          const branchOk = !cleanBranchCd || String(s.branch_cd) === String(cleanBranchCd) || String(s.department_id) === String(cleanBranchCd);
+          const semOk = !cleanSemCd || String(s.sem_cd) === String(cleanSemCd) || String(s.semester || '').includes(String(cleanSemCd));
+          return courseOk && branchOk && semOk;
+        });
+
+        const mapped = filtered.map((s: any) => ({
+          colg_cd: Number(cleanColgCd) || 1,
           sub_cd: String(s.code || s.id),
           sub_name: s.name,
           mst_sub_name: `${s.name} ${s.type || 'THEORY'}`,
           sub_addinfo: s.code,
-          course_cd: Number(crs) || 1,
-          branch_cd: Number(br) || 1,
-          batch_cd: Number(bat) || 1,
-          sem_cd: Number(sem) || 1,
+          course_cd: Number(cleanCourseCd) || 1,
+          branch_cd: Number(cleanBranchCd) || 1,
+          batch_cd: Number(cleanBatchCd) || 17,
+          sem_cd: Number(cleanSemCd) || 5,
           elective_flg: 0,
           active_flg: s.is_active ? 1 : 0,
           Sub_flg: 1,
           course_name: s.course_name || '',
-          batch_name: bat || '',
+          batch_name: cleanBatchCd || '',
           branch_name: s.department_name || '-',
-          semester_name: String(sem),
+          semester_name: String(cleanSemCd),
           ElectiveSts: 'N',
           ActiveSts: s.is_active ? 'Y' : 'N',
           SubTyp: s.type || 'THEORY',
@@ -142,25 +279,6 @@ async function handleGetAllSubjectDetail(
     }
   } catch (backendErr: any) {
     console.warn('[API /api/srms/all-subjects] PostgreSQL backend fallback error:', backendErr?.message);
-  }
-
-  // 3. Live SRMS ERP API: ONLY for SRMS tenants!
-  if (isSrmsTenant) {
-    try {
-      const payload = {
-        colgcd: String(cd),
-        coursecd: String(crs || '13'),
-        branchcd: String(br || '1'),
-        batchcd: String(bat || '2'),
-        semcd: String(sem || '3'),
-      };
-      const data = await srmsPost('AdminAttendance/GetAllSubjectDetail', payload);
-      if (Array.isArray(data) && data.length > 0) {
-        return NextResponse.json(data);
-      }
-    } catch (error: any) {
-      console.warn('[API /api/srms/all-subjects] SRMS live portal fetch error:', error?.message);
-    }
   }
 
   return NextResponse.json([]);
@@ -174,8 +292,9 @@ export async function POST(req: NextRequest) {
     const branchcd = String(body.branchcd || body.branch_cd || '').trim();
     const batchcd = String(body.batchcd || body.batch_cd || '').trim();
     const semcd = String(body.semcd || body.sem_cd || '').trim();
+    const seccd = String(body.seccd || body.sec_cd || body.section || '').trim();
     const tenant = resolveTenantFromReq(req, String(body.tenant || body.tenantSlug || '').trim());
-    return handleGetAllSubjectDetail(colgcd, coursecd, branchcd, batchcd, semcd, tenant);
+    return handleGetAllSubjectDetail(colgcd, coursecd, branchcd, batchcd, semcd, tenant, seccd);
   } catch (error: any) {
     console.error('[API /api/srms/all-subjects] Error in POST:', error);
     return NextResponse.json([]);
@@ -190,8 +309,9 @@ export async function GET(req: NextRequest) {
     const branchcd = String(searchParams.get('branchcd') || searchParams.get('branch_cd') || '').trim();
     const batchcd = String(searchParams.get('batchcd') || searchParams.get('batch_cd') || '').trim();
     const semcd = String(searchParams.get('semcd') || searchParams.get('sem_cd') || '').trim();
+    const seccd = String(searchParams.get('seccd') || searchParams.get('sec_cd') || searchParams.get('section') || '').trim();
     const tenant = resolveTenantFromReq(req, String(searchParams.get('tenant') || searchParams.get('tenantSlug') || '').trim());
-    return handleGetAllSubjectDetail(colgcd, coursecd, branchcd, batchcd, semcd, tenant);
+    return handleGetAllSubjectDetail(colgcd, coursecd, branchcd, batchcd, semcd, tenant, seccd);
   } catch (error: any) {
     console.error('[API /api/srms/all-subjects] Error in GET:', error);
     return NextResponse.json([]);

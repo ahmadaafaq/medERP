@@ -124,6 +124,8 @@ interface Subject {
   batch_code?: string;
   batch_cd?: string;
   sem_cd?: string;
+  semester?: string;
+  semester_name?: string;
   college_id?: string;
   colg_cd?: string;
   college_name?: string;
@@ -495,6 +497,24 @@ export default function AdminMasterPage() {
   const [srmsLiveSubjects, setSrmsLiveSubjects] = useState<any[]>([]);
   const [loadingSrmsSubjects, setLoadingSrmsSubjects] = useState(false);
 
+  // Unit Master live subjects, search & cascading state
+  const [unitLiveSubjects, setUnitLiveSubjects] = useState<any[]>([]);
+  const [loadingUnitSubjects, setLoadingUnitSubjects] = useState<boolean>(false);
+  const [unitSubjectSearch, setUnitSubjectSearch] = useState<string>('');
+  const [isUnitSubjectDropdownOpen, setIsUnitSubjectDropdownOpen] = useState<boolean>(false);
+
+  // Topic Master live subjects, search & cascading state
+  const [topicLiveSubjects, setTopicLiveSubjects] = useState<any[]>([]);
+  const [loadingTopicSubjects, setLoadingTopicSubjects] = useState<boolean>(false);
+  const [topicSubjectSearch, setTopicSubjectSearch] = useState<string>('');
+  const [isTopicSubjectDropdownOpen, setIsTopicSubjectDropdownOpen] = useState<boolean>(false);
+
+  // Sub-Topic / Competency Master live subjects, search & cascading state
+  const [subTopicLiveSubjects, setSubTopicLiveSubjects] = useState<any[]>([]);
+  const [loadingSubTopicSubjects, setLoadingSubTopicSubjects] = useState<boolean>(false);
+  const [subTopicSubjectSearch, setSubTopicSubjectSearch] = useState<string>('');
+  const [isSubTopicSubjectDropdownOpen, setIsSubTopicSubjectDropdownOpen] = useState<boolean>(false);
+
   // Sub-Topic / Competency temporary queue state
   const [tempCompetencies, setTempCompetencies] = useState<TempCompetencyItem[]>([]);
   const [subTopicCode, setSubTopicCode] = useState('');
@@ -720,6 +740,827 @@ export default function AdminMasterPage() {
     return [];
   };
 
+  const getSubjectPaperCode = (s: any): string => {
+    if (!s) return '';
+    const addinfo = String(s.sub_addinfo || '').trim();
+    if (addinfo && addinfo !== '-' && addinfo !== 'null' && addinfo !== 'undefined') return addinfo;
+    const code = String(s.code || s.subject_code || '').trim();
+    if (code && code !== '-' && code !== 'null' && code !== 'undefined') return code;
+    return String(s.sub_cd || s.id || '').trim();
+  };
+
+  const getSubjectTitle = (s: any): string => {
+    if (!s) return '';
+    const mst = String(s.mst_sub_name || '').trim();
+    if (mst && mst !== '-' && mst !== 'null' && mst !== 'undefined') return mst;
+    const name = String(s.name || s.sub_name || '').trim();
+    return name || 'Subject';
+  };
+
+  const getSubjectDisplayLabel = (s: any): string => {
+    if (!s) return '';
+    const paper = getSubjectPaperCode(s);
+    const title = getSubjectTitle(s);
+    if (paper && title) {
+      if (title.toUpperCase().includes(paper.toUpperCase())) return title;
+      return `[${paper}] ${title}`;
+    }
+    return title || paper || 'Selected Subject';
+  };
+
+  const getSubjectNumericCode = (s: any, fallbackId?: string | number): string => {
+    if (s) {
+      const subCd = String(s.sub_cd || '').trim();
+      if (subCd && /^\d+$/.test(subCd)) return subCd;
+      const code = String(s.code || s.subject_code || '').trim();
+      if (code && /^\d+$/.test(code)) return code;
+      const id = String(s.id || '').trim();
+      if (id && /^\d+$/.test(id)) return id;
+    }
+    if (fallbackId !== undefined && fallbackId !== null) {
+      const fb = String(fallbackId).trim();
+      if (fb && /^\d+$/.test(fb)) return fb;
+    }
+    return '';
+  };
+
+  const getNextUnitCodeForSubject = (
+    subjectCodeOrId: string | number,
+    allUnits: Unit[] = units,
+    subjectObjOrPaperCode?: any
+  ): { code: string; order: number } => {
+    // 1. Resolve raw subject paper code (e.g. 'BCS 055' or 'BNC 501')
+    let rawPaperCode = '';
+    if (typeof subjectObjOrPaperCode === 'string') {
+      rawPaperCode = subjectObjOrPaperCode;
+    } else if (subjectObjOrPaperCode && typeof subjectObjOrPaperCode === 'object') {
+      rawPaperCode = subjectObjOrPaperCode.sub_addinfo || subjectObjOrPaperCode.code || subjectObjOrPaperCode.sub_name || '';
+    }
+
+    const target = String(subjectCodeOrId || '').trim();
+    const targetLower = target.toLowerCase();
+
+    // 2. Resolve dynamic numeric subject code (e.g. "88623", "88626")
+    let numericSubCd = '';
+    if (typeof subjectObjOrPaperCode === 'object' && subjectObjOrPaperCode) {
+      numericSubCd = getSubjectNumericCode(subjectObjOrPaperCode, subjectCodeOrId);
+    } else if (typeof subjectObjOrPaperCode === 'string' && /^\d+$/.test(subjectObjOrPaperCode.trim())) {
+      numericSubCd = subjectObjOrPaperCode.trim();
+    }
+    if (!numericSubCd && target && /^\d+$/.test(target)) {
+      numericSubCd = target;
+    }
+
+    // Search in unitLiveSubjects if not passed directly
+    const foundInLive = unitLiveSubjects.find((s: any) =>
+      (target && (
+        String(s.sub_cd).toLowerCase() === targetLower ||
+        String(s.id).toLowerCase() === targetLower ||
+        String(s.code).toLowerCase() === targetLower ||
+        String(s.sub_addinfo).toLowerCase() === targetLower ||
+        String(s.sub_name).toLowerCase() === targetLower
+      )) ||
+      (rawPaperCode && String(s.sub_addinfo).toLowerCase() === rawPaperCode.toLowerCase())
+    );
+    if (!rawPaperCode && foundInLive) {
+      rawPaperCode = foundInLive.sub_addinfo || foundInLive.code || foundInLive.sub_name || '';
+    }
+    if (!numericSubCd && foundInLive) {
+      numericSubCd = getSubjectNumericCode(foundInLive);
+    }
+
+    // Search in master subjects
+    const foundInSubjects = subjects.find(s =>
+      (target && (
+        String(s.id).toLowerCase() === targetLower ||
+        String(s.code).toLowerCase() === targetLower ||
+        String(s.name).toLowerCase() === targetLower
+      )) ||
+      (rawPaperCode && String(s.code).toLowerCase() === rawPaperCode.toLowerCase())
+    );
+    if (!rawPaperCode && foundInSubjects) {
+      rawPaperCode = (foundInSubjects as any).sub_addinfo || foundInSubjects.code || '';
+    }
+    if (!numericSubCd && foundInSubjects) {
+      numericSubCd = getSubjectNumericCode(foundInSubjects);
+    }
+
+    // Strip all whitespace and uppercase: "BCS 055" -> "BCS055", "BNC 501" -> "BNC501"
+    const cleanPaperCode = (rawPaperCode || '').replace(/\s+/g, '').toUpperCase();
+
+    // Dynamic prefix: Prioritize numeric subject code (e.g. "88623"), fallback to paper code ("BCS055") if no numeric code
+    const prefixToUse = numericSubCd || cleanPaperCode;
+
+    if (!target && !prefixToUse) {
+      return { code: 'UNIT1-CO1', order: 1 };
+    }
+
+    // Build comprehensive match set
+    const targetSet = new Set<string>();
+    if (target) {
+      targetSet.add(targetLower);
+      targetSet.add(target.replace(/\s+/g, '').toLowerCase());
+    }
+    if (numericSubCd) {
+      targetSet.add(numericSubCd.toLowerCase());
+    }
+    if (rawPaperCode) {
+      targetSet.add(rawPaperCode.trim().toLowerCase());
+      targetSet.add(rawPaperCode.replace(/\s+/g, '').toLowerCase());
+    }
+    if (cleanPaperCode) {
+      targetSet.add(cleanPaperCode.toLowerCase());
+    }
+    if (foundInLive) {
+      if (foundInLive.sub_cd) targetSet.add(String(foundInLive.sub_cd).toLowerCase());
+      if (foundInLive.id) targetSet.add(String(foundInLive.id).toLowerCase());
+      if (foundInLive.sub_addinfo) {
+        targetSet.add(String(foundInLive.sub_addinfo).toLowerCase());
+        targetSet.add(String(foundInLive.sub_addinfo).replace(/\s+/g, '').toLowerCase());
+      }
+      if (foundInLive.sub_name) {
+        targetSet.add(String(foundInLive.sub_name).toLowerCase());
+        targetSet.add(String(foundInLive.sub_name).replace(/\s+/g, '').toLowerCase());
+      }
+    }
+    if (foundInSubjects) {
+      if (foundInSubjects.id) targetSet.add(String(foundInSubjects.id).toLowerCase());
+      if (foundInSubjects.code) {
+        targetSet.add(String(foundInSubjects.code).toLowerCase());
+        targetSet.add(String(foundInSubjects.code).replace(/\s+/g, '').toLowerCase());
+      }
+    }
+
+    // Find all existing units belonging to this subject
+    const matchingUnits = allUnits.filter((u: any) => {
+      const uSubId = String(u.subject_id || '').trim().toLowerCase();
+      const uSubCode = String(u.subject_code || '').trim().toLowerCase();
+      const uSubCd = String(u.sub_cd || '').trim().toLowerCase();
+      const uCodeClean = String(u.code || '').replace(/\s+/g, '').toUpperCase();
+
+      const matchesTarget =
+        (uSubId && targetSet.has(uSubId)) ||
+        (uSubCode && (targetSet.has(uSubCode) || targetSet.has(uSubCode.replace(/\s+/g, '')))) ||
+        (uSubCd && targetSet.has(uSubCd));
+
+      const matchesPrefix =
+        (numericSubCd && uCodeClean.startsWith(numericSubCd)) ||
+        (cleanPaperCode && cleanPaperCode.length >= 2 && uCodeClean.startsWith(cleanPaperCode));
+
+      return matchesTarget || matchesPrefix;
+    });
+
+    let maxNum = 0;
+    matchingUnits.forEach((u: any) => {
+      const code = String(u.code || '').trim().toUpperCase();
+      const match =
+        code.match(/UNIT\s*-?\s*(\d+)/i) ||
+        code.match(/(?:^|[-_\s])U(\d+)(?:[-_\s]|$)/i) ||
+        code.match(/(?:^|[-_\s])CO(\d+)(?:[-_\s]|$)/i) ||
+        code.match(/(?:^|[-_\s])(\d+)$/);
+
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      } else if (u.unit_order && typeof u.unit_order === 'number' && u.unit_order > maxNum && u.unit_order <= 30) {
+        maxNum = u.unit_order;
+      }
+    });
+
+    if (maxNum < matchingUnits.length) {
+      maxNum = matchingUnits.length;
+    }
+
+    const nextNum = maxNum + 1;
+    const generatedCode = prefixToUse
+      ? `${prefixToUse}-UNIT${nextNum}-CO${nextNum}`
+      : `UNIT${nextNum}-CO${nextNum}`;
+
+    return {
+      code: generatedCode,
+      order: nextNum,
+    };
+  };
+
+  const getNextTopicCodeForSubject = (
+    subjectCodeOrId: string,
+    allTopics: any[],
+    unitCode?: string,
+    subjectObj?: any
+  ): string => {
+    const target = String(subjectCodeOrId || '').trim();
+
+    // 1. Resolve numeric subject code xx (e.g. "88626", "85185")
+    let numericSubCd = '';
+    const rawObjCd = String(subjectObj?.sub_cd || '').trim();
+    if (rawObjCd && /^\d+$/.test(rawObjCd)) {
+      numericSubCd = rawObjCd;
+    } else if (subjectObj?.code && /^\d+$/.test(String(subjectObj.code).trim())) {
+      numericSubCd = String(subjectObj.code).trim();
+    } else if (target && /^\d+$/.test(target)) {
+      numericSubCd = target;
+    }
+
+    // If not found directly, search live or database subjects
+    if (!numericSubCd && (target || subjectObj)) {
+      const foundInLive = topicLiveSubjects.find((s: any) =>
+        (target && (String(s.sub_cd) === target || String(s.id) === target || String(s.code) === target || String(s.sub_addinfo) === target || String(s.sub_name) === target)) ||
+        (subjectObj?.sub_addinfo && String(s.sub_addinfo) === String(subjectObj.sub_addinfo)) ||
+        (subjectObj?.id && String(s.id) === String(subjectObj.id))
+      ) || unitLiveSubjects.find((s: any) =>
+        (target && (String(s.sub_cd) === target || String(s.id) === target || String(s.code) === target || String(s.sub_addinfo) === target || String(s.sub_name) === target)) ||
+        (subjectObj?.sub_addinfo && String(s.sub_addinfo) === String(subjectObj.sub_addinfo))
+      );
+      if (foundInLive) {
+        const liveCd = String(foundInLive.sub_cd || foundInLive.code || '').trim();
+        if (liveCd && /^\d+$/.test(liveCd)) {
+          numericSubCd = liveCd;
+        }
+      }
+    }
+
+    if (!numericSubCd && target) {
+      const foundInSubjects = subjects.find(s =>
+        s.id === target || s.code === target || s.name === target || (s as any).sub_cd === target || (s as any).sub_addinfo === target
+      );
+      if (foundInSubjects) {
+        const subCd = String((foundInSubjects as any).sub_cd || foundInSubjects.code || '').trim();
+        if (subCd && /^\d+$/.test(subCd)) {
+          numericSubCd = subCd;
+        }
+      }
+    }
+
+    // 2. If numeric subject code xx is found (e.g. "88626"):
+    // Auto topic code becomes xx1, xx2, xx3...
+    if (numericSubCd) {
+      let maxNum = 0;
+      let matchingCount = 0;
+
+      allTopics.forEach((t: any) => {
+        const tCode = String(t.code || '').trim().toUpperCase();
+        const tSub = String(t.subject_code || t.subject_id || '').trim();
+
+        // If code starts with the exact numeric subject code (e.g. "886261", "886262")
+        if (tCode.startsWith(numericSubCd)) {
+          matchingCount++;
+          const remainder = tCode.slice(numericSubCd.length).replace(/^[-_T\s]+/, '');
+          const n = parseInt(remainder, 10);
+          if (!isNaN(n) && n > maxNum) {
+            maxNum = n;
+          }
+        }
+        // Or if topic's subject matches numericSubCd or target
+        else if (tSub === numericSubCd || (target && tSub === target)) {
+          matchingCount++;
+          const match = tCode.match(/(\d+)$/);
+          if (match && match[1]) {
+            const n = parseInt(match[1], 10);
+            if (!isNaN(n) && n > maxNum) {
+              maxNum = n;
+            }
+          }
+        }
+      });
+
+      const nextOrder = Math.max(maxNum + 1, matchingCount + 1);
+      return `${numericSubCd}${nextOrder}`;
+    }
+
+    // 3. Fallback for non-numeric subjects (e.g. custom non-SRMS paper codes)
+    let rawPaperCode = subjectObj?.sub_addinfo || subjectObj?.code || '';
+    if (!rawPaperCode && target) {
+      const foundInSubjects = subjects.find(s => s.id === target || s.code === target || s.name === target);
+      if (foundInSubjects) rawPaperCode = foundInSubjects.code || (foundInSubjects as any).sub_addinfo || '';
+    }
+    const cleanPaperCode = (rawPaperCode || target || 'TOPIC').replace(/\s+/g, '').toUpperCase();
+
+    let fallbackMax = 0;
+    let fallbackCount = 0;
+    allTopics.forEach((t: any) => {
+      const tCode = String(t.code || '').trim().toUpperCase();
+      const tSub = String(t.subject_code || t.subject_id || '').trim().toUpperCase();
+      if (cleanPaperCode && tCode.startsWith(cleanPaperCode)) {
+        fallbackCount++;
+        const remainder = tCode.slice(cleanPaperCode.length).replace(/^[-_T\s]+/, '');
+        const n = parseInt(remainder, 10);
+        if (!isNaN(n) && n > fallbackMax) fallbackMax = n;
+      } else if (tSub === cleanPaperCode || (target && tSub === target.toUpperCase())) {
+        fallbackCount++;
+        const match = tCode.match(/(\d+)$/);
+        if (match && match[1]) {
+          const n = parseInt(match[1], 10);
+          if (!isNaN(n) && n > fallbackMax) fallbackMax = n;
+        }
+      }
+    });
+
+    const fallbackOrder = Math.max(fallbackMax + 1, fallbackCount + 1);
+    if (/^\d+$/.test(cleanPaperCode)) {
+      return `${cleanPaperCode}${fallbackOrder}`;
+    }
+    return `${cleanPaperCode}-T${fallbackOrder}`;
+  };
+
+  const getNextSubTopicCodeForTopic = (
+    topicCodeOrId: string,
+    allCompetencies: any[],
+    subjectObj?: any,
+    tempQueue?: TempCompetencyItem[]
+  ): string => {
+    const targetTopic = String(topicCodeOrId || '').trim();
+    const cleanTopic = targetTopic.replace(/[-_]ST\d+$/i, '').trim();
+
+    // 1. Gather all existing subtopic codes for this topic or subject
+    const matchingCodes: string[] = [];
+
+    allCompetencies.forEach((c: any) => {
+      const cTopic = String(c.topic_code || c.topic_id || '').trim();
+      const cCode = String(c.code || '').trim().toUpperCase();
+
+      if (cleanTopic && (cTopic === cleanTopic || cCode.startsWith(cleanTopic.toUpperCase()))) {
+        matchingCodes.push(cCode);
+      } else if (!cleanTopic) {
+        matchingCodes.push(cCode);
+      }
+    });
+
+    if (tempQueue && tempQueue.length > 0) {
+      tempQueue.forEach(it => {
+        if (it.code) matchingCodes.push(it.code.trim().toUpperCase());
+      });
+    }
+
+    let maxNum = 0;
+    matchingCodes.forEach(code => {
+      const stMatch = code.match(/ST(\d+)/i) || code.match(/(?:^|[-_\s])(\d+)$/);
+      if (stMatch && stMatch[1]) {
+        const n = parseInt(stMatch[1], 10);
+        if (!isNaN(n) && n > maxNum) {
+          maxNum = n;
+        }
+      }
+    });
+
+    const nextSeq = String(Math.max(maxNum + 1, matchingCodes.length + 1)).padStart(2, '0');
+    if (cleanTopic) {
+      return `${cleanTopic}-ST${nextSeq}`;
+    }
+    return `ST${nextSeq}`;
+  };
+
+  const fetchUnitSubjects = async (
+    colgcd?: string,
+    coursecd?: string,
+    branchcd?: string,
+    batchcd?: string,
+    semcd?: string,
+    seccd?: string,
+    tenantSlug?: string
+  ) => {
+    setLoadingUnitSubjects(true);
+    setUnitLiveSubjects([]);
+    const targetSlug = getFormCollegeSlug(tenantSlug || formData.college_id || formData.college_slug || selectedCollegeFilter);
+    const isSrms = targetSlug.toLowerCase().includes('srms');
+
+    // Resolve clean integer codes
+    let cd = '1';
+    const rawCd = String(colgcd || formData.college_id || '').trim();
+    if (rawCd && /^\d+$/.test(rawCd)) {
+      cd = rawCd;
+    } else if (targetSlug.includes('cetr')) {
+      cd = '2';
+    } else if (targetSlug.includes('ims')) {
+      cd = '11';
+    } else if (targetSlug.includes('unnao')) {
+      cd = '3';
+    } else if (targetSlug.includes('law')) {
+      cd = '4';
+    } else if (targetSlug.includes('ibs')) {
+      cd = '5';
+    } else if (targetSlug.includes('iahs')) {
+      cd = '6';
+    } else if (targetSlug.includes('nursing-school')) {
+      cd = '8';
+    } else if (targetSlug.includes('nursing')) {
+      cd = '9';
+    } else {
+      cd = '1';
+    }
+
+    const crs = String(coursecd || formData.course_cd || '1').match(/\d+/)?.[0] || '1';
+    const br = String(branchcd || formData.branch_cd || '1').match(/\d+/)?.[0] || '1';
+
+    let bat = '17';
+    const rawBat = String(batchcd || formData.batch_cd || formData.batch_id || '17').trim();
+    if (rawBat === '2024') {
+      bat = '17';
+    } else {
+      bat = rawBat.match(/\d+/)?.[0] || '17';
+    }
+
+    const sem = String(semcd || formData.sem_cd || '5').match(/\d+/)?.[0] || '5';
+    const sec = String(seccd || formData.sec_cd || '1').match(/\d+/)?.[0] || '1';
+
+    // 1. If SRMS tenant: use SRMS live API (https://myportal.srms.ac.in/SRMSERP/AdminAttendance/GetAllSubjectDetail)
+    if (isSrms) {
+      try {
+        const payload = {
+          colgcd: cd,
+          coursecd: crs,
+          branchcd: br,
+          batchcd: bat,
+          semcd: sem,
+          seccd: sec,
+          tenant: targetSlug,
+        };
+        const res = await fetch('/api/srms/all-subjects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            // Strictly enforce semester matching on live API response
+            const semFiltered = data.filter((s: any) =>
+              !sem || String(s.sem_cd) === String(sem) || String(s.semester_name || '').includes(String(sem))
+            );
+            const finalList = semFiltered.length > 0 ? semFiltered : data;
+            setUnitLiveSubjects(finalList);
+            setLoadingUnitSubjects(false);
+            return finalList;
+          }
+        }
+      } catch (err) {
+        console.warn('[AdminMaster] SRMS live subjects fetch error:', err);
+      }
+    }
+
+    // 2. Non-SRMS Tenant: get it from Subject Linker (faculty-subjects) in ERP / Master
+    try {
+      const linkRes = await fetch(`${API_BASE}/faculty-subjects?tenant=${encodeURIComponent(targetSlug)}`, {
+        headers: getAuthHeaders(),
+      }).catch(() => null);
+      if (linkRes && linkRes.ok) {
+        const linkJson = await linkRes.json();
+        const linkList = linkJson.data || linkJson;
+        if (Array.isArray(linkList) && linkList.length > 0) {
+          const filteredLinks = linkList.filter((l: any) =>
+            (!br || String(l.subject_department_code) === String(br) || String(l.department_id) === String(br)) &&
+            (!sem || String(l.semester || l.sem_cd || '').includes(String(sem)))
+          );
+          const activeList = filteredLinks.length > 0 ? filteredLinks : linkList;
+          const mapped = activeList.map((l: any) => ({
+            colg_cd: Number(cd) || 1,
+            sub_cd: String(l.subject_code || l.subject_id),
+            sub_name: l.subject_name,
+            mst_sub_name: `${l.subject_name} (Linked: ${l.faculty_name || 'Staff'})`,
+            sub_addinfo: l.subject_code || l.subject_id,
+            course_cd: Number(crs) || 1,
+            branch_cd: Number(br) || 1,
+            batch_cd: Number(bat) || 1,
+            sem_cd: Number(sem) || 1,
+            id: l.subject_id,
+            faculty_name: l.faculty_name,
+            SubTyp: 'THEORY',
+          }));
+          setUnitLiveSubjects(mapped);
+          setLoadingUnitSubjects(false);
+          return mapped;
+        }
+      }
+    } catch (linkErr) {
+      console.warn('[AdminMaster] Subject linker fetch error:', linkErr);
+    }
+
+    // 3. Fallback: filter master subjects in memory strictly by semester
+    const filteredMaster = subjects.filter(s =>
+      (!formData.college_id || s.college_id === formData.college_id || s.college_slug === targetSlug) &&
+      (!crs || String(s.course_cd) === String(crs)) &&
+      (!br || String(s.branch_cd) === String(br) || String(s.department_id) === String(br)) &&
+      (!sem || String(s.sem_cd) === String(sem) || String(s.semester || '').includes(String(sem)))
+    );
+    const mappedFallback = filteredMaster.map(s => ({
+      colg_cd: Number(cd) || 1,
+      sub_cd: String(s.code || s.id),
+      sub_name: s.name,
+      mst_sub_name: `${s.name} ${s.type || 'THEORY'}`,
+      sub_addinfo: s.code || '',
+      course_cd: Number(crs) || 1,
+      branch_cd: Number(br) || 1,
+      batch_cd: Number(bat) || 1,
+      sem_cd: Number(sem) || 1,
+      id: s.id,
+      SubTyp: s.type || 'THEORY',
+    }));
+    setUnitLiveSubjects(mappedFallback);
+    setLoadingUnitSubjects(false);
+    return mappedFallback;
+  };
+
+  const fetchTopicSubjects = async (
+    colgcd?: string,
+    coursecd?: string,
+    branchcd?: string,
+    batchcd?: string,
+    semcd?: string,
+    seccd?: string,
+    tenantSlug?: string
+  ) => {
+    setLoadingTopicSubjects(true);
+    setTopicLiveSubjects([]);
+    const targetSlug = getFormCollegeSlug(tenantSlug || formData.college_id || formData.college_slug || selectedCollegeFilter);
+    const isSrms = targetSlug.toLowerCase().includes('srms');
+
+    // Resolve clean integer codes
+    let cd = '1';
+    const rawCd = String(colgcd || formData.college_id || '').trim();
+    if (rawCd && /^\d+$/.test(rawCd)) {
+      cd = rawCd;
+    } else if (targetSlug.includes('cetr')) {
+      cd = '2';
+    } else if (targetSlug.includes('ims')) {
+      cd = '11';
+    } else if (targetSlug.includes('unnao')) {
+      cd = '3';
+    } else if (targetSlug.includes('law')) {
+      cd = '4';
+    } else if (targetSlug.includes('ibs')) {
+      cd = '5';
+    } else if (targetSlug.includes('iahs')) {
+      cd = '6';
+    } else if (targetSlug.includes('nursing-school')) {
+      cd = '8';
+    } else if (targetSlug.includes('nursing')) {
+      cd = '9';
+    } else {
+      cd = '1';
+    }
+
+    const crs = String(coursecd || formData.course_cd || '1').match(/\d+/)?.[0] || '1';
+    const br = String(branchcd || formData.branch_cd || '1').match(/\d+/)?.[0] || '1';
+
+    let bat = '17';
+    const rawBat = String(batchcd || formData.batch_cd || formData.batch_id || '17').trim();
+    if (rawBat === '2024') {
+      bat = '17';
+    } else {
+      bat = rawBat.match(/\d+/)?.[0] || '17';
+    }
+
+    const sem = String(semcd || formData.sem_cd || '5').match(/\d+/)?.[0] || '5';
+    const sec = String(seccd || formData.sec_cd || '1').match(/\d+/)?.[0] || '1';
+
+    // 1. If SRMS tenant: use SRMS live API (https://myportal.srms.ac.in/SRMSERP/AdminAttendance/GetAllSubjectDetail)
+    if (isSrms) {
+      try {
+        const payload = {
+          colgcd: cd,
+          coursecd: crs,
+          branchcd: br,
+          batchcd: bat,
+          semcd: sem,
+          seccd: sec,
+          tenant: targetSlug,
+        };
+        const res = await fetch('/api/srms/all-subjects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            // Strictly enforce semester matching on live API response
+            const semFiltered = data.filter((s: any) =>
+              !sem || String(s.sem_cd) === String(sem) || String(s.semester_name || '').includes(String(sem))
+            );
+            const finalList = semFiltered.length > 0 ? semFiltered : data;
+            setTopicLiveSubjects(finalList);
+            setLoadingTopicSubjects(false);
+            return finalList;
+          }
+        }
+      } catch (err) {
+        console.warn('[AdminMaster] SRMS live topic subjects fetch error:', err);
+      }
+    }
+
+    // 2. Non-SRMS Tenant: get it from Subject Linker (faculty-subjects) in ERP / Master
+    try {
+      const linkRes = await fetch(`${API_BASE}/faculty-subjects?tenant=${encodeURIComponent(targetSlug)}`, {
+        headers: getAuthHeaders(),
+      }).catch(() => null);
+      if (linkRes && linkRes.ok) {
+        const linkJson = await linkRes.json();
+        const linkList = linkJson.data || linkJson;
+        if (Array.isArray(linkList) && linkList.length > 0) {
+          const filteredLinks = linkList.filter((l: any) =>
+            (!br || String(l.subject_department_code) === String(br) || String(l.department_id) === String(br)) &&
+            (!sem || String(l.semester || l.sem_cd || '').includes(String(sem)))
+          );
+          const activeList = filteredLinks.length > 0 ? filteredLinks : linkList;
+          const mapped = activeList.map((l: any) => ({
+            colg_cd: Number(cd) || 1,
+            sub_cd: String(l.subject_code || l.subject_id),
+            sub_name: l.subject_name,
+            mst_sub_name: `${l.subject_name} (Linked: ${l.faculty_name || 'Staff'})`,
+            sub_addinfo: l.subject_code || l.subject_id,
+            course_cd: Number(crs) || 1,
+            branch_cd: Number(br) || 1,
+            batch_cd: Number(bat) || 1,
+            sem_cd: Number(sem) || 1,
+            id: l.subject_id,
+            faculty_name: l.faculty_name,
+            SubTyp: 'THEORY',
+          }));
+          setTopicLiveSubjects(mapped);
+          setLoadingTopicSubjects(false);
+          return mapped;
+        }
+      }
+    } catch (linkErr) {
+      console.warn('[AdminMaster] Topic subject linker fetch error:', linkErr);
+    }
+
+    // 3. Fallback: filter master subjects in memory strictly by semester
+    const filteredMaster = subjects.filter(s =>
+      (!formData.college_id || s.college_id === formData.college_id || s.college_slug === targetSlug) &&
+      (!crs || String(s.course_cd) === String(crs)) &&
+      (!br || String(s.branch_cd) === String(br) || String(s.department_id) === String(br)) &&
+      (!sem || String(s.sem_cd) === String(sem) || String(s.semester || '').includes(String(sem)))
+    );
+    const mappedFallback = filteredMaster.map(s => ({
+      colg_cd: Number(cd) || 1,
+      sub_cd: String(s.code || s.id),
+      sub_name: s.name,
+      mst_sub_name: `${s.name} ${s.type || 'THEORY'}`,
+      sub_addinfo: s.code || '',
+      course_cd: Number(crs) || 1,
+      branch_cd: Number(br) || 1,
+      batch_cd: Number(bat) || 1,
+      sem_cd: Number(sem) || 1,
+      id: s.id,
+      SubTyp: s.type || 'THEORY',
+    }));
+    setTopicLiveSubjects(mappedFallback);
+    setLoadingTopicSubjects(false);
+    return mappedFallback;
+  };
+
+  const fetchSubTopicSubjects = async (
+    colgcd?: string,
+    coursecd?: string,
+    branchcd?: string,
+    batchcd?: string,
+    semcd?: string,
+    seccd?: string,
+    tenantSlug?: string
+  ) => {
+    setLoadingSubTopicSubjects(true);
+    setSubTopicLiveSubjects([]);
+    const targetSlug = getFormCollegeSlug(tenantSlug || formData.college_id || formData.college_slug || selectedCollegeFilter);
+    const isSrms = targetSlug.toLowerCase().includes('srms');
+
+    // Resolve clean integer codes
+    let cd = '1';
+    const rawCd = String(colgcd || formData.college_id || '').trim();
+    if (rawCd && /^\d+$/.test(rawCd)) {
+      cd = rawCd;
+    } else if (targetSlug.includes('cetr')) {
+      cd = '2';
+    } else if (targetSlug.includes('ims')) {
+      cd = '11';
+    } else if (targetSlug.includes('unnao')) {
+      cd = '3';
+    } else if (targetSlug.includes('law')) {
+      cd = '4';
+    } else if (targetSlug.includes('ibs')) {
+      cd = '5';
+    } else if (targetSlug.includes('iahs')) {
+      cd = '6';
+    } else if (targetSlug.includes('nursing-school')) {
+      cd = '8';
+    } else if (targetSlug.includes('nursing')) {
+      cd = '9';
+    } else {
+      cd = '1';
+    }
+
+    const crs = String(coursecd || formData.course_cd || '1').match(/\d+/)?.[0] || '1';
+    const br = String(branchcd || formData.branch_cd || '1').match(/\d+/)?.[0] || '1';
+
+    let bat = '17';
+    const rawBat = String(batchcd || formData.batch_cd || formData.batch_id || '17').trim();
+    if (rawBat === '2024') {
+      bat = '17';
+    } else {
+      bat = rawBat.match(/\d+/)?.[0] || '17';
+    }
+
+    const sem = String(semcd || formData.sem_cd || '5').match(/\d+/)?.[0] || '5';
+    const sec = String(seccd || formData.sec_cd || '1').match(/\d+/)?.[0] || '1';
+
+    // 1. If SRMS tenant: use SRMS live API (https://myportal.srms.ac.in/SRMSERP/AdminAttendance/GetAllSubjectDetail)
+    if (isSrms) {
+      try {
+        const payload = {
+          colgcd: cd,
+          coursecd: crs,
+          branchcd: br,
+          batchcd: bat,
+          semcd: sem,
+          seccd: sec,
+          tenant: targetSlug,
+        };
+        const res = await fetch('/api/srms/all-subjects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            // Strictly enforce semester matching on live API response
+            const semFiltered = data.filter((s: any) =>
+              !sem || String(s.sem_cd) === String(sem) || String(s.semester_name || '').includes(String(sem))
+            );
+            const finalList = semFiltered.length > 0 ? semFiltered : data;
+            setSubTopicLiveSubjects(finalList);
+            setLoadingSubTopicSubjects(false);
+            return finalList;
+          }
+        }
+      } catch (err) {
+        console.warn('[AdminMaster] SRMS live subtopic subjects fetch error:', err);
+      }
+    }
+
+    // 2. Non-SRMS Tenant: get it from Subject Linker (faculty-subjects) in ERP / Master
+    try {
+      const linkRes = await fetch(`${API_BASE}/faculty-subjects?tenant=${encodeURIComponent(targetSlug)}`, {
+        headers: getAuthHeaders(),
+      }).catch(() => null);
+      if (linkRes && linkRes.ok) {
+        const linkJson = await linkRes.json();
+        const linkList = linkJson.data || linkJson;
+        if (Array.isArray(linkList) && linkList.length > 0) {
+          const filteredLinks = linkList.filter((l: any) =>
+            (!br || String(l.subject_department_code) === String(br) || String(l.department_id) === String(br)) &&
+            (!sem || String(l.semester || l.sem_cd || '').includes(String(sem)))
+          );
+          const activeList = filteredLinks.length > 0 ? filteredLinks : linkList;
+          const mapped = activeList.map((l: any) => ({
+            colg_cd: Number(cd) || 1,
+            sub_cd: String(l.subject_code || l.subject_id),
+            sub_name: l.subject_name,
+            mst_sub_name: `${l.subject_name} (Linked: ${l.faculty_name || 'Staff'})`,
+            sub_addinfo: l.subject_code || l.subject_id,
+            course_cd: Number(crs) || 1,
+            branch_cd: Number(br) || 1,
+            batch_cd: Number(bat) || 1,
+            sem_cd: Number(sem) || 1,
+            id: l.subject_id,
+            faculty_name: l.faculty_name,
+            SubTyp: 'THEORY',
+          }));
+          setSubTopicLiveSubjects(mapped);
+          setLoadingSubTopicSubjects(false);
+          return mapped;
+        }
+      }
+    } catch (linkErr) {
+      console.warn('[AdminMaster] Subtopic subject linker fetch error:', linkErr);
+    }
+
+    // 3. Fallback: filter master subjects in memory strictly by semester
+    const filteredMaster = subjects.filter(s =>
+      (!formData.college_id || s.college_id === formData.college_id || s.college_slug === targetSlug) &&
+      (!crs || String(s.course_cd) === String(crs)) &&
+      (!br || String(s.branch_cd) === String(br) || String(s.department_id) === String(br)) &&
+      (!sem || String(s.sem_cd) === String(sem) || String(s.semester || '').includes(String(sem)))
+    );
+    const mappedFallback = filteredMaster.map(s => ({
+      colg_cd: Number(cd) || 1,
+      sub_cd: String(s.code || s.id),
+      sub_name: s.name,
+      mst_sub_name: `${s.name} ${s.type || 'THEORY'}`,
+      sub_addinfo: s.code || '',
+      course_cd: Number(crs) || 1,
+      branch_cd: Number(br) || 1,
+      batch_cd: Number(bat) || 1,
+      sem_cd: Number(sem) || 1,
+      id: s.id,
+      SubTyp: s.type || 'THEORY',
+    }));
+    setSubTopicLiveSubjects(mappedFallback);
+    setLoadingSubTopicSubjects(false);
+    return mappedFallback;
+  };
+
   const handleBulkSyncSrmsSubjects = async (subList?: any[]) => {
     const listToSync = subList && subList.length > 0 ? subList : srmsLiveSubjects;
     if (!listToSync || listToSync.length === 0) {
@@ -888,6 +1729,29 @@ export default function AdminMasterPage() {
     setCurrentPage(1);
   }, [activeTab, searchTerm]);
 
+  // Keep unit code synchronized with selected subject's dynamic numeric code if available
+  useEffect(() => {
+    if (activeTab === 'units' && !editingItem && (formData.subject_id || formData.subject_code)) {
+      const selectedSubjectObj = unitLiveSubjects.find((s: any) =>
+        String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+        String(s.sub_addinfo || '') === String(formData.subject_code)
+      ) || subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
+
+      const numCd = getSubjectNumericCode(selectedSubjectObj, formData.subject_id || formData.subject_code);
+      if (numCd) {
+        if (!formData.code || !formData.code.startsWith(numCd)) {
+          const nextU = getNextUnitCodeForSubject(numCd, units, selectedSubjectObj);
+          setFormData(prev => ({
+            ...prev,
+            code: nextU.code,
+            name: (!prev.name || prev.name === prev.code || prev.name.startsWith('UNIT') || prev.name.includes('-UNIT')) ? nextU.code : prev.name,
+            unit_order: nextU.order,
+          }));
+        }
+      }
+    }
+  }, [activeTab, editingItem, formData.subject_id, formData.subject_code, unitLiveSubjects, units]);
+
   const isMatchCollege = (item: any) => {
     if (activeTab === 'delivery-types') return true;
     if (selectedCollegeFilter === 'all') return true;
@@ -1015,17 +1879,20 @@ export default function AdminMasterPage() {
       );
       const chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
 
-      const availableSubjects = subjects.filter(s =>
-        (!targetCol || s.college_id === targetCol.id || s.college_slug === targetCol.slug) &&
-        (!chosenCourseCd || s.course_cd === chosenCourseCd) &&
-        (!chosenBranchCd || s.branch_cd === chosenBranchCd || s.department_id === chosenBranchCd)
-      );
-      const chosenSubjectCode = selectedSubjectFilter !== 'all' ? selectedSubjectFilter : (availableSubjects[0]?.code || availableSubjects[0]?.id || '');
-
       const availableBatches = batches.filter(b =>
         (!targetCol || b.college_id === targetCol.id || b.college_slug === targetCol.slug || String(b.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || b.course_cd === chosenCourseCd)
       );
+      const chosenBatch = availableBatches[0];
+      const chosenBatchCd = chosenBatch?.batch_cd || chosenBatch?.code || '17';
+      const chosenBatchYear = chosenBatch?.year || 2024;
+      const chosenSemCd = '5';
+      const chosenSecCd = '1';
+
+      setUnitSubjectSearch('');
+      setIsUnitSubjectDropdownOpen(false);
+
+      const initialUnit = getNextUnitCodeForSubject('', units);
 
       setFormData({
         college_id: targetColCd,
@@ -1033,18 +1900,25 @@ export default function AdminMasterPage() {
         course_cd: chosenCourseCd,
         branch_cd: chosenBranchCd,
         department_id: chosenBranchCd,
-        batch_id: availableBatches[0]?.batch_cd || availableBatches[0]?.year || '1',
-        batch_year: availableBatches[0]?.year || 2024,
-        subject_id: chosenSubjectCode,
-        subject_code: chosenSubjectCode,
-        code: `UNIT-${units.length + 1}`,
+        batch_id: chosenBatchCd,
+        batch_cd: chosenBatchCd,
+        batch_year: chosenBatchYear,
+        sem_cd: chosenSemCd,
+        semester: `Semester ${chosenSemCd}`,
+        sec_cd: chosenSecCd,
+        section: 'Section A',
+        subject_id: '',
+        subject_code: '',
+        code: initialUnit.code,
         name: '',
         description: '',
         bloom_level: 'KL-2 (Understand)',
-        unit_order: units.length + 1,
+        unit_order: initialUnit.order,
         hours: 10,
         is_active: true,
       });
+
+      fetchUnitSubjects(targetColCd, chosenCourseCd, chosenBranchCd, chosenBatchCd, chosenSemCd, chosenSecCd, targetColSlug);
     } else if (activeTab === 'topics') {
       const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter) || colleges[0];
       const targetColCd = targetCol?.code || targetCol?.id || defaultCollegeId || '1';
@@ -1058,26 +1932,18 @@ export default function AdminMasterPage() {
       );
       const chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
 
-      const availableSubjects = subjects.filter(s =>
-        (!targetCol || s.college_id === targetCol.id || s.college_slug === targetCol.slug) &&
-        (!chosenCourseCd || s.course_cd === chosenCourseCd) &&
-        (!chosenBranchCd || s.branch_cd === chosenBranchCd || s.department_id === chosenBranchCd)
+      const availableBatches = batches.filter(b =>
+        (!targetCol || b.college_id === targetCol.id || b.college_slug === targetCol.slug || String(b.colg_cd) === String(targetColCd)) &&
+        (!chosenCourseCd || b.course_cd === chosenCourseCd)
       );
-      const chosenSubject = (selectedSubjectFilter !== 'all' ? availableSubjects.find(s => s.code === selectedSubjectFilter || s.id === selectedSubjectFilter) : null) || availableSubjects[0];
-      const chosenSubjectCode = chosenSubject?.code || chosenSubject?.id || '';
+      const chosenBatch = availableBatches[0];
+      const chosenBatchCd = chosenBatch?.batch_cd || chosenBatch?.code || '17';
+      const chosenBatchYear = chosenBatch?.year || 2024;
+      const chosenSemCd = '5';
+      const chosenSecCd = '1';
 
-      const availableUnits = units.filter(u =>
-        (!targetCol || u.college_id === targetCol.id || u.college_slug === targetCol.slug) &&
-        (!chosenCourseCd || u.course_cd === chosenCourseCd) &&
-        (!chosenBranchCd || u.branch_cd === chosenBranchCd) &&
-        (!chosenSubjectCode || u.subject_code === chosenSubjectCode || u.subject_id === chosenSubjectCode)
-      );
-      const chosenUnit = (selectedUnitFilter !== 'all' ? availableUnits.find(u => u.code === selectedUnitFilter || u.id === selectedUnitFilter) : null) || availableUnits[0];
-      const chosenUnitCode = chosenUnit?.code || '';
-      const chosenBloom = chosenUnit?.bloom_level || 'KL-2 (Understand)';
-
-      const topicsForSub = topics.filter(t => t.subject_code === chosenSubjectCode || t.subject_id === chosenSubjectCode);
-      const autoTopicCode = chosenSubjectCode ? `${chosenSubjectCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
+      setTopicSubjectSearch('');
+      setIsTopicSubjectDropdownOpen(false);
 
       setFormData({
         college_id: targetColCd,
@@ -1085,18 +1951,29 @@ export default function AdminMasterPage() {
         course_cd: chosenCourseCd,
         branch_cd: chosenBranchCd,
         department_id: chosenBranchCd,
-        subject_id: chosenSubjectCode,
-        subject_code: chosenSubjectCode,
-        unit_id: chosenUnitCode,
-        unit_code: chosenUnitCode,
-        bloom_level: chosenBloom,
-        code: autoTopicCode,
+        batch_id: chosenBatchCd,
+        batch_cd: chosenBatchCd,
+        batch_year: chosenBatchYear,
+        sem_cd: chosenSemCd,
+        semester: `Semester ${chosenSemCd}`,
+        sec_cd: chosenSecCd,
+        section: 'Section A',
+        subject_id: '',
+        subject_code: '',
+        unit_id: '',
+        unit_code: '',
+        bloom_level: 'KL-2 (Understand)',
+        code: '',
         name: '',
         description: '',
         hours: 2,
+        learning_method: 'Lecture',
+        assessment_method: 'Written Assessment',
         linker_id: linkers[0]?.id || '',
         is_active: true,
       });
+
+      fetchTopicSubjects(targetColCd, chosenCourseCd, chosenBranchCd, chosenBatchCd, chosenSemCd, chosenSecCd, targetColSlug);
     } else if (activeTab === 'competencies') {
       const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter) || colleges[0];
       const targetColCd = targetCol?.code || targetCol?.id || defaultCollegeId || '1';
@@ -1110,43 +1987,29 @@ export default function AdminMasterPage() {
       );
       const chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
 
-      const availableSubjects = subjects.filter(s =>
-        (!targetCol || s.college_id === targetCol.id || s.college_slug === targetCol.slug) &&
-        (!chosenCourseCd || s.course_cd === chosenCourseCd) &&
-        (!chosenBranchCd || s.branch_cd === chosenBranchCd || s.department_id === chosenBranchCd)
+      const availableBatches = batches.filter(b =>
+        (!targetCol || b.college_id === targetCol.id || b.college_slug === targetCol.slug || String(b.colg_cd) === String(targetColCd)) &&
+        (!chosenCourseCd || b.course_cd === chosenCourseCd)
       );
-      const chosenSubject = (selectedSubjectFilter !== 'all' ? availableSubjects.find(s => s.code === selectedSubjectFilter || s.id === selectedSubjectFilter) : null) || availableSubjects[0];
-      const chosenSubjectCode = chosenSubject?.code || chosenSubject?.id || '';
+      const chosenBatch = availableBatches[0];
+      const chosenBatchCd = chosenBatch?.batch_cd || chosenBatch?.code || '17';
+      const chosenBatchYear = chosenBatch?.year || 2024;
+      const chosenSemCd = '5';
+      const chosenSecCd = '1';
 
-      const availableUnits = units.filter(u =>
-        (!targetCol || u.college_id === targetCol.id || u.college_slug === targetCol.slug) &&
-        (!chosenCourseCd || u.course_cd === chosenCourseCd) &&
-        (!chosenBranchCd || u.branch_cd === chosenBranchCd) &&
-        (!chosenSubjectCode || u.subject_code === chosenSubjectCode || u.subject_id === chosenSubjectCode)
-      );
-      const chosenUnit = (selectedUnitFilter !== 'all' ? availableUnits.find(u => u.code === selectedUnitFilter || u.id === selectedUnitFilter) : null) || availableUnits[0];
-      const chosenUnitCode = chosenUnit?.code || '';
+      setSubTopicSubjectSearch('');
+      setIsSubTopicSubjectDropdownOpen(false);
 
-      const availableTopics = topics.filter(t =>
-        (!targetCol || t.college_id === targetCol.id || t.college_slug === targetCol.slug) &&
-        (!chosenCourseCd || t.course_cd === chosenCourseCd) &&
-        (!chosenBranchCd || t.branch_cd === chosenBranchCd) &&
-        (!chosenSubjectCode || t.subject_code === chosenSubjectCode || t.subject_id === chosenSubjectCode) &&
-        (!chosenUnitCode || t.unit_code === chosenUnitCode || t.unit_id === chosenUnitCode)
-      );
-      const chosenTopic = availableTopics[0];
-      const chosenTopicCode = chosenTopic?.code || chosenTopic?.id || '';
-      const chosenBloom = chosenTopic?.bloom_level || chosenUnit?.bloom_level || 'KL-2 (Understand)';
-
-      const autoSubCode = `${chosenTopicCode ? chosenTopicCode + '-' : ''}ST01`;
       setTempCompetencies([]);
-      setSubTopicCode(autoSubCode);
+      setSubTopicCode('ST01');
       setSubTopicName('');
       setSubTopicDesc('');
       setSubTopicDomain('Knowledge');
       setSubTopicLevel('Knows How');
-      setSubTopicBloom(chosenBloom);
+      setSubTopicBloom('KL-2 (Understand)');
       setSubTopicCore(true);
+      setSubTopicLearningMethod('Lecture');
+      setSubTopicAssessmentMethod('Written Assessment');
 
       setFormData({
         college_id: targetColCd,
@@ -1154,22 +2017,33 @@ export default function AdminMasterPage() {
         course_cd: chosenCourseCd,
         branch_cd: chosenBranchCd,
         department_id: chosenBranchCd,
-        subject_id: chosenSubjectCode,
-        subject_code: chosenSubjectCode,
-        unit_id: chosenUnitCode,
-        unit_code: chosenUnitCode,
-        topic_id: chosenTopicCode,
-        topic_code: chosenTopicCode,
-        bloom_level: chosenBloom,
-        code: autoSubCode,
+        batch_id: chosenBatchCd,
+        batch_cd: chosenBatchCd,
+        batch_year: chosenBatchYear,
+        sem_cd: chosenSemCd,
+        semester: `Semester ${chosenSemCd}`,
+        sec_cd: chosenSecCd,
+        section: 'Section A',
+        subject_id: '',
+        subject_code: '',
+        unit_id: '',
+        unit_code: '',
+        topic_id: '',
+        topic_code: '',
+        bloom_level: 'KL-2 (Understand)',
+        code: 'ST01',
         name: '',
         description: '',
         domain: 'Knowledge',
         level: 'Knows How',
         is_core: true,
+        learning_method: 'Lecture',
+        assessment_method: 'Written Assessment',
         linker_id: linkers[0]?.id || '',
         is_active: true,
       });
+
+      fetchSubTopicSubjects(targetColCd, chosenCourseCd, chosenBranchCd, chosenBatchCd, chosenSemCd, chosenSecCd, targetColSlug);
     }
     setIsModalOpen(true);
   };
@@ -1256,7 +2130,13 @@ export default function AdminMasterPage() {
     }
 
     if (activeTab === 'units') {
-      const matchedSubject = subjects.find(s => s.id === item.subject_id || s.code === item.subject_code);
+      const matchedSubject = subjects.find(s => s.id === item.subject_id || s.code === item.subject_code || (s as any).sub_cd === item.subject_id || (s as any).sub_cd === item.subject_code);
+      const subCode = item.subject_code || matchedSubject?.code || '';
+      const subId = item.subject_id || (matchedSubject as any)?.sub_cd || matchedSubject?.code || item.subject_code || '';
+      const subName = matchedSubject?.name || item.subject_name || '';
+      const displayLabel = getSubjectDisplayLabel(matchedSubject) || (subCode && subName ? (subName.includes(subCode) ? subName : `[${subCode}] ${subName}`) : (subName || subCode || ''));
+      setUnitSubjectSearch(displayLabel);
+      setIsUnitSubjectDropdownOpen(false);
       setFormData({
         ...item,
         college_id: collegeCodeOrId,
@@ -1264,10 +2144,15 @@ export default function AdminMasterPage() {
         course_cd: item.course_cd || matchedSubject?.course_cd || '',
         branch_cd: item.branch_cd || matchedSubject?.branch_cd || '1',
         department_id: item.branch_cd || matchedSubject?.branch_cd || '1',
-        batch_id: item.batch_id || item.batch_year || '1',
+        batch_id: item.batch_id || item.batch_cd || item.batch_year || '17',
+        batch_cd: item.batch_cd || item.batch_id || '17',
         batch_year: item.batch_year || 2024,
-        subject_id: item.subject_code || matchedSubject?.code || item.subject_id || '',
-        subject_code: item.subject_code || matchedSubject?.code || '',
+        sem_cd: item.sem_cd || '5',
+        semester: item.semester || (item.sem_cd ? `Semester ${item.sem_cd}` : 'Semester 5'),
+        sec_cd: item.sec_cd || '1',
+        section: item.section || 'Section A',
+        subject_id: subId,
+        subject_code: subCode || subId,
         code: item.code || '',
         name: item.name || item.code || '',
         description: item.description || item.name || '',
@@ -1276,13 +2161,28 @@ export default function AdminMasterPage() {
         hours: item.hours || 10,
         is_active: item.is_active !== false,
       });
+      fetchUnitSubjects(
+        collegeCodeOrId,
+        item.course_cd || matchedSubject?.course_cd || '1',
+        item.branch_cd || matchedSubject?.branch_cd || '1',
+        item.batch_cd || item.batch_id || '17',
+        item.sem_cd || '5',
+        item.sec_cd || '1',
+        collegeSlug
+      );
       setIsModalOpen(true);
       return;
     }
 
     if (activeTab === 'topics') {
-      const matchedSubject = subjects.find(s => s.id === item.subject_id || s.code === item.subject_code);
+      const matchedSubject = subjects.find(s => s.id === item.subject_id || s.code === item.subject_code || (s as any).sub_cd === item.subject_id || (s as any).sub_cd === item.subject_code);
       const matchedUnit = units.find(u => u.id === item.unit_id || u.code === item.unit_code);
+      const subCode = item.subject_code || matchedSubject?.code || '';
+      const subId = item.subject_id || (matchedSubject as any)?.sub_cd || matchedSubject?.code || item.subject_code || '';
+      const subName = matchedSubject?.name || item.subject_name || '';
+      const displayLabel = getSubjectDisplayLabel(matchedSubject) || (subCode && subName ? (subName.includes(subCode) ? subName : `[${subCode}] ${subName}`) : (subName || subCode || ''));
+      setTopicSubjectSearch(displayLabel);
+      setIsTopicSubjectDropdownOpen(false);
       setFormData({
         ...item,
         college_id: collegeCodeOrId,
@@ -1290,10 +2190,16 @@ export default function AdminMasterPage() {
         course_cd: item.course_cd || matchedSubject?.course_cd || '',
         branch_cd: item.branch_cd || matchedSubject?.branch_cd || '1',
         department_id: item.branch_cd || matchedSubject?.branch_cd || '1',
-        batch_id: item.batch_id || item.batch_year || '1',
+        batch_id: item.batch_cd || item.batch_id || '17',
+        batch_cd: item.batch_cd || item.batch_id || '17',
         batch_year: item.batch_year || 2024,
-        subject_id: item.subject_code || matchedSubject?.code || item.subject_id || '',
-        subject_code: item.subject_code || matchedSubject?.code || '',
+        sem_cd: item.sem_cd || '5',
+        semester: item.semester || `Semester ${item.sem_cd || '5'}`,
+        sec_cd: item.sec_cd || '1',
+        section: item.section || 'Section A',
+        subject_id: subId,
+        subject_code: subCode || subId,
+        subject_name: subName,
         unit_id: item.unit_code || matchedUnit?.code || item.unit_id || '',
         unit_code: item.unit_code || matchedUnit?.code || '',
         code: item.code || '',
@@ -1302,8 +2208,19 @@ export default function AdminMasterPage() {
         bloom_level: item.bloom_level || matchedUnit?.bloom_level || 'KL-2 (Understand)',
         hours: item.hours !== undefined ? Number(item.hours) : 2,
         linker_id: item.linker_id || '',
+        learning_method: item.learning_method || '',
+        assessment_method: item.assessment_method || '',
         is_active: item.is_active !== false,
       });
+      fetchTopicSubjects(
+        collegeCodeOrId,
+        item.course_cd || matchedSubject?.course_cd || '1',
+        item.branch_cd || matchedSubject?.branch_cd || '1',
+        item.batch_cd || item.batch_id || '17',
+        item.sem_cd || '5',
+        item.sec_cd || '1',
+        collegeSlug
+      );
       setIsModalOpen(true);
       return;
     }
@@ -1322,9 +2239,16 @@ export default function AdminMasterPage() {
     }
 
     if (activeTab === 'competencies') {
-      const matchedSubject = subjects.find(s => s.id === item.subject_id || s.code === item.subject_code);
+      const matchedSubject = subjects.find(s => s.id === item.subject_id || s.code === item.subject_code || (s as any).sub_cd === item.subject_id || (s as any).sub_cd === item.subject_code);
       const matchedUnit = units.find(u => u.id === item.unit_id || u.code === item.unit_code);
       const matchedTopic = topics.find(t => t.id === item.topic_id || t.code === item.topic_code);
+      const subCode = item.subject_code || matchedSubject?.code || '';
+      const subId = item.subject_id || (matchedSubject as any)?.sub_cd || matchedSubject?.code || item.subject_code || '';
+      const subName = matchedSubject?.name || item.subject_name || '';
+      const displayLabel = getSubjectDisplayLabel(matchedSubject) || (subCode && subName ? (subName.includes(subCode) ? subName : `[${subCode}] ${subName}`) : (subName || subCode || ''));
+      setSubTopicSubjectSearch(displayLabel);
+      setIsSubTopicSubjectDropdownOpen(false);
+
       setTempCompetencies([]);
       setSubTopicCode(item.code || '');
       setSubTopicName(item.name || '');
@@ -1333,6 +2257,8 @@ export default function AdminMasterPage() {
       setSubTopicLevel(item.level || 'Knows How');
       setSubTopicBloom(item.bloom_level || 'KL-2 (Understand)');
       setSubTopicCore(item.is_core !== false);
+      setSubTopicLearningMethod(item.learning_method || '');
+      setSubTopicAssessmentMethod(item.assessment_method || '');
 
       setFormData({
         ...item,
@@ -1341,8 +2267,16 @@ export default function AdminMasterPage() {
         course_cd: item.course_cd || matchedSubject?.course_cd || '',
         branch_cd: item.branch_cd || matchedSubject?.branch_cd || '1',
         department_id: item.branch_cd || matchedSubject?.branch_cd || '1',
-        subject_id: item.subject_code || matchedSubject?.code || item.subject_id || '',
-        subject_code: item.subject_code || matchedSubject?.code || '',
+        batch_id: item.batch_cd || item.batch_id || '17',
+        batch_cd: item.batch_cd || item.batch_id || '17',
+        batch_year: item.batch_year || 2024,
+        sem_cd: item.sem_cd || '5',
+        semester: item.semester || `Semester ${item.sem_cd || '5'}`,
+        sec_cd: item.sec_cd || '1',
+        section: item.section || 'Section A',
+        subject_id: subId,
+        subject_code: subCode || subId,
+        subject_name: subName,
         unit_id: item.unit_code || matchedUnit?.code || item.unit_id || '',
         unit_code: item.unit_code || matchedUnit?.code || '',
         topic_id: item.topic_code || matchedTopic?.code || item.topic_id || '',
@@ -1354,9 +2288,21 @@ export default function AdminMasterPage() {
         domain: item.domain || 'Knowledge',
         level: item.level || 'Knows How',
         is_core: item.is_core !== false,
+        learning_method: item.learning_method || '',
+        assessment_method: item.assessment_method || '',
         linker_id: item.linker_id || '',
         is_active: item.is_active !== false,
       });
+
+      fetchSubTopicSubjects(
+        collegeCodeOrId,
+        item.course_cd || matchedSubject?.course_cd || '1',
+        item.branch_cd || matchedSubject?.branch_cd || '1',
+        item.batch_cd || item.batch_id || '17',
+        item.sem_cd || '5',
+        item.sec_cd || '1',
+        collegeSlug
+      );
       setIsModalOpen(true);
       return;
     }
@@ -1469,8 +2415,23 @@ export default function AdminMasterPage() {
       if (isEdit) payload.is_active = formData.is_active !== false;
     } else if (activeTab === 'units') {
       const selectedCourse = courses.find(c => c.course_cd === formData.course_cd || c.code === formData.course_cd || c.id === formData.course_cd);
-      const subCode = subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id)?.code || formData.subject_id;
-      const batchCd = batches.find(b => b.id === formData.batch_id || String(b.batch_cd) === String(formData.batch_id) || String(b.year) === String(formData.batch_id))?.batch_cd || formData.batch_id;
+      const matchedLiveSub = unitLiveSubjects.find((s: any) =>
+        String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+        String(s.sub_addinfo || '') === String(formData.subject_code)
+      );
+      const matchedSubject = subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
+      const subNumericCd = getSubjectNumericCode(matchedLiveSub, formData.subject_id) || getSubjectNumericCode(matchedSubject);
+      const subCode = subNumericCd || formData.subject_code || formData.subject_id || matchedSubject?.code || '';
+      const batchCd = batches.find(b => b.id === formData.batch_id || String(b.batch_cd) === String(formData.batch_id) || String(b.year) === String(formData.batch_id))?.batch_cd || formData.batch_id || formData.batch_cd;
+
+      if (!subCode) {
+        alert('Please select a subject for the unit');
+        return;
+      }
+      if (!formData.code || !formData.code.trim()) {
+        alert('Unit Code is required (e.g. 88623-UNIT1-CO1)');
+        return;
+      }
 
       payload = {
         college_id: formData.college_id,
@@ -1478,8 +2439,12 @@ export default function AdminMasterPage() {
         branch_cd: formData.branch_cd || formData.department_id || null,
         batch_id: batchCd ? String(batchCd) : null,
         batch_year: Number(formData.batch_year || 2024),
-        subject_id: subCode,
-        subject_code: subCode,
+        semester: formData.semester || (formData.sem_cd ? `Semester ${formData.sem_cd}` : null),
+        sem_cd: formData.sem_cd || null,
+        section: formData.section || null,
+        sec_cd: formData.sec_cd || null,
+        subject_id: matchedSubject?.id || (formData.subject_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(formData.subject_id)) ? formData.subject_id : (subNumericCd || subCode)),
+        subject_code: subNumericCd || subCode,
         code: formData.code?.trim().toUpperCase(),
         name: formData.name?.trim() || formData.code?.trim(),
         description: formData.description?.trim() || '',
@@ -1489,17 +2454,25 @@ export default function AdminMasterPage() {
       };
       if (isEdit) payload.is_active = formData.is_active !== false;
     } else if (activeTab === 'topics') {
-      const subCode = subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id)?.code || formData.subject_id;
-      const unitCode = units.find(u => u.id === formData.unit_id || u.code === formData.unit_id)?.code || formData.unit_code || formData.unit_id;
+      const matchedLiveSub = topicLiveSubjects.find((s: any) =>
+        String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+        String(s.sub_addinfo || '') === String(formData.subject_code)
+      );
+      const matchedSubject = subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
+      const subCode = matchedLiveSub?.sub_addinfo || matchedLiveSub?.code || matchedSubject?.code || formData.subject_code || formData.subject_id;
+      const subNumericCd = matchedLiveSub?.sub_cd || (formData.subject_id && /^\d+$/.test(String(formData.subject_id)) ? formData.subject_id : null);
+      const matchedUnit = units.find(u => u.id === formData.unit_id || u.code === formData.unit_id || u.code === formData.unit_code);
+      const unitCode = matchedUnit?.code || formData.unit_code || formData.unit_id;
       const resolvedLinker = linkers.find(l => l.id === formData.linker_id || l.code === formData.linker_id || l.id === formData._resolved_linker_id);
 
       payload = {
         college_id: formData.college_id,
         course_cd: formData.course_cd || null,
         branch_cd: formData.branch_cd || null,
-        subject_id: subCode,
-        subject_code: subCode,
-        unit_id: unitCode || null,
+        batch_year: formData.batch_year ? Number(formData.batch_year) : 2024,
+        subject_id: matchedSubject?.id || (formData.subject_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(formData.subject_id)) ? formData.subject_id : null),
+        subject_code: subNumericCd || subCode,
+        unit_id: matchedUnit?.id || (formData._resolved_unit_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(formData._resolved_unit_id)) ? formData._resolved_unit_id : null),
         unit_code: unitCode || null,
         bloom_level: formData.bloom_level || 'KL-2 (Understand)',
         code: formData.code?.trim().toUpperCase(),
@@ -1507,12 +2480,28 @@ export default function AdminMasterPage() {
         description: formData.description?.trim() || null,
         hours: formData.hours !== undefined ? Number(formData.hours) : 2,
         linker_id: resolvedLinker?.id || formData.linker_id || null,
+        learning_method: formData.learning_method || null,
+        assessment_method: formData.assessment_method || null,
       };
       if (isEdit) payload.is_active = formData.is_active !== false;
     } else if (activeTab === 'competencies') {
-      const subCode = subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id)?.code || formData.subject_id;
-      const unitCode = units.find(u => u.id === formData.unit_id || u.code === formData.unit_id)?.code || formData.unit_code || formData.unit_id;
-      const topicCode = topics.find(t => t.id === formData.topic_id || t.code === formData.topic_id)?.code || formData.topic_code || formData.topic_id;
+      const matchedLiveSub = subTopicLiveSubjects.find((s: any) =>
+        String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+        String(s.sub_addinfo || '') === String(formData.subject_code)
+      );
+      const subCode = matchedLiveSub?.sub_addinfo || matchedLiveSub?.code || matchedLiveSub?.sub_cd ||
+        subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id)?.code ||
+        formData.subject_code || formData.subject_id;
+      const subId = matchedLiveSub?.id || matchedLiveSub?.sub_cd || formData.subject_id;
+
+      const matchedUnit = units.find(u => u.id === formData.unit_id || u.code === formData.unit_id || u.code === formData.unit_code);
+      const unitCode = matchedUnit?.code || formData.unit_code || formData.unit_id;
+      const unitId = matchedUnit?.id || (formData._resolved_unit_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(formData._resolved_unit_id)) ? formData._resolved_unit_id : null);
+
+      const matchedTopic = topics.find(t => t.id === formData.topic_id || t.code === formData.topic_id || t.code === formData.topic_code);
+      const topicCode = matchedTopic?.code || formData.topic_code || formData.topic_id;
+      const topicId = matchedTopic?.id || (formData._resolved_topic_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(formData._resolved_topic_id)) ? formData._resolved_topic_id : null);
+
       const resolvedLinker = linkers.find(l => l.id === formData.linker_id || l.code === formData.linker_id || l.id === formData._resolved_linker_id);
 
       if (tempCompetencies.length > 0 && !isEdit) {
@@ -1520,13 +2509,14 @@ export default function AdminMasterPage() {
           college_id: formData.college_id,
           course_cd: formData.course_cd || null,
           branch_cd: formData.branch_cd || null,
-          subject_id: subCode,
+          subject_id: subId || subCode,
           subject_code: subCode,
-          unit_id: unitCode || null,
+          unit_id: unitId || null,
           unit_code: unitCode || null,
-          topic_id: topicCode || null,
+          topic_id: topicId || null,
           topic_code: topicCode || null,
           linker_id: resolvedLinker?.id || formData.linker_id || null,
+          batch_year: formData.batch_year ? Number(formData.batch_year) : undefined,
           items: tempCompetencies.map(it => ({
             code: it.code?.trim().toUpperCase(),
             name: it.name?.trim() || null,
@@ -1542,11 +2532,11 @@ export default function AdminMasterPage() {
           college_id: formData.college_id,
           course_cd: formData.course_cd || null,
           branch_cd: formData.branch_cd || null,
-          subject_id: subCode,
+          subject_id: subId || subCode,
           subject_code: subCode,
-          unit_id: unitCode || null,
+          unit_id: unitId || null,
           unit_code: unitCode || null,
-          topic_id: topicCode || null,
+          topic_id: topicId || null,
           topic_code: topicCode || null,
           code: (subTopicCode || formData.code)?.trim().toUpperCase(),
           name: (subTopicName || formData.name)?.trim() || null,
@@ -1555,6 +2545,9 @@ export default function AdminMasterPage() {
           level: subTopicLevel || formData.level || 'Knows How',
           bloom_level: subTopicBloom || formData.bloom_level || 'KL-2 (Understand)',
           is_core: subTopicCore ?? (formData.is_core !== false),
+          learning_method: subTopicLearningMethod || formData.learning_method || null,
+          assessment_method: subTopicAssessmentMethod || formData.assessment_method || null,
+          batch_year: formData.batch_year ? Number(formData.batch_year) : undefined,
           linker_id: resolvedLinker?.id || formData.linker_id || null,
         };
       }
@@ -1568,11 +2561,30 @@ export default function AdminMasterPage() {
     }
     setIsSaving(true);
     try {
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         method,
         headers,
         body: JSON.stringify(payload),
       });
+
+      // Backward-compatibility: If target backend has older DTO forbidding new fields
+      if (!res.ok && activeTab === 'units') {
+        const cloned = res.clone();
+        const errText = await cloned.text();
+        if (errText.includes('should not exist') && (errText.includes('semester') || errText.includes('section') || errText.includes('sem_cd') || errText.includes('sec_cd'))) {
+          const fallbackPayload = { ...payload };
+          delete fallbackPayload.semester;
+          delete fallbackPayload.sem_cd;
+          delete fallbackPayload.section;
+          delete fallbackPayload.sec_cd;
+          res = await fetch(url, {
+            method,
+            headers,
+            body: JSON.stringify(fallbackPayload),
+          });
+        }
+      }
+
       if (res.ok) {
         setIsModalOpen(false);
         await Promise.all([
@@ -2490,6 +3502,23 @@ export default function AdminMasterPage() {
                             <td className="p-4 pl-5 font-bold text-slate-900 dark:text-white">
                               <div className="font-extrabold text-[#5B4BFF] font-mono text-sm">{u.code}</div>
                               <div className="text-[11px] text-slate-500 font-mono">Order: #{u.unit_order || 1}</div>
+                              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                {u.subject_code && (
+                                  <span className="px-1.5 py-0.2 text-[9px] font-mono font-bold rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                                    {u.subject_code}
+                                  </span>
+                                )}
+                                {(u.semester || u.sem_cd) && (
+                                  <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                    {u.semester || `Sem ${u.sem_cd}`}
+                                  </span>
+                                )}
+                                {(u.section || u.sec_cd) && (
+                                  <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                    {u.section || `Sec ${u.sec_cd}`}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="p-4">
                               {u.name && u.name !== u.code && (
@@ -3758,7 +4787,8 @@ export default function AdminMasterPage() {
                       const isColMatch = !currentCollege || s.college_id === currentCollege.id || s.college_slug === currentCollege.slug;
                       const isCourseMatch = !selectedCourseCd || s.course_cd === selectedCourseCd;
                       const isBranchMatch = !selectedBranchCd || s.branch_cd === selectedBranchCd || s.department_id === selectedBranchCd;
-                      return isColMatch && isCourseMatch && isBranchMatch;
+                      const isSemMatch = !formData.sem_cd || String(s.sem_cd) === String(formData.sem_cd) || String(s.semester || '').includes(String(formData.sem_cd));
+                      return isColMatch && isCourseMatch && isBranchMatch && isSemMatch;
                     });
 
                     const availableBatches = batches.filter(b => {
@@ -3790,11 +4820,14 @@ export default function AdminMasterPage() {
                                 (!firstCourseCd || d.course_cd === firstCourseCd)
                               );
                               const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
-                              const newSubjects = subjects.filter(s =>
-                                (s.college_id === newCol?.id || s.college_slug === newCol?.slug) &&
-                                (!firstCourseCd || s.course_cd === firstCourseCd) &&
-                                (!firstBranchCd || s.branch_cd === firstBranchCd || s.department_id === firstBranchCd)
+                              const newBatches = batches.filter(b =>
+                                (b.college_id === newCol?.id || b.college_slug === newCol?.slug || String(b.colg_cd) === String(newCol?.code)) &&
+                                (!firstCourseCd || b.course_cd === firstCourseCd)
                               );
+                              const firstBatch = newBatches[0];
+                              const firstBatchCd = firstBatch?.batch_cd || firstBatch?.code || '17';
+                              const firstBatchYear = firstBatch?.year || 2024;
+                              const initialUnit = getNextUnitCodeForSubject('', units);
 
                               setFormData({
                                 ...formData,
@@ -3803,9 +4836,21 @@ export default function AdminMasterPage() {
                                 course_cd: firstCourseCd,
                                 branch_cd: firstBranchCd,
                                 department_id: firstBranchCd,
-                                subject_id: newSubjects[0]?.code || newSubjects[0]?.id || '',
-                                subject_code: newSubjects[0]?.code || '',
+                                batch_id: firstBatchCd,
+                                batch_cd: firstBatchCd,
+                                batch_year: firstBatchYear,
+                                sem_cd: '5',
+                                semester: 'Semester 5',
+                                sec_cd: '1',
+                                section: 'Section A',
+                                subject_id: '',
+                                subject_code: '',
+                                code: initialUnit.code,
+                                unit_order: initialUnit.order,
                               });
+                              setUnitSubjectSearch('');
+                              setIsUnitSubjectDropdownOpen(false);
+                              fetchUnitSubjects(newCol?.code || newCol?.id || newColCd, firstCourseCd, firstBranchCd, firstBatchCd, '5', '1', newCol?.slug);
                             }}
                             className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                           >
@@ -3835,20 +4880,35 @@ export default function AdminMasterPage() {
                                 (!newCourseCd || d.course_cd === newCourseCd || d.course_code === newCourseCd)
                               );
                               const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
-                              const newSubjects = subjects.filter(s =>
-                                (s.college_id === currentCollege?.id || s.college_slug === currentCollege?.slug) &&
-                                (!newCourseCd || s.course_cd === newCourseCd) &&
-                                (!firstBranchCd || s.branch_cd === firstBranchCd || s.department_id === firstBranchCd)
+                              const newBatches = batches.filter(b =>
+                                (b.college_id === currentCollege?.id || b.college_slug === currentCollege?.slug || String(b.colg_cd) === String(currentCollege?.code)) &&
+                                (!newCourseCd || b.course_cd === newCourseCd)
                               );
+                              const firstBatch = newBatches[0];
+                              const firstBatchCd = firstBatch?.batch_cd || firstBatch?.code || '17';
+                              const firstBatchYear = firstBatch?.year || 2024;
+                              const initialUnit = getNextUnitCodeForSubject('', units);
 
                               setFormData({
                                 ...formData,
                                 course_cd: newCourseCd,
                                 branch_cd: firstBranchCd,
                                 department_id: firstBranchCd,
-                                subject_id: newSubjects[0]?.code || newSubjects[0]?.id || '',
-                                subject_code: newSubjects[0]?.code || '',
+                                batch_id: firstBatchCd,
+                                batch_cd: firstBatchCd,
+                                batch_year: firstBatchYear,
+                                sem_cd: '5',
+                                semester: 'Semester 5',
+                                sec_cd: '1',
+                                section: 'Section A',
+                                subject_id: '',
+                                subject_code: '',
+                                code: initialUnit.code,
+                                unit_order: initialUnit.order,
                               });
+                              setUnitSubjectSearch('');
+                              setIsUnitSubjectDropdownOpen(false);
+                              fetchUnitSubjects(currentCollege?.code || formData.college_id, newCourseCd, firstBranchCd, firstBatchCd, '5', '1', currentCollege?.slug);
                             }}
                             className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                           >
@@ -3873,18 +4933,27 @@ export default function AdminMasterPage() {
                             value={selectedBranchCd}
                             onChange={(e) => {
                               const newBranchCd = e.target.value;
-                              const newSubjects = subjects.filter(s =>
-                                (s.college_id === currentCollege?.id || s.college_slug === currentCollege?.slug) &&
-                                (!selectedCourseCd || s.course_cd === selectedCourseCd) &&
-                                (!newBranchCd || s.branch_cd === newBranchCd || s.department_id === newBranchCd)
-                              );
+                              const initialUnit = getNextUnitCodeForSubject('', units);
                               setFormData({
                                 ...formData,
                                 branch_cd: newBranchCd,
                                 department_id: newBranchCd,
-                                subject_id: newSubjects[0]?.code || newSubjects[0]?.id || '',
-                                subject_code: newSubjects[0]?.code || '',
+                                subject_id: '',
+                                subject_code: '',
+                                code: initialUnit.code,
+                                unit_order: initialUnit.order,
                               });
+                              setUnitSubjectSearch('');
+                              setIsUnitSubjectDropdownOpen(false);
+                              fetchUnitSubjects(
+                                currentCollege?.code || formData.college_id,
+                                selectedCourseCd,
+                                newBranchCd,
+                                formData.batch_id || formData.batch_cd || '17',
+                                formData.sem_cd || '5',
+                                formData.sec_cd || '1',
+                                currentCollege?.slug
+                              );
                             }}
                             className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                           >
@@ -3915,12 +4984,32 @@ export default function AdminMasterPage() {
                               onChange={e => {
                                 const val = e.target.value;
                                 const selectedB = availableBatches.find(b => String(b.batch_cd) === val || String(b.year) === val || b.code === val || b.id === val);
+                                const chosenBatchCd = selectedB?.batch_cd || selectedB?.year || selectedB?.id || val;
+                                const chosenYear = selectedB?.year || formData.batch_year || 2024;
+                                const initialUnit = getNextUnitCodeForSubject('', units);
+
                                 setFormData({
                                   ...formData,
-                                  batch_id: selectedB?.batch_cd || selectedB?.year || selectedB?.id || val,
+                                  batch_id: chosenBatchCd,
+                                  batch_cd: chosenBatchCd,
                                   _resolved_batch_id: selectedB?.id,
-                                  batch_year: selectedB?.year || formData.batch_year || 2024,
+                                  batch_year: chosenYear,
+                                  subject_id: '',
+                                  subject_code: '',
+                                  code: initialUnit.code,
+                                  unit_order: initialUnit.order,
                                 });
+                                setUnitSubjectSearch('');
+                                setIsUnitSubjectDropdownOpen(false);
+                                fetchUnitSubjects(
+                                  currentCollege?.code || formData.college_id,
+                                  selectedCourseCd,
+                                  selectedBranchCd,
+                                  chosenBatchCd,
+                                  formData.sem_cd || '5',
+                                  formData.sec_cd || '1',
+                                  currentCollege?.slug
+                                );
                               }}
                               className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
@@ -3947,33 +5036,337 @@ export default function AdminMasterPage() {
                           </div>
                         </div>
 
-                        {/* Step 5: Select Subject */}
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Step 5: Select Subject * ({availableSubjects.length} available)
-                          </label>
-                          <select
-                            required
-                            value={subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id)?.code || formData.subject_id || ''}
-                            onChange={e => {
-                              const val = e.target.value;
-                              const found = availableSubjects.find(s => s.code === val || s.id === val);
-                              setFormData({
-                                ...formData,
-                                subject_id: found?.code || found?.id || val,
-                                subject_code: found?.code || '',
-                                _resolved_subject_id: found?.id,
-                              });
-                            }}
-                            className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                          >
-                            <option value="">-- Choose Subject for Unit --</option>
-                            {availableSubjects.map(s => (
-                              <option key={s.id} value={s.code || s.id}>
-                                📚 {s.name} (Code: #{s.code || 'N/A'}, {s.credits || 4} Credits)
-                              </option>
-                            ))}
-                          </select>
+                        {/* Step 5: Select Semester & Step 6: Select Section (Cascading) */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 5: Select Semester *</span>
+                              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
+                                sem_cd: #{formData.sem_cd || '5'}
+                              </span>
+                            </label>
+                            <select
+                              required
+                              value={formData.sem_cd || '5'}
+                              onChange={(e) => {
+                                const newSemCd = e.target.value;
+                                const semName = `Semester ${newSemCd}`;
+                                const initialUnit = getNextUnitCodeForSubject('', units);
+                                setFormData({
+                                  ...formData,
+                                  sem_cd: newSemCd,
+                                  semester: semName,
+                                  subject_id: '',
+                                  subject_code: '',
+                                  code: initialUnit.code,
+                                  unit_order: initialUnit.order,
+                                });
+                                setUnitSubjectSearch('');
+                                setIsUnitSubjectDropdownOpen(false);
+                                fetchUnitSubjects(
+                                  currentCollege?.code || formData.college_id,
+                                  selectedCourseCd,
+                                  selectedBranchCd,
+                                  formData.batch_id || formData.batch_cd || '17',
+                                  newSemCd,
+                                  formData.sec_cd || '1',
+                                  currentCollege?.slug
+                                );
+                              }}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                                <option key={s} value={String(s)}>
+                                  📖 Semester {s} (Code: #{s})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 6: Select Section *</span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                                sec_cd: #{formData.sec_cd || '1'}
+                              </span>
+                            </label>
+                            <select
+                              required
+                              value={formData.sec_cd || '1'}
+                              onChange={(e) => {
+                                const newSecCd = e.target.value;
+                                const secMap: Record<string, string> = {
+                                  '1': 'Section A',
+                                  '2': 'Section B',
+                                  '3': 'Section C',
+                                  '4': 'Section D',
+                                  'all': 'All Sections',
+                                };
+                                const newSecName = secMap[newSecCd] || `Section ${newSecCd}`;
+                                const initialUnit = getNextUnitCodeForSubject('', units);
+                                setFormData({
+                                  ...formData,
+                                  sec_cd: newSecCd,
+                                  section: newSecName,
+                                  subject_id: '',
+                                  subject_code: '',
+                                  code: initialUnit.code,
+                                  unit_order: initialUnit.order,
+                                });
+                                setUnitSubjectSearch('');
+                                setIsUnitSubjectDropdownOpen(false);
+                                fetchUnitSubjects(
+                                  currentCollege?.code || formData.college_id,
+                                  selectedCourseCd,
+                                  selectedBranchCd,
+                                  formData.batch_id || formData.batch_cd || '17',
+                                  formData.sem_cd || '5',
+                                  newSecCd,
+                                  currentCollege?.slug
+                                );
+                              }}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="1">🏷️ Section A (Code: #1)</option>
+                              <option value="2">🏷️ Section B (Code: #2)</option>
+                              <option value="3">🏷️ Section C (Code: #3)</option>
+                              <option value="4">🏷️ Section D (Code: #4)</option>
+                              <option value="all">🏷️ All Sections</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Step 7: Select Subject (SRMS Live API GetAllSubjectDetail / Subject Linker with Autocomplete Search) */}
+                        <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                          {(() => {
+                            const isSrmsTenant = (currentCollege?.slug || formData.college_slug || '').toLowerCase().includes('srms');
+                            const rawSubjectList = unitLiveSubjects.length > 0 ? unitLiveSubjects : availableSubjects;
+                            const displaySubjectList = rawSubjectList.filter((s: any) => {
+                              if (!formData.sem_cd) return true;
+                              const sSem = String(s.sem_cd ?? s.semester ?? s.semester_name ?? '');
+                              return sSem === String(formData.sem_cd) || sSem.includes(String(formData.sem_cd));
+                            });
+                            const filteredSubjects = displaySubjectList.filter((s: any) => {
+                              if (!unitSubjectSearch.trim()) return true;
+                              const q = unitSubjectSearch.toLowerCase().trim();
+                              const qClean = q.replace(/\s+/g, '');
+                              const paper = getSubjectPaperCode(s).toLowerCase();
+                              const paperClean = paper.replace(/\s+/g, '');
+                              const title = getSubjectTitle(s).toLowerCase();
+                              const numCode = String(s.sub_cd || s.code || s.id || '').toLowerCase();
+                              return paper.includes(q) || paperClean.includes(qClean) || title.includes(q) || numCode.includes(q);
+                            });
+
+                            const selectedSubjectObj = displaySubjectList.find((s: any) =>
+                              String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+                              String(s.sub_addinfo || '') === String(formData.subject_code) ||
+                              (getSubjectPaperCode(s) && getSubjectPaperCode(s) === String(formData.subject_code || formData.subject_id))
+                            ) || subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
+
+                            const cardPaperCode = getSubjectPaperCode(selectedSubjectObj) || formData.subject_code || '';
+                            const cardNumericCode = getSubjectNumericCode(selectedSubjectObj, formData.subject_id || formData.subject_code);
+                            const cardTitle = getSubjectTitle(selectedSubjectObj) || formData.subject_name || 'Selected Subject';
+                            const cardSubType = selectedSubjectObj?.SubTyp || selectedSubjectObj?.type || 'THEORY';
+
+                            return (
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                    <span>Step 7: Select Subject *</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                                      {loadingUnitSubjects ? 'Fetching subjects...' : `${displaySubjectList.length} available`}
+                                    </span>
+                                  </label>
+                                  <div className="flex items-center gap-1.5 text-[10px]">
+                                    {isSrmsTenant ? (
+                                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        SRMS Live API (GetAllSubjectDetail)
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                        Subject Linker (Faculty Linked)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Confirmed Selected Subject Card */}
+                                {formData.subject_id ? (
+                                  <div className="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/60 dark:from-indigo-950/40 dark:via-slate-900 dark:to-purple-950/30 border border-indigo-200 dark:border-indigo-800/80 rounded-xl p-3 shadow-xs">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                          {cardPaperCode && (
+                                            <span className="px-2.5 py-1 text-xs font-mono font-black bg-indigo-600 text-white rounded-lg shadow-xs flex items-center gap-1">
+                                              <span>📄</span>
+                                              <span>{cardPaperCode}</span>
+                                            </span>
+                                          )}
+                                          {cardNumericCode && (
+                                            <span className="px-2.5 py-1 text-xs font-mono font-black bg-purple-600 text-white dark:bg-purple-700 rounded-lg shadow-xs flex items-center gap-1" title={`Numeric Subject Code: ${cardNumericCode}`}>
+                                              <span className="text-[10px] uppercase font-sans font-extrabold opacity-85">Code:</span>
+                                              <span>#{cardNumericCode}</span>
+                                            </span>
+                                          )}
+                                          {cardSubType && (
+                                            <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 rounded-md border border-amber-200 dark:border-amber-800">
+                                              {cardSubType}
+                                            </span>
+                                          )}
+                                          <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-800 font-mono">
+                                            Auto Unit: {formData.code}
+                                          </span>
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                          {cardTitle}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const initialUnit = getNextUnitCodeForSubject('', units);
+                                          setFormData({
+                                            ...formData,
+                                            subject_id: '',
+                                            subject_code: '',
+                                            code: initialUnit.code,
+                                            unit_order: initialUnit.order,
+                                          });
+                                          setUnitSubjectSearch('');
+                                          setIsUnitSubjectDropdownOpen(true);
+                                        }}
+                                        className="shrink-0 text-xs px-2.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold border border-indigo-200 dark:border-indigo-800 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.83 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                                        </svg>
+                                        <span>Change Subject</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  /* Autocomplete Search Input & Dropdown */
+                                  <div className="relative">
+                                    <div className="relative">
+                                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                                      </svg>
+                                      <input
+                                        type="text"
+                                        value={unitSubjectSearch}
+                                        onFocus={() => setIsUnitSubjectDropdownOpen(true)}
+                                        onChange={(e) => {
+                                          setUnitSubjectSearch(e.target.value);
+                                          setIsUnitSubjectDropdownOpen(true);
+                                        }}
+                                        placeholder="🔍 Search subject by paper code (e.g. BCS 052), code (e.g. 88622), or title..."
+                                        className="w-full pl-9 pr-8 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#5B4BFF] shadow-xs"
+                                      />
+                                      {unitSubjectSearch && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setUnitSubjectSearch('')}
+                                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                                        >
+                                          ✕
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Dropdown list */}
+                                    {isUnitSubjectDropdownOpen && (
+                                      <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl divide-y divide-slate-100 dark:divide-slate-750">
+                                        {loadingUnitSubjects ? (
+                                          <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400 flex items-center justify-center gap-2">
+                                            <span className="w-3 h-3 rounded-full border-2 border-[#5B4BFF] border-t-transparent animate-spin"></span>
+                                            <span>Fetching live subjects for Semester {formData.sem_cd || '5'}...</span>
+                                          </div>
+                                        ) : filteredSubjects.length === 0 ? (
+                                          <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                                            No subjects found matching "{unitSubjectSearch}".
+                                          </div>
+                                        ) : (
+                                          filteredSubjects.map((s: any) => {
+                                            const subCodeOrId = String(s.sub_cd || s.code || s.id);
+                                            const subNumericCode = getSubjectNumericCode(s, subCodeOrId);
+                                            const paperCode = getSubjectPaperCode(s);
+                                            const cleanPaperCode = paperCode.replace(/\s+/g, '').toUpperCase();
+                                            const fullTitle = getSubjectTitle(s);
+                                            const displayLabel = getSubjectDisplayLabel(s);
+                                            const subType = s.SubTyp || s.type || 'THEORY';
+
+                                            // Count existing units for this subject to display preview
+                                            const existingUnitsForSub = units.filter(u => {
+                                              const uTarget = String(subCodeOrId).toLowerCase();
+                                              const uCodeClean = String(u.code || '').replace(/\s+/g, '').toUpperCase();
+                                              return String(u.subject_id || '').toLowerCase() === uTarget ||
+                                                     String(u.subject_code || '').toLowerCase() === uTarget ||
+                                                     (paperCode && String(u.subject_code || '').toLowerCase() === paperCode.toLowerCase()) ||
+                                                     (cleanPaperCode && cleanPaperCode.length >= 2 && uCodeClean.startsWith(cleanPaperCode));
+                                            });
+
+                                            const previewNext = getNextUnitCodeForSubject(subCodeOrId, units, s);
+
+                                            return (
+                                              <button
+                                                key={`${subCodeOrId}-${paperCode}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  const nextUnit = getNextUnitCodeForSubject(subCodeOrId, units, s);
+                                                  setFormData({
+                                                    ...formData,
+                                                    subject_id: subCodeOrId,
+                                                    subject_code: subNumericCode || paperCode || subCodeOrId,
+                                                    subject_name: fullTitle,
+                                                    code: nextUnit.code,
+                                                    name: (!formData.name || formData.name === formData.code || formData.name.startsWith('UNIT') || formData.name.includes('-UNIT')) ? nextUnit.code : formData.name,
+                                                    unit_order: nextUnit.order,
+                                                  });
+                                                  setUnitSubjectSearch(displayLabel);
+                                                  setIsUnitSubjectDropdownOpen(false);
+                                                }}
+                                                className="w-full text-left p-2.5 hover:bg-indigo-50/80 dark:hover:bg-slate-700/60 transition-colors flex items-center justify-between gap-3 group"
+                                              >
+                                                <div className="min-w-0 flex-1">
+                                                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                                    {paperCode && (
+                                                      <span className="px-2 py-0.5 text-xs font-mono font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 rounded border border-indigo-200 dark:border-indigo-800">
+                                                        📄 {paperCode}
+                                                      </span>
+                                                    )}
+                                                    {subNumericCode && (
+                                                      <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 rounded border border-purple-200 dark:border-purple-800">
+                                                        #{subNumericCode}
+                                                      </span>
+                                                    )}
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                                      {subType}
+                                                    </span>
+                                                  </div>
+                                                  <p className="text-xs font-semibold text-slate-900 dark:text-white truncate group-hover:text-[#5B4BFF]">
+                                                    {fullTitle}
+                                                  </p>
+                                                </div>
+                                                <div className="shrink-0 text-right">
+                                                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                                    Next: {previewNext.code}
+                                                  </span>
+                                                  <span className="block text-[9px] text-slate-400 mt-0.5">
+                                                    {existingUnitsForSub.length} existing unit{existingUnitsForSub.length === 1 ? '' : 's'}
+                                                  </span>
+                                                </div>
+                                              </button>
+                                            );
+                                          })
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         {/* Unit Code & Dynamic (Competency Count vs Bloom's Level) */}
@@ -3988,18 +5381,32 @@ export default function AdminMasterPage() {
                             currentCollege?.slug === 'rmribar'
                           );
 
+                          const selectedSubObj = unitLiveSubjects.find((s: any) =>
+                            String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+                            String(s.sub_addinfo || '') === String(formData.subject_code)
+                          ) || subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
+                          const currentNumericCode = getSubjectNumericCode(selectedSubObj, formData.subject_id || formData.subject_code);
+
                           return (
                             <div className="grid grid-cols-2 gap-3">
                               <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Unit Code *</label>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                                  <span>Unit Code *</span>
+                                  <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold bg-purple-50 dark:bg-purple-950/50 px-1.5 py-0.5 rounded">
+                                    Dynamic: {formData.code || (currentNumericCode ? `${currentNumericCode}-UNIT1-CO1` : 'UNIT1-CO1')}
+                                  </span>
+                                </label>
                                 <input
                                   type="text"
                                   required
                                   value={formData.code || ''}
-                                  onChange={e => setFormData({ ...formData, code: e.target.value })}
-                                  placeholder="e.g. UNIT-1 / U1 / UNIT-01"
+                                  onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                                  placeholder={currentNumericCode ? `e.g. ${currentNumericCode}-UNIT1-CO1, ${currentNumericCode}-UNIT2-CO2` : "e.g. 88623-UNIT1-CO1, 88623-UNIT2-CO2"}
                                   className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
                                 />
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">
+                                  Dynamic numeric subject code + Unit (e.g. {currentNumericCode ? `${currentNumericCode}-UNIT1-CO1, ${currentNumericCode}-UNIT2-CO2...` : '88623-UNIT1-CO1, 88623-UNIT2-CO2...'})
+                                </span>
                               </div>
                               <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -4084,7 +5491,7 @@ export default function AdminMasterPage() {
                     );
                   })()}
 
-                  {/* Form fields for Topics (Compact Multi-Column Grid Layout) */}
+                  {/* Form fields for Topics (With 8-Step Cascading Selectors & Auto Topic Code) */}
                   {activeTab === 'topics' && (() => {
                     const currentCollege = colleges.find(c => c.code === formData.college_id || c.id === formData.college_id || c.slug === formData.college_slug) || colleges[0];
                     const availableCourses = getCoursesForCollege(currentCollege?.id || currentCollege?.slug);
@@ -4097,338 +5504,745 @@ export default function AdminMasterPage() {
                     });
                     const selectedBranchCd = formData.branch_cd || availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1';
 
+                    const availableBatches = batches.filter(b => {
+                      const isColMatch = !currentCollege || b.college_id === currentCollege.id || b.college_slug === currentCollege.slug || String(b.colg_cd) === String(currentCollege.code);
+                      const isCourseMatch = !selectedCourseCd || b.course_cd === selectedCourseCd;
+                      return isColMatch && isCourseMatch;
+                    });
+
                     const availableSubjects = subjects.filter(s => {
                       const isColMatch = !currentCollege || s.college_id === currentCollege.id || s.college_slug === currentCollege.slug;
                       const isCourseMatch = !selectedCourseCd || s.course_cd === selectedCourseCd;
                       const isBranchMatch = !selectedBranchCd || s.branch_cd === selectedBranchCd || s.department_id === selectedBranchCd;
-                      return isColMatch && isCourseMatch && isBranchMatch;
+                      const isSemMatch = !formData.sem_cd || String(s.sem_cd) === String(formData.sem_cd) || String(s.semester || '').includes(String(formData.sem_cd));
+                      return isColMatch && isCourseMatch && isBranchMatch && isSemMatch;
                     });
-                    const selectedSubCode = formData.subject_code || formData.subject_id || availableSubjects[0]?.code || '';
+
+                    // Strict matching for availableUnits for the selected subject:
+                    const selectedSubCd = String(formData.subject_id || formData.subject_code || '').trim();
+                    const selectedSubPaper = String(formData.subject_code || '').trim();
+                    const cleanSubPaper = selectedSubPaper.replace(/\s+/g, '').toUpperCase();
+                    const currentSubjectObj = topicLiveSubjects.find((s: any) =>
+                      String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+                      String(s.sub_addinfo || '') === String(formData.subject_code)
+                    ) || subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
 
                     const availableUnits = units.filter(u => {
                       const isColMatch = !currentCollege || u.college_id === currentCollege.id || u.college_slug === currentCollege.slug;
                       const isCourseMatch = !selectedCourseCd || u.course_cd === selectedCourseCd;
                       const isBranchMatch = !selectedBranchCd || u.branch_cd === selectedBranchCd;
-                      const isSubMatch = !selectedSubCode || u.subject_code === selectedSubCode || u.subject_id === selectedSubCode;
+                      if (!selectedSubCd && !selectedSubPaper) return isColMatch && isCourseMatch && isBranchMatch;
+
+                      const uSubId = String(u.subject_id || '').trim();
+                      const uSubCode = String(u.subject_code || '').trim();
+                      const uCode = String(u.code || '').replace(/\s+/g, '').toUpperCase();
+
+                      const isSubMatch =
+                        (selectedSubCd && (uSubId === selectedSubCd || uSubCode === selectedSubCd)) ||
+                        (selectedSubPaper && (uSubCode === selectedSubPaper || uSubId === selectedSubPaper)) ||
+                        (cleanSubPaper && cleanSubPaper.length >= 2 && uCode.startsWith(cleanSubPaper));
+
                       return isColMatch && isCourseMatch && isBranchMatch && isSubMatch;
                     });
-                    const selectedUnitCode = formData.unit_code || formData.unit_id || availableUnits[0]?.code || '';
+
+                    const selectedCourseObj = availableCourses.find((c: any) => c.course_cd === selectedCourseCd || c.code === selectedCourseCd || c.id === selectedCourseCd);
+                    const isMedicalTopic = Boolean(
+                      selectedCourseObj?.academic_system === 'professional' ||
+                      selectedCourseObj?.academicSystem === 'professional' ||
+                      selectedCourseObj?.name?.toUpperCase().includes('MBBS') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('BAMS') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('MD') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('MS') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('BDS') ||
+                      selectedCourseObj?.code === '100' ||
+                      selectedCourseObj?.course_cd === '100' ||
+                      currentCollege?.slug === 'srms-ims' ||
+                      currentCollege?.slug === 'rmribar'
+                    );
 
                     return (
                       <>
-                        {/* Row 1: 4-Column Header Ribbon (College, Course, Branch, Subject) */}
-                        <div className="grid grid-cols-4 gap-2 bg-[#F6F8FC] dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                          <div className="space-y-1">
-                            <label className="text-slate-700 dark:text-slate-300 font-extrabold text-[11px] block truncate">
-                              🏛️ 1. College *
+                        {/* Step 1: Select College */}
+                        <div className="space-y-1 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                          <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
+                            <span>Step 1: Select College *</span>
+                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">
+                              colg_cd: #{currentCollege?.code || '1'}
+                            </span>
+                          </label>
+                          <select
+                            required
+                            value={currentCollege?.code || currentCollege?.id || formData.college_id}
+                            onChange={(e) => {
+                              const newColCd = e.target.value;
+                              const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
+                              const colCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
+                              const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '';
+                              const newDepts = departments.filter(d =>
+                                (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newCol?.code)) &&
+                                (!firstCourseCd || d.course_cd === firstCourseCd)
+                              );
+                              const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
+                              const newBatches = batches.filter(b =>
+                                (b.college_id === newCol?.id || b.college_slug === newCol?.slug || String(b.colg_cd) === String(newCol?.code)) &&
+                                (!firstCourseCd || b.course_cd === firstCourseCd)
+                              );
+                              const firstBatch = newBatches[0];
+                              const firstBatchCd = firstBatch?.batch_cd || firstBatch?.code || '17';
+                              const firstBatchYear = firstBatch?.year || 2024;
+
+                              setFormData({
+                                ...formData,
+                                college_id: newCol?.code || newCol?.id || newColCd,
+                                college_slug: newCol?.slug || '',
+                                course_cd: firstCourseCd,
+                                branch_cd: firstBranchCd,
+                                department_id: firstBranchCd,
+                                batch_id: firstBatchCd,
+                                batch_cd: firstBatchCd,
+                                batch_year: firstBatchYear,
+                                sem_cd: '5',
+                                semester: 'Semester 5',
+                                sec_cd: '1',
+                                section: 'Section A',
+                                subject_id: '',
+                                subject_code: '',
+                                unit_id: '',
+                                unit_code: '',
+                                code: '',
+                              });
+                              setTopicSubjectSearch('');
+                              setIsTopicSubjectDropdownOpen(false);
+                              fetchTopicSubjects(newCol?.code || newCol?.id || newColCd, firstCourseCd, firstBranchCd, firstBatchCd, '5', '1', newCol?.slug);
+                            }}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          >
+                            {colleges.map(c => (
+                              <option key={c.id} value={c.code || c.id}>
+                                🏛️ {c.name} ({c.slug})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Step 2: Select Course */}
+                        <div className="space-y-1 bg-amber-50/50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+                          <label className="text-amber-900 dark:text-amber-300 font-extrabold flex items-center justify-between">
+                            <span>Step 2: Select Course *</span>
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">
+                              course_cd: #{selectedCourseCd || '1'}
+                            </span>
+                          </label>
+                          <select
+                            required
+                            value={selectedCourseCd}
+                            onChange={(e) => {
+                              const newCourseCd = e.target.value;
+                              const newDepts = departments.filter(d =>
+                                (d.college_id === currentCollege?.id || d.college_slug === currentCollege?.slug || String(d.colg_cd) === String(currentCollege?.code)) &&
+                                (!newCourseCd || d.course_cd === newCourseCd || d.course_code === newCourseCd)
+                              );
+                              const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
+                              const newBatches = batches.filter(b =>
+                                (b.college_id === currentCollege?.id || b.college_slug === currentCollege?.slug || String(b.colg_cd) === String(currentCollege?.code)) &&
+                                (!newCourseCd || b.course_cd === newCourseCd)
+                              );
+                              const firstBatch = newBatches[0];
+                              const firstBatchCd = firstBatch?.batch_cd || firstBatch?.code || '17';
+                              const firstBatchYear = firstBatch?.year || 2024;
+
+                              setFormData({
+                                ...formData,
+                                course_cd: newCourseCd,
+                                branch_cd: firstBranchCd,
+                                department_id: firstBranchCd,
+                                batch_id: firstBatchCd,
+                                batch_cd: firstBatchCd,
+                                batch_year: firstBatchYear,
+                                sem_cd: '5',
+                                semester: 'Semester 5',
+                                sec_cd: '1',
+                                section: 'Section A',
+                                subject_id: '',
+                                subject_code: '',
+                                unit_id: '',
+                                unit_code: '',
+                                code: '',
+                              });
+                              setTopicSubjectSearch('');
+                              setIsTopicSubjectDropdownOpen(false);
+                              fetchTopicSubjects(currentCollege?.code || formData.college_id, newCourseCd, firstBranchCd, firstBatchCd, '5', '1', currentCollege?.slug);
+                            }}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          >
+                            {availableCourses.map(c => (
+                              <option key={c.id || c.code} value={c.course_cd || c.code}>
+                                🎓 {c.name} (Code: #{c.course_cd || c.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Step 3: Select Branch / Department */}
+                        <div className="space-y-1 bg-emerald-50/50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                          <label className="text-emerald-900 dark:text-emerald-300 font-extrabold flex items-center justify-between">
+                            <span>Step 3: Select Branch / Department *</span>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                              branch_cd: #{selectedBranchCd || '1'}
+                            </span>
+                          </label>
+                          <select
+                            required
+                            value={selectedBranchCd}
+                            onChange={(e) => {
+                              const newBranchCd = e.target.value;
+                              setFormData({
+                                ...formData,
+                                branch_cd: newBranchCd,
+                                department_id: newBranchCd,
+                                subject_id: '',
+                                subject_code: '',
+                                unit_id: '',
+                                unit_code: '',
+                                code: '',
+                              });
+                              setTopicSubjectSearch('');
+                              setIsTopicSubjectDropdownOpen(false);
+                              fetchTopicSubjects(
+                                currentCollege?.code || formData.college_id,
+                                selectedCourseCd,
+                                newBranchCd,
+                                formData.batch_id || formData.batch_cd || '17',
+                                formData.sem_cd || '5',
+                                formData.sec_cd || '1',
+                                currentCollege?.slug
+                              );
+                            }}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          >
+                            {availableDepts.length === 0 ? (
+                              <option value="1">Dept #1</option>
+                            ) : (
+                              availableDepts.map(d => {
+                                const displayCode = d.branch_cd || d.code || '1';
+                                const displayName = (d.name && d.name !== '-') ? d.name : `Dept ${displayCode}`;
+                                return (
+                                  <option key={d.id} value={displayCode}>
+                                    🏢 {displayName} (Code: #{displayCode})
+                                  </option>
+                                );
+                              })
+                            )}
+                          </select>
+                        </div>
+
+                        {/* Step 4: Select Batch (Cascading) */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 4: Select Batch *</span>
+                              <span className="text-[10px] text-purple-600 dark:text-purple-400 font-mono">
+                                batch_cd: #{formData.batch_cd || '17'}
+                              </span>
                             </label>
                             <select
                               required
-                              value={currentCollege?.code || currentCollege?.id || formData.college_id}
+                              value={formData.batch_cd || formData.batch_id || '17'}
                               onChange={(e) => {
-                                const newColCd = e.target.value;
-                                const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
-                                const colCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
-                                const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '';
-                                const newDepts = departments.filter(d =>
-                                  (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newCol?.code)) &&
-                                  (!firstCourseCd || d.course_cd === firstCourseCd)
+                                const chosenBatchCd = e.target.value;
+                                const selectedB = availableBatches.find(b =>
+                                  String(b.batch_cd) === chosenBatchCd || String(b.code) === chosenBatchCd || String(b.year) === chosenBatchCd || String(b.id) === chosenBatchCd
                                 );
-                                const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
-                                const newSubjects = subjects.filter(s =>
-                                  (s.college_id === newCol?.id || s.college_slug === newCol?.slug) &&
-                                  (!firstCourseCd || s.course_cd === firstCourseCd) &&
-                                  (!firstBranchCd || s.branch_cd === firstBranchCd || s.department_id === firstBranchCd)
-                                );
-                                const firstSubCode = newSubjects[0]?.code || '';
-                                const newUnits = units.filter(u =>
-                                  (u.college_id === newCol?.id || u.college_slug === newCol?.slug) &&
-                                  (!firstCourseCd || u.course_cd === firstCourseCd) &&
-                                  (!firstSubCode || u.subject_code === firstSubCode)
-                                );
-                                const firstUnit = newUnits[0];
-                                const topicsForSub = topics.filter(t => t.subject_code === firstSubCode || t.subject_id === firstSubCode);
-                                const autoCode = firstSubCode ? `${firstSubCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
+                                const chosenYear = selectedB?.year || formData.batch_year || 2024;
 
                                 setFormData({
                                   ...formData,
-                                  college_id: newCol?.code || newCol?.id || newColCd,
-                                  college_slug: newCol?.slug || '',
-                                  course_cd: firstCourseCd,
-                                  branch_cd: firstBranchCd,
-                                  department_id: firstBranchCd,
-                                  subject_id: firstSubCode || newSubjects[0]?.id || '',
-                                  subject_code: firstSubCode,
-                                  unit_id: firstUnit?.code || '',
-                                  unit_code: firstUnit?.code || '',
-                                  bloom_level: firstUnit?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
-                                  code: autoCode,
+                                  batch_id: chosenBatchCd,
+                                  batch_cd: chosenBatchCd,
+                                  _resolved_batch_id: selectedB?.id,
+                                  batch_year: chosenYear,
+                                  subject_id: '',
+                                  subject_code: '',
+                                  unit_id: '',
+                                  unit_code: '',
+                                  code: '',
                                 });
+                                setTopicSubjectSearch('');
+                                setIsTopicSubjectDropdownOpen(false);
+                                fetchTopicSubjects(
+                                  currentCollege?.code || formData.college_id,
+                                  selectedCourseCd,
+                                  selectedBranchCd,
+                                  chosenBatchCd,
+                                  formData.sem_cd || '5',
+                                  formData.sec_cd || '1',
+                                  currentCollege?.slug
+                                );
                               }}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] truncate"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              {colleges.map(c => (
-                                <option key={c.id} value={c.code || c.id}>{c.name} ({c.code})</option>
+                              <option value="">-- Select Batch --</option>
+                              {availableBatches.map(b => (
+                                <option key={b.id} value={b.batch_cd || b.code || b.year || b.id}>
+                                  📅 {b.name || `Batch ${b.year}`} (Code: #{b.batch_cd || b.year})
+                                </option>
                               ))}
                             </select>
                           </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Batch Admission Year
+                            </label>
+                            <input
+                              type="number"
+                              min="2000"
+                              max="2100"
+                              value={formData.batch_year || 2024}
+                              onChange={e => setFormData({ ...formData, batch_year: Number(e.target.value) })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            />
+                          </div>
+                        </div>
 
-                          <div className="space-y-1">
-                            <label className="text-slate-700 dark:text-slate-300 font-extrabold text-[11px] block truncate">
-                              🎓 2. Course *
+                        {/* Step 5: Select Semester & Step 6: Select Section (Cascading) */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 5: Select Semester *</span>
+                              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
+                                sem_cd: #{formData.sem_cd || '5'}
+                              </span>
                             </label>
                             <select
                               required
-                              value={selectedCourseCd}
+                              value={formData.sem_cd || '5'}
                               onChange={(e) => {
-                                const newCourseCd = e.target.value;
-                                const newDepts = departments.filter(d =>
-                                  (d.college_id === currentCollege?.id || d.college_slug === currentCollege?.slug || String(d.colg_cd) === String(currentCollege?.code)) &&
-                                  (!newCourseCd || d.course_cd === newCourseCd || d.course_code === newCourseCd)
-                                );
-                                const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
-                                const newSubjects = subjects.filter(s =>
-                                  (s.college_id === currentCollege?.id || s.college_slug === currentCollege?.slug) &&
-                                  (!newCourseCd || s.course_cd === newCourseCd) &&
-                                  (!firstBranchCd || s.branch_cd === firstBranchCd || s.department_id === firstBranchCd)
-                                );
-                                const firstSubCode = newSubjects[0]?.code || '';
-                                const newUnits = units.filter(u =>
-                                  (u.college_id === currentCollege?.id || u.college_slug === currentCollege?.slug) &&
-                                  (!newCourseCd || u.course_cd === newCourseCd) &&
-                                  (!firstSubCode || u.subject_code === firstSubCode)
-                                );
-                                const firstUnit = newUnits[0];
-                                const topicsForSub = topics.filter(t => t.subject_code === firstSubCode || t.subject_id === firstSubCode);
-                                const autoCode = firstSubCode ? `${firstSubCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
-
+                                const newSemCd = e.target.value;
+                                const semName = `Semester ${newSemCd}`;
                                 setFormData({
                                   ...formData,
-                                  course_cd: newCourseCd,
-                                  branch_cd: firstBranchCd,
-                                  department_id: firstBranchCd,
-                                  subject_id: firstSubCode || newSubjects[0]?.id || '',
-                                  subject_code: firstSubCode,
-                                  unit_id: firstUnit?.code || '',
-                                  unit_code: firstUnit?.code || '',
-                                  bloom_level: firstUnit?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
-                                  code: autoCode,
+                                  sem_cd: newSemCd,
+                                  semester: semName,
+                                  subject_id: '',
+                                  subject_code: '',
+                                  unit_id: '',
+                                  unit_code: '',
+                                  code: '',
                                 });
+                                setTopicSubjectSearch('');
+                                setIsTopicSubjectDropdownOpen(false);
+                                fetchTopicSubjects(
+                                  currentCollege?.code || formData.college_id,
+                                  selectedCourseCd,
+                                  selectedBranchCd,
+                                  formData.batch_id || formData.batch_cd || '17',
+                                  newSemCd,
+                                  formData.sec_cd || '1',
+                                  currentCollege?.slug
+                                );
                               }}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] truncate"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              {availableCourses.map(c => (
-                                <option key={c.id || c.code} value={c.course_cd || c.code}>{c.name} (#{c.course_cd || c.code})</option>
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                                <option key={s} value={String(s)}>
+                                  📖 Semester {s} (Code: #{s})
+                                </option>
                               ))}
                             </select>
                           </div>
-
-                          <div className="space-y-1">
-                            <label className="text-slate-700 dark:text-slate-300 font-extrabold text-[11px] block truncate">
-                              🏢 3. Branch *
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 6: Select Section *</span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                                sec_cd: #{formData.sec_cd || '1'}
+                              </span>
                             </label>
                             <select
                               required
-                              value={selectedBranchCd}
+                              value={formData.sec_cd || '1'}
                               onChange={(e) => {
-                                const newBranchCd = e.target.value;
-                                const newSubjects = subjects.filter(s =>
-                                  (s.college_id === currentCollege?.id || s.college_slug === currentCollege?.slug) &&
-                                  (!selectedCourseCd || s.course_cd === selectedCourseCd) &&
-                                  (!newBranchCd || s.branch_cd === newBranchCd || s.department_id === newBranchCd)
-                                );
-                                const firstSubCode = newSubjects[0]?.code || '';
-                                const newUnits = units.filter(u =>
-                                  (u.college_id === currentCollege?.id || u.college_slug === currentCollege?.slug) &&
-                                  (!selectedCourseCd || u.course_cd === selectedCourseCd) &&
-                                  (!newBranchCd || u.branch_cd === newBranchCd) &&
-                                  (!firstSubCode || u.subject_code === firstSubCode)
-                                );
-                                const firstUnit = newUnits[0];
-                                const topicsForSub = topics.filter(t => t.subject_code === firstSubCode || t.subject_id === firstSubCode);
-                                const autoCode = firstSubCode ? `${firstSubCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
-
+                                const newSecCd = e.target.value;
+                                const secMap: Record<string, string> = {
+                                  '1': 'Section A',
+                                  '2': 'Section B',
+                                  '3': 'Section C',
+                                  '4': 'Section D',
+                                  'all': 'All Sections',
+                                };
+                                const newSecName = secMap[newSecCd] || `Section ${newSecCd}`;
                                 setFormData({
                                   ...formData,
-                                  branch_cd: newBranchCd,
-                                  department_id: newBranchCd,
-                                  subject_id: firstSubCode || newSubjects[0]?.id || '',
-                                  subject_code: firstSubCode,
-                                  unit_id: firstUnit?.code || '',
-                                  unit_code: firstUnit?.code || '',
-                                  bloom_level: firstUnit?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
-                                  code: autoCode,
+                                  sec_cd: newSecCd,
+                                  section: newSecName,
+                                  subject_id: '',
+                                  subject_code: '',
+                                  unit_id: '',
+                                  unit_code: '',
+                                  code: '',
                                 });
-                              }}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] truncate"
-                            >
-                              {availableDepts.length === 0 ? (
-                                <option value="1">Dept #1</option>
-                              ) : (
-                                availableDepts.map(d => {
-                                  const displayCode = d.branch_cd || d.code || '1';
-                                  const displayName = (d.name && d.name !== '-') ? d.name : `Dept ${displayCode}`;
-                                  return (
-                                    <option key={d.id} value={displayCode}>{displayName} (#{displayCode})</option>
-                                  );
-                                })
-                              )}
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-slate-700 dark:text-slate-300 font-extrabold text-[11px] block truncate">
-                              📚 4. Subject *
-                            </label>
-                            <select
-                              required
-                              value={subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id)?.code || formData.subject_id || ''}
-                              onChange={e => {
-                                const val = e.target.value;
-                                const found = availableSubjects.find(s => s.code === val || s.id === val);
-                                const subCode = found?.code || val;
-                                const newUnits = units.filter(u =>
-                                  (u.college_id === currentCollege?.id || u.college_slug === currentCollege?.slug) &&
-                                  (!selectedCourseCd || u.course_cd === selectedCourseCd) &&
-                                  (!subCode || u.subject_code === subCode)
+                                setTopicSubjectSearch('');
+                                setIsTopicSubjectDropdownOpen(false);
+                                fetchTopicSubjects(
+                                  currentCollege?.code || formData.college_id,
+                                  selectedCourseCd,
+                                  selectedBranchCd,
+                                  formData.batch_id || formData.batch_cd || '17',
+                                  formData.sem_cd || '5',
+                                  newSecCd,
+                                  currentCollege?.slug
                                 );
-                                const firstUnit = newUnits[0];
-                                const topicsForSub = topics.filter(t => t.subject_code === subCode || t.subject_id === subCode);
-                                const autoCode = subCode ? `${subCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
-
-                                setFormData({
-                                  ...formData,
-                                  subject_id: found?.code || found?.id || val,
-                                  subject_code: found?.code || '',
-                                  _resolved_subject_id: found?.id,
-                                  unit_id: firstUnit?.code || '',
-                                  unit_code: firstUnit?.code || '',
-                                  bloom_level: firstUnit?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
-                                  code: autoCode,
-                                });
                               }}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] truncate"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              <option value="">-- Choose Subject --</option>
-                              {availableSubjects.map(s => (
-                                <option key={s.id} value={s.code || s.id}>[#{s.code || 'N/A'}] {s.name}</option>
-                              ))}
+                              <option value="1">🏷️ Section A (Code: #1)</option>
+                              <option value="2">🏷️ Section B (Code: #2)</option>
+                              <option value="3">🏷️ Section C (Code: #3)</option>
+                              <option value="4">🏷️ Section D (Code: #4)</option>
+                              <option value="all">🏷️ All Sections</option>
                             </select>
                           </div>
                         </div>
 
-                        {/* Row 2: Unit, Topic Code (Auto), Dynamic (Competency Count vs Bloom's Level) */}
-                        {(() => {
-                          const selectedCourseObj = availableCourses.find((c: any) => c.course_cd === selectedCourseCd || c.code === selectedCourseCd || c.id === selectedCourseCd);
-                          const isMedicalTopic = Boolean(
-                            selectedCourseObj?.academic_system === 'professional' ||
-                            selectedCourseObj?.academicSystem === 'professional' ||
-                            selectedCourseObj?.name?.toUpperCase().includes('MBBS') ||
-                            selectedCourseObj?.name?.toUpperCase().includes('BAMS') ||
-                            selectedCourseObj?.name?.toUpperCase().includes('MD') ||
-                            selectedCourseObj?.name?.toUpperCase().includes('MS') ||
-                            selectedCourseObj?.name?.toUpperCase().includes('BDS') ||
-                            selectedCourseObj?.code === '100' ||
-                            selectedCourseObj?.course_cd === '100' ||
-                            currentCollege?.slug === 'srms-ims' ||
-                            currentCollege?.slug === 'rmribar'
-                          );
+                        {/* Step 7: Select Subject (SRMS Live API GetAllSubjectDetail / Subject Linker with Autocomplete Search) */}
+                        <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                          {(() => {
+                            const isSrmsTenant = (currentCollege?.slug || formData.college_slug || '').toLowerCase().includes('srms');
+                            const rawSubjectList = topicLiveSubjects.length > 0 ? topicLiveSubjects : availableSubjects;
+                            const displaySubjectList = rawSubjectList.filter((s: any) => {
+                              if (!formData.sem_cd) return true;
+                              const sSem = String(s.sem_cd ?? s.semester ?? s.semester_name ?? '');
+                              return sSem === String(formData.sem_cd) || sSem.includes(String(formData.sem_cd));
+                            });
+                            const filteredSubjects = displaySubjectList.filter((s: any) => {
+                              if (!topicSubjectSearch.trim()) return true;
+                              const q = topicSubjectSearch.toLowerCase().trim();
+                              const qClean = q.replace(/\s+/g, '');
+                              const paper = getSubjectPaperCode(s).toLowerCase();
+                              const paperClean = paper.replace(/\s+/g, '');
+                              const title = getSubjectTitle(s).toLowerCase();
+                              const numCode = getSubjectNumericCode(s).toLowerCase();
+                              return paper.includes(q) || paperClean.includes(qClean) || title.includes(q) || numCode.includes(q);
+                            });
 
-                          return (
-                            <div className="grid grid-cols-3 gap-2.5">
+                            const selectedSubjectObj = displaySubjectList.find((s: any) =>
+                              String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+                              String(s.sub_addinfo || '') === String(formData.subject_code) ||
+                              (getSubjectPaperCode(s) && getSubjectPaperCode(s) === String(formData.subject_code || formData.subject_id))
+                            ) || subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
+
+                            const cardPaperCode = getSubjectPaperCode(selectedSubjectObj) || formData.subject_code || '';
+                            const cardNumericCode = getSubjectNumericCode(selectedSubjectObj, formData.subject_id || formData.subject_code);
+                            const cardTitle = getSubjectTitle(selectedSubjectObj) || formData.subject_name || 'Selected Subject';
+                            const cardSubType = selectedSubjectObj?.SubTyp || selectedSubjectObj?.type || 'THEORY';
+
+                            return (
                               <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  📑 5. Select Unit *
-                                </label>
-                                <select
-                                  required
-                                  value={units.find(u => u.id === formData.unit_id || u.code === formData.unit_id)?.code || formData.unit_id || ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    const found = availableUnits.find(u => u.code === val || u.id === val);
-                                    const unitCode = found?.code || val;
-                                    const subCode = formData.subject_code || formData.subject_id || '';
-                                    const topicsForSub = topics.filter(t => t.subject_code === subCode || t.subject_id === subCode);
-                                    const autoCode = subCode ? `${subCode}${topicsForSub.length + 1}` : `TOPIC${topics.length + 1}`;
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                    <span>Step 7: Select Subject *</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                                      {loadingTopicSubjects ? 'Fetching subjects...' : `${displaySubjectList.length} available`}
+                                    </span>
+                                  </label>
+                                  <div className="flex items-center gap-1.5 text-[10px]">
+                                    {isSrmsTenant ? (
+                                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        SRMS Live API (GetAllSubjectDetail)
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                        Subject Linker (Faculty Linked)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
 
-                                    setFormData({
-                                      ...formData,
-                                      unit_id: found?.code || found?.id || val,
-                                      unit_code: found?.code || '',
-                                      _resolved_unit_id: found?.id,
-                                      bloom_level: found?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
-                                      code: autoCode,
-                                    });
-                                  }}
-                                  className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                                >
-                                  <option value="">-- Choose Unit --</option>
-                                  {availableUnits.map(u => (
-                                    <option key={u.id} value={u.code || u.id}>
-                                      📑 {u.code} — {u.name && u.name !== u.code ? u.name : (u.description ? u.description.slice(0, 20) : u.code)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Topic Code (Auto) *
-                                </label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={formData.code || ''}
-                                  onChange={e => setFormData({ ...formData, code: e.target.value })}
-                                  placeholder="e.g. 88534-U1-T01"
-                                  className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 truncate" title={isMedicalTopic ? 'Enter No of Competency Under This Topic' : "Bloom's Knowledge Level"}>
-                                  {isMedicalTopic ? 'Enter No of Competency Under This Topic *' : "Bloom's Knowledge Level *"}
-                                </label>
-                                {isMedicalTopic ? (
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="100"
-                                    required
-                                    value={formData.competency_count || formData.competencies_count || (formData.bloom_level && !isNaN(Number(formData.bloom_level)) ? formData.bloom_level : '')}
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setFormData({
-                                        ...formData,
-                                        competency_count: val,
-                                        competencies_count: val,
-                                        bloom_level: val ? `Competencies: ${val}` : '',
-                                      });
-                                    }}
-                                    placeholder="e.g. 5"
-                                    className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                                  />
+                                {/* Confirmed Selected Subject Card */}
+                                {formData.subject_id ? (
+                                  <div className="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/60 dark:from-indigo-950/40 dark:via-slate-900 dark:to-purple-950/30 border border-indigo-200 dark:border-indigo-800/80 rounded-xl p-3 shadow-xs">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                          {cardPaperCode && (
+                                            <span className="px-2.5 py-1 text-xs font-mono font-black bg-indigo-600 text-white rounded-lg shadow-xs flex items-center gap-1">
+                                              <span>📄</span>
+                                              <span>{cardPaperCode}</span>
+                                            </span>
+                                          )}
+                                          {cardNumericCode && (
+                                            <span className="px-2.5 py-1 text-xs font-mono font-black bg-purple-600 text-white dark:bg-purple-700 rounded-lg shadow-xs flex items-center gap-1" title={`Numeric Subject Code: ${cardNumericCode}`}>
+                                              <span className="text-[10px] uppercase font-sans font-extrabold opacity-85">Code:</span>
+                                              <span>#{cardNumericCode}</span>
+                                            </span>
+                                          )}
+                                          {cardSubType && (
+                                            <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 rounded-md border border-amber-200 dark:border-amber-800">
+                                              {cardSubType}
+                                            </span>
+                                          )}
+                                          {formData.code && (
+                                            <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-800 font-mono">
+                                              Auto Topic: {formData.code}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                          {cardTitle}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setFormData({
+                                            ...formData,
+                                            subject_id: '',
+                                            subject_code: '',
+                                            subject_name: '',
+                                            unit_id: '',
+                                            unit_code: '',
+                                            code: '',
+                                          });
+                                          setTopicSubjectSearch('');
+                                          setIsTopicSubjectDropdownOpen(true);
+                                        }}
+                                        className="shrink-0 text-xs px-2.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold border border-indigo-200 dark:border-indigo-800 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.83 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                                        </svg>
+                                        <span>Change Subject</span>
+                                      </button>
+                                    </div>
+                                  </div>
                                 ) : (
-                                  <select
-                                    required
-                                    value={formData.bloom_level || 'KL-2 (Understand)'}
-                                    onChange={e => setFormData({ ...formData, bloom_level: e.target.value })}
-                                    className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                                  >
-                                    <option value="KL-1 (Remember)">KL-1 (Remember)</option>
-                                    <option value="KL-2 (Understand)">KL-2 (Understand)</option>
-                                    <option value="KL-3 (Apply)">KL-3 (Apply)</option>
-                                    <option value="KL-4 (Analyze)">KL-4 (Analyze)</option>
-                                    <option value="KL-5 (Evaluate)">KL-5 (Evaluate)</option>
-                                    <option value="KL-6 (Create)">KL-6 (Create)</option>
-                                  </select>
+                                  /* Autocomplete Search Input & Dropdown */
+                                  <div className="relative">
+                                    <div className="relative">
+                                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                                      </svg>
+                                      <input
+                                        type="text"
+                                        value={topicSubjectSearch}
+                                        onFocus={() => setIsTopicSubjectDropdownOpen(true)}
+                                        onChange={(e) => {
+                                          setTopicSubjectSearch(e.target.value);
+                                          setIsTopicSubjectDropdownOpen(true);
+                                        }}
+                                        placeholder="🔍 Search subject by paper code (e.g. BCS 052), code (e.g. 88622), or title..."
+                                        className="w-full pl-9 pr-8 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#5B4BFF] shadow-xs"
+                                      />
+                                      {topicSubjectSearch && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setTopicSubjectSearch('')}
+                                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                                        >
+                                          ✕
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Dropdown list */}
+                                    {isTopicSubjectDropdownOpen && (
+                                      <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl divide-y divide-slate-100 dark:divide-slate-750">
+                                        {loadingTopicSubjects ? (
+                                          <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400 flex items-center justify-center gap-2">
+                                            <span className="w-3 h-3 rounded-full border-2 border-[#5B4BFF] border-t-transparent animate-spin"></span>
+                                            <span>Fetching live subjects for Semester {formData.sem_cd || '5'}...</span>
+                                          </div>
+                                        ) : filteredSubjects.length === 0 ? (
+                                          <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                                            No subjects found matching "{topicSubjectSearch}".
+                                          </div>
+                                        ) : (
+                                          filteredSubjects.map((s: any) => {
+                                            const subCodeOrId = String(s.sub_cd || s.code || s.id);
+                                            const subNumericCode = getSubjectNumericCode(s, subCodeOrId);
+                                            const paperCode = getSubjectPaperCode(s);
+                                            const cleanPaperCode = paperCode.replace(/\s+/g, '').toUpperCase();
+                                            const fullTitle = getSubjectTitle(s);
+                                            const displayLabel = getSubjectDisplayLabel(s);
+                                            const subType = s.SubTyp || s.type || 'THEORY';
+
+                                            const previewTopicCode = getNextTopicCodeForSubject(subCodeOrId, topics, '', s);
+
+                                            return (
+                                              <button
+                                                key={`${subCodeOrId}-${paperCode}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  // Find units belonging to this subject
+                                                  const subUnits = units.filter(u => {
+                                                    const uSubId = String(u.subject_id || '').trim();
+                                                    const uSubCode = String(u.subject_code || '').trim();
+                                                    const uCode = String(u.code || '').replace(/\s+/g, '').toUpperCase();
+                                                    return (
+                                                      uSubId === subCodeOrId ||
+                                                      uSubCode === subCodeOrId ||
+                                                      (paperCode && (uSubCode === paperCode || uSubId === paperCode)) ||
+                                                      (cleanPaperCode && cleanPaperCode.length >= 2 && uCode.startsWith(cleanPaperCode))
+                                                    );
+                                                  });
+                                                  const firstUnit = subUnits[0];
+                                                  const nextTopicCode = getNextTopicCodeForSubject(subCodeOrId, topics, firstUnit?.code, s);
+
+                                                  setFormData({
+                                                    ...formData,
+                                                    subject_id: subCodeOrId,
+                                                    subject_code: paperCode || subCodeOrId,
+                                                    subject_name: fullTitle,
+                                                    unit_id: firstUnit?.code || firstUnit?.id || '',
+                                                    unit_code: firstUnit?.code || '',
+                                                    bloom_level: firstUnit?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
+                                                    code: nextTopicCode,
+                                                    name: (!formData.name || formData.name.startsWith('TOPIC')) ? nextTopicCode : formData.name,
+                                                  });
+                                                  setTopicSubjectSearch(displayLabel);
+                                                  setIsTopicSubjectDropdownOpen(false);
+                                                }}
+                                                className="w-full text-left p-2.5 hover:bg-indigo-50/80 dark:hover:bg-slate-700/60 transition-colors flex items-center justify-between gap-3 group"
+                                              >
+                                                <div className="min-w-0 flex-1">
+                                                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                                    {paperCode && (
+                                                      <span className="px-2 py-0.5 text-xs font-mono font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 rounded border border-indigo-200 dark:border-indigo-800">
+                                                        📄 {paperCode}
+                                                      </span>
+                                                    )}
+                                                    {subNumericCode && (
+                                                      <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 rounded border border-purple-200 dark:border-purple-800">
+                                                        #{subNumericCode}
+                                                      </span>
+                                                    )}
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                                      {subType}
+                                                    </span>
+                                                  </div>
+                                                  <p className="text-xs font-semibold text-slate-900 dark:text-white truncate group-hover:text-[#5B4BFF]">
+                                                    {fullTitle}
+                                                  </p>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded border border-emerald-200 dark:border-emerald-800">
+                                                    Next: {previewTopicCode}
+                                                  </span>
+                                                </div>
+                                              </button>
+                                            );
+                                          })
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            </div>
-                          );
-                        })()}
+                            );
+                          })()}
+                        </div>
 
-                        {/* Row 3: Topic Title (col-span-2), Allocated Hours (col-span-1) */}
+                        {/* Step 8: Select Unit (Cascading from Selected Subject), Topic Code (Auto) & Bloom's Level */}
+                        <div className="grid grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 8: Select Unit *</span>
+                              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
+                                {availableUnits.length} units
+                              </span>
+                            </label>
+                            <select
+                              required
+                              value={units.find(u => u.id === formData.unit_id || u.code === formData.unit_id)?.code || formData.unit_id || ''}
+                              onChange={e => {
+                                const val = e.target.value;
+                                const found = availableUnits.find(u => u.code === val || u.id === val);
+                                const unitCode = found?.code || val;
+                                const subCode = formData.subject_code || formData.subject_id || '';
+                                const nextTopicCode = getNextTopicCodeForSubject(subCode, topics, unitCode, currentSubjectObj);
+
+                                setFormData({
+                                  ...formData,
+                                  unit_id: found?.code || found?.id || val,
+                                  unit_code: found?.code || '',
+                                  _resolved_unit_id: found?.id,
+                                  bloom_level: found?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
+                                  code: (!formData.code || formData.code.startsWith('TOPIC') || (nextTopicCode && /^\d+$/.test(nextTopicCode))) ? nextTopicCode : formData.code,
+                                });
+                              }}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">-- Choose Unit --</option>
+                              {availableUnits.map(u => (
+                                <option key={u.id} value={u.code || u.id}>
+                                  📑 {u.code} — {u.name && u.name !== u.code ? u.name : (u.description ? u.description.slice(0, 25) : u.code)}
+                                </option>
+                              ))}
+                            </select>
+                            {availableUnits.length === 0 && formData.subject_id && (
+                              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-1">
+                                ⚠️ No units found for this subject yet. You can still create the topic or add a Unit first.
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Topic Code (Auto) *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={formData.code || ''}
+                              onChange={e => setFormData({ ...formData, code: e.target.value })}
+                              placeholder="e.g. BCS502-T1 or 851851"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 truncate" title={isMedicalTopic ? 'Enter No of Competency Under This Topic' : "Bloom's Knowledge Level"}>
+                              {isMedicalTopic ? 'Enter No of Competency Under This Topic *' : "Bloom's Knowledge Level *"}
+                            </label>
+                            {isMedicalTopic ? (
+                              <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                required
+                                value={formData.competency_count || formData.competencies_count || (formData.bloom_level && !isNaN(Number(formData.bloom_level)) ? formData.bloom_level : '')}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setFormData({
+                                    ...formData,
+                                    competency_count: val,
+                                    competencies_count: val,
+                                    bloom_level: val ? `Competencies: ${val}` : '',
+                                  });
+                                }}
+                                placeholder="e.g. 5"
+                                className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                              />
+                            ) : (
+                              <select
+                                required
+                                value={formData.bloom_level || 'KL-2 (Understand)'}
+                                onChange={e => setFormData({ ...formData, bloom_level: e.target.value })}
+                                className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                              >
+                                <option value="KL-1 (Remember)">KL-1 (Remember)</option>
+                                <option value="KL-2 (Understand)">KL-2 (Understand)</option>
+                                <option value="KL-3 (Apply)">KL-3 (Apply)</option>
+                                <option value="KL-4 (Analyze)">KL-4 (Analyze)</option>
+                                <option value="KL-5 (Evaluate)">KL-5 (Evaluate)</option>
+                                <option value="KL-6 (Create)">KL-6 (Create)</option>
+                              </select>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Row: Topic Title (col-span-2), Allocated Hours (col-span-1) */}
                         <div className="grid grid-cols-3 gap-2.5">
                           <div className="col-span-2">
                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -4459,67 +6273,46 @@ export default function AdminMasterPage() {
                           </div>
                         </div>
 
-                        
                         {/* Row: Learning Method & Assessment Method */}
-                        {(() => {
-                          const selectedCourseCd = formData.course_cd || '13';
-                          const selectedCourseObj = availableCourses.find((c: any) => c.course_cd === selectedCourseCd || c.code === selectedCourseCd || c.id === selectedCourseCd);
-                          const isMedicalTopic = Boolean(
-                            selectedCourseObj?.academic_system === 'professional' ||
-                            selectedCourseObj?.academicSystem === 'professional' ||
-                            selectedCourseObj?.name?.toUpperCase().includes('MBBS') ||
-                            selectedCourseObj?.name?.toUpperCase().includes('BAMS') ||
-                            selectedCourseObj?.name?.toUpperCase().includes('MD') ||
-                            selectedCourseObj?.name?.toUpperCase().includes('MS') ||
-                            selectedCourseObj?.name?.toUpperCase().includes('BDS') ||
-                            selectedCourseObj?.code === '100' ||
-                            selectedCourseObj?.course_cd === '100' ||
-                            currentCollege?.slug === 'srms-ims' ||
-                            currentCollege?.slug === 'rmribar'
-                          );
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Learning Method
+                            </label>
+                            <select
+                              value={formData.learning_method || ''}
+                              onChange={e => setFormData({ ...formData, learning_method: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">-- Select Learning Method --</option>
+                              {(isMedicalTopic ? MEDICAL_LEARNING_METHODS : ENGINEERING_LEARNING_METHODS).map(opt => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                          return (
-                            <div className="grid grid-cols-2 gap-2.5">
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Learning Method
-                                </label>
-                                <select
-                                  value={formData.learning_method || ''}
-                                  onChange={e => setFormData({ ...formData, learning_method: e.target.value })}
-                                  className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                                >
-                                  <option value="">-- Select Learning Method --</option>
-                                  {(isMedicalTopic ? MEDICAL_LEARNING_METHODS : ENGINEERING_LEARNING_METHODS).map(opt => (
-                                    <option key={opt} value={opt}>
-                                      {opt}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Assessment Method
+                            </label>
+                            <select
+                              value={formData.assessment_method || ''}
+                              onChange={e => setFormData({ ...formData, assessment_method: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">-- Select Assessment Method --</option>
+                              {(isMedicalTopic ? MEDICAL_ASSESSMENT_METHODS : ENGINEERING_ASSESSMENT_METHODS).map(opt => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
 
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Assessment Method
-                                </label>
-                                <select
-                                  value={formData.assessment_method || ''}
-                                  onChange={e => setFormData({ ...formData, assessment_method: e.target.value })}
-                                  className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
-                                >
-                                  <option value="">-- Select Assessment Method --</option>
-                                  {(isMedicalTopic ? MEDICAL_ASSESSMENT_METHODS : ENGINEERING_ASSESSMENT_METHODS).map(opt => (
-                                    <option key={opt} value={opt}>
-                                      {opt}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Row 4: Topic Description (col-span-2), Linked Guideline (col-span-1) */}
+                        {/* Row: Topic Description (col-span-2), Linked Guideline (col-span-1) */}
                         <div className="grid grid-cols-3 gap-2.5">
                           <div className="col-span-2">
                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -4558,7 +6351,7 @@ export default function AdminMasterPage() {
                     );
                   })()}
 
-                  {/* Form fields for Competencies / Sub-Topics (Compact Multi-Column Grid Layout & In-Modal Queue) */}
+                  {/* Form fields for Competencies / Sub-Topics (With Cascading Selectors, SRMS Live API & Auto Sub-Topic Code) */}
                   {activeTab === 'competencies' && (() => {
                     const currentCollege = colleges.find(c => c.code === formData.college_id || c.id === formData.college_id || c.slug === formData.college_slug) || colleges[0];
                     const availableCourses = getCoursesForCollege(currentCollege?.id || currentCollege?.slug);
@@ -4571,29 +6364,66 @@ export default function AdminMasterPage() {
                     });
                     const selectedBranchCd = formData.branch_cd || availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1';
 
+                    const availableBatches = batches.filter(b => {
+                      const isColMatch = !currentCollege || b.college_id === currentCollege.id || b.college_slug === currentCollege.slug || String(b.colg_cd) === String(currentCollege.code);
+                      const isCourseMatch = !selectedCourseCd || b.course_cd === selectedCourseCd;
+                      return isColMatch && isCourseMatch;
+                    });
+
                     const availableSubjects = subjects.filter(s => {
                       const isColMatch = !currentCollege || s.college_id === currentCollege.id || s.college_slug === currentCollege.slug;
                       const isCourseMatch = !selectedCourseCd || s.course_cd === selectedCourseCd;
                       const isBranchMatch = !selectedBranchCd || s.branch_cd === selectedBranchCd || s.department_id === selectedBranchCd;
-                      return isColMatch && isCourseMatch && isBranchMatch;
+                      const isSemMatch = !formData.sem_cd || String(s.sem_cd) === String(formData.sem_cd) || String(s.semester || '').includes(String(formData.sem_cd));
+                      return isColMatch && isCourseMatch && isBranchMatch && isSemMatch;
                     });
-                    const selectedSubCode = formData.subject_code || formData.subject_id || availableSubjects[0]?.code || '';
+
+                    // Strict matching for availableUnits for the selected subject:
+                    const selectedSubCd = String(formData.subject_id || formData.subject_code || '').trim();
+                    const selectedSubPaper = String(formData.subject_code || '').trim();
+                    const cleanSubPaper = selectedSubPaper.replace(/\s+/g, '').toUpperCase();
+                    const currentSubjectObj = subTopicLiveSubjects.find((s: any) =>
+                      String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+                      String(s.sub_addinfo || '') === String(formData.subject_code)
+                    ) || subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
 
                     const availableUnits = units.filter(u => {
                       const isColMatch = !currentCollege || u.college_id === currentCollege.id || u.college_slug === currentCollege.slug;
                       const isCourseMatch = !selectedCourseCd || u.course_cd === selectedCourseCd;
                       const isBranchMatch = !selectedBranchCd || u.branch_cd === selectedBranchCd;
-                      const isSubMatch = !selectedSubCode || u.subject_code === selectedSubCode || u.subject_id === selectedSubCode;
+                      if (!selectedSubCd && !selectedSubPaper) return isColMatch && isCourseMatch && isBranchMatch;
+
+                      const uSubId = String(u.subject_id || '').trim();
+                      const uSubCode = String(u.subject_code || '').trim();
+                      const uCode = String(u.code || '').replace(/\s+/g, '').toUpperCase();
+
+                      const isSubMatch =
+                        (selectedSubCd && (uSubId === selectedSubCd || uSubCode === selectedSubCd)) ||
+                        (selectedSubPaper && (uSubCode === selectedSubPaper || uSubId === selectedSubPaper)) ||
+                        (cleanSubPaper && cleanSubPaper.length >= 2 && uCode.startsWith(cleanSubPaper));
+
                       return isColMatch && isCourseMatch && isBranchMatch && isSubMatch;
                     });
                     const selectedUnitCode = formData.unit_code || formData.unit_id || availableUnits[0]?.code || '';
 
+                    // Strict matching for availableTopics for the selected unit and subject:
                     const availableTopics = topics.filter(t => {
                       const isColMatch = !currentCollege || t.college_id === currentCollege.id || t.college_slug === currentCollege.slug;
                       const isCourseMatch = !selectedCourseCd || t.course_cd === selectedCourseCd;
                       const isBranchMatch = !selectedBranchCd || t.branch_cd === selectedBranchCd;
-                      const isSubMatch = !selectedSubCode || t.subject_code === selectedSubCode || t.subject_id === selectedSubCode;
-                      const isUnitMatch = !selectedUnitCode || t.unit_code === selectedUnitCode || t.unit_id === selectedUnitCode;
+                      if (!selectedSubCd && !selectedSubPaper) return isColMatch && isCourseMatch && isBranchMatch;
+
+                      const tSubId = String(t.subject_id || '').trim();
+                      const tSubCode = String(t.subject_code || '').trim();
+                      const tUnitId = String(t.unit_id || '').trim();
+                      const tUnitCode = String(t.unit_code || '').trim();
+
+                      const isSubMatch =
+                        (selectedSubCd && (tSubId === selectedSubCd || tSubCode === selectedSubCd)) ||
+                        (selectedSubPaper && (tSubCode === selectedSubPaper || tSubId === selectedSubPaper));
+
+                      const isUnitMatch = !selectedUnitCode || tUnitCode === selectedUnitCode || tUnitId === selectedUnitCode;
+
                       return isColMatch && isCourseMatch && isBranchMatch && isSubMatch && isUnitMatch;
                     });
                     const selectedTopicCode = formData.topic_code || formData.topic_id || availableTopics[0]?.code || '';
@@ -4602,7 +6432,7 @@ export default function AdminMasterPage() {
                     const activeCheckCode = (subTopicCode || formData.code || '').trim().toUpperCase();
                     const codeExistsInSubject = activeCheckCode ? competencies.some(c =>
                       c.code?.toUpperCase() === activeCheckCode &&
-                      (c.subject_code === selectedSubCode || c.subject_id === selectedSubCode || !selectedSubCode)
+                      (c.subject_code === selectedSubCd || c.subject_id === selectedSubCd || !selectedSubCd)
                     ) : false;
 
                     const handleAddSubTopicToQueue = () => {
@@ -4623,274 +6453,675 @@ export default function AdminMasterPage() {
                         return;
                       }
 
-                      setTempCompetencies(prev => [
-                        ...prev,
-                        {
-                          code,
-                          name,
-                          description: desc,
-                          domain: subTopicDomain || formData.domain || 'Knowledge',
-                          level: subTopicLevel || formData.level || 'Knows How',
-                          bloom_level: subTopicBloom || formData.bloom_level || 'KL-2 (Understand)',
-                          is_core: subTopicCore,
-                        },
-                      ]);
+                      const newItem: TempCompetencyItem = {
+                        code,
+                        name,
+                        description: desc,
+                        domain: subTopicDomain || formData.domain || 'Knowledge',
+                        level: subTopicLevel || formData.level || 'Knows How',
+                        bloom_level: subTopicBloom || formData.bloom_level || 'KL-2 (Understand)',
+                        is_core: subTopicCore,
+                      };
 
-                      const nextSeq = String(tempCompetencies.length + 2).padStart(2, '0');
-                      if (code.includes('-ST')) {
-                        setSubTopicCode(`${code.split('-ST')[0]}-ST${nextSeq}`);
-                      } else {
-                        setSubTopicCode(`${code}-ST${nextSeq}`);
-                      }
+                      const newQueue = [...tempCompetencies, newItem];
+                      setTempCompetencies(newQueue);
+
+                      const nextCode = getNextSubTopicCodeForTopic(
+                        selectedTopicCode || formData.topic_code || formData.topic_id,
+                        competencies,
+                        currentSubjectObj,
+                        newQueue
+                      );
+                      setSubTopicCode(nextCode);
+                      setFormData(prev => ({ ...prev, code: nextCode }));
                       setSubTopicName('');
                       setSubTopicDesc('');
                     };
 
+                    const selectedCourseObj = availableCourses.find((c: any) => c.course_cd === selectedCourseCd || c.code === selectedCourseCd || c.id === selectedCourseCd);
+                    const isMedicalTopic = Boolean(
+                      selectedCourseObj?.academic_system === 'professional' ||
+                      selectedCourseObj?.academicSystem === 'professional' ||
+                      selectedCourseObj?.name?.toUpperCase().includes('MBBS') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('BAMS') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('MD') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('MS') ||
+                      selectedCourseObj?.name?.toUpperCase().includes('BDS') ||
+                      selectedCourseObj?.code === '100' ||
+                      selectedCourseObj?.course_cd === '100' ||
+                      currentCollege?.slug === 'srms-ims' ||
+                      currentCollege?.slug === 'rmribar'
+                    );
+                    const learningOptions = isMedicalTopic ? MEDICAL_LEARNING_METHODS : ENGINEERING_LEARNING_METHODS;
+                    const assessmentOptions = isMedicalTopic ? MEDICAL_ASSESSMENT_METHODS : ENGINEERING_ASSESSMENT_METHODS;
+
                     return (
                       <>
-                        {/* Row 1: 4-Column Header Ribbon (College, Course, Branch, Subject) */}
-                        <div className="grid grid-cols-4 gap-2 bg-[#F6F8FC] dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                          <div className="space-y-1">
-                            <label className="text-slate-700 dark:text-slate-300 font-extrabold text-[11px] block truncate">
-                              🏛️ 1. College *
+                        {/* Step 1: Select College */}
+                        <div className="space-y-1 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                          <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
+                            <span>Step 1: Select College *</span>
+                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">
+                              colg_cd: #{currentCollege?.code || '1'}
+                            </span>
+                          </label>
+                          <select
+                            required
+                            value={currentCollege?.code || currentCollege?.id || formData.college_id}
+                            onChange={(e) => {
+                              const newColCd = e.target.value;
+                              const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
+                              const colCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
+                              const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '';
+                              const newDepts = departments.filter(d =>
+                                (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newCol?.code)) &&
+                                (!firstCourseCd || d.course_cd === firstCourseCd)
+                              );
+                              const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
+                              const newBatches = batches.filter(b =>
+                                (b.college_id === newCol?.id || b.college_slug === newCol?.slug || String(b.colg_cd) === String(newCol?.code)) &&
+                                (!firstCourseCd || b.course_cd === firstCourseCd)
+                              );
+                              const firstBatch = newBatches[0];
+                              const firstBatchCd = firstBatch?.batch_cd || firstBatch?.code || '17';
+                              const firstBatchYear = firstBatch?.year || 2024;
+
+                              setFormData({
+                                ...formData,
+                                college_id: newCol?.code || newCol?.id || newColCd,
+                                college_slug: newCol?.slug || '',
+                                course_cd: firstCourseCd,
+                                branch_cd: firstBranchCd,
+                                department_id: firstBranchCd,
+                                batch_id: firstBatchCd,
+                                batch_cd: firstBatchCd,
+                                batch_year: firstBatchYear,
+                                sem_cd: '5',
+                                semester: 'Semester 5',
+                                sec_cd: '1',
+                                section: 'Section A',
+                                subject_id: '',
+                                subject_code: '',
+                                unit_id: '',
+                                unit_code: '',
+                                topic_id: '',
+                                topic_code: '',
+                                code: 'ST01',
+                              });
+                              setSubTopicCode('ST01');
+                              setSubTopicSubjectSearch('');
+                              setIsSubTopicSubjectDropdownOpen(false);
+                              fetchSubTopicSubjects(newCol?.code || newCol?.id || newColCd, firstCourseCd, firstBranchCd, firstBatchCd, '5', '1', newCol?.slug);
+                            }}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          >
+                            {colleges.map(c => (
+                              <option key={c.id} value={c.code || c.id}>
+                                🏛️ {c.name} ({c.slug})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Step 2: Select Course */}
+                        <div className="space-y-1 bg-amber-50/50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+                          <label className="text-amber-900 dark:text-amber-300 font-extrabold flex items-center justify-between">
+                            <span>Step 2: Select Course *</span>
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">
+                              course_cd: #{selectedCourseCd || '1'}
+                            </span>
+                          </label>
+                          <select
+                            required
+                            value={selectedCourseCd}
+                            onChange={(e) => {
+                              const newCourseCd = e.target.value;
+                              const newDepts = departments.filter(d =>
+                                (d.college_id === currentCollege?.id || d.college_slug === currentCollege?.slug || String(d.colg_cd) === String(currentCollege?.code)) &&
+                                (!newCourseCd || d.course_cd === newCourseCd || d.course_code === newCourseCd)
+                              );
+                              const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
+                              const newBatches = batches.filter(b =>
+                                (b.college_id === currentCollege?.id || b.college_slug === currentCollege?.slug || String(b.colg_cd) === String(currentCollege?.code)) &&
+                                (!newCourseCd || b.course_cd === newCourseCd)
+                              );
+                              const firstBatch = newBatches[0];
+                              const firstBatchCd = firstBatch?.batch_cd || firstBatch?.code || '17';
+                              const firstBatchYear = firstBatch?.year || 2024;
+
+                              setFormData({
+                                ...formData,
+                                course_cd: newCourseCd,
+                                branch_cd: firstBranchCd,
+                                department_id: firstBranchCd,
+                                batch_id: firstBatchCd,
+                                batch_cd: firstBatchCd,
+                                batch_year: firstBatchYear,
+                                sem_cd: '5',
+                                semester: 'Semester 5',
+                                sec_cd: '1',
+                                section: 'Section A',
+                                subject_id: '',
+                                subject_code: '',
+                                unit_id: '',
+                                unit_code: '',
+                                topic_id: '',
+                                topic_code: '',
+                                code: 'ST01',
+                              });
+                              setSubTopicCode('ST01');
+                              setSubTopicSubjectSearch('');
+                              setIsSubTopicSubjectDropdownOpen(false);
+                              fetchSubTopicSubjects(currentCollege?.code || formData.college_id, newCourseCd, firstBranchCd, firstBatchCd, '5', '1', currentCollege?.slug);
+                            }}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          >
+                            {availableCourses.map(c => (
+                              <option key={c.id || c.code} value={c.course_cd || c.code}>
+                                🎓 {c.name} (Code: #{c.course_cd || c.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Step 3: Select Branch / Department */}
+                        <div className="space-y-1 bg-emerald-50/50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                          <label className="text-emerald-900 dark:text-emerald-300 font-extrabold flex items-center justify-between">
+                            <span>Step 3: Select Branch / Department *</span>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                              branch_cd: #{selectedBranchCd || '1'}
+                            </span>
+                          </label>
+                          <select
+                            required
+                            value={selectedBranchCd}
+                            onChange={(e) => {
+                              const newBranchCd = e.target.value;
+                              setFormData({
+                                ...formData,
+                                branch_cd: newBranchCd,
+                                department_id: newBranchCd,
+                                subject_id: '',
+                                subject_code: '',
+                                unit_id: '',
+                                unit_code: '',
+                                topic_id: '',
+                                topic_code: '',
+                                code: 'ST01',
+                              });
+                              setSubTopicCode('ST01');
+                              setSubTopicSubjectSearch('');
+                              setIsSubTopicSubjectDropdownOpen(false);
+                              fetchSubTopicSubjects(
+                                currentCollege?.code || formData.college_id,
+                                selectedCourseCd,
+                                newBranchCd,
+                                formData.batch_id || formData.batch_cd || '17',
+                                formData.sem_cd || '5',
+                                formData.sec_cd || '1',
+                                currentCollege?.slug
+                              );
+                            }}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          >
+                            {availableDepts.length === 0 ? (
+                              <option value="1">Dept #1</option>
+                            ) : (
+                              availableDepts.map(d => {
+                                const displayCode = d.branch_cd || d.code || '1';
+                                const displayName = (d.name && d.name !== '-') ? d.name : `Dept ${displayCode}`;
+                                return (
+                                  <option key={d.id} value={displayCode}>
+                                    🏢 {displayName} (Code: #{displayCode})
+                                  </option>
+                                );
+                              })
+                            )}
+                          </select>
+                        </div>
+
+                        {/* Step 4: Select Batch (Cascading) */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 4: Select Batch *</span>
+                              <span className="text-[10px] text-purple-600 dark:text-purple-400 font-mono">
+                                batch_cd: #{formData.batch_cd || '17'}
+                              </span>
                             </label>
                             <select
                               required
-                              value={currentCollege?.code || currentCollege?.id || formData.college_id}
+                              value={formData.batch_cd || formData.batch_id || '17'}
                               onChange={(e) => {
-                                const newColCd = e.target.value;
-                                const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
-                                const colCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
-                                const firstCourseCd = colCourses[0]?.course_cd || colCourses[0]?.code || '';
-                                const newDepts = departments.filter(d =>
-                                  (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newCol?.code)) &&
-                                  (!firstCourseCd || d.course_cd === firstCourseCd)
+                                const chosenBatchCd = e.target.value;
+                                const selectedB = availableBatches.find(b =>
+                                  String(b.batch_cd) === chosenBatchCd || String(b.code) === chosenBatchCd || String(b.year) === chosenBatchCd || String(b.id) === chosenBatchCd
                                 );
-                                const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
-                                const newSubjects = subjects.filter(s =>
-                                  (s.college_id === newCol?.id || s.college_slug === newCol?.slug) &&
-                                  (!firstCourseCd || s.course_cd === firstCourseCd) &&
-                                  (!firstBranchCd || s.branch_cd === firstBranchCd || s.department_id === firstBranchCd)
-                                );
-                                const firstSubCode = newSubjects[0]?.code || '';
-                                const newUnits = units.filter(u =>
-                                  (u.college_id === newCol?.id || u.college_slug === newCol?.slug) &&
-                                  (!firstCourseCd || u.course_cd === firstCourseCd) &&
-                                  (!firstSubCode || u.subject_code === firstSubCode)
-                                );
-                                const firstUnit = newUnits[0];
-                                const newTopics = topics.filter(t =>
-                                  (t.college_id === newCol?.id || t.college_slug === newCol?.slug) &&
-                                  (!firstCourseCd || t.course_cd === firstCourseCd) &&
-                                  (!firstSubCode || t.subject_code === firstSubCode) &&
-                                  (!firstUnit?.code || t.unit_code === firstUnit?.code)
-                                );
-                                const firstTopic = newTopics[0];
-                                const autoSubCode = `${firstTopic?.code ? firstTopic.code + '-' : ''}ST01`;
-                                setSubTopicCode(autoSubCode);
+                                const chosenYear = selectedB?.year || formData.batch_year || 2024;
 
                                 setFormData({
                                   ...formData,
-                                  college_id: newCol?.code || newCol?.id || newColCd,
-                                  college_slug: newCol?.slug || '',
-                                  course_cd: firstCourseCd,
-                                  branch_cd: firstBranchCd,
-                                  department_id: firstBranchCd,
-                                  subject_id: firstSubCode || newSubjects[0]?.id || '',
-                                  subject_code: firstSubCode,
-                                  unit_id: firstUnit?.code || '',
-                                  unit_code: firstUnit?.code || '',
-                                  topic_id: firstTopic?.code || '',
-                                  topic_code: firstTopic?.code || '',
-                                  bloom_level: firstTopic?.bloom_level || firstUnit?.bloom_level || 'KL-2 (Understand)',
-                                  code: autoSubCode,
+                                  batch_id: chosenBatchCd,
+                                  batch_cd: chosenBatchCd,
+                                  _resolved_batch_id: selectedB?.id,
+                                  batch_year: chosenYear,
+                                  subject_id: '',
+                                  subject_code: '',
+                                  unit_id: '',
+                                  unit_code: '',
+                                  topic_id: '',
+                                  topic_code: '',
+                                  code: 'ST01',
                                 });
+                                setSubTopicCode('ST01');
+                                setSubTopicSubjectSearch('');
+                                setIsSubTopicSubjectDropdownOpen(false);
+                                fetchSubTopicSubjects(
+                                  currentCollege?.code || formData.college_id,
+                                  selectedCourseCd,
+                                  selectedBranchCd,
+                                  chosenBatchCd,
+                                  formData.sem_cd || '5',
+                                  formData.sec_cd || '1',
+                                  currentCollege?.slug
+                                );
                               }}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] truncate"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              {colleges.map(c => (
-                                <option key={c.id} value={c.code || c.id}>{c.name} ({c.code})</option>
+                              <option value="">-- Select Batch --</option>
+                              {availableBatches.map(b => (
+                                <option key={b.id} value={b.batch_cd || b.code || b.year || b.id}>
+                                  📅 {b.name || `Batch ${b.year}`} (Code: #{b.batch_cd || b.year})
+                                </option>
                               ))}
                             </select>
                           </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Batch Admission Year
+                            </label>
+                            <input
+                              type="number"
+                              min="2000"
+                              max="2100"
+                              value={formData.batch_year || 2024}
+                              onChange={e => setFormData({ ...formData, batch_year: Number(e.target.value) })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            />
+                          </div>
+                        </div>
 
-                          <div className="space-y-1">
-                            <label className="text-slate-700 dark:text-slate-300 font-extrabold text-[11px] block truncate">
-                              🎓 2. Course *
+                        {/* Step 5: Select Semester & Step 6: Select Section (Cascading) */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 5: Select Semester *</span>
+                              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
+                                sem_cd: #{formData.sem_cd || '5'}
+                              </span>
                             </label>
                             <select
                               required
-                              value={selectedCourseCd}
+                              value={formData.sem_cd || '5'}
                               onChange={(e) => {
-                                const newCourseCd = e.target.value;
-                                const newDepts = departments.filter(d =>
-                                  (d.college_id === currentCollege?.id || d.college_slug === currentCollege?.slug || String(d.colg_cd) === String(currentCollege?.code)) &&
-                                  (!newCourseCd || d.course_cd === newCourseCd || d.course_code === newCourseCd)
-                                );
-                                const firstBranchCd = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
-                                const newSubjects = subjects.filter(s =>
-                                  (s.college_id === currentCollege?.id || s.college_slug === currentCollege?.slug) &&
-                                  (!newCourseCd || s.course_cd === newCourseCd) &&
-                                  (!firstBranchCd || s.branch_cd === firstBranchCd || s.department_id === firstBranchCd)
-                                );
-                                const firstSubCode = newSubjects[0]?.code || '';
-                                const newUnits = units.filter(u =>
-                                  (u.college_id === currentCollege?.id || u.college_slug === currentCollege?.slug) &&
-                                  (!newCourseCd || u.course_cd === newCourseCd) &&
-                                  (!firstSubCode || u.subject_code === firstSubCode)
-                                );
-                                const firstUnit = newUnits[0];
-                                const newTopics = topics.filter(t =>
-                                  (t.college_id === currentCollege?.id || t.college_slug === currentCollege?.slug) &&
-                                  (!newCourseCd || t.course_cd === newCourseCd) &&
-                                  (!firstSubCode || t.subject_code === firstSubCode) &&
-                                  (!firstUnit?.code || t.unit_code === firstUnit?.code)
-                                );
-                                const firstTopic = newTopics[0];
-                                const autoSubCode = `${firstTopic?.code ? firstTopic.code + '-' : ''}ST01`;
-                                setSubTopicCode(autoSubCode);
-
+                                const newSemCd = e.target.value;
+                                const semName = `Semester ${newSemCd}`;
                                 setFormData({
                                   ...formData,
-                                  course_cd: newCourseCd,
-                                  branch_cd: firstBranchCd,
-                                  department_id: firstBranchCd,
-                                  subject_id: firstSubCode || newSubjects[0]?.id || '',
-                                  subject_code: firstSubCode,
-                                  unit_id: firstUnit?.code || '',
-                                  unit_code: firstUnit?.code || '',
-                                  topic_id: firstTopic?.code || '',
-                                  topic_code: firstTopic?.code || '',
-                                  bloom_level: firstTopic?.bloom_level || firstUnit?.bloom_level || 'KL-2 (Understand)',
-                                  code: autoSubCode,
+                                  sem_cd: newSemCd,
+                                  semester: semName,
+                                  subject_id: '',
+                                  subject_code: '',
+                                  unit_id: '',
+                                  unit_code: '',
+                                  topic_id: '',
+                                  topic_code: '',
+                                  code: 'ST01',
                                 });
+                                setSubTopicCode('ST01');
+                                setSubTopicSubjectSearch('');
+                                setIsSubTopicSubjectDropdownOpen(false);
+                                fetchSubTopicSubjects(
+                                  currentCollege?.code || formData.college_id,
+                                  selectedCourseCd,
+                                  selectedBranchCd,
+                                  formData.batch_id || formData.batch_cd || '17',
+                                  newSemCd,
+                                  formData.sec_cd || '1',
+                                  currentCollege?.slug
+                                );
                               }}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] truncate"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              {availableCourses.map(c => (
-                                <option key={c.id || c.code} value={c.course_cd || c.code}>{c.name} (#{c.course_cd || c.code})</option>
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                                <option key={s} value={String(s)}>
+                                  📖 Semester {s} (Code: #{s})
+                                </option>
                               ))}
                             </select>
                           </div>
-
-                          <div className="space-y-1">
-                            <label className="text-slate-700 dark:text-slate-300 font-extrabold text-[11px] block truncate">
-                              🏢 3. Branch *
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 6: Select Section *</span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                                sec_cd: #{formData.sec_cd || '1'}
+                              </span>
                             </label>
                             <select
                               required
-                              value={selectedBranchCd}
+                              value={formData.sec_cd || '1'}
                               onChange={(e) => {
-                                const newBranchCd = e.target.value;
-                                const newSubjects = subjects.filter(s =>
-                                  (s.college_id === currentCollege?.id || s.college_slug === currentCollege?.slug) &&
-                                  (!selectedCourseCd || s.course_cd === selectedCourseCd) &&
-                                  (!newBranchCd || s.branch_cd === newBranchCd || s.department_id === newBranchCd)
-                                );
-                                const firstSubCode = newSubjects[0]?.code || '';
-                                const newUnits = units.filter(u =>
-                                  (u.college_id === currentCollege?.id || u.college_slug === currentCollege?.slug) &&
-                                  (!selectedCourseCd || u.course_cd === selectedCourseCd) &&
-                                  (!newBranchCd || u.branch_cd === newBranchCd) &&
-                                  (!firstSubCode || u.subject_code === firstSubCode)
-                                );
-                                const firstUnit = newUnits[0];
-                                const newTopics = topics.filter(t =>
-                                  (t.college_id === currentCollege?.id || t.college_slug === currentCollege?.slug) &&
-                                  (!selectedCourseCd || t.course_cd === selectedCourseCd) &&
-                                  (!newBranchCd || t.branch_cd === newBranchCd) &&
-                                  (!firstSubCode || t.subject_code === firstSubCode || t.subject_id === firstSubCode) &&
-                                  (!firstUnit?.code || t.unit_code === firstUnit?.code)
-                                );
-                                const firstTopic = newTopics[0];
-                                const autoSubCode = `${firstTopic?.code ? firstTopic.code + '-' : ''}ST01`;
-                                setSubTopicCode(autoSubCode);
-
+                                const newSecCd = e.target.value;
+                                const secMap: Record<string, string> = {
+                                  '1': 'Section A',
+                                  '2': 'Section B',
+                                  '3': 'Section C',
+                                  '4': 'Section D',
+                                  'all': 'All Sections',
+                                };
+                                const newSecName = secMap[newSecCd] || `Section ${newSecCd}`;
                                 setFormData({
                                   ...formData,
-                                  branch_cd: newBranchCd,
-                                  department_id: newBranchCd,
-                                  subject_id: firstSubCode || newSubjects[0]?.id || '',
-                                  subject_code: firstSubCode,
-                                  unit_id: firstUnit?.code || '',
-                                  unit_code: firstUnit?.code || '',
-                                  topic_id: firstTopic?.code || '',
-                                  topic_code: firstTopic?.code || '',
-                                  bloom_level: firstTopic?.bloom_level || firstUnit?.bloom_level || 'KL-2 (Understand)',
-                                  code: autoSubCode,
+                                  sec_cd: newSecCd,
+                                  section: newSecName,
+                                  subject_id: '',
+                                  subject_code: '',
+                                  unit_id: '',
+                                  unit_code: '',
+                                  topic_id: '',
+                                  topic_code: '',
+                                  code: 'ST01',
                                 });
-                              }}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] truncate"
-                            >
-                              {availableDepts.length === 0 ? (
-                                <option value="1">Dept #1</option>
-                              ) : (
-                                availableDepts.map(d => {
-                                  const displayCode = d.branch_cd || d.code || '1';
-                                  const displayName = (d.name && d.name !== '-') ? d.name : `Dept ${displayCode}`;
-                                  return (
-                                    <option key={d.id} value={displayCode}>{displayName} (#{displayCode})</option>
-                                  );
-                                })
-                              )}
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-slate-700 dark:text-slate-300 font-extrabold text-[11px] block truncate">
-                              📚 4. Subject *
-                            </label>
-                            <select
-                              required
-                              value={subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id)?.code || formData.subject_id || ''}
-                              onChange={e => {
-                                const val = e.target.value;
-                                const found = availableSubjects.find(s => s.code === val || s.id === val);
-                                const subCode = found?.code || val;
-                                const newUnits = units.filter(u =>
-                                  (u.college_id === currentCollege?.id || u.college_slug === currentCollege?.slug) &&
-                                  (!selectedCourseCd || u.course_cd === selectedCourseCd) &&
-                                  (!subCode || u.subject_code === subCode)
+                                setSubTopicCode('ST01');
+                                setSubTopicSubjectSearch('');
+                                setIsSubTopicSubjectDropdownOpen(false);
+                                fetchSubTopicSubjects(
+                                  currentCollege?.code || formData.college_id,
+                                  selectedCourseCd,
+                                  selectedBranchCd,
+                                  formData.batch_id || formData.batch_cd || '17',
+                                  formData.sem_cd || '5',
+                                  newSecCd,
+                                  currentCollege?.slug
                                 );
-                                const firstUnit = newUnits[0];
-                                const newTopics = topics.filter(t =>
-                                  (t.college_id === currentCollege?.id || t.college_slug === currentCollege?.slug) &&
-                                  (!selectedCourseCd || t.course_cd === selectedCourseCd) &&
-                                  (!subCode || t.subject_code === subCode) &&
-                                  (!firstUnit?.code || t.unit_code === firstUnit?.code)
-                                );
-                                const firstTopic = newTopics[0];
-                                const autoSubCode = `${firstTopic?.code ? firstTopic.code + '-' : ''}ST01`;
-                                setSubTopicCode(autoSubCode);
-
-                                setFormData({
-                                  ...formData,
-                                  subject_id: found?.code || found?.id || val,
-                                  subject_code: found?.code || '',
-                                  _resolved_subject_id: found?.id,
-                                  unit_id: firstUnit?.code || '',
-                                  unit_code: firstUnit?.code || '',
-                                  topic_id: firstTopic?.code || '',
-                                  topic_code: firstTopic?.code || '',
-                                  bloom_level: firstTopic?.bloom_level || firstUnit?.bloom_level || 'KL-2 (Understand)',
-                                  code: autoSubCode,
-                                });
                               }}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] truncate"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              <option value="">-- Choose Subject --</option>
-                              {availableSubjects.map(s => (
-                                <option key={s.id} value={s.code || s.id}>[#{s.code || 'N/A'}] {s.name}</option>
-                              ))}
+                              <option value="1">🏷️ Section A (Code: #1)</option>
+                              <option value="2">🏷️ Section B (Code: #2)</option>
+                              <option value="3">🏷️ Section C (Code: #3)</option>
+                              <option value="4">🏷️ Section D (Code: #4)</option>
+                              <option value="all">🏷️ All Sections</option>
                             </select>
                           </div>
                         </div>
 
-                        {/* Row 2: 3-Column Cascading (Unit, Topic, Linked Guideline) */}
+                        {/* Step 7: Select Subject (SRMS Live API GetAllSubjectDetail / Subject Linker with Autocomplete Search) */}
+                        <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                          {(() => {
+                            const isSrmsTenant = (currentCollege?.slug || formData.college_slug || '').toLowerCase().includes('srms');
+                            const rawSubjectList = subTopicLiveSubjects.length > 0 ? subTopicLiveSubjects : availableSubjects;
+                            const displaySubjectList = rawSubjectList.filter((s: any) => {
+                              if (!formData.sem_cd) return true;
+                              const sSem = String(s.sem_cd ?? s.semester ?? s.semester_name ?? '');
+                              return sSem === String(formData.sem_cd) || sSem.includes(String(formData.sem_cd));
+                            });
+                            const filteredSubjects = displaySubjectList.filter((s: any) => {
+                              if (!subTopicSubjectSearch.trim()) return true;
+                              const q = subTopicSubjectSearch.toLowerCase().trim();
+                              const qClean = q.replace(/\s+/g, '');
+                              const paper = getSubjectPaperCode(s).toLowerCase();
+                              const paperClean = paper.replace(/\s+/g, '');
+                              const title = getSubjectTitle(s).toLowerCase();
+                              const numCode = getSubjectNumericCode(s).toLowerCase();
+                              return paper.includes(q) || paperClean.includes(qClean) || title.includes(q) || numCode.includes(q);
+                            });
+
+                            const selectedSubjectObj = displaySubjectList.find((s: any) =>
+                              String(s.sub_cd || s.code || s.id) === String(formData.subject_id || formData.subject_code) ||
+                              String(s.sub_addinfo || '') === String(formData.subject_code) ||
+                              (getSubjectPaperCode(s) && getSubjectPaperCode(s) === String(formData.subject_code || formData.subject_id))
+                            ) || subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
+
+                            const cardPaperCode = getSubjectPaperCode(selectedSubjectObj) || formData.subject_code || '';
+                            const cardNumericCode = getSubjectNumericCode(selectedSubjectObj, formData.subject_id || formData.subject_code);
+                            const cardTitle = getSubjectTitle(selectedSubjectObj) || formData.subject_name || 'Selected Subject';
+                            const cardSubType = selectedSubjectObj?.SubTyp || selectedSubjectObj?.type || 'THEORY';
+
+                            return (
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                    <span>Step 7: Select Subject *</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                                      {loadingSubTopicSubjects ? 'Fetching subjects...' : `${displaySubjectList.length} available`}
+                                    </span>
+                                  </label>
+                                  <div className="flex items-center gap-1.5 text-[10px]">
+                                    {isSrmsTenant ? (
+                                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        SRMS Live API (GetAllSubjectDetail)
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                        Subject Linker (Faculty Linked)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Confirmed Selected Subject Card */}
+                                {formData.subject_id ? (
+                                  <div className="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/60 dark:from-indigo-950/40 dark:via-slate-900 dark:to-purple-950/30 border border-indigo-200 dark:border-indigo-800/80 rounded-xl p-3 shadow-xs">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                          {cardPaperCode && (
+                                            <span className="px-2.5 py-1 text-xs font-mono font-black bg-indigo-600 text-white rounded-lg shadow-xs flex items-center gap-1">
+                                              <span>📄</span>
+                                              <span>{cardPaperCode}</span>
+                                            </span>
+                                          )}
+                                          {cardNumericCode && (
+                                            <span className="px-2.5 py-1 text-xs font-mono font-black bg-purple-600 text-white dark:bg-purple-700 rounded-lg shadow-xs flex items-center gap-1" title={`Numeric Subject Code: ${cardNumericCode}`}>
+                                              <span className="text-[10px] uppercase font-sans font-extrabold opacity-85">Code:</span>
+                                              <span>#{cardNumericCode}</span>
+                                            </span>
+                                          )}
+                                          {cardSubType && (
+                                            <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 rounded-md border border-amber-200 dark:border-amber-800">
+                                              {cardSubType}
+                                            </span>
+                                          )}
+                                          {formData.code && (
+                                            <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-800 font-mono">
+                                              Auto Sub-Topic: {formData.code}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                          {cardTitle}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setFormData({
+                                            ...formData,
+                                            subject_id: '',
+                                            subject_code: '',
+                                            subject_name: '',
+                                            unit_id: '',
+                                            unit_code: '',
+                                            topic_id: '',
+                                            topic_code: '',
+                                            code: 'ST01',
+                                          });
+                                          setSubTopicCode('ST01');
+                                          setSubTopicSubjectSearch('');
+                                          setIsSubTopicSubjectDropdownOpen(true);
+                                        }}
+                                        className="shrink-0 text-xs px-2.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold border border-indigo-200 dark:border-indigo-800 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.83 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                                        </svg>
+                                        <span>Change Subject</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  /* Autocomplete Search Input & Dropdown */
+                                  <div className="relative">
+                                    <div className="relative">
+                                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                                      </svg>
+                                      <input
+                                        type="text"
+                                        value={subTopicSubjectSearch}
+                                        onFocus={() => setIsSubTopicSubjectDropdownOpen(true)}
+                                        onChange={(e) => {
+                                          setSubTopicSubjectSearch(e.target.value);
+                                          setIsSubTopicSubjectDropdownOpen(true);
+                                        }}
+                                        placeholder="🔍 Search subject by paper code (e.g. BCS 052), code (e.g. 88622), or title..."
+                                        className="w-full pl-9 pr-8 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#5B4BFF] shadow-xs"
+                                      />
+                                      {subTopicSubjectSearch && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setSubTopicSubjectSearch('')}
+                                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                                        >
+                                          ✕
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Dropdown list */}
+                                    {isSubTopicSubjectDropdownOpen && (
+                                      <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl divide-y divide-slate-100 dark:divide-slate-750">
+                                        {loadingSubTopicSubjects ? (
+                                          <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400 flex items-center justify-center gap-2">
+                                            <span className="w-3 h-3 rounded-full border-2 border-[#5B4BFF] border-t-transparent animate-spin"></span>
+                                            <span>Fetching live subjects for Semester {formData.sem_cd || '5'}...</span>
+                                          </div>
+                                        ) : filteredSubjects.length === 0 ? (
+                                          <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                                            No subjects found matching "{subTopicSubjectSearch}".
+                                          </div>
+                                        ) : (
+                                          filteredSubjects.map((s: any) => {
+                                            const subCodeOrId = String(s.sub_cd || s.code || s.id);
+                                            const subNumericCode = getSubjectNumericCode(s, subCodeOrId);
+                                            const paperCode = getSubjectPaperCode(s);
+                                            const cleanPaperCode = paperCode.replace(/\s+/g, '').toUpperCase();
+                                            const fullTitle = getSubjectTitle(s);
+                                            const displayLabel = getSubjectDisplayLabel(s);
+                                            const subType = s.SubTyp || s.type || 'THEORY';
+
+                                            // Find units belonging to this subject
+                                            const subUnits = units.filter(u => {
+                                              const uSubId = String(u.subject_id || '').trim();
+                                              const uSubCode = String(u.subject_code || '').trim();
+                                              const uCode = String(u.code || '').replace(/\s+/g, '').toUpperCase();
+                                              return (
+                                                uSubId === subCodeOrId ||
+                                                uSubCode === subCodeOrId ||
+                                                (paperCode && (uSubCode === paperCode || uSubId === paperCode)) ||
+                                                (cleanPaperCode && cleanPaperCode.length >= 2 && uCode.startsWith(cleanPaperCode))
+                                              );
+                                            });
+                                            const firstUnit = subUnits[0];
+                                            const unitCode = firstUnit?.code || '';
+
+                                            // Find topics belonging to firstUnit
+                                            const subTopics = topics.filter(t => {
+                                              const tSubId = String(t.subject_id || '').trim();
+                                              const tSubCode = String(t.subject_code || '').trim();
+                                              const tUnitId = String(t.unit_id || '').trim();
+                                              const tUnitCode = String(t.unit_code || '').trim();
+                                              const isSubMatch = tSubId === subCodeOrId || tSubCode === subCodeOrId || (paperCode && (tSubCode === paperCode || tSubId === paperCode));
+                                              const isUnitMatch = !unitCode || tUnitCode === unitCode || tUnitId === unitCode || tUnitId === firstUnit?.id;
+                                              return isSubMatch && isUnitMatch;
+                                            });
+                                            const firstTopic = subTopics[0];
+                                            const previewSubCode = getNextSubTopicCodeForTopic(firstTopic?.code, competencies, s, tempCompetencies);
+
+                                            return (
+                                              <button
+                                                key={`${subCodeOrId}-${paperCode}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  setFormData({
+                                                    ...formData,
+                                                    subject_id: subCodeOrId,
+                                                    subject_code: paperCode || subCodeOrId,
+                                                    subject_name: fullTitle,
+                                                    unit_id: firstUnit?.code || firstUnit?.id || '',
+                                                    unit_code: firstUnit?.code || '',
+                                                    _resolved_unit_id: firstUnit?.id,
+                                                    topic_id: firstTopic?.code || firstTopic?.id || '',
+                                                    topic_code: firstTopic?.code || '',
+                                                    _resolved_topic_id: firstTopic?.id,
+                                                    bloom_level: firstTopic?.bloom_level || firstUnit?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
+                                                    code: previewSubCode,
+                                                  });
+                                                  setSubTopicCode(previewSubCode);
+                                                  setSubTopicSubjectSearch(displayLabel);
+                                                  setIsSubTopicSubjectDropdownOpen(false);
+                                                }}
+                                                className="w-full text-left p-2.5 hover:bg-indigo-50/80 dark:hover:bg-slate-700/60 transition-colors flex items-center justify-between gap-3 group"
+                                              >
+                                                <div className="min-w-0 flex-1">
+                                                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                                    {paperCode && (
+                                                      <span className="px-2 py-0.5 text-xs font-mono font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 rounded border border-indigo-200 dark:border-indigo-800">
+                                                        📄 {paperCode}
+                                                      </span>
+                                                    )}
+                                                    {subNumericCode && (
+                                                      <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 rounded border border-purple-200 dark:border-purple-800">
+                                                        #{subNumericCode}
+                                                      </span>
+                                                    )}
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                                      {subType}
+                                                    </span>
+                                                  </div>
+                                                  <p className="text-xs font-semibold text-slate-900 dark:text-white truncate group-hover:text-[#5B4BFF]">
+                                                    {fullTitle}
+                                                  </p>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded border border-emerald-200 dark:border-emerald-800">
+                                                    Next: {previewSubCode}
+                                                  </span>
+                                                </div>
+                                              </button>
+                                            );
+                                          })
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+
+                        {/* Step 8: Select Unit, Step 9: Select Topic & Step 10: Linked Guideline */}
                         <div className="grid grid-cols-3 gap-2.5">
                           <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                              📑 5. Select Unit * ({availableUnits.length} in subject)
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 8: Select Unit *</span>
+                              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
+                                {availableUnits.length} in subject
+                              </span>
                             </label>
                             <select
                               required
@@ -4900,26 +7131,31 @@ export default function AdminMasterPage() {
                                 const found = availableUnits.find(u => u.code === val || u.id === val);
                                 const unitCode = found?.code || val;
                                 const subCode = formData.subject_code || formData.subject_id || '';
-                                const newTopics = topics.filter(t =>
-                                  (t.college_id === currentCollege?.id || t.college_slug === currentCollege?.slug) &&
-                                  (!selectedCourseCd || t.course_cd === selectedCourseCd) &&
-                                  (!subCode || t.subject_code === subCode) &&
-                                  (!unitCode || t.unit_code === unitCode)
-                                );
-                                const firstTopic = newTopics[0];
-                                const autoSubCode = `${firstTopic?.code ? firstTopic.code + '-' : ''}ST01`;
-                                setSubTopicCode(autoSubCode);
+
+                                const unitTopics = topics.filter(t => {
+                                  const isColMatch = !currentCollege || t.college_id === currentCollege.id || t.college_slug === currentCollege.slug;
+                                  const isCourseMatch = !selectedCourseCd || t.course_cd === selectedCourseCd;
+                                  const isBranchMatch = !selectedBranchCd || t.branch_cd === selectedBranchCd;
+                                  const isSubMatch = !subCode || t.subject_code === subCode || t.subject_id === subCode;
+                                  const isUnitMatch = !unitCode || t.unit_code === unitCode || t.unit_id === unitCode || t.unit_id === found?.id;
+                                  return isColMatch && isCourseMatch && isBranchMatch && isSubMatch && isUnitMatch;
+                                });
+                                const firstTopic = unitTopics[0];
+                                const topicCode = firstTopic?.code || '';
+                                const nextSubCode = getNextSubTopicCodeForTopic(topicCode, competencies, currentSubjectObj, tempCompetencies);
 
                                 setFormData({
                                   ...formData,
                                   unit_id: found?.code || found?.id || val,
                                   unit_code: found?.code || '',
                                   _resolved_unit_id: found?.id,
-                                  topic_id: firstTopic?.code || '',
+                                  topic_id: firstTopic?.code || firstTopic?.id || '',
                                   topic_code: firstTopic?.code || '',
-                                  bloom_level: firstTopic?.bloom_level || found?.bloom_level || 'KL-2 (Understand)',
-                                  code: autoSubCode,
+                                  _resolved_topic_id: firstTopic?.id,
+                                  bloom_level: firstTopic?.bloom_level || found?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
+                                  code: nextSubCode,
                                 });
+                                setSubTopicCode(nextSubCode);
                               }}
                               className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
@@ -4933,8 +7169,11 @@ export default function AdminMasterPage() {
                           </div>
 
                           <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                              📌 6. Select Topic * ({availableTopics.length} in unit)
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                              <span>Step 9: Select Topic *</span>
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">
+                                {availableTopics.length} in unit
+                              </span>
                             </label>
                             <select
                               required
@@ -4943,8 +7182,7 @@ export default function AdminMasterPage() {
                                 const val = e.target.value;
                                 const found = availableTopics.find(t => t.code === val || t.id === val);
                                 const topicCode = found?.code || val;
-                                const autoSubCode = `${topicCode ? topicCode + '-' : ''}ST01`;
-                                setSubTopicCode(autoSubCode);
+                                const nextSubCode = getNextSubTopicCodeForTopic(topicCode, competencies, currentSubjectObj, tempCompetencies);
 
                                 setFormData({
                                   ...formData,
@@ -4952,8 +7190,9 @@ export default function AdminMasterPage() {
                                   topic_code: found?.code || '',
                                   _resolved_topic_id: found?.id,
                                   bloom_level: found?.bloom_level || formData.bloom_level || 'KL-2 (Understand)',
-                                  code: autoSubCode,
+                                  code: nextSubCode,
                                 });
+                                setSubTopicCode(nextSubCode);
                               }}
                               className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >

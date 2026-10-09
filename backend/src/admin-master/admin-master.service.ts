@@ -163,6 +163,10 @@ export class AdminMasterService {
         ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS bloom_level VARCHAR(50) DEFAULT 'KL-2 (Understand)';
         ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS unit_order INT DEFAULT 1;
         ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS hours INT DEFAULT 10;
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS sem_cd VARCHAR(50);
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+        ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS sec_cd VARCHAR(50);
         ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
         ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
       `);
@@ -193,10 +197,18 @@ export class AdminMasterService {
         ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS unit_code VARCHAR(50);
         ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
         ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS batch_id UUID;
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
         ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS batch_year INT;
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS sem_cd VARCHAR(20);
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS sec_cd VARCHAR(20);
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS section VARCHAR(50);
         ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS bloom_level VARCHAR(50) DEFAULT 'KL-2 (Understand)';
         ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS linker_id UUID;
         ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS hours INT DEFAULT 1;
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS learning_method VARCHAR(100);
+        ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS assessment_method VARCHAR(100);
         ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
         ALTER TABLE "${schema}".topics ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
       `);
@@ -1304,6 +1316,36 @@ export class AdminMasterService {
       }
     }
 
+    // Resolve batch if string code or UUID
+    let batchId: string | undefined | null = dto.batch_id || dto.batchId;
+    let batchCd = dto.batch_cd;
+    let batchYear = dto.batch_year || dto.batchYear;
+    if (batchId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(batchId))) {
+      const bRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, year, batch_cd FROM batches WHERE id::text = $1 OR batch_cd = $1 OR code = $1 OR year::text = $1 LIMIT 1`,
+        [batchId],
+      ).catch(() => []);
+      if (bRows.length > 0) {
+        batchId = bRows[0].id;
+        batchYear = batchYear || bRows[0].year;
+        batchCd = batchCd || bRows[0].batch_cd;
+      } else {
+        batchId = null;
+      }
+    }
+    const isBatchUuid = batchId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(batchId));
+    const validBatchId = isBatchUuid ? batchId : null;
+
+    const isSubjectUuid = subjectId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(subjectId));
+    const validSubjectId = isSubjectUuid ? subjectId : null;
+
+    const isUnitUuid = unitId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(unitId));
+    const validUnitId = isUnitUuid ? unitId : null;
+
+    const isLinkerUuid = (dto.linker_id || dto.linkerId) && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(dto.linker_id || dto.linkerId));
+    const validLinkerId = isLinkerUuid ? (dto.linker_id || dto.linkerId) : null;
+
     const learningMethod = dto.learning_method || dto.learningMethod || null;
     const assessmentMethod = dto.assessment_method || dto.assessmentMethod || null;
 
@@ -1318,7 +1360,13 @@ export class AdminMasterService {
          ADD COLUMN IF NOT EXISTS unit_code         VARCHAR(50),
          ADD COLUMN IF NOT EXISTS course_cd         VARCHAR(50),
          ADD COLUMN IF NOT EXISTS branch_cd         VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS batch_id          UUID,
+         ADD COLUMN IF NOT EXISTS batch_cd          VARCHAR(50),
          ADD COLUMN IF NOT EXISTS batch_year        VARCHAR(20),
+         ADD COLUMN IF NOT EXISTS sem_cd            VARCHAR(20),
+         ADD COLUMN IF NOT EXISTS semester          VARCHAR(50),
+         ADD COLUMN IF NOT EXISTS sec_cd            VARCHAR(20),
+         ADD COLUMN IF NOT EXISTS section           VARCHAR(50),
          ADD COLUMN IF NOT EXISTS bloom_level       VARCHAR(50) DEFAULT 'KL-2 (Understand)',
          ADD COLUMN IF NOT EXISTS learning_method   VARCHAR(100),
          ADD COLUMN IF NOT EXISTS assessment_method VARCHAR(100),
@@ -1327,23 +1375,34 @@ export class AdminMasterService {
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO topics (subject_id, subject_code, unit_id, unit_code, course_cd, branch_cd, batch_year, bloom_level, code, name, description, hours, is_active, linker_id, learning_method, assessment_method)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13, $14, $15)
+      `INSERT INTO topics (
+         subject_id, subject_code, unit_id, unit_code, course_cd, branch_cd,
+         batch_id, batch_cd, batch_year, sem_cd, semester, sec_cd, section,
+         bloom_level, code, name, description, hours, is_active, linker_id,
+         learning_method, assessment_method
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, true, $19, $20, $21)
        RETURNING *`,
       [
-        subjectId || null,
+        validSubjectId,
         subjectCode || null,
-        unitId || null,
+        validUnitId,
         unitCode || null,
         courseCd || null,
         branchCd || null,
-        dto.batch_year || dto.batchYear || null,
+        validBatchId,
+        batchCd || dto.batch_cd || null,
+        batchYear || null,
+        dto.sem_cd || null,
+        dto.semester || null,
+        dto.sec_cd || null,
+        dto.section || null,
         bloomLevel || 'KL-2 (Understand)',
         dto.code.trim().toUpperCase(),
         dto.name.trim(),
         dto.description?.trim() || null,
         dto.hours || 1,
-        dto.linker_id || dto.linkerId || null,
+        validLinkerId,
         learningMethod,
         assessmentMethod,
       ],
@@ -1419,8 +1478,38 @@ export class AdminMasterService {
       }
     }
 
-    const learningMethod = dto.learning_method !== undefined ? dto.learning_method : dto.learningMethod;
-    const assessmentMethod = dto.assessment_method !== undefined ? dto.assessment_method : dto.assessmentMethod;
+    // Resolve batch if string code or UUID
+    let batchId: string | undefined | null = dto.batch_id || (dto as any).batchId;
+    let batchCd = dto.batch_cd;
+    let batchYear = dto.batch_year || (dto as any).batchYear;
+    if (batchId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(batchId))) {
+      const bRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, year, batch_cd FROM batches WHERE id::text = $1 OR batch_cd = $1 OR code = $1 OR year::text = $1 LIMIT 1`,
+        [batchId],
+      ).catch(() => []);
+      if (bRows.length > 0) {
+        batchId = bRows[0].id;
+        batchYear = batchYear || bRows[0].year;
+        batchCd = batchCd || bRows[0].batch_cd;
+      } else {
+        batchId = null;
+      }
+    }
+    const isBatchUuid = batchId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(batchId));
+    const validBatchId = isBatchUuid ? batchId : null;
+
+    const isSubjectUuid = subjectId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(subjectId));
+    const validSubjectId = isSubjectUuid ? subjectId : null;
+
+    const isUnitUuid = unitId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(unitId));
+    const validUnitId = isUnitUuid ? unitId : null;
+
+    const isLinkerUuid = dto.linker_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(dto.linker_id));
+    const validLinkerId = isLinkerUuid ? dto.linker_id : null;
+
+    const learningMethod = dto.learning_method !== undefined ? dto.learning_method : (dto as any).learningMethod;
+    const assessmentMethod = dto.assessment_method !== undefined ? dto.assessment_method : (dto as any).assessmentMethod;
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -1431,34 +1520,46 @@ export class AdminMasterService {
            unit_code = COALESCE($4, unit_code),
            course_cd = COALESCE($5, course_cd),
            branch_cd = COALESCE($6, branch_cd),
-           batch_year = COALESCE($7, batch_year),
-           bloom_level = COALESCE($8, bloom_level),
-           code = COALESCE($9, code),
-           name = COALESCE($10, name),
-           description = COALESCE($11, description),
-           hours = COALESCE($12, hours),
-           is_active = COALESCE($13, is_active),
-           linker_id = COALESCE($14, linker_id),
-           learning_method = COALESCE($15, learning_method),
-           assessment_method = COALESCE($16, assessment_method),
+           batch_id = COALESCE($7, batch_id),
+           batch_cd = COALESCE($8, batch_cd),
+           batch_year = COALESCE($9, batch_year),
+           sem_cd = COALESCE($10, sem_cd),
+           semester = COALESCE($11, semester),
+           sec_cd = COALESCE($12, sec_cd),
+           section = COALESCE($13, section),
+           bloom_level = COALESCE($14, bloom_level),
+           code = COALESCE($15, code),
+           name = COALESCE($16, name),
+           description = COALESCE($17, description),
+           hours = COALESCE($18, hours),
+           is_active = COALESCE($19, is_active),
+           linker_id = COALESCE($20, linker_id),
+           learning_method = COALESCE($21, learning_method),
+           assessment_method = COALESCE($22, assessment_method),
            updated_at = NOW()
-       WHERE id = $17
+       WHERE id = $23
        RETURNING *`,
       [
-        subjectId || null,
+        validSubjectId,
         subjectCode || null,
-        unitId || null,
+        validUnitId,
         unitCode || null,
         courseCd || null,
         branchCd || null,
-        dto.batch_year || null,
+        validBatchId,
+        batchCd || dto.batch_cd || null,
+        batchYear || null,
+        dto.sem_cd || null,
+        dto.semester || null,
+        dto.sec_cd || null,
+        dto.section || null,
         bloomLevel || null,
         dto.code ? dto.code.trim().toUpperCase() : null,
         dto.name ? dto.name.trim() : null,
         dto.description !== undefined ? dto.description : null,
         dto.hours || null,
         dto.is_active,
-        dto.linker_id || null,
+        validLinkerId,
         learningMethod !== undefined ? learningMethod : null,
         assessmentMethod !== undefined ? assessmentMethod : null,
         id,
@@ -3077,9 +3178,9 @@ export class AdminMasterService {
     }
 
     // 2. Resolve Batch
-    let batchId = dto.batch_id || dto.batchId;
+    let batchId: string | undefined | null = dto.batch_id || dto.batchId;
     let batchYear = dto.batch_year || dto.batchYear;
-    if (batchId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId)) {
+    if (batchId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(batchId))) {
       const bRows = await this.tenantSchemaService.queryInTenant(
         slug,
         `SELECT id, year, batch_cd FROM batches WHERE id::text = $1 OR batch_cd = $1 OR code = $1 OR year::text = $1 LIMIT 1`,
@@ -3088,28 +3189,40 @@ export class AdminMasterService {
       if (bRows.length > 0) {
         batchId = bRows[0].id;
         batchYear = batchYear || bRows[0].year;
+      } else {
+        batchId = null;
       }
     }
+
+    const isSubjectUuid = subjectId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(subjectId));
+    const validSubjectId = isSubjectUuid ? subjectId : null;
+    const isBatchUuid = batchId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(batchId));
+    const validBatchId = isBatchUuid ? batchId : null;
+    const finalSubjectCode = dto.subject_code || (subjectSearch ? String(subjectSearch) : null);
 
     const bloomLevel = dto.bloom_level || dto.bloomLevel || 'KL-2 (Understand)';
     const unitOrder = dto.unit_order || dto.unitOrder || 1;
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO units (code, name, description, subject_id, subject_code, course_cd, course_name, branch_cd, batch_id, batch_year, bloom_level, unit_order, hours, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true)
+      `INSERT INTO units (code, name, description, subject_id, subject_code, course_cd, course_name, branch_cd, batch_id, batch_year, semester, sem_cd, section, sec_cd, bloom_level, unit_order, hours, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, true)
        RETURNING *`,
       [
         dto.code.trim().toUpperCase(),
         dto.name?.trim() || dto.code.trim(),
         dto.description?.trim() || dto.name?.trim() || '',
-        subjectId || null,
-        dto.subject_code || null,
+        validSubjectId,
+        finalSubjectCode,
         courseCd || null,
         courseName || null,
         branchCd || null,
-        batchId || null,
+        validBatchId,
         batchYear || null,
+        dto.semester || null,
+        dto.sem_cd || null,
+        dto.section || null,
+        dto.sec_cd || null,
         dto.bloom_level || 'KL-2 (Understand)',
         dto.unit_order || 1,
         dto.hours || 0,
@@ -3119,12 +3232,12 @@ export class AdminMasterService {
     const resultRows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT u.*, 
-              s.name AS subject_name, s.code AS subject_code,
+              s.name AS subject_name, COALESCE(s.code, u.subject_code) AS subject_code,
               COALESCE(u.course_cd, s.course_cd) AS course_cd,
               COALESCE(u.course_name, s.course_name) AS course_name,
               COALESCE(u.branch_cd, s.branch_cd) AS branch_cd
        FROM units u
-       LEFT JOIN subjects s ON u.subject_id = s.id
+       LEFT JOIN subjects s ON (u.subject_id IS NOT NULL AND u.subject_id = s.id) OR (u.subject_code IS NOT NULL AND s.code = u.subject_code)
        WHERE u.id = $1`,
       [rows[0].id],
     ).catch(() => []);
@@ -3163,6 +3276,10 @@ export class AdminMasterService {
       }
     }
 
+    const isSubjectUuid = subjectId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(subjectId));
+    const validSubjectId = isSubjectUuid ? subjectId : null;
+    const finalSubjectCode = dto.subject_code || (subjectSearch ? String(subjectSearch) : null);
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE units
@@ -3175,23 +3292,31 @@ export class AdminMasterService {
            course_name = COALESCE($7, course_name),
            branch_cd = COALESCE($8, branch_cd),
            batch_year = COALESCE($9, batch_year),
-           bloom_level = COALESCE($10, bloom_level),
-           unit_order = COALESCE($11, unit_order),
-           hours = COALESCE($12, hours),
-           is_active = COALESCE($13, is_active),
+           semester = COALESCE($10, semester),
+           sem_cd = COALESCE($11, sem_cd),
+           section = COALESCE($12, section),
+           sec_cd = COALESCE($13, sec_cd),
+           bloom_level = COALESCE($14, bloom_level),
+           unit_order = COALESCE($15, unit_order),
+           hours = COALESCE($16, hours),
+           is_active = COALESCE($17, is_active),
            updated_at = NOW()
-       WHERE id = $14
+       WHERE id = $18
        RETURNING *`,
       [
         dto.code ? dto.code.trim().toUpperCase() : null,
         dto.name ? dto.name.trim() : null,
         dto.description ? dto.description.trim() : null,
-        subjectId || null,
-        dto.subject_code || null,
+        validSubjectId,
+        finalSubjectCode,
         courseCd || null,
         courseName || null,
         branchCd || null,
         dto.batch_year || null,
+        dto.semester || null,
+        dto.sem_cd || null,
+        dto.section || null,
+        dto.sec_cd || null,
         dto.bloom_level || null,
         dto.unit_order || null,
         dto.hours || null,
@@ -3204,12 +3329,12 @@ export class AdminMasterService {
     const resultRows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT u.*, 
-              s.name AS subject_name, s.code AS subject_code,
+              s.name AS subject_name, COALESCE(s.code, u.subject_code) AS subject_code,
               COALESCE(u.course_cd, s.course_cd) AS course_cd,
               COALESCE(u.course_name, s.course_name) AS course_name,
               COALESCE(u.branch_cd, s.branch_cd) AS branch_cd
        FROM units u
-       LEFT JOIN subjects s ON u.subject_id = s.id
+       LEFT JOIN subjects s ON (u.subject_id IS NOT NULL AND u.subject_id = s.id) OR (u.subject_code IS NOT NULL AND s.code = u.subject_code)
        WHERE u.id = $1`,
       [id],
     ).catch(() => []);

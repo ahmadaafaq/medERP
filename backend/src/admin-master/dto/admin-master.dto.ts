@@ -569,6 +569,41 @@ export class CreateTopicMasterDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batch_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batchId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sem_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  semester?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sec_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  section?: string;
 }
 
 export class UpdateTopicMasterDto extends PartialType(CreateTopicMasterDto) {
@@ -1183,6 +1218,26 @@ export class CreateUnitMasterDto {
   @IsOptional()
   @IsNumber()
   batchYear?: number;
+
+  @ApiPropertyOptional({ example: 'Semester 5' })
+  @IsOptional()
+  @IsString()
+  semester?: string;
+
+  @ApiPropertyOptional({ example: '5' })
+  @IsOptional()
+  @IsString()
+  sem_cd?: string;
+
+  @ApiPropertyOptional({ example: 'Section A' })
+  @IsOptional()
+  @IsString()
+  section?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  sec_cd?: string;
 
   @ApiPropertyOptional({ example: 'KL-2 (Understand)' })
   @IsOptional()

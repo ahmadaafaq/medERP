@@ -22,6 +22,7 @@ interface MatrixStudent {
   course: string;
   batch: string;
   semester: string;
+  section?: string;
   TotalPresentPercentage: string;
   attendance: Record<
     string,
@@ -169,7 +170,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     }
     return '3';
   });
-  const [selectedSection, setSelectedSection] = useState('1'); // Section A = 1
+  const [selectedSection, setSelectedSection] = useState('all'); // 'all' = All Sections, 1 = Section A, 2 = Section B
 
   // Date Range States: default from start of semester through current month end
   const [fromDate, setFromDate] = useState('2026-07-01');
@@ -583,7 +584,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         branch_cd: Number(selectedBranch || 1),
         batch_cd: Number(selectedBatch || 16),
         sem_cd: Number(selectedSem || 3),
-        section_cd: Number(selectedSection || 1),
+        section_cd: selectedSection === 'all' ? null : Number(selectedSection || 1),
         fdt: fromDate,
         tdt: toDate,
         tenantSlug: userTenantSlug || 'srms-cet-bareilly',
@@ -591,6 +592,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
       const res = await fetch('/api/srms/student-attendance', {
         method: 'POST',
+        cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
           'x-tenant-slug': userTenantSlug || 'srms-cet-bareilly',
@@ -637,6 +639,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
               course: stud.course_name || (String(selectedCourse) === '4' ? 'MBA' : 'BCA'),
               batch: stud.batch_name ? `${stud.batch_name} Batch` : '2025 Batch',
               semester: String(selectedSem),
+              section: stud.sec_cd ? (Number(stud.sec_cd) === 2 ? 'B (2)' : 'A (1)') : (Number(stud.section_cd) === 2 ? 'B (2)' : 'A (1)'),
               TotalPresentPercentage: stud.TotalPresentPercentage || '0.00%',
               attendance: attRecord,
             };
@@ -1041,6 +1044,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
               onChange={(e) => setSelectedSection(e.target.value)}
               className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold cursor-pointer text-[11px]"
             >
+              <option value="all">All Sections (Batch)</option>
               <option value="1">Section A (1)</option>
               <option value="2">Section B (2)</option>
               <option value="3">Section C (3)</option>
@@ -1294,6 +1298,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                       <th className="py-1.5 px-1.5 font-black uppercase bg-[#2D2575] text-white border-r border-indigo-900 text-center w-12 text-[10px] tracking-wider">
                         Sem
                       </th>
+                      <th className="py-1.5 px-1.5 font-black uppercase bg-[#2D2575] text-white border-r border-indigo-900 text-center w-12 text-[10px] tracking-wider">
+                        Sec
+                      </th>
                       {matrixSubjects.map((sub, idx) => (
                         <th
                           key={sub.sub_cd}
@@ -1347,6 +1354,9 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                         </td>
                         <td className="py-1 px-1.5 text-center font-bold text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-800 text-[10.5px]">
                           {st.semester}
+                        </td>
+                        <td className="py-1 px-1.5 text-center font-bold text-indigo-700 dark:text-indigo-400 border-r border-slate-200 dark:border-slate-800 text-[10px] whitespace-nowrap">
+                          {st.section || 'A (1)'}
                         </td>
 
                         {/* Subject Attendance Badges */}

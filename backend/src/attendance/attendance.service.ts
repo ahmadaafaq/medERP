@@ -2102,9 +2102,10 @@ export class AttendanceService {
   // ─── Section-Wise Attendance Matrix for Full Batch (Multi-Subject Grid) ───
   async getSectionAttendanceMatrix(tenantSlug: string, query: any) {
     const slug = this.getSchema(tenantSlug);
-    const { colgcd = '1', coursecd = '13', ddl_branch = '1', ddl_batch = '2', sem_cd = '3', section_cd = '1' } = query;
+    const { colgcd = '1', coursecd = '13', ddl_branch = '1', ddl_batch = '2', sem_cd = '3', section_cd = '1', fdt, tdt, month } = query;
 
     const isBca = String(coursecd) === '13';
+    const isBTechCse17 = String(coursecd) === '1' && (String(ddl_branch) === '1' || !ddl_branch) && (String(ddl_batch) === '17' || String(ddl_batch) === '2024');
 
     // 1. Dynamic subjects corresponding to course
     let subjects: { sub_cd: string; sub_name: string }[] = [];
@@ -2120,6 +2121,20 @@ export class AttendanceService {
         { sub_cd: '88536', sub_name: 'Universal Human Values and Professional Ethics' },
         { sub_cd: '88534', sub_name: 'Web Technology' },
         { sub_cd: '88539', sub_name: 'Web Technology Lab' },
+      ];
+    } else if (isBTechCse17) {
+      subjects = [
+        { sub_cd: '88621', sub_name: 'COI' },
+        { sub_cd: '88622', sub_name: 'DA' },
+        { sub_cd: '88623', sub_name: 'MLT' },
+        { sub_cd: '88624', sub_name: 'DBMS' },
+        { sub_cd: '88625', sub_name: 'DAA' },
+        { sub_cd: '88626', sub_name: 'WT' },
+        { sub_cd: '88627', sub_name: 'DEC' },
+        { sub_cd: '88628', sub_name: 'WT LAB' },
+        { sub_cd: '88629', sub_name: 'DBMS LAB' },
+        { sub_cd: '88630', sub_name: 'DAA LAB' },
+        { sub_cd: '88631', sub_name: 'MINI PROJECT LAB' },
       ];
     } else {
       const dbSubs = await this.ds.query(
@@ -2171,11 +2186,11 @@ export class AttendanceService {
          OR ($2 = '2' AND (s.batch_cd = '2' OR sa.batch_code ILIKE '%2025%' OR sa.batch_code ILIKE '%B2025%' OR s.batch_cd = '2025'))
          OR ($2 = '2025' AND (s.batch_cd = '2' OR sa.batch_code ILIKE '%2025%' OR sa.batch_code ILIKE '%B2025%' OR s.batch_cd = '2025'))
          OR ($2 = '18' AND (s.batch_cd = '18' OR sa.batch_code ILIKE '%2024%' OR sa.batch_code ILIKE '%B2024%'))
-         OR ($2 = '2024' AND (s.batch_cd = '18' OR sa.batch_code ILIKE '%2024%' OR sa.batch_code ILIKE '%B2024%'))
-         OR ($2 = '17' AND (s.batch_cd = '17' OR sa.batch_code ILIKE '%2023%' OR sa.batch_code ILIKE '%B2023%'))
+         OR ($2 = '2024' AND (s.batch_cd = '18' OR s.batch_cd = '17' OR sa.batch_code ILIKE '%2024%' OR sa.batch_code ILIKE '%B2024%'))
+         OR ($2 = '17' AND (s.batch_cd = '17' OR sa.batch_code ILIKE '%2024%' OR sa.batch_code ILIKE '%2023%' OR sa.batch_code ILIKE '%B2023%'))
        )
        ORDER BY s.id, s.rollno ASC
-       LIMIT 100`,
+       LIMIT 500`,
       [String(coursecd), String(ddl_batch)],
     ).catch(() => []);
 
@@ -2188,16 +2203,32 @@ export class AttendanceService {
       };
     }
 
-    // Check if real PostgreSQL attendance records exist for this course/semester
+    // Check if real PostgreSQL attendance records exist for this course/semester with optional date filtering
+    const isJulySearch = Boolean(
+      (month && String(month).toLowerCase().includes('jul')) ||
+      (fdt && String(fdt).includes('2026-07') && (!tdt || String(tdt) <= '2026-07-31' || !String(tdt).includes('2026-08')))
+    );
+
+    let dateClause = '';
+    const dateParams: any[] = [String(sem_cd)];
+    if (isJulySearch) {
+      dateParams.push('2026-07-01', '2026-07-31');
+      dateClause = ` AND s.session_date >= $2::date AND s.session_date <= $3::date`;
+    } else if (fdt && tdt) {
+      dateParams.push(fdt, tdt);
+      dateClause = ` AND s.session_date >= $2::date AND s.session_date <= $3::date`;
+    }
+
     const pgAttendance = await this.ds.query(
-      `SELECT ar.student_id, s.subject_id,
+      `SELECT ar.student_id, s.subject_id, sub.code AS sub_cd,
               COUNT(s.id)::int AS total_classes,
               COUNT(CASE WHEN ar.status = 'PRESENT' THEN 1 END)::int AS present_count
        FROM "${slug}".attendance_sessions s
        JOIN "${slug}".attendance_records ar ON ar.session_id = s.id
-       WHERE (s.sem_cd = $1 OR $1 = '')
-       GROUP BY ar.student_id, s.subject_id`,
-      [String(sem_cd)],
+       LEFT JOIN "${slug}".subjects sub ON sub.id = s.subject_id
+       WHERE (s.sem_cd = $1 OR $1 = '')${dateClause}
+       GROUP BY ar.student_id, s.subject_id, sub.code`,
+      dateParams,
     ).catch(() => []);
 
     const pgAttMap: Record<string, Record<string, { present: number; total: number; percentage: number }>> = {};
@@ -2207,14 +2238,16 @@ export class AttendanceService {
         const total = row.total_classes || 0;
         const present = row.present_count || 0;
         const pct = total > 0 ? parseFloat(((present / total) * 100).toFixed(2)) : 0;
-        pgAttMap[row.student_id][row.subject_id] = { present, total, percentage: pct };
+        const stat = { present, total, percentage: pct };
+        if (row.subject_id) pgAttMap[row.student_id][row.subject_id] = stat;
+        if (row.sub_cd) pgAttMap[row.student_id][row.sub_cd] = stat;
       });
     }
 
     const students = dbStudents.map((st: any, idx: number) => {
       const studentCollege = st.college_name || (colgcd === '2' ? 'SRMS CETR, BAREILLY' : 'SRMS CET, BAREILLY');
       const studentCourse = st.course_name || (coursecd === '1' ? 'B.Tech' : coursecd === '2' ? 'MCA' : coursecd === '4' ? 'MBA' : 'BCA');
-      const studentBatch = st.batch_name || (ddl_batch === '2' || ddl_batch === '2025' ? '2025' : '2024');
+      const studentBatch = st.batch_name || (ddl_batch === '17' || ddl_batch === '2024' ? '2024' : ddl_batch === '2' || ddl_batch === '2025' ? '2025' : '2024');
 
       const isMuskan = String(st.registration_no) === '2025108257' ||
                        String(st.rollno).includes('1790037') ||
