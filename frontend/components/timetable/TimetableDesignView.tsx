@@ -822,7 +822,7 @@ export default function TimetableDesignView({
   const submitDraftToHod = async (draftId: string) => {
     setSendingClerkDraftId(draftId);
     try {
-      const slug = (typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || '').replace(/^tenant_/, '') : '') || 'srms-cet-bareilly';
+      const slug = getActiveTenantSlug() || 'default';
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const headers: any = {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -840,6 +840,36 @@ export default function TimetableDesignView({
       showAlert('error', 'Failed to submit timetable to HOD');
     } finally {
       setSendingClerkDraftId(null);
+    }
+  };
+
+  const handleCopyToNextWeek = async (draftId: string) => {
+    try {
+      const slug = getActiveTenantSlug() || 'default';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: any = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        'x-tenant-slug': slug,
+        'Content-Type': 'application/json',
+      };
+      showAlert('info', 'Copying timetable to next week...');
+      const res = await fetch(`/api/v1/exams/timetable-drafts/copy-to-next-week?tenant=${slug}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ draftId }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        throw new Error(d?.message || 'Failed to copy timetable');
+      }
+      showAlert('success', 'Copied timetable to next week! Slot mapping status reset to PENDING.');
+      await loadClerkDrafts();
+      if (d?.id) {
+        setActiveDraft(d);
+        loadDraftIntoGrid(d);
+      }
+    } catch (err: any) {
+      showAlert('error', err?.message || 'Failed to copy timetable');
     }
   };
 
@@ -2855,6 +2885,15 @@ export default function TimetableDesignView({
         };
 
         const slotId = editingSlot?.id || `draft_slot_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        const isLinked = Boolean(
+          (formData.unitName && formData.unitName.trim()) ||
+          (formData.unitId && formData.unitId.trim()) ||
+          (formData.topic && formData.topic.trim()) ||
+          (subTopicsStr && subTopicsStr.trim()) ||
+          (selectedCompetencies && selectedCompetencies.length > 0)
+        );
+        const slotMappingStatus: 'PENDING' | 'LINKED' = isLinked ? 'LINKED' : 'PENDING';
+
         const draftSlotItem: ClerkSlot = {
           id: slotId,
           dayOfWeek: formData.dayOfWeek,
@@ -2889,15 +2928,17 @@ export default function TimetableDesignView({
           faculty_name: facName,
           facultyEmpId: facEmpId,
           faculty_code: facEmpId,
-          unitName: formData.unitName || 'Unit 1',
-          unit_name: formData.unitName || 'Unit 1',
-          unitId: formData.unitId || 'unit_1',
-          unit_id: formData.unitId || 'unit_1',
-          topic: formData.topic || subTitle,
-          subTopics: subTopicsStr,
-          sub_topics: subTopicsStr,
+          unitName: formData.unitName || '',
+          unit_name: formData.unitName || '',
+          unitId: formData.unitId || '',
+          unit_id: formData.unitId || '',
+          topic: formData.topic || '',
+          subTopics: subTopicsStr || '',
+          sub_topics: subTopicsStr || '',
           competencyCodes: selectedCompetencies.join(','),
           competency_codes: selectedCompetencies.join(','),
+          mappingStatus: slotMappingStatus,
+          mapping_status: slotMappingStatus,
           room: roomName,
           cameraId: formData.cameraId,
           slotType: formData.slotType,
@@ -2946,6 +2987,10 @@ export default function TimetableDesignView({
           section: selectedSection || currentDraft?.section || '1',
           academicYear: currentDraft?.academic_year || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
           notes: currentDraft?.notes || 'Created via Timetable Designer',
+          week_start: effFromStr,
+          week_end: `${sundayDate.getFullYear()}-${pad(sundayDate.getMonth() + 1)}-${pad(sundayDate.getDate())}`,
+          weekStart: effFromStr,
+          weekEnd: `${sundayDate.getFullYear()}-${pad(sundayDate.getMonth() + 1)}-${pad(sundayDate.getDate())}`,
           slots: updatedSlots,
         };
 
@@ -4345,16 +4390,28 @@ export default function TimetableDesignView({
                           </p>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => submitDraftToHod(activeDraft.id)}
-                        disabled={sendingClerkDraftId === activeDraft.id || activeDraftSlots.length === 0}
-                        className="shrink-0 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#FF9248] hover:from-[#e05b10] hover:to-[#f36c21] text-white text-xs font-black transition-all shadow-lg shadow-orange-500/25 disabled:opacity-50 cursor-pointer flex items-center gap-2 active:scale-95"
-                        title={activeDraftSlots.length === 0 ? 'Add at least one lecture before submitting draft' : 'Submit draft to HOD for approval'}
-                      >
-                        <span>{sendingClerkDraftId === activeDraft.id ? '⏳' : '📤'}</span>
-                        <span>{sendingClerkDraftId === activeDraft.id ? 'Submitting to HOD...' : 'Submit to HOD for Approval'}</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyToNextWeek(activeDraft.id)}
+                          disabled={!activeDraft?.id || activeDraftSlots.length === 0}
+                          className="shrink-0 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-black transition-all border border-slate-300 dark:border-slate-600 cursor-pointer flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                          title="Copy this timetable to next week (resets slot mapping status to PENDING)"
+                        >
+                          <span>📋</span>
+                          <span>Copy to Next Week</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => submitDraftToHod(activeDraft.id)}
+                          disabled={sendingClerkDraftId === activeDraft.id || activeDraftSlots.length === 0}
+                          className="shrink-0 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F36C21] to-[#FF9248] hover:from-[#e05b10] hover:to-[#f36c21] text-white text-xs font-black transition-all shadow-lg shadow-orange-500/25 disabled:opacity-50 cursor-pointer flex items-center gap-2 active:scale-95"
+                          title={activeDraftSlots.length === 0 ? 'Add at least one lecture before submitting draft' : 'Submit draft to HOD for approval'}
+                        >
+                          <span>{sendingClerkDraftId === activeDraft.id ? '⏳' : '📤'}</span>
+                          <span>{sendingClerkDraftId === activeDraft.id ? 'Submitting to HOD...' : 'Submit to HOD for Approval'}</span>
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -4798,8 +4855,19 @@ export default function TimetableDesignView({
                                               </button>
 
                                               {/* Subject Name Header */}
-                                              <div className="slot-subject font-black text-slate-900 dark:text-white leading-snug text-[11px] truncate pr-3" title={cleanSubName}>
-                                                {cleanSubName}
+                                              <div className="flex items-center justify-between gap-1">
+                                                <div className="slot-subject font-black text-slate-900 dark:text-white leading-snug text-[11px] truncate pr-1" title={cleanSubName}>
+                                                  {cleanSubName}
+                                                </div>
+                                                {Boolean((slot as any).mappingStatus || (slot as any).mapping_status) && (
+                                                  <span className={`text-[7px] font-black px-1 py-0.2 rounded shrink-0 border uppercase tracking-wider ${
+                                                    (slot as any).mappingStatus === 'LINKED' || (slot as any).mapping_status === 'LINKED'
+                                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700'
+                                                      : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700'
+                                                  }`}>
+                                                    {(slot as any).mappingStatus === 'LINKED' || (slot as any).mapping_status === 'LINKED' ? '✓ Linked' : '⏳ Pending'}
+                                                  </span>
+                                                )}
                                               </div>
 
                                               {/* Unit Name Badge/Line */}
@@ -5013,9 +5081,18 @@ export default function TimetableDesignView({
                                     {roomVal}
                                   </td>
                                   <td className="py-3 px-3">
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
-                                      {slotStatus}
-                                    </span>
+                                    <div className="flex flex-col gap-1 items-start">
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
+                                        {slotStatus}
+                                      </span>
+                                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                                        s.mappingStatus === 'LINKED' || s.mapping_status === 'LINKED'
+                                          ? 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700'
+                                          : 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700'
+                                      }`}>
+                                        {s.mappingStatus === 'LINKED' || s.mapping_status === 'LINKED' ? '✓ LINKED' : '⏳ PENDING'}
+                                      </span>
+                                    </div>
                                   </td>
                                   <td className="py-3 px-3 text-right whitespace-nowrap">
                                     {isApproved ? (
@@ -5164,6 +5241,15 @@ export default function TimetableDesignView({
                                 </button>
 
                                 <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyToNextWeek(d.id)}
+                                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                                    title="Copy this draft to next week (resets slot mapping status to PENDING)"
+                                  >
+                                    <span>📋</span>
+                                    <span>Copy Next Week</span>
+                                  </button>
                                   {(!d.status || d.status === 'DRAFT' || d.status === 'HOD_REJECTED') && (
                                     <button
                                       type="button"
