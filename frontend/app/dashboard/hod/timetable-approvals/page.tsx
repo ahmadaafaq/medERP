@@ -378,22 +378,59 @@ export default function HODTimetableApprovalsPage() {
                           </div>
                         )}
                       </div>
-                      {filter === 'PENDING_HOD_APPROVAL' && (
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={() => act(d.id, 'approve')} disabled={actioning === d.id}
-                            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-extrabold disabled:opacity-50 shadow-sm shadow-emerald-500/30 cursor-pointer flex items-center gap-1.5">
-                            <span>✓</span>
-                            <span>{actioning === d.id ? 'Approving...' : 'Approve & Go Live'}</span>
-                          </button>
-                          <button onClick={() => act(d.id, 'reject')} disabled={actioning === d.id}
-                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-amber-600 hover:from-rose-600 hover:to-amber-700 text-white text-sm font-extrabold disabled:opacity-50 shadow-sm cursor-pointer flex items-center gap-1.5"
-                            title="Send remarks & reschedule instructions to Clerk">
-                            <span>📤</span>
-                            <span>{actioning === d.id ? 'Sending...' : 'Request Changes (Send Remarks to Clerk)'}</span>
-                          </button>
+                      {filter === 'PENDING_HOD_APPROVAL' && (() => {
+                          const rawSlotsForCheck = typeof d.slots === 'string' ? JSON.parse(d.slots || '[]') : (d.slots || []);
+                          const pendingCnt = rawSlotsForCheck.filter((s: any) => !s.mappingStatus || s.mappingStatus === 'PENDING').length;
+                          const linkedCnt = rawSlotsForCheck.filter((s: any) => s.mappingStatus === 'LINKED').length;
+                          const totalCnt = rawSlotsForCheck.length;
+                          const allLinked = pendingCnt === 0 && totalCnt > 0;
+                          return (
+                            <div className="flex flex-col gap-2 flex-shrink-0">
+                              {/* Mapping progress */}
+                              <div className="flex items-center gap-2 text-[10px]">
+                                <span className="text-amber-600 font-bold">⏳ {pendingCnt} pending</span>
+                                <span className="text-emerald-600 font-bold">✓ {linkedCnt} linked</span>
+                                {totalCnt > 0 && (
+                                  <div className="w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.round((linkedCnt / totalCnt) * 100)}%` }} />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-2">
+                                <div className="relative group/approve">
+                                  <button
+                                    onClick={() => allLinked ? act(d.id, 'approve') : undefined}
+                                    disabled={actioning === d.id || !allLinked}
+                                    title={!allLinked ? `All faculties must link their Schedule Planner before approval (${pendingCnt} slot${pendingCnt !== 1 ? 's' : ''} still PENDING)` : 'Approve & Go Live'}
+                                    className={`px-4 py-2 rounded-xl text-white text-sm font-extrabold shadow-sm flex items-center gap-1.5 transition-all ${
+                                      allLinked
+                                        ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/30 cursor-pointer'
+                                        : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed opacity-70'
+                                    }`}
+                                  >
+                                    <span>{allLinked ? '✓' : '🔒'}</span>
+                                    <span>{actioning === d.id ? 'Approving...' : allLinked ? 'Approve & Go Live' : 'Approve (Blocked)'}</span>
+                                  </button>
+                                  {!allLinked && (
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 z-10 hidden group-hover/approve:flex">
+                                      <div className="bg-slate-900 text-white text-[10px] font-bold px-3 py-2 rounded-xl shadow-xl text-center leading-relaxed">
+                                        🔒 All faculties must link their Schedule Planner before approval.<br />
+                                        <span className="text-amber-400">{pendingCnt} slot{pendingCnt !== 1 ? 's' : ''} still PENDING</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <button onClick={() => act(d.id, 'reject')} disabled={actioning === d.id}
+                                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-amber-600 hover:from-rose-600 hover:to-amber-700 text-white text-sm font-extrabold disabled:opacity-50 shadow-sm cursor-pointer flex items-center gap-1.5"
+                                  title="Send remarks & reschedule instructions to Clerk">
+                                  <span>📤</span>
+                                  <span>{actioning === d.id ? 'Sending...' : 'Request Changes'}</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
-                        </div>
-                      )}
                       {d.status === 'HOD_APPROVED' && (
                         <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs font-extrabold flex items-center gap-1">
                           🟢 Live — Faculty &amp; Students can see this

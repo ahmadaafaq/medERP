@@ -179,6 +179,27 @@ export class ExaminationController {
     return this.examinationService.getApprovedTimetable(tenantSlug, departmentId, batchId);
   }
 
+  /** Faculty: Get submitted/approved weeks with only this faculty's slots */
+  @Public()
+  @Get('timetable-drafts/faculty-schedule')
+  async getFacultySchedule(
+    @Tenant() tenantSlug: string,
+    @Query('facultyId') facultyId?: string,
+    @Query('facultyEmpId') facultyEmpId?: string,
+  ) {
+    return this.examinationService.getDraftsByWeekForFaculty(tenantSlug, facultyId || '', facultyEmpId);
+  }
+
+  /** Clerk / Admin: Get a single timetable draft by ID */
+  @Public()
+  @Get('timetable-drafts/:id')
+  async getDraftById(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+  ) {
+    return this.examinationService.getDraftById(tenantSlug, id);
+  }
+
   /** Clerk / Admin: Delete a timetable draft */
   @Public()
   @Delete('timetable-drafts/:id')
@@ -187,6 +208,27 @@ export class ExaminationController {
     @Param('id') id: string,
   ) {
     return this.examinationService.deleteTimetableDraft(tenantSlug, id);
+  }
+
+  /** Faculty: Link unit/topic/subtopic to a slot → mappingStatus = LINKED */
+  @Public()
+  @Post('timetable-drafts/link-slot')
+  async linkSlot(
+    @Tenant() tenantSlug: string,
+    @Body() dto: { draftId: string; slotId: string; unitId?: string; unitName?: string; topic?: string; subTopics?: string; competencyCodes?: string },
+  ) {
+    return this.examinationService.facultyLinkSlot(tenantSlug, dto);
+  }
+
+  /** Clerk: Copy a draft to the next week (new DRAFT, all slots = PENDING) */
+  @Public()
+  @Post('timetable-drafts/copy-to-next-week')
+  async copyDraftToNextWeek(
+    @Tenant() tenantSlug: string,
+    @CurrentUser() user: any,
+    @Body() body: { draftId: string },
+  ) {
+    return this.examinationService.copyDraftToNextWeek(tenantSlug, user, body.draftId);
   }
 
   // ─── Results & Marks ────────────────────────────────────────────────────

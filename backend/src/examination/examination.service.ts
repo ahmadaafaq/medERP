@@ -920,6 +920,8 @@ export class ExaminationService {
         ALTER TABLE public.timetable_drafts ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
         ALTER TABLE public.timetable_drafts ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
         ALTER TABLE public.timetable_drafts ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+        ALTER TABLE public.timetable_drafts ADD COLUMN IF NOT EXISTS week_start DATE;
+        ALTER TABLE public.timetable_drafts ADD COLUMN IF NOT EXISTS week_end DATE;
       `).catch(() => {});
     } catch (e: any) {
       this.logger.warn(`ensureTimetableDraftsTable: ${e.message}`);
@@ -951,6 +953,8 @@ export class ExaminationService {
                branch_cd = COALESCE($10, branch_cd),
                batch_cd = COALESCE($11, batch_cd),
                section = COALESCE($12, section),
+               week_start = COALESCE($14, week_start),
+               week_end = COALESCE($15, week_end),
                updated_at = NOW()
            WHERE id::text = $13 RETURNING *`,
           [
@@ -967,6 +971,8 @@ export class ExaminationService {
             dto.batchCd || null,
             dto.section || null,
             dto.id,
+            dto.weekStart || null,
+            dto.weekEnd || null,
           ],
         );
         if (updateRes && updateRes.length > 0) return updateRes[0];
@@ -976,8 +982,8 @@ export class ExaminationService {
         slug,
         `INSERT INTO timetable_drafts (
            title, department_id, batch_id, semester, academic_year, slots, status, notes, created_by,
-           colg_cd, course_cd, branch_cd, batch_cd, section, created_at, updated_at
-         ) VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6::jsonb, 'DRAFT', $7, $8::uuid, $9, $10, $11, $12, $13, NOW(), NOW()) RETURNING *`,
+           colg_cd, course_cd, branch_cd, batch_cd, section, week_start, week_end, created_at, updated_at
+         ) VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6::jsonb, 'DRAFT', $7, $8::uuid, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW()) RETURNING *`,
         [
           dto.title,
           this.isUUID(dto.departmentId) ? dto.departmentId : null,
@@ -992,6 +998,8 @@ export class ExaminationService {
           dto.branchCd || null,
           dto.batchCd || null,
           dto.section || null,
+          dto.weekStart || null,
+          dto.weekEnd || null,
         ],
       );
       return res[0] || { success: true };
@@ -1067,6 +1075,29 @@ export class ExaminationService {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     await this.ensureTimetableDraftsTable(slug);
     const newStatus = dto.action === 'approve' ? 'HOD_APPROVED' : 'HOD_REJECTED';
+
+    // Block approval if any slot is still PENDING
+    if (dto.action === 'approve') {
+      const checkRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT slots FROM timetable_drafts WHERE id::text = $1`,
+        [dto.draftId],
+      ).catch(() => []);
+      if (checkRows && checkRows.length > 0) {
+        const rawSlots = checkRows[0].slots;
+        const checkSlots: any[] = typeof rawSlots === 'string' ? JSON.parse(rawSlots || '[]') : (rawSlots || []);
+        const hasPending = checkSlots.some(
+          (s: any) => !s.mappingStatus || s.mappingStatus === 'PENDING',
+        );
+        if (hasPending) {
+          throw new BadRequestException(
+            'Cannot approve: all faculty must link their Schedule Planner slots before approval. ' +
+            `${checkSlots.filter((s: any) => !s.mappingStatus || s.mappingStatus === 'PENDING').length} slot(s) are still PENDING.`,
+          );
+        }
+      }
+    }
+
     try {
       const slotsJson = dto.slots ? JSON.stringify(dto.slots) : null;
       let res;
@@ -1184,5 +1215,174 @@ export class ExaminationService {
       if (batchId && this.isUUID(batchId)) { conditions.push(`batch_id::text = $${idx++}`); params.push(batchId); }
       return await this.tenantSchemaService.queryInTenant(slug, `SELECT * FROM timetable_drafts WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`, params);
     } catch { return []; }
+  }
+
+  /** Get a single timetable draft by ID */
+  async getDraftById(tenantSlug: string, draftId: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    await this.ensureTimetableDraftsTable(slug);
+    try {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT * FROM timetable_drafts WHERE id::text = $1 LIMIT 1`,
+        [draftId],
+      );
+      return rows?.[0] || null;
+    } catch { return null; }
+  }
+
+  /**
+   * Faculty: Get weeks whose drafts are PENDING_HOD_APPROVAL or HOD_APPROVED,
+   * filtered to only slots where faculty_id or faculty_emp_id matches.
+   */
+  async getDraftsByWeekForFaculty(tenantSlug: string, facultyId: string, facultyEmpId?: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    await this.ensureTimetableDraftsTable(slug);
+    try {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT * FROM timetable_drafts
+         WHERE status IN ('PENDING_HOD_APPROVAL', 'HOD_APPROVED')
+           AND slots IS NOT NULL
+           AND jsonb_array_length(slots) > 0
+         ORDER BY week_start DESC NULLS LAST, updated_at DESC`,
+        [],
+      );
+      // Filter server-side to only include drafts that have at least one slot for this faculty
+      return (rows || []).map((draft: any) => {
+        const rawSlots = draft.slots;
+        const allSlots: any[] = typeof rawSlots === 'string' ? JSON.parse(rawSlots || '[]') : (rawSlots || []);
+        const mySlots = allSlots.filter((s: any) => {
+          const slotFacId = String(s.facultyId || s.faculty_id || '');
+          const slotEmpId = String(s.facultyEmpId || s.faculty_emp_id || s.faculty_code || '');
+          return (
+            (facultyId && slotFacId && slotFacId === facultyId) ||
+            (facultyEmpId && slotEmpId && slotEmpId === facultyEmpId)
+          );
+        });
+        if (mySlots.length === 0) return null;
+        return { ...draft, slots: mySlots };
+      }).filter(Boolean);
+    } catch { return []; }
+  }
+
+  /**
+   * Faculty: Link unit/topic/subTopic to a specific slot in a draft.
+   * Sets mappingStatus = 'LINKED' on the slot.
+   */
+  async facultyLinkSlot(tenantSlug: string, dto: {
+    draftId: string;
+    slotId: string;
+    unitId?: string;
+    unitName?: string;
+    topic?: string;
+    subTopics?: string;
+    competencyCodes?: string;
+  }) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    await this.ensureTimetableDraftsTable(slug);
+    try {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT slots FROM timetable_drafts WHERE id::text = $1 LIMIT 1`,
+        [dto.draftId],
+      );
+      if (!rows || rows.length === 0) throw new Error('Draft not found');
+      const rawSlots = rows[0].slots;
+      let slots: any[] = typeof rawSlots === 'string' ? JSON.parse(rawSlots || '[]') : (rawSlots || []);
+      let matched = false;
+      slots = slots.map((s: any) => {
+        if (String(s.id) === String(dto.slotId)) {
+          matched = true;
+          return {
+            ...s,
+            unitId: dto.unitId || s.unitId || s.unit_id,
+            unit_id: dto.unitId || s.unitId || s.unit_id,
+            unitName: dto.unitName || s.unitName || s.unit_name,
+            unit_name: dto.unitName || s.unitName || s.unit_name,
+            topic: dto.topic || s.topic,
+            subTopics: dto.subTopics || s.subTopics || s.sub_topics,
+            sub_topics: dto.subTopics || s.subTopics || s.sub_topics,
+            competencyCodes: dto.competencyCodes || s.competencyCodes || s.competency_codes,
+            competency_codes: dto.competencyCodes || s.competencyCodes || s.competency_codes,
+            mappingStatus: 'LINKED',
+          };
+        }
+        return s;
+      });
+      if (!matched) throw new Error(`Slot ${dto.slotId} not found in draft`);
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE timetable_drafts SET slots = $1::jsonb, updated_at = NOW() WHERE id::text = $2`,
+        [JSON.stringify(slots), dto.draftId],
+      );
+      return { success: true, message: 'Slot linked successfully', slots };
+    } catch (err: any) {
+      throw new BadRequestException(err.message || 'Failed to link slot');
+    }
+  }
+
+  /**
+   * Clerk: Copy a draft's slots to the next week (creates a new DRAFT).
+   * New draft has all slots with mappingStatus = 'PENDING'.
+   */
+  async copyDraftToNextWeek(tenantSlug: string, user: any, draftId: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    await this.ensureTimetableDraftsTable(slug);
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM timetable_drafts WHERE id::text = $1 LIMIT 1`,
+      [draftId],
+    ).catch(() => []);
+    if (!rows || rows.length === 0) throw new BadRequestException('Draft not found');
+    const src = rows[0];
+    const rawSlots = src.slots;
+    const slots: any[] = typeof rawSlots === 'string' ? JSON.parse(rawSlots || '[]') : (rawSlots || []);
+
+    // Advance week_start / week_end by 7 days
+    const srcStart = src.week_start ? new Date(src.week_start) : new Date();
+    const srcEnd = src.week_end ? new Date(src.week_end) : new Date(srcStart.getTime() + 6 * 86400000);
+    const nextStart = new Date(srcStart.getTime() + 7 * 86400000);
+    const nextEnd = new Date(srcEnd.getTime() + 7 * 86400000);
+    const toISO = (d: Date) => d.toISOString().slice(0, 10);
+
+    // Reset mapping status on copied slots
+    const newSlots = slots.map((s: any) => ({
+      ...s,
+      id: `slot_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      mappingStatus: 'PENDING',
+      effectiveFrom: toISO(nextStart),
+      effectiveUntil: toISO(nextEnd),
+      hodRemark: undefined,
+      hod_remark: undefined,
+    }));
+
+    const createdBy = user?.userId || user?.sub || user?.id || null;
+    const newTitle = `Week of ${toISO(nextStart)} – ${toISO(nextEnd)}`;
+    const res = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `INSERT INTO timetable_drafts (
+         title, department_id, batch_id, semester, academic_year, slots, status, notes, created_by,
+         colg_cd, course_cd, branch_cd, batch_cd, section, week_start, week_end, created_at, updated_at
+       ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'DRAFT', $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW()) RETURNING *`,
+      [
+        newTitle,
+        src.department_id || null,
+        src.batch_id || null,
+        src.semester || null,
+        src.academic_year || null,
+        JSON.stringify(newSlots),
+        src.notes || null,
+        this.isUUID(createdBy) ? createdBy : null,
+        src.colg_cd || null,
+        src.course_cd || null,
+        src.branch_cd || null,
+        src.batch_cd || null,
+        src.section || null,
+        toISO(nextStart),
+        toISO(nextEnd),
+      ],
+    );
+    return res[0] || { success: true };
   }
 }
