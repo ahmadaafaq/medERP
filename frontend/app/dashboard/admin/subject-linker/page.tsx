@@ -103,6 +103,13 @@ interface FacultySubjectLink {
   subject_code: string;
   subject_department_name?: string;
   subject_department_code?: string;
+  course_cd?: string;
+  course_name?: string;
+  branch_cd?: string;
+  branch_name?: string;
+  batch_cd?: string;
+  sem_cd?: string;
+  section?: string;
   college_id?: string;
   college_name?: string;
   college_code?: string;
@@ -122,13 +129,14 @@ export default function SubjectLinkerPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
 
-  // Step-by-Step Cascading Form states (College -> Course -> Branch/Department -> Batch/Semester -> Subject -> Faculty)
+  // Step-by-Step Cascading Form states (College -> Course -> Branch/Department -> Batch/Semester/Section -> Subject -> Faculty)
   const [selectedCollegeId, setSelectedCollegeId] = useState('');
   const [selectedCollegeSlug, setSelectedCollegeSlug] = useState('');
   const [selectedCourseCd, setSelectedCourseCd] = useState('all');
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [selectedBatchCd, setSelectedBatchCd] = useState('all');
   const [selectedSemCd, setSelectedSemCd] = useState('all');
+  const [selectedSection, setSelectedSection] = useState('All Sections');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
   const [facultySearchTerm, setFacultySearchTerm] = useState('');
@@ -139,6 +147,7 @@ export default function SubjectLinkerPage() {
 
   // Table Filters & Loading
   const [selectedCollegeFilter, setSelectedCollegeFilter] = useState('all');
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState('all');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -744,6 +753,7 @@ export default function SubjectLinkerPage() {
     setSelectedCourseCd('all');
     setSelectedBatchCd('all');
     setSelectedSemCd('all');
+    setSelectedSection('All Sections');
     if (formAvailableDepartments.length > 0) {
       const firstDept = formAvailableDepartments[0];
       setSelectedDeptId(firstDept.id || firstDept.code);
@@ -769,17 +779,22 @@ export default function SubjectLinkerPage() {
     setSelectedSubjectId(link.subject_id || link.subject_code);
 
     const sub = subjects.find(s => s.id === link.subject_id || s.code === link.subject_code);
-    if (sub?.course_cd) {
-      setSelectedCourseCd(sub.course_cd);
+    if (link.course_cd || sub?.course_cd) {
+      setSelectedCourseCd(link.course_cd || sub?.course_cd || 'all');
     }
-    if (sub?.department_id || sub?.department_code) {
-      setSelectedDeptId(sub.department_id || sub.department_code || '');
+    if (link.branch_cd || link.faculty_department_code || sub?.department_id) {
+      setSelectedDeptId(link.branch_cd || link.faculty_department_code || sub?.department_id || '');
     }
-    if (sub?.batch_cd) {
-      setSelectedBatchCd(sub.batch_cd);
+    if (link.batch_cd || sub?.batch_cd) {
+      setSelectedBatchCd(link.batch_cd || sub?.batch_cd || 'all');
     }
-    if (sub?.sem_cd) {
-      setSelectedSemCd(sub.sem_cd);
+    if (link.sem_cd || sub?.sem_cd) {
+      setSelectedSemCd(link.sem_cd || sub?.sem_cd || 'all');
+    }
+    if (link.section) {
+      setSelectedSection(link.section);
+    } else {
+      setSelectedSection('All Sections');
     }
   };
 
@@ -796,6 +811,26 @@ export default function SubjectLinkerPage() {
 
     const realFacId = facObj?.id || selectedFacultyId;
     const realSubId = subObj?.id || selectedSubjectId;
+
+    // Resolve comprehensive Course, Branch, Batch, Sem, Section metadata
+    const chosenCourse = courses.find(c =>
+      String(c.code) === String(selectedCourseCd) ||
+      String(c.course_cd) === String(selectedCourseCd) ||
+      String(c.id) === String(selectedCourseCd)
+    );
+    const chosenDept = departments.find(d =>
+      d.id === selectedDeptId || d.code === selectedDeptId || d.branch_cd === selectedDeptId
+    );
+
+    const targetCourseCd = selectedCourseCd !== 'all'
+      ? (chosenCourse?.course_cd || chosenCourse?.code || selectedCourseCd)
+      : (subObj?.course_cd || '');
+    const targetCourseName = chosenCourse?.name || subObj?.course_name || '';
+    const targetBranchCd = chosenDept?.branch_cd || chosenDept?.code || selectedDeptId || subObj?.branch_cd || subObj?.department_id || '';
+    const targetBranchName = chosenDept?.name || subObj?.department_name || '';
+    const targetBatchCd = selectedBatchCd !== 'all' ? selectedBatchCd : (subObj?.batch_cd || '');
+    const targetSemCd = selectedSemCd !== 'all' ? selectedSemCd : (subObj?.sem_cd || subObj?.semester || '');
+    const targetSection = selectedSection || 'All Sections';
 
     // Duplicate check
     const isDup = links.some(
@@ -825,11 +860,21 @@ export default function SubjectLinkerPage() {
         body: JSON.stringify({
           facultyId: realFacId,
           subjectId: realSubId,
+          courseCd: targetCourseCd,
+          courseName: targetCourseName,
+          branchCd: targetBranchCd,
+          branchName: targetBranchName,
+          batchCd: targetBatchCd,
+          semCd: targetSemCd,
+          section: targetSection,
+          departmentId: selectedDeptId,
+          collegeId: activeCollege?.id,
+          collegeSlug: targetSlug,
         }),
       });
 
       if (res.ok) {
-        showAlert('success', `Faculty subject link ${isEdit ? 'updated' : 'saved'} in PostgreSQL successfully!`);
+        showAlert('success', `Faculty linked to ${targetCourseName || 'Course'} / ${subObj?.name || 'Subject'} successfully!`);
         resetForm();
         fetchLinks(selectedCollegeFilter);
       } else {
@@ -891,6 +936,13 @@ export default function SubjectLinkerPage() {
         subject_code: f.subject_code || sub?.code || 'SUB',
         subject_department_name: sub?.department_name || f.department_name,
         subject_department_code: sub?.department_code || f.department_code,
+        course_cd: sub?.course_cd,
+        course_name: sub?.course_name,
+        branch_cd: sub?.branch_cd || f.department_code,
+        branch_name: sub?.department_name || f.department_name,
+        batch_cd: sub?.batch_cd,
+        sem_cd: sub?.sem_cd || sub?.semester,
+        section: 'All Sections',
         college_id: facCol?.id || f.college_id,
         college_name: facCol?.name || f.college_name || (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution',
         college_code: facCol?.code || f.college_code || '1',
@@ -991,7 +1043,27 @@ export default function SubjectLinkerPage() {
         if (!isColMatch) return false;
       }
 
-      // 2. Department Filter
+      // 2. Course Filter
+      if (selectedCourseFilter !== 'all') {
+        const targetCourse = courses.find(c =>
+          String(c.code) === String(selectedCourseFilter) ||
+          String(c.course_cd) === String(selectedCourseFilter) ||
+          String(c.id) === String(selectedCourseFilter)
+        );
+        const targetCd = targetCourse?.course_cd || targetCourse?.code || selectedCourseFilter;
+        const targetName = (targetCourse?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        const linkCourseCd = String(link.course_cd || '');
+        const linkCourseName = (link.course_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        const isCourseMatch =
+          linkCourseCd === String(targetCd) ||
+          (targetName && linkCourseName && (linkCourseName === targetName || linkCourseName.includes(targetName)));
+
+        if (!isCourseMatch) return false;
+      }
+
+      // 3. Department Filter
       if (selectedDeptFilter !== 'all') {
         const filterVal = selectedDeptFilter.toLowerCase().trim();
         const facDept = (link.faculty_department_name || '').toLowerCase().trim();
@@ -1010,7 +1082,7 @@ export default function SubjectLinkerPage() {
         if (!isDeptMatch) return false;
       }
 
-      // 3. Search Term Filter
+      // 4. Search Term Filter
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const matchesSearch =
@@ -1018,6 +1090,7 @@ export default function SubjectLinkerPage() {
           link.faculty_code.toLowerCase().includes(term) ||
           link.subject_name.toLowerCase().includes(term) ||
           link.subject_code.toLowerCase().includes(term) ||
+          (link.course_name && link.course_name.toLowerCase().includes(term)) ||
           (link.faculty_department_name && link.faculty_department_name.toLowerCase().includes(term)) ||
           (link.college_name && link.college_name.toLowerCase().includes(term));
         if (!matchesSearch) return false;
@@ -1025,7 +1098,7 @@ export default function SubjectLinkerPage() {
 
       return true;
     });
-  }, [allDisplayLinks, selectedCollegeFilter, selectedDeptFilter, searchTerm, colleges, departments]);
+  }, [allDisplayLinks, selectedCollegeFilter, selectedCourseFilter, selectedDeptFilter, searchTerm, colleges, departments, courses]);
 
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
@@ -1186,8 +1259,8 @@ export default function SubjectLinkerPage() {
                     )}
                   </div>
 
-                  {/* STEP 4: Batch & Semester Filters (Precision Filters) */}
-                  <div className="grid grid-cols-2 gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  {/* STEP 4: Batch, Semester & Section Filters (Precision Filters) */}
+                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                     <div className="space-y-1">
                       <label className="text-[10px] font-extrabold uppercase text-slate-600 dark:text-slate-400 tracking-wider">
                         Batch
@@ -1195,7 +1268,7 @@ export default function SubjectLinkerPage() {
                       <select
                         value={selectedBatchCd}
                         onChange={(e) => handleBatchChange(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[11px] text-slate-900 dark:text-white font-semibold focus:outline-none"
+                        className="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[11px] text-slate-900 dark:text-white font-semibold focus:outline-none"
                       >
                         <option value="all">All Batches</option>
                         {formAvailableBatches.map((b) => (
@@ -1213,14 +1286,32 @@ export default function SubjectLinkerPage() {
                       <select
                         value={selectedSemCd}
                         onChange={(e) => handleSemesterChange(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[11px] text-slate-900 dark:text-white font-semibold focus:outline-none"
+                        className="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[11px] text-slate-900 dark:text-white font-semibold focus:outline-none"
                       >
-                        <option value="all">All Semesters</option>
+                        <option value="all">All Sems</option>
                         {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
                           <option key={s} value={String(s)}>
                             Sem {s}
                           </option>
                         ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-extrabold uppercase text-slate-600 dark:text-slate-400 tracking-wider">
+                        Section
+                      </label>
+                      <select
+                        value={selectedSection}
+                        onChange={(e) => setSelectedSection(e.target.value)}
+                        className="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[11px] text-slate-900 dark:text-white font-semibold focus:outline-none"
+                      >
+                        <option value="All Sections">All Sec</option>
+                        <option value="Section A">Sec A</option>
+                        <option value="Section B">Sec B</option>
+                        <option value="Section C">Sec C</option>
+                        <option value="Section D">Sec D</option>
+                        <option value="Section E">Sec E</option>
                       </select>
                     </div>
                   </div>
@@ -1394,6 +1485,20 @@ export default function SubjectLinkerPage() {
                     </div>
                   </div>
 
+                  {/* 2.5 Course Filter */}
+                  <select
+                    value={selectedCourseFilter}
+                    onChange={(e) => setSelectedCourseFilter(e.target.value)}
+                    className="px-3.5 py-2 text-xs rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white font-bold"
+                  >
+                    <option value="all">🎓 All Courses ({courses.length})</option>
+                    {courses.map((crs) => (
+                      <option key={crs.id} value={crs.code || crs.course_cd || crs.id}>
+                        🎓 [{crs.code || crs.course_cd || '#'}] {crs.name}
+                      </option>
+                    ))}
+                  </select>
+
                   {/* 3. Department Filter */}
                   <select
                     value={selectedDeptFilter}
@@ -1417,9 +1522,10 @@ export default function SubjectLinkerPage() {
                     <thead>
                       <tr className="border-b border-[#E7EAF3] dark:border-slate-800 text-slate-500 dark:text-slate-400 font-extrabold uppercase text-[10px] tracking-wider bg-slate-50 dark:bg-slate-800/50">
                         <th className="pl-6 py-4">Faculty Member</th>
+                        <th className="py-4">Course & Academic Scope</th>
                         <th className="py-4">College & Dept</th>
                         <th className="py-4">Linked Subject</th>
-                        <th className="py-4">Source / Classification</th>
+                        <th className="py-4">Classification</th>
                         <th className="pr-6 py-4 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -1433,6 +1539,7 @@ export default function SubjectLinkerPage() {
                                 <div className="h-2.5 bg-slate-100 dark:bg-slate-900 rounded w-20"></div>
                               </div>
                             </td>
+                            <td className="py-4"><div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-28"></div></td>
                             <td className="py-4"><div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-24"></div></td>
                             <td className="py-4">
                               <div className="space-y-2">
@@ -1448,7 +1555,7 @@ export default function SubjectLinkerPage() {
                         ))
                       ) : filteredLinks.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-14 text-center text-slate-400 font-medium">
+                          <td colSpan={6} className="py-14 text-center text-slate-400 font-medium">
                             No faculty subject links found matching the filter.
                           </td>
                         </tr>
@@ -1466,6 +1573,27 @@ export default function SubjectLinkerPage() {
                                   <p className="font-extrabold text-slate-900 dark:text-white text-sm">{link.faculty_name}</p>
                                   <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                                     <span className="font-mono font-bold">{link.faculty_code}</span> | {link.faculty_designation || 'Faculty Member'}
+                                  </p>
+                                </div>
+                              </td>
+
+                              <td className="py-4">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-[#5B4BFF] border border-[#5B4BFF]/25 font-black text-[9px] uppercase tracking-wide inline-block">
+                                      🎓 {link.course_name || link.course_cd || 'General Course'}
+                                    </span>
+                                    {link.section && link.section !== 'All Sections' && (
+                                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 font-black text-[9px] inline-block">
+                                        🏷️ {link.section}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-slate-600 dark:text-slate-300 font-bold">
+                                    {link.branch_name || link.faculty_department_name || link.branch_cd || 'All Branches'}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 font-medium">
+                                    {link.batch_cd ? `Batch ${link.batch_cd}` : 'All Batches'} • {link.sem_cd ? `Sem ${link.sem_cd}` : 'All Sems'}
                                   </p>
                                 </div>
                               </td>
@@ -1497,7 +1625,7 @@ export default function SubjectLinkerPage() {
                                   </span>
                                 ) : (
                                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-extrabold uppercase text-[9px] tracking-wider inline-block">
-                                    🔗 Subject Linker
+                                    🔗 Course & Subject Linker
                                   </span>
                                 )}
                               </td>

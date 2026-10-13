@@ -26,9 +26,10 @@ export class NotificationsService {
     const slug = this.resolveTenantSlug(tenantSlug);
     const schema = `tenant_${slug}`;
 
-    const regNo = user?.registration_no || user?.username || user?.rollno || user?.sub || '';
+    const regNo = user?.registration_no || user?.username || user?.rollno || user?.sub || user?.emp_id || user?.empid || '';
+    const empId = user?.emp_id || user?.empid || user?.employee_id || user?.employeeId || '';
     const userId = user?.sub || user?.id || '';
-    const role = user?.role || 'STUDENT';
+    const role = (user?.role || 'STUDENT').toUpperCase();
 
     const params: any[] = [];
     const recipientConditions: string[] = ["n.recipient_id = 'ALL'"];
@@ -36,6 +37,12 @@ export class NotificationsService {
     if (role === 'ADMIN') {
       recipientConditions.push("n.recipient_id = 'ADMIN'");
       recipientConditions.push("n.recipient_id = 'ALL_ADMINS'");
+    }
+
+    if (role === 'HOD') {
+      recipientConditions.push("n.recipient_id = 'HOD'");
+      recipientConditions.push("n.recipient_id = 'ALL_HODS'");
+      recipientConditions.push("n.recipient_id = 'ALL_FACULTY'");
     }
 
     if (role === 'STUDENT') {
@@ -51,7 +58,12 @@ export class NotificationsService {
       recipientConditions.push(`n.recipient_id = $${params.length}`);
     }
 
-    if (userId && userId !== regNo) {
+    if (empId && empId !== regNo) {
+      params.push(empId);
+      recipientConditions.push(`n.recipient_id = $${params.length}`);
+    }
+
+    if (userId && userId !== regNo && userId !== empId) {
       params.push(userId);
       recipientConditions.push(`n.recipient_id = $${params.length}`);
     }
@@ -62,6 +74,8 @@ export class NotificationsService {
         categoryFilter = `AND (n.type = 'announcement' OR n.type = 'info' OR n.type = 'success')`;
       } else if (category === 'deadlines') {
         categoryFilter = `AND (n.type = 'deadline' OR n.type = 'warning' OR n.title ILIKE '%deadline%')`;
+      } else if (category === 'timetable') {
+        categoryFilter = `AND (n.category = 'timetable' OR n.title ILIKE '%schedule%' OR n.title ILIKE '%timetable%')`;
       }
     }
 
@@ -140,6 +154,9 @@ export class NotificationsService {
       if (role === 'ADMIN') {
         updateSql += ` OR recipient_id = 'ADMIN' OR recipient_id = 'ALL_ADMINS'`;
       }
+      if (role === 'HOD') {
+        updateSql += ` OR recipient_id = 'HOD' OR recipient_id = 'ALL_HODS' OR recipient_id = 'ALL_FACULTY'`;
+      }
       if (role === 'STUDENT') {
         updateSql += ` OR recipient_id = 'ALL_STUDENTS'`;
       }
@@ -148,6 +165,11 @@ export class NotificationsService {
       }
       if (regNo) {
         params.push(regNo);
+        updateSql += ` OR recipient_id = $${params.length}`;
+      }
+      const empId = user?.emp_id || user?.empid || user?.employee_id || '';
+      if (empId && empId !== regNo) {
+        params.push(empId);
         updateSql += ` OR recipient_id = $${params.length}`;
       }
       updateSql += `)`;

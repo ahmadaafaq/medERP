@@ -68,6 +68,31 @@ export default function FacultyDashboard() {
     loading: true,
   });
 
+  // 5. Schedule Planner Clerk Alert & Pending Topics state
+  const [plannerAlert, setPlannerAlert] = useState<{
+    loading: boolean;
+    hasDrafts: boolean;
+    pendingCount: number;
+    linkedCount: number;
+    totalSlots: number;
+    activeWeekStr: string;
+    courseInfo: string;
+    pendingSlots: any[];
+    draftId: string;
+    draftTitle: string;
+  }>({
+    loading: true,
+    hasDrafts: false,
+    pendingCount: 0,
+    linkedCount: 0,
+    totalSlots: 0,
+    activeWeekStr: '',
+    courseInfo: '',
+    pendingSlots: [],
+    draftId: '',
+    draftTitle: '',
+  });
+
   useEffect(() => {
     const slug = typeof window !== 'undefined'
       ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '').replace(/^tenant_/, '').replace(/^tenant-/, '') || 'srms-cet-bareilly'
@@ -80,18 +105,67 @@ export default function FacultyDashboard() {
 
     // 0. Fetch Dynamic Lectures for Logged-In Faculty
     const facEmpId = typeof window !== 'undefined' ? localStorage.getItem('empid') || localStorage.getItem('emp_id') || '' : '';
+    const storedName = typeof window !== 'undefined' ? localStorage.getItem('name') || localStorage.getItem('facultyName') || '' : '';
 
     fetch(`${API_BASE}/auth/me`, { headers })
       .then(async (r) => {
         let facId = '';
         let targetEmpId = facEmpId;
+        let targetName = storedName;
         if (r && r.ok) {
           const j = await r.json();
           const me = j.data || j;
           const profile = me.profile || {};
           facId = profile.id || me.id || '';
           targetEmpId = profile.emp_id || me.emp_id || targetEmpId;
+          targetName = profile.name || me.name || targetName;
         }
+
+        // Fetch Clerk-scheduled Drafts for Faculty Schedule Planner Alert
+        const planUrl = `/api/v1/exams/timetable-drafts/faculty-schedule?facultyId=${encodeURIComponent(facId)}&facultyEmpId=${encodeURIComponent(targetEmpId)}&facultyName=${encodeURIComponent(targetName)}&tenant=${slug}`;
+        fetch(planUrl, { headers })
+          .then(async (pr) => {
+            if (pr.ok) {
+              const pj = await pr.json();
+              const pDrafts = Array.isArray(pj.data) ? pj.data : Array.isArray(pj) ? pj : [];
+              if (pDrafts.length > 0) {
+                // Find draft with pending slots, or fallback to latest
+                const targetDraft = pDrafts.find((d: any) => {
+                  const sList = Array.isArray(d.slots) ? d.slots : [];
+                  return sList.some((s: any) => !s.mappingStatus || s.mappingStatus === 'PENDING');
+                }) || pDrafts[0];
+
+                const sList = Array.isArray(targetDraft.slots) ? targetDraft.slots : [];
+                const pending = sList.filter((s: any) => !s.mappingStatus || s.mappingStatus === 'PENDING');
+                const linked = sList.filter((s: any) => s.mappingStatus === 'LINKED');
+
+                const wStart = targetDraft.week_start ? String(targetDraft.week_start).slice(0, 10) : '';
+                const wEnd = targetDraft.week_end ? String(targetDraft.week_end).slice(0, 10) : '';
+                const weekStr = wStart && wEnd ? `${wStart} – ${wEnd}` : (targetDraft.title || 'Current Week');
+                const semText = targetDraft.semester ? `Sem ${targetDraft.semester}` : '';
+                const secText = targetDraft.section ? `Sec ${targetDraft.section}` : '';
+                const courseText = [semText, secText].filter(Boolean).join(' · ');
+
+                setPlannerAlert({
+                  loading: false,
+                  hasDrafts: true,
+                  pendingCount: pending.length,
+                  linkedCount: linked.length,
+                  totalSlots: sList.length,
+                  activeWeekStr: weekStr,
+                  courseInfo: courseText,
+                  pendingSlots: pending,
+                  draftId: targetDraft.id,
+                  draftTitle: targetDraft.title || 'Weekly Timetable',
+                });
+              } else {
+                setPlannerAlert(prev => ({ ...prev, loading: false, hasDrafts: false }));
+              }
+            } else {
+              setPlannerAlert(prev => ({ ...prev, loading: false }));
+            }
+          })
+          .catch(() => setPlannerAlert(prev => ({ ...prev, loading: false })));
 
         let ttUrl = `${API_BASE}/timetable?tenant=${slug}`;
         if (facId) ttUrl += `&facultyId=${encodeURIComponent(facId)}`;
@@ -294,9 +368,122 @@ export default function FacultyDashboard() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Faculty Academic & Research Portal" />
         <main className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 flex-1 max-w-[1600px] w-full mx-auto overflow-x-hidden">
-          {/* Top 4 Premium Feature Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Clerk Weekly Schedule Alert Banner for Faculty Schedule Planner */}
+          {plannerAlert.hasDrafts && (
+            <div className={`p-4 sm:p-5 rounded-[22px] border transition-all ${
+              plannerAlert.pendingCount > 0
+                ? 'bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-indigo-500/10 border-amber-300 dark:border-amber-700/60 shadow-sm'
+                : 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/50'
+            }`}>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0 shadow-sm ${
+                    plannerAlert.pendingCount > 0
+                      ? 'bg-gradient-to-br from-[#F36C21] to-amber-500 text-white animate-pulse'
+                      : 'bg-emerald-500 text-white'
+                  }`}>
+                    {plannerAlert.pendingCount > 0 ? '⚠️' : '✓'}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base font-extrabold text-[#1B1E28] dark:text-white">
+                        {plannerAlert.pendingCount > 0
+                          ? `Clerk Scheduled Lectures — Curriculum Planning Required`
+                          : `Weekly Schedule Complete`}
+                      </h2>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider ${
+                        plannerAlert.pendingCount > 0
+                          ? 'bg-[#F36C21] text-white shadow-sm'
+                          : 'bg-emerald-500 text-white'
+                      }`}>
+                        {plannerAlert.pendingCount > 0 ? `${plannerAlert.pendingCount} Pending` : '100% Linked'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#4E5969] dark:text-slate-300 leading-relaxed">
+                      {plannerAlert.pendingCount > 0 ? (
+                        <>
+                          Clerk has scheduled lectures for you for <span className="font-bold text-[#1B1E28] dark:text-white">{plannerAlert.activeWeekStr}</span> {plannerAlert.courseInfo ? `(${plannerAlert.courseInfo})` : ''}. Please link syllabus units &amp; topics in Schedule Planner before HOD can approve.
+                        </>
+                      ) : (
+                        <>
+                          All <span className="font-bold text-emerald-700 dark:text-emerald-300">{plannerAlert.totalSlots} lectures</span> are linked with curriculum for <span className="font-bold">{plannerAlert.activeWeekStr}</span>. Awaiting HOD final approval.
+                        </>
+                      )}
+                    </p>
+                    {plannerAlert.pendingSlots.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {plannerAlert.pendingSlots.slice(0, 4).map((s: any, idx: number) => {
+                          const sub = s.subjectName || s.subject_name || s.subject || s.subjectCode || 'Lecture';
+                          const t = `${(s.startTime || s.start_time || '').slice(0, 5)} - ${(s.endTime || s.end_time || '').slice(0, 5)}`;
+                          return (
+                            <span key={s.id || idx} className="px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 text-[10.5px] font-bold border border-amber-300 dark:border-amber-700/60">
+                              ⏳ {sub} ({t})
+                            </span>
+                          );
+                        })}
+                        {plannerAlert.pendingSlots.length > 4 && (
+                          <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10.5px] font-bold">
+                            +{plannerAlert.pendingSlots.length - 4} more
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                  <Link
+                    href="/dashboard/faculty/schedule-planner"
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] hover:from-[#4E3FE4] hover:to-[#6754F5] text-white text-xs font-black shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer group"
+                  >
+                    <span>Open Schedule Planner</span>
+                    <span className="transition-transform group-hover:translate-x-1">➔</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Top 5 Premium Feature Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
             
+            {/* Card 0: Schedule Planner Status */}
+            <Link
+              href="/dashboard/faculty/schedule-planner"
+              className={`bg-white dark:bg-slate-900 border rounded-[22px] p-6 shadow-soft hover:shadow-md transition-all block group relative overflow-hidden space-y-2.5 ${
+                plannerAlert.pendingCount > 0
+                  ? 'border-amber-400/80 hover:border-amber-500 shadow-amber-500/10'
+                  : 'border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/40'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                  Schedule Planner
+                </span>
+                <span className={`w-8 h-8 rounded-xl text-white flex items-center justify-center text-sm shadow-sm group-hover:scale-110 transition-transform ${
+                  plannerAlert.pendingCount > 0
+                    ? 'bg-gradient-to-tr from-[#F36C21] to-amber-500'
+                    : 'bg-gradient-to-tr from-emerald-500 to-teal-500'
+                }`}>
+                  {plannerAlert.pendingCount > 0 ? '⚠️' : '📑'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <p className={`text-2xl font-black ${plannerAlert.pendingCount > 0 ? 'text-[#F36C21]' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  {plannerAlert.loading ? '...' : plannerAlert.pendingCount > 0 ? `${plannerAlert.pendingCount} Pending` : 'All Linked'}
+                </p>
+                <p className="text-xs text-[#5B4BFF] font-black line-clamp-1 truncate">
+                  {plannerAlert.activeWeekStr ? `Week: ${plannerAlert.activeWeekStr}` : 'Schedule Planner'}
+                </p>
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] font-bold">
+                <span className={plannerAlert.pendingCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                  {plannerAlert.linkedCount} / {plannerAlert.totalSlots} Linked
+                </span>
+                <span className="text-[#5B4BFF] group-hover:underline">Plan Topics ➔</span>
+              </div>
+            </Link>
+
             {/* Card 1: Today's Lectures */}
             <Link
               href="/dashboard/faculty/schedule"

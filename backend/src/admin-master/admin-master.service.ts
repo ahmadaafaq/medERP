@@ -15,6 +15,9 @@ import {
   CreateSubjectOfferingDto, UpdateSubjectOfferingDto,
   LinkFacultySubjectDto,
   CreateUnitMasterDto, UpdateUnitMasterDto,
+  CreateProgramOutcomeDto, UpdateProgramOutcomeDto,
+  CreateProgramEducationalObjectiveDto, UpdateProgramEducationalObjectiveDto,
+  SaveCoPoMatrixDto, SavePoPeoMatrixDto,
 } from './dto/admin-master.dto';
 
 const _srmsAdminAgent = new https.Agent({ rejectUnauthorized: false });
@@ -169,6 +172,14 @@ export class AdminMasterService {
         ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS sec_cd VARCHAR(50);
         ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
         ALTER TABLE "${schema}".units ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+        DROP INDEX IF EXISTS "${schema}".units_code_uq_idx;
+        DROP INDEX IF EXISTS "${schema}".units_code_idx;
+        DROP INDEX IF EXISTS "${schema}".units_code_idx1;
+        DROP INDEX IF EXISTS "${schema}".uq_${slug.replace(/-/g, '_')}_unt_code;
+        ALTER TABLE "${schema}".units DROP CONSTRAINT IF EXISTS units_code_key;
+        ALTER TABLE "${schema}".units DROP CONSTRAINT IF EXISTS units_code_idx;
+        CREATE INDEX IF NOT EXISTS idx_units_code ON "${schema}".units (code);
+        CREATE INDEX IF NOT EXISTS idx_units_subject_code ON "${schema}".units (subject_code, code);
       `);
 
       // 4. topics
@@ -287,6 +298,93 @@ export class AdminMasterService {
         ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS hours_allotted INT;
         ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS is_elective BOOLEAN DEFAULT false;
         ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+      `);
+
+      // 7. program_outcomes (POs / PSOs)
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".program_outcomes (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          code VARCHAR(50) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          type VARCHAR(20) DEFAULT 'PO',
+          course_cd VARCHAR(50),
+          course_name VARCHAR(200),
+          branch_cd VARCHAR(50),
+          batch_year INT,
+          po_order INT DEFAULT 1,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ
+        );
+        ALTER TABLE "${schema}".program_outcomes ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'PO';
+        ALTER TABLE "${schema}".program_outcomes ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".program_outcomes ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+        ALTER TABLE "${schema}".program_outcomes ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".program_outcomes ADD COLUMN IF NOT EXISTS batch_year INT;
+        ALTER TABLE "${schema}".program_outcomes ADD COLUMN IF NOT EXISTS po_order INT DEFAULT 1;
+        ALTER TABLE "${schema}".program_outcomes ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+        ALTER TABLE "${schema}".program_outcomes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+        CREATE INDEX IF NOT EXISTS idx_po_code ON "${schema}".program_outcomes (code);
+      `);
+
+      // 8. program_educational_objectives (PEOs)
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".program_educational_objectives (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          code VARCHAR(50) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          course_cd VARCHAR(50),
+          course_name VARCHAR(200),
+          branch_cd VARCHAR(50),
+          batch_year INT,
+          peo_order INT DEFAULT 1,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ
+        );
+        ALTER TABLE "${schema}".program_educational_objectives ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".program_educational_objectives ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+        ALTER TABLE "${schema}".program_educational_objectives ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".program_educational_objectives ADD COLUMN IF NOT EXISTS batch_year INT;
+        ALTER TABLE "${schema}".program_educational_objectives ADD COLUMN IF NOT EXISTS peo_order INT DEFAULT 1;
+        ALTER TABLE "${schema}".program_educational_objectives ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+        ALTER TABLE "${schema}".program_educational_objectives ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+        CREATE INDEX IF NOT EXISTS idx_peo_code ON "${schema}".program_educational_objectives (code);
+      `);
+
+      // 9. co_po_matrices
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".co_po_matrices (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          college_id VARCHAR(50),
+          course_cd VARCHAR(50),
+          branch_cd VARCHAR(50),
+          batch_year INT,
+          sem_cd VARCHAR(50),
+          subject_id VARCHAR(100) NOT NULL,
+          subject_code VARCHAR(100),
+          subject_name VARCHAR(255),
+          matrix_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ
+        );
+        CREATE INDEX IF NOT EXISTS idx_co_po_subj ON "${schema}".co_po_matrices (subject_id);
+      `);
+
+      // 10. po_peo_matrices
+      await this.ds.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".po_peo_matrices (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          college_id VARCHAR(50),
+          course_cd VARCHAR(50),
+          branch_cd VARCHAR(50),
+          batch_year INT,
+          matrix_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ
+        );
       `);
     } catch (e: any) {
       this.logger.error(`Failed to ensure admin master tables for schema ${schema}: ${e.message}`);
@@ -2867,11 +2965,20 @@ export class AdminMasterService {
       await this.ds.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9_]/g, '_')}_fac_sub ON "${schema}".faculty_subjects (faculty_id, subject_id);
       `).catch(() => {});
+      await this.ds.query(`
+        ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+        ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+        ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS branch_name VARCHAR(200);
+        ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+        ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS sem_cd VARCHAR(50);
+        ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+      `).catch(() => {});
       AdminMasterService.ensuredFacultySubjectSchemas.add(schema);
     } catch (e) {}
   }
 
-  async listFacultySubjects(query: { facultyId?: string; subjectId?: string; departmentId?: string }, tenantSlug?: string) {
+  async listFacultySubjects(query: { facultyId?: string; subjectId?: string; departmentId?: string; courseCd?: string; branchCd?: string }, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
     const colleges = await this.ds.query(`SELECT id, code, name, slug FROM public.tenants WHERE is_active = true`).catch(() => []);
 
@@ -2884,14 +2991,20 @@ export class AdminMasterService {
           await this.ensureFacultySubjectsTable(s);
           const rows = await this.ds.query(
             `SELECT DISTINCT ON (fs.id) fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
+                    fs.course_cd, fs.course_name, fs.branch_cd, fs.branch_name, fs.batch_cd, fs.sem_cd, fs.section,
+                    COALESCE(fs.course_cd, s.course_cd) AS resolved_course_cd,
+                    COALESCE(fs.course_name, s.course_name) AS resolved_course_name,
+                    COALESCE(fs.branch_cd, s.branch_cd) AS resolved_branch_cd,
+                    COALESCE(fs.batch_cd, s.batch_cd) AS resolved_batch_cd,
+                    COALESCE(fs.sem_cd, s.sem_cd, s.semester) AS resolved_sem_cd,
                     f.name AS faculty_name, f.emp_id AS faculty_code, f.designation AS faculty_designation,
                     fd.name AS faculty_department_name, fd.code AS faculty_department_code,
                     s.name AS subject_name, s.code AS subject_code,
                     sd.name AS subject_department_name, sd.code AS subject_department_code
              FROM "${s}".faculty_subjects fs
-             JOIN "${s}".faculty f ON f.id::text = fs.faculty_id::text
+             JOIN "${s}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
              LEFT JOIN "${s}".departments fd ON (fd.id::text = f.department_id::text OR fd.code::text = f.department_id::text)
-             JOIN "${s}".subjects s ON s.id::text = fs.subject_id::text
+             JOIN "${s}".subjects s ON (s.id::text = fs.subject_id::text OR s.code::text = fs.subject_id::text)
              LEFT JOIN "${s}".departments sd ON (sd.id::text = s.department_id::text OR sd.code::text = s.department_id::text)
              WHERE fs.is_active = true
              ORDER BY fs.id, fs.created_at DESC`
@@ -2918,28 +3031,42 @@ export class AdminMasterService {
     const params: any[] = [];
     let sql = `
       SELECT DISTINCT ON (fs.id) fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
+             fs.course_cd, fs.course_name, fs.branch_cd, fs.branch_name, fs.batch_cd, fs.sem_cd, fs.section,
+             COALESCE(fs.course_cd, s.course_cd) AS resolved_course_cd,
+             COALESCE(fs.course_name, s.course_name) AS resolved_course_name,
+             COALESCE(fs.branch_cd, s.branch_cd) AS resolved_branch_cd,
+             COALESCE(fs.batch_cd, s.batch_cd) AS resolved_batch_cd,
+             COALESCE(fs.sem_cd, s.sem_cd, s.semester) AS resolved_sem_cd,
              f.name AS faculty_name, f.emp_id AS faculty_code, f.designation AS faculty_designation,
              fd.name AS faculty_department_name, fd.code AS faculty_department_code,
              s.name AS subject_name, s.code AS subject_code,
              sd.name AS subject_department_name, sd.code AS subject_department_code
       FROM "${s}".faculty_subjects fs
-      JOIN "${s}".faculty f ON f.id::text = fs.faculty_id::text
+      JOIN "${s}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
       LEFT JOIN "${s}".departments fd ON (fd.id::text = f.department_id::text OR fd.code::text = f.department_id::text)
-      JOIN "${s}".subjects s ON s.id::text = fs.subject_id::text
+      JOIN "${s}".subjects s ON (s.id::text = fs.subject_id::text OR s.code::text = fs.subject_id::text)
       LEFT JOIN "${s}".departments sd ON (sd.id::text = s.department_id::text OR sd.code::text = s.department_id::text)
       WHERE fs.is_active = true
     `;
     if (query?.facultyId) {
       params.push(query.facultyId);
-      sql += ` AND fs.faculty_id::text = $${params.length}::text`;
+      sql += ` AND (fs.faculty_id::text = $${params.length}::text OR f.emp_id::text = $${params.length}::text OR f.id::text = $${params.length}::text)`;
     }
     if (query?.subjectId) {
       params.push(query.subjectId);
-      sql += ` AND fs.subject_id::text = $${params.length}::text`;
+      sql += ` AND (fs.subject_id::text = $${params.length}::text OR s.code::text = $${params.length}::text OR s.id::text = $${params.length}::text)`;
     }
     if (query?.departmentId) {
       params.push(query.departmentId);
       sql += ` AND (f.department_id::text = $${params.length}::text OR s.department_id::text = $${params.length}::text OR fd.code::text = $${params.length}::text OR sd.code::text = $${params.length}::text)`;
+    }
+    if (query?.courseCd) {
+      params.push(query.courseCd);
+      sql += ` AND (fs.course_cd::text = $${params.length}::text OR s.course_cd::text = $${params.length}::text)`;
+    }
+    if (query?.branchCd) {
+      params.push(query.branchCd);
+      sql += ` AND (fs.branch_cd::text = $${params.length}::text OR s.branch_cd::text = $${params.length}::text OR s.department_id::text = $${params.length}::text OR sd.code::text = $${params.length}::text)`;
     }
     sql += ` ORDER BY fs.id, fs.created_at DESC`;
     const rows = await this.ds.query(sql, params).catch(() => []);
@@ -2970,22 +3097,42 @@ export class AdminMasterService {
       if (fRows.length) facId = fRows[0].id;
     }
 
-    // Resolve Subject UUID
+    // Resolve Subject UUID and Subject details (fallback for course, branch, batch, sem)
     let subId = dto.subjectId;
-    if (!this.isUUID(subId)) {
-      const sRows = await this.ds.query(
-        `SELECT id FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
-        [dto.subjectId],
-      ).catch(() => []);
-      if (sRows.length) subId = sRows[0].id;
+    const sRows = await this.ds.query(
+      `SELECT * FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
+      [dto.subjectId],
+    ).catch(() => []);
+    if (sRows.length) {
+      subId = sRows[0].id;
     }
+    const sub = sRows[0] || {};
+
+    const courseCd = dto.courseCd || sub.course_cd || null;
+    const courseName = dto.courseName || sub.course_name || null;
+    const branchCd = dto.branchCd || sub.branch_cd || dto.departmentId || null;
+    const branchName = dto.branchName || null;
+    const batchCd = dto.batchCd || sub.batch_cd || null;
+    const semCd = dto.semCd || sub.sem_cd || sub.semester || null;
+    const section = dto.section || null;
 
     const rows = await this.ds.query(
-      `INSERT INTO "${schema}".faculty_subjects (faculty_id, subject_id, is_active)
-       VALUES ($1, $2, true)
-       ON CONFLICT (faculty_id, subject_id) DO UPDATE SET is_active = true
+      `INSERT INTO "${schema}".faculty_subjects (
+         faculty_id, subject_id, course_cd, course_name, branch_cd, branch_name, batch_cd, sem_cd, section, is_active
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+       ON CONFLICT (faculty_id, subject_id) DO UPDATE SET
+         course_cd = COALESCE(EXCLUDED.course_cd, "${schema}".faculty_subjects.course_cd),
+         course_name = COALESCE(EXCLUDED.course_name, "${schema}".faculty_subjects.course_name),
+         branch_cd = COALESCE(EXCLUDED.branch_cd, "${schema}".faculty_subjects.branch_cd),
+         branch_name = COALESCE(EXCLUDED.branch_name, "${schema}".faculty_subjects.branch_name),
+         batch_cd = COALESCE(EXCLUDED.batch_cd, "${schema}".faculty_subjects.batch_cd),
+         sem_cd = COALESCE(EXCLUDED.sem_cd, "${schema}".faculty_subjects.sem_cd),
+         section = COALESCE(EXCLUDED.section, "${schema}".faculty_subjects.section),
+         is_active = true,
+         updated_at = NOW()
        RETURNING *`,
-      [facId, subId]
+      [facId, subId, courseCd, courseName, branchCd, branchName, batchCd, semCd, section]
     );
     return rows[0];
   }
@@ -2996,6 +3143,7 @@ export class AdminMasterService {
     const currentCollege = colleges.find((c: any) => c.slug === slug || c.id === slug || c.code === slug);
     const targetSlug = currentCollege?.slug || (slug === 'all' ? 'srms-cet-bareilly' : slug);
     const schema = `tenant_${targetSlug}`;
+    await this.ensureFacultySubjectsTable(schema);
 
     // Resolve Faculty UUID
     let facId = dto.facultyId;
@@ -3009,20 +3157,38 @@ export class AdminMasterService {
 
     // Resolve Subject UUID
     let subId = dto.subjectId;
-    if (!this.isUUID(subId)) {
-      const sRows = await this.ds.query(
-        `SELECT id FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
-        [dto.subjectId],
-      ).catch(() => []);
-      if (sRows.length) subId = sRows[0].id;
+    const sRows = await this.ds.query(
+      `SELECT * FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
+      [dto.subjectId],
+    ).catch(() => []);
+    if (sRows.length) {
+      subId = sRows[0].id;
     }
+    const sub = sRows[0] || {};
+
+    const courseCd = dto.courseCd || sub.course_cd || null;
+    const courseName = dto.courseName || sub.course_name || null;
+    const branchCd = dto.branchCd || sub.branch_cd || dto.departmentId || null;
+    const branchName = dto.branchName || null;
+    const batchCd = dto.batchCd || sub.batch_cd || null;
+    const semCd = dto.semCd || sub.sem_cd || sub.semester || null;
+    const section = dto.section || null;
 
     const rows = await this.ds.query(
       `UPDATE "${schema}".faculty_subjects
-       SET faculty_id = $1, subject_id = $2, is_active = true
-       WHERE id = $3
+       SET faculty_id = $1, subject_id = $2,
+           course_cd = COALESCE($3, course_cd),
+           course_name = COALESCE($4, course_name),
+           branch_cd = COALESCE($5, branch_cd),
+           branch_name = COALESCE($6, branch_name),
+           batch_cd = COALESCE($7, batch_cd),
+           sem_cd = COALESCE($8, sem_cd),
+           section = COALESCE($9, section),
+           is_active = true,
+           updated_at = NOW()
+       WHERE id = $10
        RETURNING *`,
-      [facId, subId, id]
+      [facId, subId, courseCd, courseName, branchCd, branchName, batchCd, semCd, section, id]
     );
     return rows[0];
   }
@@ -3360,4 +3526,662 @@ export class AdminMasterService {
     );
     return { success: true, message: 'Unit deleted successfully' };
   }
+
+  // ─── 10. PROGRAM OUTCOMES (POs / PSOs) ───────────────────────────────────────
+  async listProgramOutcomes(tenantSlug?: string, courseCd?: string, branchCd?: string) {
+    let slug = await this.resolveTenantSlug(tenantSlug);
+    const colleges = await this.listColleges();
+    if (!slug || slug === 'all') {
+      slug = colleges[0]?.slug || 'srms-cet-bareilly';
+    }
+    await this.ensureAdminMasterTables(slug);
+
+    let query = `
+      SELECT po.*, 
+             COALESCE(c.name, po.course_name) AS course_name,
+             COALESCE(d.name, po.branch_cd) AS branch_name
+      FROM program_outcomes po
+      LEFT JOIN courses c ON c.code = po.course_cd OR c.course_cd = po.course_cd
+      LEFT JOIN departments d ON d.code = po.branch_cd OR d.branch_cd = po.branch_cd
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    if (courseCd && courseCd !== 'all') {
+      params.push(courseCd);
+      query += ` AND (po.course_cd = $${params.length} OR po.course_cd IS NULL)`;
+    }
+    if (branchCd && branchCd !== 'all') {
+      params.push(branchCd);
+      query += ` AND (po.branch_cd = $${params.length} OR po.branch_cd IS NULL)`;
+    }
+    query += ` ORDER BY po.po_order ASC, po.code ASC`;
+
+    const rows = await this.tenantSchemaService.queryInTenant(slug, query, params).catch(() => []);
+    const currentCollege = colleges.find((c: any) => c.slug === slug) || colleges[0];
+
+    return rows.map((r: any) => ({
+      ...r,
+      college_id: currentCollege?.id,
+      college_name: currentCollege?.name,
+      college_code: currentCollege?.code,
+      college_slug: slug,
+    }));
+  }
+
+  async createProgramOutcome(dto: CreateProgramOutcomeDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    await this.ensureAdminMasterTables(slug);
+
+    const cleanCode = dto.code.trim().toUpperCase();
+    const cleanType = (dto.type || (cleanCode.startsWith('PSO') ? 'PSO' : 'PO')).toUpperCase();
+    const cleanTitle = dto.title.trim();
+    const cleanDesc = dto.description ? dto.description.trim() : null;
+
+    // Determine order: auto-increment PO sequence number
+    let poOrder = dto.po_order || dto.poOrder;
+    if (!poOrder) {
+      const match = cleanCode.match(/\d+/);
+      if (match) {
+        poOrder = parseInt(match[0], 10);
+      } else {
+        const maxOrderRow = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT COALESCE(MAX(po_order), 0) + 1 AS next_order FROM program_outcomes`,
+        ).catch(() => [{ next_order: 1 }]);
+        poOrder = parseInt(maxOrderRow[0]?.next_order || '1', 10);
+      }
+    }
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `INSERT INTO program_outcomes (
+         code, title, description, type, course_cd, course_name, branch_cd, batch_year, po_order, is_active
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [
+        cleanCode,
+        cleanTitle,
+        cleanDesc,
+        cleanType,
+        dto.course_cd || dto.courseCd || null,
+        dto.course_name || dto.courseName || null,
+        dto.branch_cd || dto.branchCd || null,
+        dto.batch_year || dto.batchYear || null,
+        poOrder,
+        dto.is_active !== undefined ? dto.is_active : true,
+      ],
+    );
+
+    const colleges = await this.listColleges();
+    const currentCollege = colleges.find((c: any) => c.slug === slug);
+    return {
+      ...(rows[0] || {}),
+      college_id: currentCollege?.id,
+      college_name: currentCollege?.name,
+      college_code: currentCollege?.code,
+      college_slug: slug,
+    };
+  }
+
+  async updateProgramOutcome(id: string, dto: UpdateProgramOutcomeDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    await this.ensureAdminMasterTables(slug);
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE program_outcomes
+       SET code = COALESCE($1, code),
+           title = COALESCE($2, title),
+           description = COALESCE($3, description),
+           type = COALESCE($4, type),
+           course_cd = COALESCE($5, course_cd),
+           course_name = COALESCE($6, course_name),
+           branch_cd = COALESCE($7, branch_cd),
+           batch_year = COALESCE($8, batch_year),
+           po_order = COALESCE($9, po_order),
+           is_active = COALESCE($10, is_active),
+           updated_at = NOW()
+       WHERE id = $11
+       RETURNING *`,
+      [
+        dto.code ? dto.code.trim().toUpperCase() : null,
+        dto.title ? dto.title.trim() : null,
+        dto.description !== undefined ? dto.description : null,
+        dto.type ? dto.type.trim().toUpperCase() : null,
+        dto.course_cd || dto.courseCd || null,
+        dto.course_name || dto.courseName || null,
+        dto.branch_cd || dto.branchCd || null,
+        dto.batch_year || dto.batchYear || null,
+        dto.po_order || dto.poOrder || null,
+        dto.is_active,
+        id,
+      ],
+    );
+    if (rows.length === 0) throw new NotFoundException('Program Outcome not found');
+
+    const colleges = await this.listColleges();
+    const currentCollege = colleges.find((c: any) => c.slug === slug);
+    return {
+      ...(rows[0] || {}),
+      college_id: currentCollege?.id,
+      college_name: currentCollege?.name,
+      college_code: currentCollege?.code,
+      college_slug: slug,
+    };
+  }
+
+  async deleteProgramOutcome(id: string, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM program_outcomes WHERE id = $1`,
+      [id],
+    );
+    return { success: true, message: 'Program Outcome deleted successfully' };
+  }
+
+  async seedProgramOutcomes(tenantSlug?: string, courseCd?: string, branchCd?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.ensureAdminMasterTables(slug);
+
+    const standardNBAOutcomes = [
+      {
+        code: 'PO1',
+        title: 'Engineering Knowledge',
+        description: 'Apply mathematics, natural sciences, computing fundamentals, and engineering knowledge to solve complex engineering problems.',
+        type: 'PO',
+        order: 1,
+      },
+      {
+        code: 'PO2',
+        title: 'Problem Analysis',
+        description: 'Identify, formulate, review research literature, and analyze complex engineering problems using first principles of mathematics and engineering sciences.',
+        type: 'PO',
+        order: 2,
+      },
+      {
+        code: 'PO3',
+        title: 'Design/Development of Solutions',
+        description: 'Design solutions for complex engineering problems and develop systems, components, or processes that meet specified needs.',
+        type: 'PO',
+        order: 3,
+      },
+      {
+        code: 'PO4',
+        title: 'Conduct Investigations of Complex Problems',
+        description: 'Use research-based knowledge and methods, including design of experiments, data analysis, and interpretation of results.',
+        type: 'PO',
+        order: 4,
+      },
+      {
+        code: 'PO5',
+        title: 'Modern Tool Usage',
+        description: 'Create, select, and apply appropriate techniques, resources, and modern engineering and IT tools, including prediction and modelling.',
+        type: 'PO',
+        order: 5,
+      },
+      {
+        code: 'PO6',
+        title: 'The Engineer and Society',
+        description: 'Apply reasoning informed by contextual knowledge to assess societal, health, safety, legal, and cultural issues.',
+        type: 'PO',
+        order: 6,
+      },
+      {
+        code: 'PO7',
+        title: 'Environment and Sustainability',
+        description: 'Understand the impact of engineering solutions in societal and environmental contexts and demonstrate knowledge of sustainable development.',
+        type: 'PO',
+        order: 7,
+      },
+      {
+        code: 'PO8',
+        title: 'Ethics',
+        description: 'Apply ethical principles and commit to professional ethics, responsibilities, and norms of engineering practice.',
+        type: 'PO',
+        order: 8,
+      },
+      {
+        code: 'PO9',
+        title: 'Individual and Team Work',
+        description: 'Function effectively as an individual and as a member or leader in diverse teams and multidisciplinary settings.',
+        type: 'PO',
+        order: 9,
+      },
+      {
+        code: 'PO10',
+        title: 'Communication',
+        description: 'Communicate effectively on complex engineering activities with the engineering community and society.',
+        type: 'PO',
+        order: 10,
+      },
+      {
+        code: 'PO11',
+        title: 'Project Management and Finance',
+        description: 'Demonstrate knowledge and understanding of engineering and management principles and apply these to manage projects and multidisciplinary environments.',
+        type: 'PO',
+        order: 11,
+      },
+      {
+        code: 'PO12',
+        title: 'Life-long Learning',
+        description: 'Recognize the need for independent and lifelong learning and demonstrate the capacity to engage in it in the broadest context of technological change.',
+        type: 'PO',
+        order: 12,
+      },
+      {
+        code: 'PSO1',
+        title: 'Domain Specific Professional Expertise',
+        description: 'Apply domain-specific engineering principles, modern technologies, and architectural paradigms to specify, design, and validate robust systems.',
+        type: 'PSO',
+        order: 13,
+      },
+      {
+        code: 'PSO2',
+        title: 'Problem Solving & Innovation',
+        description: 'Exhibit competence in solving real-world challenges through research, contemporary software/hardware tools, and sustainable innovations.',
+        type: 'PSO',
+        order: 14,
+      },
+    ];
+
+    let seededCount = 0;
+    for (const item of standardNBAOutcomes) {
+      const existing = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM program_outcomes WHERE code = $1 ${courseCd ? 'AND (course_cd = $2 OR course_cd IS NULL)' : ''} LIMIT 1`,
+        courseCd ? [item.code, courseCd] : [item.code],
+      ).catch(() => []);
+
+      if (existing.length === 0) {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO program_outcomes (code, title, description, type, course_cd, branch_cd, po_order, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+          [item.code, item.title, item.description, item.type, courseCd || null, branchCd || null, item.order],
+        );
+        seededCount++;
+      } else {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `UPDATE program_outcomes
+           SET title = $1, description = $2, type = $3, po_order = $4, is_active = true, updated_at = NOW()
+           WHERE id = $5`,
+          [item.title, item.description, item.type, item.order, existing[0].id],
+        );
+        seededCount++;
+      }
+    }
+
+    return {
+      success: true,
+      message: `Successfully seeded/updated ${seededCount} BTech CSE NBA Program Outcomes (PO1-PO12, PSO1-PSO2)`,
+      seededCount,
+    };
+  }
+
+  // ─── 11. PROGRAM EDUCATIONAL OBJECTIVES (PEOs) ──────────────────────────────
+  async listProgramEducationalObjectives(tenantSlug?: string, courseCd?: string, branchCd?: string) {
+    let slug = await this.resolveTenantSlug(tenantSlug);
+    const colleges = await this.listColleges();
+    if (!slug || slug === 'all') {
+      slug = colleges[0]?.slug || 'srms-cet-bareilly';
+    }
+    await this.ensureAdminMasterTables(slug);
+
+    let query = `
+      SELECT peo.*, 
+             COALESCE(c.name, peo.course_name) AS course_name,
+             COALESCE(d.name, peo.branch_cd) AS branch_name
+      FROM program_educational_objectives peo
+      LEFT JOIN courses c ON c.code = peo.course_cd OR c.course_cd = peo.course_cd
+      LEFT JOIN departments d ON d.code = peo.branch_cd OR d.branch_cd = peo.branch_cd
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    if (courseCd && courseCd !== 'all') {
+      params.push(courseCd);
+      query += ` AND (peo.course_cd = $${params.length} OR peo.course_cd IS NULL)`;
+    }
+    if (branchCd && branchCd !== 'all') {
+      params.push(branchCd);
+      query += ` AND (peo.branch_cd = $${params.length} OR peo.branch_cd IS NULL)`;
+    }
+    query += ` ORDER BY peo.peo_order ASC, peo.code ASC`;
+
+    const rows = await this.tenantSchemaService.queryInTenant(slug, query, params).catch(() => []);
+    const currentCollege = colleges.find((c: any) => c.slug === slug) || colleges[0];
+
+    return rows.map((r: any) => ({
+      ...r,
+      college_id: currentCollege?.id,
+      college_name: currentCollege?.name,
+      college_code: currentCollege?.code,
+      college_slug: slug,
+    }));
+  }
+
+  async createProgramEducationalObjective(dto: CreateProgramEducationalObjectiveDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    await this.ensureAdminMasterTables(slug);
+
+    const cleanCode = dto.code.trim().toUpperCase();
+    const cleanTitle = dto.title.trim();
+    const cleanDesc = dto.description ? dto.description.trim() : null;
+
+    let peoOrder = dto.peo_order || dto.peoOrder;
+    if (!peoOrder) {
+      const match = cleanCode.match(/\d+/);
+      peoOrder = match ? parseInt(match[0], 10) : 1;
+    }
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `INSERT INTO program_educational_objectives (
+         code, title, description, course_cd, course_name, branch_cd, batch_year, peo_order, is_active
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        cleanCode,
+        cleanTitle,
+        cleanDesc,
+        dto.course_cd || dto.courseCd || null,
+        dto.course_name || dto.courseName || null,
+        dto.branch_cd || dto.branchCd || null,
+        dto.batch_year || dto.batchYear || null,
+        peoOrder,
+        dto.is_active !== undefined ? dto.is_active : true,
+      ],
+    );
+
+    const colleges = await this.listColleges();
+    const currentCollege = colleges.find((c: any) => c.slug === slug);
+    return {
+      ...(rows[0] || {}),
+      college_id: currentCollege?.id,
+      college_name: currentCollege?.name,
+      college_code: currentCollege?.code,
+      college_slug: slug,
+    };
+  }
+
+  async updateProgramEducationalObjective(id: string, dto: UpdateProgramEducationalObjectiveDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    await this.ensureAdminMasterTables(slug);
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE program_educational_objectives
+       SET code = COALESCE($1, code),
+           title = COALESCE($2, title),
+           description = COALESCE($3, description),
+           course_cd = COALESCE($4, course_cd),
+           course_name = COALESCE($5, course_name),
+           branch_cd = COALESCE($6, branch_cd),
+           batch_year = COALESCE($7, batch_year),
+           peo_order = COALESCE($8, peo_order),
+           is_active = COALESCE($9, is_active),
+           updated_at = NOW()
+       WHERE id = $10
+       RETURNING *`,
+      [
+        dto.code ? dto.code.trim().toUpperCase() : null,
+        dto.title ? dto.title.trim() : null,
+        dto.description !== undefined ? dto.description : null,
+        dto.course_cd || dto.courseCd || null,
+        dto.course_name || dto.courseName || null,
+        dto.branch_cd || dto.branchCd || null,
+        dto.batch_year || dto.batchYear || null,
+        dto.peo_order || dto.peoOrder || null,
+        dto.is_active,
+        id,
+      ],
+    );
+    if (rows.length === 0) throw new NotFoundException('Program Educational Objective not found');
+
+    const colleges = await this.listColleges();
+    const currentCollege = colleges.find((c: any) => c.slug === slug);
+    return {
+      ...(rows[0] || {}),
+      college_id: currentCollege?.id,
+      college_name: currentCollege?.name,
+      college_code: currentCollege?.code,
+      college_slug: slug,
+    };
+  }
+
+  async deleteProgramEducationalObjective(id: string, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM program_educational_objectives WHERE id = $1`,
+      [id],
+    );
+    return { success: true, message: 'Program Educational Objective deleted successfully' };
+  }
+
+  async seedProgramEducationalObjectives(tenantSlug?: string, courseCd?: string, branchCd?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.ensureAdminMasterTables(slug);
+
+    const standardPEOs = [
+      { code: 'PEO1', title: 'Core Competence & Professional Career', description: 'Graduates will establish successful professional careers in computing and allied sectors, demonstrating core problem-solving competence and technical acumen.', order: 1 },
+      { code: 'PEO2', title: 'Higher Studies & Research', description: 'Graduates will pursue higher education, research, and professional certifications to contribute to technological breakthroughs and advanced scientific paradigms.', order: 2 },
+      { code: 'PEO3', title: 'Social & Ethical Responsibility', description: 'Graduates will practice engineering with ethical integrity, professional responsibility, environmental stewardship, and social commitment.', order: 3 },
+      { code: 'PEO4', title: 'Leadership & Teamwork', description: 'Graduates will exhibit leadership skills, multidisciplinary teamwork, clear communication, and entrepreneurial mindset in diverse cultural and global settings.', order: 4 },
+      { code: 'PEO5', title: 'Lifelong Learning & Adaptability', description: 'Graduates will demonstrate self-learning, adaptability to rapid technological advancements, and commitment to lifelong intellectual enrichment.', order: 5 },
+    ];
+
+    let seededCount = 0;
+    for (const item of standardPEOs) {
+      const existing = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM program_educational_objectives WHERE code = $1 ${courseCd ? 'AND (course_cd = $2 OR course_cd IS NULL)' : ''} LIMIT 1`,
+        courseCd ? [item.code, courseCd] : [item.code],
+      ).catch(() => []);
+
+      if (existing.length === 0) {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO program_educational_objectives (code, title, description, course_cd, branch_cd, peo_order, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, true)`,
+          [item.code, item.title, item.description, courseCd || null, branchCd || null, item.order],
+        );
+        seededCount++;
+      }
+    }
+
+    return {
+      success: true,
+      message: `Successfully seeded ${seededCount} standard Program Educational Objectives (PEO1–PEO5)`,
+      seededCount,
+    };
+  }
+
+  // ─── 12. CO - PO MATRIX ─────────────────────────────────────────────────────
+  async getCoPoMatrix(
+    tenantSlug?: string,
+    params?: {
+      subjectId?: string;
+      subjectCode?: string;
+      courseCd?: string;
+      branchCd?: string;
+      batchYear?: number;
+      semCd?: string;
+    },
+  ) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.ensureAdminMasterTables(slug);
+
+    if (!params?.subjectId && !params?.subjectCode) {
+      return { success: true, data: null };
+    }
+
+    let query = `
+      SELECT * FROM co_po_matrices
+      WHERE (subject_id = $1 OR subject_code = $1 OR subject_id = $2 OR subject_code = $2)
+    `;
+    const qParams: any[] = [params.subjectId || '', params.subjectCode || ''];
+
+    if (params.courseCd && params.courseCd !== 'all') {
+      qParams.push(params.courseCd);
+      query += ` AND (course_cd = $${qParams.length} OR course_cd IS NULL)`;
+    }
+
+    query += ` ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`;
+
+    const rows = await this.tenantSchemaService.queryInTenant(slug, query, qParams).catch(() => []);
+    return { success: true, data: rows[0] || null };
+  }
+
+  async saveCoPoMatrix(dto: SaveCoPoMatrixDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    await this.ensureAdminMasterTables(slug);
+
+    const existing = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT id FROM co_po_matrices 
+       WHERE (subject_id = $1 OR subject_code = $2) 
+         AND (course_cd = $3 OR $3 IS NULL)
+       LIMIT 1`,
+      [dto.subject_id, dto.subject_code || dto.subject_id, dto.course_cd || null],
+    ).catch(() => []);
+
+    let savedRow: any;
+    if (existing && existing.length > 0) {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE co_po_matrices
+         SET matrix_data = $1,
+             subject_name = COALESCE($2, subject_name),
+             subject_code = COALESCE($3, subject_code),
+             course_cd = COALESCE($4, course_cd),
+             branch_cd = COALESCE($5, branch_cd),
+             batch_year = COALESCE($6, batch_year),
+             sem_cd = COALESCE($7, sem_cd),
+             updated_at = NOW()
+         WHERE id = $8
+         RETURNING *`,
+        [
+          dto.matrix_data || {},
+          dto.subject_name || null,
+          dto.subject_code || null,
+          dto.course_cd || null,
+          dto.branch_cd || null,
+          dto.batch_year || null,
+          dto.sem_cd || null,
+          existing[0].id,
+        ],
+      );
+      savedRow = rows[0];
+    } else {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO co_po_matrices (
+           college_id, course_cd, branch_cd, batch_year, sem_cd, subject_id, subject_code, subject_name, matrix_data
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING *`,
+        [
+          dto.college_id || null,
+          dto.course_cd || null,
+          dto.branch_cd || null,
+          dto.batch_year || null,
+          dto.sem_cd || null,
+          dto.subject_id,
+          dto.subject_code || null,
+          dto.subject_name || null,
+          dto.matrix_data || {},
+        ],
+      );
+      savedRow = rows[0];
+    }
+
+    return {
+      success: true,
+      message: 'CO - PO Matrix saved successfully',
+      data: savedRow,
+    };
+  }
+
+  // ─── 13. PO - PEO MATRIX ────────────────────────────────────────────────────
+  async getPoPeoMatrix(
+    tenantSlug?: string,
+    params?: {
+      courseCd?: string;
+      branchCd?: string;
+      batchYear?: number;
+    },
+  ) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.ensureAdminMasterTables(slug);
+
+    let query = `SELECT * FROM po_peo_matrices WHERE 1=1`;
+    const qParams: any[] = [];
+
+    if (params?.courseCd && params.courseCd !== 'all') {
+      qParams.push(params.courseCd);
+      query += ` AND (course_cd = $${qParams.length} OR course_cd IS NULL)`;
+    }
+    if (params?.branchCd && params.branchCd !== 'all') {
+      qParams.push(params.branchCd);
+      query += ` AND (branch_cd = $${qParams.length} OR branch_cd IS NULL)`;
+    }
+
+    query += ` ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`;
+
+    const rows = await this.tenantSchemaService.queryInTenant(slug, query, qParams).catch(() => []);
+    return { success: true, data: rows[0] || null };
+  }
+
+  async savePoPeoMatrix(dto: SavePoPeoMatrixDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
+    await this.ensureAdminMasterTables(slug);
+
+    const existing = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT id FROM po_peo_matrices 
+       WHERE (course_cd = $1 OR ($1 IS NULL AND course_cd IS NULL))
+         AND (branch_cd = $2 OR ($2 IS NULL AND branch_cd IS NULL))
+       LIMIT 1`,
+      [dto.course_cd || null, dto.branch_cd || null],
+    ).catch(() => []);
+
+    let savedRow: any;
+    if (existing && existing.length > 0) {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE po_peo_matrices
+         SET matrix_data = $1,
+             batch_year = COALESCE($2, batch_year),
+             updated_at = NOW()
+         WHERE id = $3
+         RETURNING *`,
+        [dto.matrix_data || {}, dto.batch_year || null, existing[0].id],
+      );
+      savedRow = rows[0];
+    } else {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO po_peo_matrices (
+           college_id, course_cd, branch_cd, batch_year, matrix_data
+         ) VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [
+          dto.college_id || null,
+          dto.course_cd || null,
+          dto.branch_cd || null,
+          dto.batch_year || null,
+          dto.matrix_data || {},
+        ],
+      );
+      savedRow = rows[0];
+    }
+
+    return {
+      success: true,
+      message: 'PO - PEO Matrix saved successfully',
+      data: savedRow,
+    };
+  }
 }
+

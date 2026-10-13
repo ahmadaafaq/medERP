@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import { useRolePermissions } from '../../../../lib/useRolePermissions';
@@ -43,7 +44,43 @@ const TableSkeleton = ({ colCount = 6 }: { colCount?: number }) => (
   </tbody>
 );
 
-type SubCategory = 'departments' | 'subjects' | 'professional-linkers' | 'subject-offerings' | 'delivery-types' | 'units' | 'topics' | 'competencies';
+type SubCategory = 'departments' | 'subjects' | 'professional-linkers' | 'subject-offerings' | 'delivery-types' | 'units' | 'topics' | 'competencies' | 'pos' | 'peos';
+
+interface ProgramOutcome {
+  id: string;
+  code: string;
+  title: string;
+  description?: string;
+  type: string; // 'PO' | 'PSO'
+  course_cd?: string;
+  course_name?: string;
+  branch_cd?: string;
+  batch_year?: number;
+  po_order?: number;
+  target_level?: number;
+  college_id?: string;
+  college_slug?: string;
+  college_name?: string;
+  college_code?: string;
+  is_active: boolean;
+}
+
+interface ProgramEducationalObjective {
+  id: string;
+  code: string;
+  title: string;
+  description?: string;
+  course_cd?: string;
+  course_name?: string;
+  branch_cd?: string;
+  batch_year?: number;
+  peo_order?: number;
+  college_id?: string;
+  college_slug?: string;
+  college_name?: string;
+  college_code?: string;
+  is_active: boolean;
+}
 
 interface Unit {
   id: string;
@@ -460,7 +497,10 @@ const getAuthHeaders = (): Record<string, string> => {
 };
 
 export default function AdminMasterPage() {
-  const [activeTab, setActiveTab] = useState<SubCategory>('departments');
+  const pathname = usePathname();
+  const isFaculty = pathname?.includes('/dashboard/faculty');
+  const role: 'admin' | 'faculty' = isFaculty ? 'faculty' : 'admin';
+  const [activeTab, setActiveTab] = useState<SubCategory>(isFaculty ? 'units' : 'departments');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -487,6 +527,9 @@ export default function AdminMasterPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [profPhases, setProfPhases] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [pos, setPos] = useState<ProgramOutcome[]>([]);
+  const [peos, setPeos] = useState<ProgramEducationalObjective[]>([]);
+  const [isSeeding, setIsSeeding] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -527,6 +570,156 @@ export default function AdminMasterPage() {
   const [subTopicLearningMethod, setSubTopicLearningMethod] = useState('');
   const [subTopicAssessmentMethod, setSubTopicAssessmentMethod] = useState('');
 
+  // Faculty Linked Courses & Subjects State (for Faculty isolation)
+  const [facultyLinkedItems, setFacultyLinkedItems] = useState<any[]>([]);
+  const [facultyLinkedLoaded, setFacultyLinkedLoaded] = useState<boolean>(false);
+
+  const facultyLinkedCourseCds = useMemo(() => {
+    if (!isFaculty) return null;
+    const set = new Set<string>();
+    facultyLinkedItems.forEach(item => {
+      if (item.course_cd) set.add(String(item.course_cd).trim().toLowerCase());
+      if (item.course_code) set.add(String(item.course_code).trim().toLowerCase());
+      if (item.course_name) set.add(String(item.course_name).trim().toLowerCase());
+    });
+    return set;
+  }, [isFaculty, facultyLinkedItems]);
+
+  const facultyLinkedBranchCds = useMemo(() => {
+    if (!isFaculty) return null;
+    const set = new Set<string>();
+    facultyLinkedItems.forEach(item => {
+      if (item.branch_cd) set.add(String(item.branch_cd).trim().toLowerCase());
+      if (item.department_id) set.add(String(item.department_id).trim().toLowerCase());
+      if (item.branch_code) set.add(String(item.branch_code).trim().toLowerCase());
+      if (item.branch_name) set.add(String(item.branch_name).trim().toLowerCase());
+    });
+    return set;
+  }, [isFaculty, facultyLinkedItems]);
+
+  const facultyLinkedBatchCds = useMemo(() => {
+    if (!isFaculty) return null;
+    const set = new Set<string>();
+    facultyLinkedItems.forEach(item => {
+      if (item.batch_cd) set.add(String(item.batch_cd).trim().toLowerCase());
+      if (item.batch_id) set.add(String(item.batch_id).trim().toLowerCase());
+    });
+    return set;
+  }, [isFaculty, facultyLinkedItems]);
+
+  const facultyLinkedSubjectKeys = useMemo(() => {
+    if (!isFaculty) return null;
+    const set = new Set<string>();
+    facultyLinkedItems.forEach(item => {
+      if (item.subject_id) set.add(String(item.subject_id).trim().toLowerCase());
+      if (item.subject_code) {
+        set.add(String(item.subject_code).trim().toLowerCase());
+        set.add(String(item.subject_code).trim().toLowerCase().replace(/\s+/g, ''));
+      }
+      if (item.subject_name) set.add(String(item.subject_name).trim().toLowerCase());
+    });
+    return set;
+  }, [isFaculty, facultyLinkedItems]);
+
+  const fetchFacultyLinks = async () => {
+    if (!isFaculty) return;
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const storedSlug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
+      const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      let facId = '';
+      let empId = '';
+      let userObj: any = null;
+      if (userStr) {
+        try {
+          userObj = JSON.parse(userStr);
+          facId = userObj.faculty_id || userObj.profile?.id || userObj.id || userObj.sub || '';
+          empId = userObj.emp_id || userObj.profile?.emp_id || (typeof window !== 'undefined' ? localStorage.getItem('empid') || '' : '') || '';
+        } catch {}
+      }
+
+      // 1. Fetch /auth/me to get the freshest profile with enriched profile.subjects
+      let meSubjects: any[] = [];
+      try {
+        const meRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/auth/me`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            'x-tenant-slug': storedSlug,
+          },
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.profile?.id) facId = meData.profile.id;
+          if (meData?.profile?.emp_id) empId = meData.profile.emp_id;
+          if (Array.isArray(meData?.profile?.subjects)) {
+            meSubjects = meData.profile.subjects;
+          }
+        }
+      } catch (meErr) {
+        console.warn('[AdminMaster] auth/me fetch error:', meErr);
+      }
+
+      // 2. Fetch from faculty-subjects in admin-master
+      let linkItems: any[] = [];
+      try {
+        const linkRes = await fetch(`${API_BASE}/faculty-subjects?tenant=${storedSlug}&facultyId=${encodeURIComponent(facId || empId)}`, {
+          headers: getAuthHeaders(),
+        });
+        if (linkRes.ok) {
+          const linkJson = await linkRes.json();
+          linkItems = linkJson.data || linkJson || [];
+        }
+      } catch (linkErr) {
+        console.warn('[AdminMaster] faculty-subjects fetch error:', linkErr);
+      }
+
+      // If specific facultyId query returned 0, try fetching all and matching in memory
+      if (linkItems.length === 0 && (facId || empId || userObj?.name || userObj?.email)) {
+        try {
+          const allRes = await fetch(`${API_BASE}/faculty-subjects?tenant=${storedSlug}`, {
+            headers: getAuthHeaders(),
+          });
+          if (allRes.ok) {
+            const allJson = await allRes.json();
+            const allList = allJson.data || allJson || [];
+            linkItems = allList.filter((l: any) =>
+              (facId && (l.faculty_id === facId || l.user_id === facId)) ||
+              (empId && l.emp_id === empId) ||
+              (userObj?.name && l.faculty_name && l.faculty_name.toLowerCase() === userObj.name.toLowerCase()) ||
+              (userObj?.email && l.faculty_email && l.faculty_email.toLowerCase() === userObj.email.toLowerCase())
+            );
+          }
+        } catch {}
+      }
+
+      // Combine both sources (faculty-subjects and meSubjects)
+      const combinedMap = new Map<string, any>();
+      linkItems.forEach((it) => {
+        const key = `${it.subject_id || it.subject_code}_${it.course_cd || ''}_${it.branch_cd || ''}_${it.section || ''}`;
+        combinedMap.set(key, it);
+      });
+      meSubjects.forEach((it) => {
+        const key = `${it.subject_id || it.subject_code || it.code}_${it.course_cd || ''}_${it.branch_cd || ''}_${it.section || ''}`;
+        if (!combinedMap.has(key)) {
+          combinedMap.set(key, {
+            ...it,
+            subject_id: it.subject_id || it.id,
+            subject_code: it.subject_code || it.code,
+            subject_name: it.subject_name || it.name,
+          });
+        }
+      });
+
+      const finalLinks = Array.from(combinedMap.values());
+      setFacultyLinkedItems(finalLinks);
+      setFacultyLinkedLoaded(true);
+    } catch (err) {
+      console.error('[AdminMaster] Error loading faculty links:', err);
+      setFacultyLinkedLoaded(true);
+    }
+  };
+
   const getActiveTenantSlug = (): string => {
     if (selectedCollegeFilter !== 'all') {
       const col = colleges.find((c) => c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter || c.code === selectedCollegeFilter);
@@ -562,11 +755,22 @@ export default function AdminMasterPage() {
     if (filter !== 'all') {
       const matched = colleges.find(c => c.id === filter || c.slug === filter || c.code === filter);
       targetTenant = matched?.slug || filter;
+    } else if (typeof window !== 'undefined') {
+      const storedSlug = localStorage.getItem('tenantSlug');
+      if (storedSlug) targetTenant = storedSlug;
     }
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/${targetCat}?tenant=${targetTenant}`);
+      let res = await fetch(`${API_BASE}/${targetCat}?tenant=${targetTenant}`, {
+        headers: getAuthHeaders(),
+      });
+      // Resilient fallback: If remote backend returns 404 or fails, call local Next.js route handler
+      if (!res.ok) {
+        res = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${targetTenant}`, {
+          headers: getAuthHeaders(),
+        });
+      }
       if (res.ok) {
         const json = await res.json();
         const data = json.data || json || [];
@@ -578,11 +782,82 @@ export default function AdminMasterPage() {
         if (targetCat === 'delivery-types') setDeliveryTypes(data);
         if (targetCat === 'subject-offerings') setOfferings(data);
         if (targetCat === 'units') setUnits(data);
+        if (targetCat === 'pos') setPos(data);
+        if (targetCat === 'peos') setPeos(data);
       }
     } catch (err) {
       console.error(`[AdminMaster] Error loading ${targetCat}:`, err);
+      try {
+        const fallbackRes = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${targetTenant}`, {
+          headers: getAuthHeaders(),
+        });
+        if (fallbackRes.ok) {
+          const json = await fallbackRes.json();
+          const data = json.data || json || [];
+          if (targetCat === 'pos') setPos(data);
+          if (targetCat === 'peos') setPeos(data);
+        }
+      } catch (e) {}
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSeedPos = async () => {
+    try {
+      setIsSeeding(true);
+      const targetSlug = getActiveTenantSlug() === 'all' ? (colleges[0]?.slug || 'srms-cet-bareilly') : getActiveTenantSlug();
+      let res = await fetch(`${API_BASE}/pos/seed?tenant=${targetSlug}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        res = await fetch(`/api/v1/admin-master/pos/seed?tenant=${targetSlug}`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+        });
+      }
+      if (res.ok) {
+        setSyncMessage('🌱 Successfully seeded NBA Program Outcomes (PO1–PO12 + PSO1–PSO2) into PostgreSQL!');
+        await fetchCategoryData('pos');
+        setTimeout(() => setSyncMessage(''), 5000);
+      } else {
+        const err = await res.text();
+        alert(`Failed to seed POs: ${err}`);
+      }
+    } catch (err) {
+      console.error('Seed POs error:', err);
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  const handleSeedPeos = async () => {
+    try {
+      setIsSeeding(true);
+      const targetSlug = getActiveTenantSlug() === 'all' ? (colleges[0]?.slug || 'srms-cet-bareilly') : getActiveTenantSlug();
+      let res = await fetch(`${API_BASE}/peos/seed?tenant=${targetSlug}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        res = await fetch(`/api/v1/admin-master/peos/seed?tenant=${targetSlug}`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+        });
+      }
+      if (res.ok) {
+        setSyncMessage('🏆 Successfully seeded Program Educational Objectives (PEO1–PEO5) into PostgreSQL!');
+        await fetchCategoryData('peos');
+        setTimeout(() => setSyncMessage(''), 5000);
+      } else {
+        const err = await res.text();
+        alert(`Failed to seed PEOs: ${err}`);
+      }
+    } catch (err) {
+      console.error('Seed PEOs error:', err);
+    } finally {
+      setIsSeeding(false);
     }
   };
 
@@ -852,7 +1127,7 @@ export default function AdminMasterPage() {
     const prefixToUse = numericSubCd || cleanPaperCode;
 
     if (!target && !prefixToUse) {
-      return { code: 'UNIT1-CO1', order: 1 };
+      return { code: 'CO1', order: 1 };
     }
 
     // Build comprehensive match set
@@ -914,9 +1189,9 @@ export default function AdminMasterPage() {
     matchingUnits.forEach((u: any) => {
       const code = String(u.code || '').trim().toUpperCase();
       const match =
+        code.match(/CO\s*-?\s*(\d+)/i) ||
         code.match(/UNIT\s*-?\s*(\d+)/i) ||
         code.match(/(?:^|[-_\s])U(\d+)(?:[-_\s]|$)/i) ||
-        code.match(/(?:^|[-_\s])CO(\d+)(?:[-_\s]|$)/i) ||
         code.match(/(?:^|[-_\s])(\d+)$/);
 
       if (match && match[1]) {
@@ -934,9 +1209,7 @@ export default function AdminMasterPage() {
     }
 
     const nextNum = maxNum + 1;
-    const generatedCode = prefixToUse
-      ? `${prefixToUse}-UNIT${nextNum}-CO${nextNum}`
-      : `UNIT${nextNum}-CO${nextNum}`;
+    const generatedCode = `CO${nextNum}`;
 
     return {
       code: generatedCode,
@@ -1111,6 +1384,41 @@ export default function AdminMasterPage() {
     return `ST${nextSeq}`;
   };
 
+  const filterSubjectsForFaculty = (list: any[]) => {
+    if (!isFaculty || !facultyLinkedSubjectKeys || facultyLinkedSubjectKeys.size === 0) return list;
+    const filtered = list.filter((s: any) => {
+      const sId = String(s.id || '').trim().toLowerCase();
+      const sCd = String(s.sub_cd || '').trim().toLowerCase();
+      const sAdd = String(s.sub_addinfo || '').trim().toLowerCase();
+      const sCode = String(s.code || '').trim().toLowerCase();
+      const sName = String(s.sub_name || s.name || '').trim().toLowerCase();
+      return (
+        (sId && facultyLinkedSubjectKeys.has(sId)) ||
+        (sCd && facultyLinkedSubjectKeys.has(sCd)) ||
+        (sAdd && facultyLinkedSubjectKeys.has(sAdd)) ||
+        (sCode && facultyLinkedSubjectKeys.has(sCode)) ||
+        (sName && facultyLinkedSubjectKeys.has(sName))
+      );
+    });
+    if (filtered.length > 0) return filtered;
+    if (facultyLinkedItems && facultyLinkedItems.length > 0) {
+      return facultyLinkedItems.map(it => ({
+        colg_cd: 1,
+        sub_cd: String(it.subject_code || it.subject_id),
+        sub_name: it.subject_name,
+        mst_sub_name: `[${it.course_name || it.course_cd || ''}] ${it.subject_name}`,
+        sub_addinfo: it.subject_code || it.subject_id,
+        course_cd: it.course_cd,
+        branch_cd: it.branch_cd,
+        batch_cd: it.batch_cd,
+        sem_cd: it.sem_cd,
+        id: it.subject_id,
+        SubTyp: 'THEORY',
+      }));
+    }
+    return filtered;
+  };
+
   const fetchUnitSubjects = async (
     colgcd?: string,
     coursecd?: string,
@@ -1189,9 +1497,10 @@ export default function AdminMasterPage() {
               !sem || String(s.sem_cd) === String(sem) || String(s.semester_name || '').includes(String(sem))
             );
             const finalList = semFiltered.length > 0 ? semFiltered : data;
-            setUnitLiveSubjects(finalList);
+            const toSet = filterSubjectsForFaculty(finalList);
+            setUnitLiveSubjects(toSet);
             setLoadingUnitSubjects(false);
-            return finalList;
+            return toSet;
           }
         }
       } catch (err) {
@@ -1227,9 +1536,10 @@ export default function AdminMasterPage() {
             faculty_name: l.faculty_name,
             SubTyp: 'THEORY',
           }));
-          setUnitLiveSubjects(mapped);
+          const toSet = filterSubjectsForFaculty(mapped);
+          setUnitLiveSubjects(toSet);
           setLoadingUnitSubjects(false);
-          return mapped;
+          return toSet;
         }
       }
     } catch (linkErr) {
@@ -1256,9 +1566,10 @@ export default function AdminMasterPage() {
       id: s.id,
       SubTyp: s.type || 'THEORY',
     }));
-    setUnitLiveSubjects(mappedFallback);
+    const toSet = filterSubjectsForFaculty(mappedFallback);
+    setUnitLiveSubjects(toSet);
     setLoadingUnitSubjects(false);
-    return mappedFallback;
+    return toSet;
   };
 
   const fetchTopicSubjects = async (
@@ -1339,9 +1650,10 @@ export default function AdminMasterPage() {
               !sem || String(s.sem_cd) === String(sem) || String(s.semester_name || '').includes(String(sem))
             );
             const finalList = semFiltered.length > 0 ? semFiltered : data;
-            setTopicLiveSubjects(finalList);
+            const toSet = filterSubjectsForFaculty(finalList);
+            setTopicLiveSubjects(toSet);
             setLoadingTopicSubjects(false);
-            return finalList;
+            return toSet;
           }
         }
       } catch (err) {
@@ -1377,9 +1689,10 @@ export default function AdminMasterPage() {
             faculty_name: l.faculty_name,
             SubTyp: 'THEORY',
           }));
-          setTopicLiveSubjects(mapped);
+          const toSet = filterSubjectsForFaculty(mapped);
+          setTopicLiveSubjects(toSet);
           setLoadingTopicSubjects(false);
-          return mapped;
+          return toSet;
         }
       }
     } catch (linkErr) {
@@ -1406,9 +1719,10 @@ export default function AdminMasterPage() {
       id: s.id,
       SubTyp: s.type || 'THEORY',
     }));
-    setTopicLiveSubjects(mappedFallback);
+    const toSet = filterSubjectsForFaculty(mappedFallback);
+    setTopicLiveSubjects(toSet);
     setLoadingTopicSubjects(false);
-    return mappedFallback;
+    return toSet;
   };
 
   const fetchSubTopicSubjects = async (
@@ -1489,9 +1803,10 @@ export default function AdminMasterPage() {
               !sem || String(s.sem_cd) === String(sem) || String(s.semester_name || '').includes(String(sem))
             );
             const finalList = semFiltered.length > 0 ? semFiltered : data;
-            setSubTopicLiveSubjects(finalList);
+            const toSet = filterSubjectsForFaculty(finalList);
+            setSubTopicLiveSubjects(toSet);
             setLoadingSubTopicSubjects(false);
-            return finalList;
+            return toSet;
           }
         }
       } catch (err) {
@@ -1527,9 +1842,10 @@ export default function AdminMasterPage() {
             faculty_name: l.faculty_name,
             SubTyp: 'THEORY',
           }));
-          setSubTopicLiveSubjects(mapped);
+          const toSet = filterSubjectsForFaculty(mapped);
+          setSubTopicLiveSubjects(toSet);
           setLoadingSubTopicSubjects(false);
-          return mapped;
+          return toSet;
         }
       }
     } catch (linkErr) {
@@ -1556,9 +1872,10 @@ export default function AdminMasterPage() {
       id: s.id,
       SubTyp: s.type || 'THEORY',
     }));
-    setSubTopicLiveSubjects(mappedFallback);
+    const toSet = filterSubjectsForFaculty(mappedFallback);
+    setSubTopicLiveSubjects(toSet);
     setLoadingSubTopicSubjects(false);
-    return mappedFallback;
+    return toSet;
   };
 
   const handleBulkSyncSrmsSubjects = async (subList?: any[]) => {
@@ -1692,9 +2009,14 @@ export default function AdminMasterPage() {
         fetchCategoryData('competencies', initialCollegeCode),
         fetchCategoryData('delivery-types', initialCollegeCode),
         fetchCategoryData('subject-offerings', initialCollegeCode),
+        fetchCategoryData('pos', initialCollegeCode),
+        fetchCategoryData('peos', initialCollegeCode),
         fetchProfessionals(initialCollegeCode),
         fetchBatches(initialCollegeCode),
       ]);
+      if (isFaculty) {
+        await fetchFacultyLinks();
+      }
     };
     loadAll();
   }, []);
@@ -1720,16 +2042,24 @@ export default function AdminMasterPage() {
       fetchCategoryData('units', newColgFilter),
       fetchCategoryData('topics', newColgFilter),
       fetchCategoryData('competencies', newColgFilter),
+      fetchCategoryData('pos', newColgFilter),
+      fetchCategoryData('peos', newColgFilter),
       fetchProfessionals(newColgFilter),
       fetchBatches(newColgFilter),
+      ...(isFaculty ? [fetchFacultyLinks()] : []),
     ]);
   };
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchTerm]);
+    fetchCategoryData(activeTab);
+  }, [activeTab]);
 
-  // Keep unit code synchronized with selected subject's dynamic numeric code if available
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // Keep unit code synchronized with selected subject (CO1, CO2, CO3...)
   useEffect(() => {
     if (activeTab === 'units' && !editingItem && (formData.subject_id || formData.subject_code)) {
       const selectedSubjectObj = unitLiveSubjects.find((s: any) =>
@@ -1737,23 +2067,27 @@ export default function AdminMasterPage() {
         String(s.sub_addinfo || '') === String(formData.subject_code)
       ) || subjects.find(s => s.id === formData.subject_id || s.code === formData.subject_id || s.code === formData.subject_code);
 
-      const numCd = getSubjectNumericCode(selectedSubjectObj, formData.subject_id || formData.subject_code);
-      if (numCd) {
-        if (!formData.code || !formData.code.startsWith(numCd)) {
-          const nextU = getNextUnitCodeForSubject(numCd, units, selectedSubjectObj);
-          setFormData(prev => ({
-            ...prev,
-            code: nextU.code,
-            name: (!prev.name || prev.name === prev.code || prev.name.startsWith('UNIT') || prev.name.includes('-UNIT')) ? nextU.code : prev.name,
-            unit_order: nextU.order,
-          }));
-        }
+      const subKey = formData.subject_id || formData.subject_code;
+      const isLegacyOrEmpty =
+        !formData.code ||
+        formData.code.includes('-UNIT') ||
+        formData.code.startsWith('UNIT') ||
+        /^\d+-/.test(formData.code);
+
+      if (isLegacyOrEmpty) {
+        const nextU = getNextUnitCodeForSubject(subKey, units, selectedSubjectObj);
+        setFormData(prev => ({
+          ...prev,
+          code: nextU.code,
+          name: (!prev.name || prev.name === prev.code || prev.name.startsWith('UNIT') || prev.name.includes('-UNIT') || /^CO\d+$/i.test(prev.name)) ? nextU.code : prev.name,
+          unit_order: nextU.order,
+        }));
       }
     }
   }, [activeTab, editingItem, formData.subject_id, formData.subject_code, unitLiveSubjects, units]);
 
   const isMatchCollege = (item: any) => {
-    if (activeTab === 'delivery-types') return true;
+    if (activeTab === 'delivery-types' || activeTab === 'pos' || activeTab === 'peos') return true;
     if (selectedCollegeFilter === 'all') return true;
     const targetCol = colleges.find(c => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetId = targetCol?.id;
@@ -1766,7 +2100,8 @@ export default function AdminMasterPage() {
       (targetCode && String(item.college_code) === String(targetCode)) ||
       (targetSlug && item.college_slug === targetSlug) ||
       item.college_slug === selectedCollegeFilter ||
-      item.college_id === selectedCollegeFilter
+      item.college_id === selectedCollegeFilter ||
+      (!item.college_id && !item.college_slug)
     );
   };
 
@@ -1871,28 +2206,45 @@ export default function AdminMasterPage() {
       const targetColCd = targetCol?.code || targetCol?.id || defaultCollegeId || '1';
       const targetColSlug = targetCol?.slug || defaultCollegeSlug || '';
       const colCourses = getCoursesForCollege(targetCol?.id || targetCol?.slug);
-      const chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
+      let chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
 
       const availableDepts = departments.filter(d =>
         (d.college_id === targetCol?.id || d.college_slug === targetCol?.slug || String(d.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || d.course_cd === chosenCourseCd || d.course_code === chosenCourseCd)
       );
-      const chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
+      let chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
 
       const availableBatches = batches.filter(b =>
         (!targetCol || b.college_id === targetCol.id || b.college_slug === targetCol.slug || String(b.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || b.course_cd === chosenCourseCd)
       );
       const chosenBatch = availableBatches[0];
-      const chosenBatchCd = chosenBatch?.batch_cd || chosenBatch?.code || '17';
-      const chosenBatchYear = chosenBatch?.year || 2024;
-      const chosenSemCd = '5';
-      const chosenSecCd = '1';
+      let chosenBatchCd = chosenBatch?.batch_cd || chosenBatch?.code || '17';
+      let chosenBatchYear = chosenBatch?.year || 2024;
+      let chosenSemCd = '5';
+      let chosenSecCd = '1';
+      let chosenSubjectId = '';
+      let chosenSubjectCode = '';
+      let chosenSubjectName = '';
 
-      setUnitSubjectSearch('');
+      if (isFaculty && facultyLinkedItems.length > 0) {
+        const link = facultyLinkedItems.find(l => selectedCourseFilter === 'all' || String(l.course_cd) === String(selectedCourseFilter)) || facultyLinkedItems[0];
+        if (link) {
+          if (link.course_cd) chosenCourseCd = String(link.course_cd);
+          if (link.branch_cd) chosenBranchCd = String(link.branch_cd);
+          if (link.batch_cd) chosenBatchCd = String(link.batch_cd);
+          if (link.sem_cd) chosenSemCd = String(link.sem_cd);
+          if (link.section) chosenSecCd = String(link.section);
+          chosenSubjectId = link.subject_id || '';
+          chosenSubjectCode = link.subject_code || '';
+          chosenSubjectName = link.subject_name || '';
+        }
+      }
+
+      setUnitSubjectSearch(chosenSubjectName ? (chosenSubjectCode ? `[${chosenSubjectCode}] ${chosenSubjectName}` : chosenSubjectName) : '');
       setIsUnitSubjectDropdownOpen(false);
 
-      const initialUnit = getNextUnitCodeForSubject('', units);
+      const initialUnit = getNextUnitCodeForSubject(chosenSubjectCode || chosenSubjectId, units);
 
       setFormData({
         college_id: targetColCd,
@@ -1906,11 +2258,11 @@ export default function AdminMasterPage() {
         sem_cd: chosenSemCd,
         semester: `Semester ${chosenSemCd}`,
         sec_cd: chosenSecCd,
-        section: 'Section A',
-        subject_id: '',
-        subject_code: '',
+        section: chosenSecCd ? (chosenSecCd.toLowerCase().startsWith('sec') ? chosenSecCd : `Section ${chosenSecCd}`) : 'Section A',
+        subject_id: chosenSubjectId,
+        subject_code: chosenSubjectCode,
         code: initialUnit.code,
-        name: '',
+        name: initialUnit.code,
         description: '',
         bloom_level: 'KL-2 (Understand)',
         unit_order: initialUnit.order,
@@ -1924,25 +2276,42 @@ export default function AdminMasterPage() {
       const targetColCd = targetCol?.code || targetCol?.id || defaultCollegeId || '1';
       const targetColSlug = targetCol?.slug || defaultCollegeSlug || '';
       const colCourses = getCoursesForCollege(targetCol?.id || targetCol?.slug);
-      const chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
+      let chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
 
       const availableDepts = departments.filter(d =>
         (d.college_id === targetCol?.id || d.college_slug === targetCol?.slug || String(d.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || d.course_cd === chosenCourseCd || d.course_code === chosenCourseCd)
       );
-      const chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
+      let chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
 
       const availableBatches = batches.filter(b =>
         (!targetCol || b.college_id === targetCol.id || b.college_slug === targetCol.slug || String(b.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || b.course_cd === chosenCourseCd)
       );
       const chosenBatch = availableBatches[0];
-      const chosenBatchCd = chosenBatch?.batch_cd || chosenBatch?.code || '17';
-      const chosenBatchYear = chosenBatch?.year || 2024;
-      const chosenSemCd = '5';
-      const chosenSecCd = '1';
+      let chosenBatchCd = chosenBatch?.batch_cd || chosenBatch?.code || '17';
+      let chosenBatchYear = chosenBatch?.year || 2024;
+      let chosenSemCd = '5';
+      let chosenSecCd = '1';
+      let chosenSubjectId = '';
+      let chosenSubjectCode = '';
+      let chosenSubjectName = '';
 
-      setTopicSubjectSearch('');
+      if (isFaculty && facultyLinkedItems.length > 0) {
+        const link = facultyLinkedItems.find(l => selectedCourseFilter === 'all' || String(l.course_cd) === String(selectedCourseFilter)) || facultyLinkedItems[0];
+        if (link) {
+          if (link.course_cd) chosenCourseCd = String(link.course_cd);
+          if (link.branch_cd) chosenBranchCd = String(link.branch_cd);
+          if (link.batch_cd) chosenBatchCd = String(link.batch_cd);
+          if (link.sem_cd) chosenSemCd = String(link.sem_cd);
+          if (link.section) chosenSecCd = String(link.section);
+          chosenSubjectId = link.subject_id || '';
+          chosenSubjectCode = link.subject_code || '';
+          chosenSubjectName = link.subject_name || '';
+        }
+      }
+
+      setTopicSubjectSearch(chosenSubjectName ? (chosenSubjectCode ? `[${chosenSubjectCode}] ${chosenSubjectName}` : chosenSubjectName) : '');
       setIsTopicSubjectDropdownOpen(false);
 
       setFormData({
@@ -1957,9 +2326,9 @@ export default function AdminMasterPage() {
         sem_cd: chosenSemCd,
         semester: `Semester ${chosenSemCd}`,
         sec_cd: chosenSecCd,
-        section: 'Section A',
-        subject_id: '',
-        subject_code: '',
+        section: chosenSecCd ? (chosenSecCd.toLowerCase().startsWith('sec') ? chosenSecCd : `Section ${chosenSecCd}`) : 'Section A',
+        subject_id: chosenSubjectId,
+        subject_code: chosenSubjectCode,
         unit_id: '',
         unit_code: '',
         bloom_level: 'KL-2 (Understand)',
@@ -1979,25 +2348,42 @@ export default function AdminMasterPage() {
       const targetColCd = targetCol?.code || targetCol?.id || defaultCollegeId || '1';
       const targetColSlug = targetCol?.slug || defaultCollegeSlug || '';
       const colCourses = getCoursesForCollege(targetCol?.id || targetCol?.slug);
-      const chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
+      let chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
 
       const availableDepts = departments.filter(d =>
         (d.college_id === targetCol?.id || d.college_slug === targetCol?.slug || String(d.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || d.course_cd === chosenCourseCd || d.course_code === chosenCourseCd)
       );
-      const chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
+      let chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
 
       const availableBatches = batches.filter(b =>
         (!targetCol || b.college_id === targetCol.id || b.college_slug === targetCol.slug || String(b.colg_cd) === String(targetColCd)) &&
         (!chosenCourseCd || b.course_cd === chosenCourseCd)
       );
       const chosenBatch = availableBatches[0];
-      const chosenBatchCd = chosenBatch?.batch_cd || chosenBatch?.code || '17';
-      const chosenBatchYear = chosenBatch?.year || 2024;
-      const chosenSemCd = '5';
-      const chosenSecCd = '1';
+      let chosenBatchCd = chosenBatch?.batch_cd || chosenBatch?.code || '17';
+      let chosenBatchYear = chosenBatch?.year || 2024;
+      let chosenSemCd = '5';
+      let chosenSecCd = '1';
+      let chosenSubjectId = '';
+      let chosenSubjectCode = '';
+      let chosenSubjectName = '';
 
-      setSubTopicSubjectSearch('');
+      if (isFaculty && facultyLinkedItems.length > 0) {
+        const link = facultyLinkedItems.find(l => selectedCourseFilter === 'all' || String(l.course_cd) === String(selectedCourseFilter)) || facultyLinkedItems[0];
+        if (link) {
+          if (link.course_cd) chosenCourseCd = String(link.course_cd);
+          if (link.branch_cd) chosenBranchCd = String(link.branch_cd);
+          if (link.batch_cd) chosenBatchCd = String(link.batch_cd);
+          if (link.sem_cd) chosenSemCd = String(link.sem_cd);
+          if (link.section) chosenSecCd = String(link.section);
+          chosenSubjectId = link.subject_id || '';
+          chosenSubjectCode = link.subject_code || '';
+          chosenSubjectName = link.subject_name || '';
+        }
+      }
+
+      setSubTopicSubjectSearch(chosenSubjectName ? (chosenSubjectCode ? `[${chosenSubjectCode}] ${chosenSubjectName}` : chosenSubjectName) : '');
       setIsSubTopicSubjectDropdownOpen(false);
 
       setTempCompetencies([]);
@@ -2023,9 +2409,9 @@ export default function AdminMasterPage() {
         sem_cd: chosenSemCd,
         semester: `Semester ${chosenSemCd}`,
         sec_cd: chosenSecCd,
-        section: 'Section A',
-        subject_id: '',
-        subject_code: '',
+        section: chosenSecCd ? (chosenSecCd.toLowerCase().startsWith('sec') ? chosenSecCd : `Section ${chosenSecCd}`) : 'Section A',
+        subject_id: chosenSubjectId,
+        subject_code: chosenSubjectCode,
         unit_id: '',
         unit_code: '',
         topic_id: '',
@@ -2044,6 +2430,69 @@ export default function AdminMasterPage() {
       });
 
       fetchSubTopicSubjects(targetColCd, chosenCourseCd, chosenBranchCd, chosenBatchCd, chosenSemCd, chosenSecCd, targetColSlug);
+    } else if (activeTab === 'pos') {
+      const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter) || colleges[0];
+      const targetColCd = targetCol?.code || targetCol?.id || defaultCollegeId || '1';
+      const targetColSlug = targetCol?.slug || defaultCollegeSlug || '';
+      const colCourses = getCoursesForCollege(targetCol?.id || targetCol?.slug);
+      const chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
+      const availableDepts = departments.filter(d =>
+        (d.college_id === targetCol?.id || d.college_slug === targetCol?.slug || String(d.colg_cd) === String(targetColCd)) &&
+        (!chosenCourseCd || d.course_cd === chosenCourseCd || d.course_code === chosenCourseCd)
+      );
+      const chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
+      const maxExistingPoNum = pos.reduce((max, p) => {
+        if (p.type === 'PO' || !p.type || p.code.startsWith('PO')) {
+          const m = (p.code || '').match(/\d+/);
+          const num = m ? parseInt(m[0], 10) : 0;
+          return num > max ? num : max;
+        }
+        return max;
+      }, 0);
+      const nextPoOrder = maxExistingPoNum + 1;
+      setFormData({
+        college_id: targetColCd,
+        college_slug: targetColSlug,
+        course_cd: chosenCourseCd,
+        branch_cd: chosenBranchCd,
+        batch_year: selectedBatchFilter !== 'all' ? Number(selectedBatchFilter) : 2024,
+        type: 'PO',
+        code: `PO${nextPoOrder}`,
+        title: '',
+        description: '',
+        po_order: nextPoOrder,
+        target_level: 2.5,
+        is_active: true,
+      });
+    } else if (activeTab === 'peos') {
+      const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter) || colleges[0];
+      const targetColCd = targetCol?.code || targetCol?.id || defaultCollegeId || '1';
+      const targetColSlug = targetCol?.slug || defaultCollegeSlug || '';
+      const colCourses = getCoursesForCollege(targetCol?.id || targetCol?.slug);
+      const chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
+      const availableDepts = departments.filter(d =>
+        (d.college_id === targetCol?.id || d.college_slug === targetCol?.slug || String(d.colg_cd) === String(targetColCd)) &&
+        (!chosenCourseCd || d.course_cd === chosenCourseCd || d.course_code === chosenCourseCd)
+      );
+      const chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
+      const maxExistingPeoNum = peos.reduce((max, peo) => {
+        const m = (peo.code || '').match(/\d+/);
+        const num = m ? parseInt(m[0], 10) : 0;
+        return num > max ? num : max;
+      }, 0);
+      const nextPeoOrder = maxExistingPeoNum + 1;
+      setFormData({
+        college_id: targetColCd,
+        college_slug: targetColSlug,
+        course_cd: chosenCourseCd,
+        branch_cd: chosenBranchCd,
+        batch_year: selectedBatchFilter !== 'all' ? Number(selectedBatchFilter) : 2024,
+        code: `PEO${nextPeoOrder}`,
+        title: '',
+        description: '',
+        peo_order: nextPeoOrder,
+        is_active: true,
+      });
     }
     setIsModalOpen(true);
   };
@@ -2306,6 +2755,44 @@ export default function AdminMasterPage() {
       setIsModalOpen(true);
       return;
     }
+
+    if (activeTab === 'pos') {
+      setFormData({
+        ...item,
+        college_id: collegeCodeOrId,
+        college_slug: collegeSlug,
+        course_cd: item.course_cd || '',
+        branch_cd: item.branch_cd || '',
+        batch_year: item.batch_year || 2024,
+        type: item.type || 'PO',
+        code: item.code || '',
+        title: item.title || '',
+        description: item.description || '',
+        po_order: item.po_order || 1,
+        target_level: item.target_level || 2.5,
+        is_active: item.is_active !== false,
+      });
+      setIsModalOpen(true);
+      return;
+    }
+
+    if (activeTab === 'peos') {
+      setFormData({
+        ...item,
+        college_id: collegeCodeOrId,
+        college_slug: collegeSlug,
+        course_cd: item.course_cd || '',
+        branch_cd: item.branch_cd || '',
+        batch_year: item.batch_year || 2024,
+        code: item.code || '',
+        title: item.title || '',
+        description: item.description || '',
+        peo_order: item.peo_order || 1,
+        is_active: item.is_active !== false,
+      });
+      setIsModalOpen(true);
+      return;
+    }
   };
 
   const handleDelete = async (id: string, itemCollegeSlug?: string) => {
@@ -2317,10 +2804,16 @@ export default function AdminMasterPage() {
       headers['Authorization'] = `Bearer ${token}`;
     }
     try {
-      const res = await fetch(`${API_BASE}/${activeTab}/${id}?tenant=${targetSlug}`, {
+      let res = await fetch(`${API_BASE}/${activeTab}/${id}?tenant=${targetSlug}`, {
         method: 'DELETE',
         headers,
       });
+      if (!res.ok && (activeTab === 'pos' || activeTab === 'peos')) {
+        res = await fetch(`/api/v1/admin-master/${activeTab}/${id}?tenant=${targetSlug}`, {
+          method: 'DELETE',
+          headers,
+        });
+      }
       if (res.ok) {
         await Promise.all([
           fetchCategoryData(activeTab, selectedCollegeFilter),
@@ -2329,6 +2822,8 @@ export default function AdminMasterPage() {
           fetchCategoryData('units', selectedCollegeFilter),
           fetchCategoryData('topics', selectedCollegeFilter),
           fetchCategoryData('competencies', selectedCollegeFilter),
+          fetchCategoryData('pos', selectedCollegeFilter),
+          fetchCategoryData('peos', selectedCollegeFilter),
         ]);
       } else {
         const err = await res.text();
@@ -2429,7 +2924,7 @@ export default function AdminMasterPage() {
         return;
       }
       if (!formData.code || !formData.code.trim()) {
-        alert('Unit Code is required (e.g. 88623-UNIT1-CO1)');
+        alert('CO Code is required (e.g. CO1, CO2, CO3)');
         return;
       }
 
@@ -2552,6 +3047,40 @@ export default function AdminMasterPage() {
         };
       }
       if (isEdit) payload.is_active = formData.is_active !== false;
+    } else if (activeTab === 'pos') {
+      const colCourses = getCoursesForCollege(formData.college_id || formData.college_slug);
+      const matchedCourse = colCourses.find((c: any) => c.course_cd === formData.course_cd || c.code === formData.course_cd || c.id === formData.course_cd);
+      payload = {
+        code: formData.code?.trim().toUpperCase(),
+        title: formData.title?.trim(),
+        description: formData.description?.trim() || null,
+        type: formData.type || 'PO',
+        po_order: Number(formData.po_order) || 1,
+        target_level: formData.target_level ? Number(formData.target_level) : undefined,
+        course_cd: formData.course_cd || null,
+        course_name: matchedCourse?.name || formData.course_name || null,
+        branch_cd: formData.branch_cd || null,
+        batch_year: formData.batch_year ? Number(formData.batch_year) : undefined,
+        college_id: formData.college_id || null,
+        college_slug: targetSlug,
+        is_active: formData.is_active !== false,
+      };
+    } else if (activeTab === 'peos') {
+      const colCourses = getCoursesForCollege(formData.college_id || formData.college_slug);
+      const matchedCourse = colCourses.find((c: any) => c.course_cd === formData.course_cd || c.code === formData.course_cd || c.id === formData.course_cd);
+      payload = {
+        code: formData.code?.trim().toUpperCase(),
+        title: formData.title?.trim(),
+        description: formData.description?.trim() || null,
+        peo_order: Number(formData.peo_order) || 1,
+        course_cd: formData.course_cd || null,
+        course_name: matchedCourse?.name || formData.course_name || null,
+        branch_cd: formData.branch_cd || null,
+        batch_year: formData.batch_year ? Number(formData.batch_year) : undefined,
+        college_id: formData.college_id || null,
+        college_slug: targetSlug,
+        is_active: formData.is_active !== false,
+      };
     }
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
@@ -2585,6 +3114,18 @@ export default function AdminMasterPage() {
         }
       }
 
+      // Resilient fallback for pos and peos if remote backend returns 404
+      if (!res.ok && (activeTab === 'pos' || activeTab === 'peos')) {
+        const localUrl = isEdit
+          ? `/api/v1/admin-master/${activeTab}/${editingItem.id}?tenant=${targetSlug}`
+          : `/api/v1/admin-master/${activeTab}?tenant=${targetSlug}`;
+        res = await fetch(localUrl, {
+          method,
+          headers,
+          body: JSON.stringify(payload),
+        });
+      }
+
       if (res.ok) {
         setIsModalOpen(false);
         await Promise.all([
@@ -2596,6 +3137,8 @@ export default function AdminMasterPage() {
           fetchCategoryData('units', selectedCollegeFilter),
           fetchCategoryData('topics', selectedCollegeFilter),
           fetchCategoryData('competencies', selectedCollegeFilter),
+          fetchCategoryData('pos', selectedCollegeFilter),
+          fetchCategoryData('peos', selectedCollegeFilter),
         ]);
       } else {
         const err = await res.text();
@@ -2608,20 +3151,32 @@ export default function AdminMasterPage() {
     }
   };
 
-  const { isAllowed } = useRolePermissions();
+  const { isAllowed, enabledKeys } = useRolePermissions(undefined, role.toUpperCase());
 
   const allCategories = [
-    { key: 'departments', label: '1. Department Master', icon: '🩺', count: departments.filter(isMatchCollege).length, permissionKey: 'admin_admin_master_departments' },
-    { key: 'subjects', label: '2. Subject Master', icon: '📚', count: subjects.filter(isMatchCollege).length, permissionKey: 'admin_admin_master_subjects' },
-    { key: 'professional-linkers', label: '3. Guidelines', icon: '📋', count: linkers.length, permissionKey: 'admin_admin_master_guidelines' },
-    { key: 'subject-offerings', label: '4. Subject Offerings', icon: '🎓', count: offerings.length, permissionKey: 'admin_admin_master_offerings' },
-    { key: 'delivery-types', label: '5. Delivery Types', icon: '📖', count: deliveryTypes.length, permissionKey: 'admin_admin_master_delivery_types' },
-    { key: 'units', label: '6. Unit Master', icon: '📑', count: units.length, permissionKey: 'admin_admin_master_units' },
-    { key: 'topics', label: '7. Topic Master', icon: '📝', count: topics.length, permissionKey: 'admin_admin_master_topics' },
-    { key: 'competencies', label: '8. Sub Topics', icon: '🎯', count: competencies.length, permissionKey: 'admin_admin_master_competencies' },
+    { key: 'departments', label: '1. Department Master', icon: '🩺', count: departments.filter(isMatchCollege).length, permissionKey: 'admin_admin_master_departments', facultyPermissionKey: 'faculty_curriculum_subjects_departments' },
+    { key: 'subjects', label: '2. Subject Master', icon: '📚', count: subjects.filter(isMatchCollege).length, permissionKey: 'admin_admin_master_subjects', facultyPermissionKey: 'faculty_curriculum_subjects_subjects' },
+    { key: 'professional-linkers', label: '3. Guidelines', icon: '📋', count: linkers.length, permissionKey: 'admin_admin_master_guidelines', facultyPermissionKey: 'faculty_curriculum_subjects_guidelines' },
+    { key: 'subject-offerings', label: '4. Subject Offerings', icon: '🎓', count: offerings.length, permissionKey: 'admin_admin_master_offerings', facultyPermissionKey: 'faculty_curriculum_subjects_offerings' },
+    { key: 'delivery-types', label: '5. Delivery Types', icon: '📖', count: deliveryTypes.length, permissionKey: 'admin_admin_master_delivery_types', facultyPermissionKey: 'faculty_curriculum_subjects_delivery_types' },
+    { key: 'units', label: '6. COs Master', icon: '📑', count: units.length, permissionKey: 'admin_admin_master_units', facultyPermissionKey: 'faculty_curriculum_subjects_units' },
+    { key: 'topics', label: '7. Topic Master', icon: '📝', count: topics.length, permissionKey: 'admin_admin_master_topics', facultyPermissionKey: 'faculty_curriculum_subjects_topics' },
+    { key: 'competencies', label: '8. Sub Topics', icon: '🎯', count: competencies.length, permissionKey: 'admin_admin_master_competencies', facultyPermissionKey: 'faculty_curriculum_subjects_competencies' },
+    { key: 'pos', label: '9. POs', icon: '🎯', count: pos.length, permissionKey: 'admin_admin_master_pos', facultyPermissionKey: 'faculty_curriculum_subjects_pos' },
+    { key: 'peos', label: '10. PEOs', icon: '🏆', count: peos.length, permissionKey: 'admin_admin_master_peos', facultyPermissionKey: 'faculty_curriculum_subjects_peos' },
   ];
 
-  const categories = allCategories.filter((cat) => isAllowed(cat.permissionKey, 'admin_admin_master'));
+  const categories = allCategories.filter((cat) => {
+    if (role === 'faculty') {
+      const facultyAllowed = isAllowed(cat.facultyPermissionKey, 'faculty_curriculum_subjects');
+      const hasFacultySubTabs = enabledKeys && enabledKeys.some((k) => k.startsWith('faculty_curriculum_subjects_'));
+      if (hasFacultySubTabs) {
+        return facultyAllowed;
+      }
+      return facultyAllowed || isAllowed(cat.permissionKey, 'admin_admin_master');
+    }
+    return isAllowed(cat.permissionKey, 'admin_admin_master');
+  });
 
   // Automatically select the first allowed tab if current activeTab is disallowed
   useEffect(() => {
@@ -2640,20 +3195,45 @@ export default function AdminMasterPage() {
       case 'units': return units;
       case 'topics': return topics;
       case 'competencies': return competencies;
+      case 'pos': return pos;
+      case 'peos': return peos;
       default: return [];
     }
   };
 
   const availableFilterCourses = useMemo(() => {
-    if (selectedCollegeFilter === 'all') return courses;
-    const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
-    return getCoursesForCollege(targetCol?.id || targetCol?.slug);
-  }, [selectedCollegeFilter, colleges, courses]);
+    let baseList = courses;
+    if (selectedCollegeFilter !== 'all') {
+      const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
+      baseList = getCoursesForCollege(targetCol?.id || targetCol?.slug);
+    }
+
+    if (isFaculty && facultyLinkedItems.length > 0) {
+      const facultyFiltered = baseList.filter(c => {
+        const cCd = String(c.course_cd || c.code || c.id || '').trim().toLowerCase();
+        const cName = String(c.course_name || c.name || '').trim().toLowerCase();
+        return (facultyLinkedCourseCds && (facultyLinkedCourseCds.has(cCd) || facultyLinkedCourseCds.has(cName)));
+      });
+      if (facultyFiltered.length > 0) return facultyFiltered;
+
+      // Synthesize from facultyLinkedItems if courses master has different IDs or codes
+      const uniqueCourses = new Map<string, any>();
+      facultyLinkedItems.forEach(it => {
+        const cCd = it.course_cd || it.course_code;
+        const cName = it.course_name || it.course_cd || 'Linked Course';
+        if (cCd && !uniqueCourses.has(String(cCd))) {
+          uniqueCourses.set(String(cCd), { id: cCd, course_cd: cCd, code: cCd, name: cName });
+        }
+      });
+      if (uniqueCourses.size > 0) return Array.from(uniqueCourses.values());
+    }
+    return baseList;
+  }, [selectedCollegeFilter, colleges, courses, isFaculty, facultyLinkedCourseCds, facultyLinkedItems]);
 
   const availableFilterBranches = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetColCd = targetCol?.code || targetCol?.id;
-    return departments.filter(d => {
+    let baseList = departments.filter(d => {
       const matchCol = selectedCollegeFilter === 'all' ||
         d.college_id === targetCol?.id ||
         d.college_slug === targetCol?.slug ||
@@ -2662,7 +3242,30 @@ export default function AdminMasterPage() {
       if (selectedCourseFilter === 'all') return true;
       return d.course_cd === selectedCourseFilter || d.course_code === selectedCourseFilter;
     });
-  }, [selectedCollegeFilter, selectedCourseFilter, departments, colleges]);
+
+    if (isFaculty && facultyLinkedItems.length > 0) {
+      const facultyFiltered = baseList.filter(d => {
+        const bCd = String(d.branch_cd || d.code || d.id || '').trim().toLowerCase();
+        const bName = String(d.name || '').trim().toLowerCase();
+        return (facultyLinkedBranchCds && (facultyLinkedBranchCds.has(bCd) || facultyLinkedBranchCds.has(bName)));
+      });
+      if (facultyFiltered.length > 0) return facultyFiltered;
+
+      // Synthesize from facultyLinkedItems
+      const uniqueBranches = new Map<string, any>();
+      facultyLinkedItems.forEach(it => {
+        const bCd = it.branch_cd || it.branch_code || it.department_id;
+        const bName = it.branch_name || it.department_name || bCd || 'Linked Branch';
+        if (bCd && (!selectedCourseFilter || selectedCourseFilter === 'all' || String(it.course_cd) === String(selectedCourseFilter))) {
+          if (!uniqueBranches.has(String(bCd))) {
+            uniqueBranches.set(String(bCd), { id: bCd, branch_cd: bCd, code: bCd, name: bName });
+          }
+        }
+      });
+      if (uniqueBranches.size > 0) return Array.from(uniqueBranches.values());
+    }
+    return baseList;
+  }, [selectedCollegeFilter, selectedCourseFilter, departments, colleges, isFaculty, facultyLinkedBranchCds, facultyLinkedItems]);
 
   const availableFilterBatches = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
@@ -2676,18 +3279,36 @@ export default function AdminMasterPage() {
       if (selectedCourseFilter !== 'all' && b.course_cd && String(b.course_cd) !== String(selectedCourseFilter)) return false;
       return true;
     });
-    if (colBatches.length > 0) return colBatches;
-    return [
+    const baseList = colBatches.length > 0 ? colBatches : [
       { id: '1', batch_cd: '1', code: '1', name: 'Batch 2024' },
       { id: '2', batch_cd: '2', code: '2', name: 'Batch 2025' },
       { id: '3', batch_cd: '3', code: '3', name: 'Batch 2026' },
     ];
-  }, [selectedCollegeFilter, selectedCourseFilter, batches, colleges]);
+
+    if (isFaculty && facultyLinkedItems.length > 0) {
+      const facultyFiltered = baseList.filter(b => {
+        const bCd = String(b.batch_cd || b.code || b.id || '').trim().toLowerCase();
+        const bName = String(b.name || '').trim().toLowerCase();
+        return (facultyLinkedBatchCds && (facultyLinkedBatchCds.has(bCd) || facultyLinkedBatchCds.has(bName)));
+      });
+      if (facultyFiltered.length > 0) return facultyFiltered;
+
+      const uniqueBatches = new Map<string, any>();
+      facultyLinkedItems.forEach(it => {
+        const bCd = it.batch_cd || it.batch_id;
+        if (bCd && !uniqueBatches.has(String(bCd))) {
+          uniqueBatches.set(String(bCd), { id: bCd, batch_cd: bCd, code: bCd, name: `Batch ${bCd}` });
+        }
+      });
+      if (uniqueBatches.size > 0) return Array.from(uniqueBatches.values());
+    }
+    return baseList;
+  }, [selectedCollegeFilter, selectedCourseFilter, batches, colleges, isFaculty, facultyLinkedBatchCds, facultyLinkedItems]);
 
   const availableFilterSubjects = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetColCd = targetCol?.code || targetCol?.id;
-    return subjects.filter(s => {
+    let baseList = subjects.filter(s => {
       const matchCol = selectedCollegeFilter === 'all' ||
         s.college_id === targetCol?.id ||
         s.college_slug === targetCol?.slug ||
@@ -2699,12 +3320,48 @@ export default function AdminMasterPage() {
       if (selectedSemesterFilter !== 'all' && s.sem_cd && String(s.sem_cd) !== String(selectedSemesterFilter)) return false;
       return true;
     });
-  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedBatchFilter, selectedSemesterFilter, subjects, colleges]);
+
+    if (isFaculty && facultyLinkedItems.length > 0) {
+      const facultyFiltered = baseList.filter(s => {
+        const sId = String(s.id || '').trim().toLowerCase();
+        const sCd = String((s as any).sub_cd || s.code || '').trim().toLowerCase();
+        const sAdd = String((s as any).sub_addinfo || '').trim().toLowerCase();
+        const sName = String(s.name || '').trim().toLowerCase();
+        return (
+          (facultyLinkedSubjectKeys && (
+            (sId && facultyLinkedSubjectKeys.has(sId)) ||
+            (sCd && facultyLinkedSubjectKeys.has(sCd)) ||
+            (sAdd && facultyLinkedSubjectKeys.has(sAdd)) ||
+            (sName && facultyLinkedSubjectKeys.has(sName))
+          ))
+        );
+      });
+      if (facultyFiltered.length > 0) return facultyFiltered;
+
+      const uniqueSubs = new Map<string, any>();
+      facultyLinkedItems.forEach(it => {
+        const sKey = it.subject_code || it.subject_id;
+        if (sKey && !uniqueSubs.has(String(sKey))) {
+          uniqueSubs.set(String(sKey), {
+            id: it.subject_id || sKey,
+            code: it.subject_code || sKey,
+            name: it.subject_name || sKey,
+            sub_cd: it.subject_code || it.subject_id,
+            course_cd: it.course_cd,
+            branch_cd: it.branch_cd,
+            sem_cd: it.sem_cd,
+          });
+        }
+      });
+      if (uniqueSubs.size > 0) return Array.from(uniqueSubs.values());
+    }
+    return baseList;
+  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedBatchFilter, selectedSemesterFilter, subjects, colleges, isFaculty, facultyLinkedSubjectKeys, facultyLinkedItems]);
 
   const availableFilterUnits = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetColCd = targetCol?.code || targetCol?.id;
-    return units.filter(u => {
+    let baseList = units.filter(u => {
       const matchCol = selectedCollegeFilter === 'all' ||
         u.college_id === targetCol?.id ||
         u.college_slug === targetCol?.slug ||
@@ -2715,12 +3372,26 @@ export default function AdminMasterPage() {
       if (selectedSubjectFilter !== 'all' && u.subject_code !== selectedSubjectFilter && u.subject_id !== selectedSubjectFilter) return false;
       return true;
     });
-  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedSubjectFilter, units, colleges]);
+
+    if (isFaculty && facultyLinkedSubjectKeys && facultyLinkedSubjectKeys.size > 0) {
+      return baseList.filter(u => {
+        const uSubId = String(u.subject_id || '').trim().toLowerCase();
+        const uSubCode = String(u.subject_code || '').trim().toLowerCase();
+        const uSubCd = String((u as any).sub_cd || '').trim().toLowerCase();
+        return (
+          (uSubId && facultyLinkedSubjectKeys.has(uSubId)) ||
+          (uSubCode && facultyLinkedSubjectKeys.has(uSubCode)) ||
+          (uSubCd && facultyLinkedSubjectKeys.has(uSubCd))
+        );
+      });
+    }
+    return baseList;
+  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedSubjectFilter, units, colleges, isFaculty, facultyLinkedSubjectKeys]);
 
   const availableFilterTopics = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetColCd = targetCol?.code || targetCol?.id;
-    return topics.filter(t => {
+    let baseList = topics.filter(t => {
       const matchCol = selectedCollegeFilter === 'all' ||
         t.college_id === targetCol?.id ||
         t.college_slug === targetCol?.slug ||
@@ -2732,13 +3403,58 @@ export default function AdminMasterPage() {
       if (selectedUnitFilter !== 'all' && t.unit_code !== selectedUnitFilter && t.unit_id !== selectedUnitFilter) return false;
       return true;
     });
-  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedSubjectFilter, selectedUnitFilter, topics, colleges]);
+
+    if (isFaculty && facultyLinkedSubjectKeys && facultyLinkedSubjectKeys.size > 0) {
+      return baseList.filter(t => {
+        const tSubId = String(t.subject_id || '').trim().toLowerCase();
+        const tSubCode = String(t.subject_code || '').trim().toLowerCase();
+        const tSubCd = String((t as any).sub_cd || '').trim().toLowerCase();
+        return (
+          (tSubId && facultyLinkedSubjectKeys.has(tSubId)) ||
+          (tSubCode && facultyLinkedSubjectKeys.has(tSubCode)) ||
+          (tSubCd && facultyLinkedSubjectKeys.has(tSubCd))
+        );
+      });
+    }
+    return baseList;
+  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedSubjectFilter, selectedUnitFilter, topics, colleges, isFaculty, facultyLinkedSubjectKeys]);
 
   const filteredList = getFilteredItemsList().filter((item: any) => {
     if (activeTab === 'delivery-types') {
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase();
       return (item.name && item.name.toLowerCase().includes(term)) || (item.code && item.code.toLowerCase().includes(term));
+    }
+
+    if (activeTab === 'pos' || activeTab === 'peos') {
+      if (!isMatchCollege(item)) return false;
+
+      // Filter by Course (if outcome is course-specific)
+      if (selectedCourseFilter !== 'all' && item.course_cd) {
+        if (String(item.course_cd) !== String(selectedCourseFilter) && String(item.course_code) !== String(selectedCourseFilter)) return false;
+      }
+
+      // Filter by Branch (if outcome is branch-specific)
+      if (selectedBranchFilter !== 'all' && item.branch_cd) {
+        if (String(item.branch_cd) !== String(selectedBranchFilter)) return false;
+      }
+
+      // Filter by Batch (if outcome is batch-specific)
+      if (selectedBatchFilter !== 'all' && item.batch_year) {
+        if (String(item.batch_year) !== String(selectedBatchFilter)) return false;
+      }
+
+      // Search filter
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        return (
+          (item.code && item.code.toLowerCase().includes(term)) ||
+          (item.title && item.title.toLowerCase().includes(term)) ||
+          (item.description && item.description.toLowerCase().includes(term)) ||
+          (item.type && item.type.toLowerCase().includes(term))
+        );
+      }
+      return true;
     }
 
     if (!isMatchCollege(item)) return false;
@@ -2791,11 +3507,45 @@ export default function AdminMasterPage() {
       if (!isTopicMatch) return false;
     }
 
+    // Faculty isolation: restrict rows across tabs to their linked courses and subjects!
+    if (isFaculty && facultyLinkedItems.length > 0) {
+      if (activeTab === 'units' || activeTab === 'topics' || activeTab === 'competencies') {
+        const itemSubId = String(item.subject_id || '').trim().toLowerCase();
+        const itemSubCode = String(item.subject_code || '').trim().toLowerCase();
+        const itemSubCd = String(item.sub_cd || '').trim().toLowerCase();
+        const matchSub = (
+          (itemSubId && facultyLinkedSubjectKeys?.has(itemSubId)) ||
+          (itemSubCode && facultyLinkedSubjectKeys?.has(itemSubCode)) ||
+          (itemSubCd && facultyLinkedSubjectKeys?.has(itemSubCd))
+        );
+        if (!matchSub) return false;
+      } else if (activeTab === 'subjects') {
+        const sId = String(item.id || '').trim().toLowerCase();
+        const sCode = String(item.code || '').trim().toLowerCase();
+        const sSubCd = String(item.sub_cd || '').trim().toLowerCase();
+        const sName = String(item.name || '').trim().toLowerCase();
+        const matchSub = (
+          (sId && facultyLinkedSubjectKeys?.has(sId)) ||
+          (sCode && facultyLinkedSubjectKeys?.has(sCode)) ||
+          (sSubCd && facultyLinkedSubjectKeys?.has(sSubCd)) ||
+          (sName && facultyLinkedSubjectKeys?.has(sName))
+        );
+        if (!matchSub) return false;
+      } else if (activeTab === 'departments') {
+        const bCd = String(item.branch_cd || item.code || item.id || '').trim().toLowerCase();
+        const bName = String(item.name || '').trim().toLowerCase();
+        if (facultyLinkedBranchCds && facultyLinkedBranchCds.size > 0) {
+          if (!facultyLinkedBranchCds.has(bCd) && !facultyLinkedBranchCds.has(bName)) return false;
+        }
+      }
+    }
+
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
       (item.code && item.code.toLowerCase().includes(term)) ||
       (item.name && item.name.toLowerCase().includes(term)) ||
+      (item.title && item.title.toLowerCase().includes(term)) ||
       (item.description && item.description.toLowerCase().includes(term)) ||
       (item.department_name && item.department_name.toLowerCase().includes(term)) ||
       (item.subject_name && item.subject_name.toLowerCase().includes(term)) ||
@@ -2803,10 +3553,11 @@ export default function AdminMasterPage() {
     );
   });
 
+  const effectivePageSize = (activeTab === 'pos' || activeTab === 'peos') ? 25 : ITEMS_PER_PAGE;
   const totalItems = filteredList.length;
-  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedList = filteredList.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(totalItems / effectivePageSize) || 1;
+  const startIndex = (currentPage - 1) * effectivePageSize;
+  const paginatedList = filteredList.slice(startIndex, startIndex + effectivePageSize);
 
   const modalDepartments = useMemo(() => {
     const targetColId = formData.college_id;
@@ -2817,7 +3568,7 @@ export default function AdminMasterPage() {
 
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#1B1E28] dark:text-slate-100 font-sans transition-colors">
-      <Sidebar role="admin" />
+      <Sidebar role={role} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Curriculum & Subject Configuration" />
         <main className="p-6 space-y-6 flex-1">
@@ -2826,21 +3577,21 @@ export default function AdminMasterPage() {
               <p className="text-xs font-bold text-slate-500">🔒 Access to Curriculum & Subject tabs is currently restricted for your role. Contact Platform SuperAdmin.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-3">
               {categories.map((cat) => (
                 <button
                   key={cat.key}
                   onClick={() => { setActiveTab(cat.key as SubCategory); setSearchTerm(''); }}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 text-left border ${activeTab === cat.key
-                    ? 'bg-[#F36C21] text-white shadow-md border-[#F36C21] relative after:absolute after:left-3 after:bottom-1 after:w-5 after:h-[2px] after:bg-white'
-                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 border-slate-200 dark:border-slate-800'
+                  className={`px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2.5 text-left border whitespace-nowrap shrink-0 w-auto ${activeTab === cat.key
+                    ? 'bg-[#F36C21] text-white shadow-md border-[#F36C21] relative after:absolute after:left-3.5 after:bottom-1 after:w-5 after:h-[2px] after:bg-white'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 border-slate-200 dark:border-slate-800 shadow-sm'
                     }`}
                 >
-                  <div className="flex items-center gap-2 truncate">
+                  <div className="flex items-center gap-2 whitespace-nowrap">
                     <span className="text-sm shrink-0">{cat.icon}</span>
-                    <span className="truncate text-[11px] font-bold">{cat.label.split('. ')[1]}</span>
+                    <span className="text-[12px] font-bold whitespace-nowrap">{cat.label.split('. ')[1]}</span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 border ${activeTab === cat.key
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 border ml-1 ${activeTab === cat.key
                     ? 'bg-white/20 text-white border-transparent'
                     : 'bg-slate-100 dark:bg-slate-800 text-[#5B4BFF] dark:text-indigo-400 border-slate-200 dark:border-slate-700'
                     }`}>
@@ -2855,6 +3606,33 @@ export default function AdminMasterPage() {
             <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-between animate-fadeIn">
               <span>{syncMessage}</span>
               <button onClick={() => setSyncMessage('')} className="text-emerald-600 font-bold hover:underline">✕</button>
+            </div>
+          )}
+
+          {isFaculty && (
+            <div className="p-3.5 bg-gradient-to-r from-[#2D2575]/10 via-[#5B4BFF]/10 to-[#F36C21]/10 border border-[#5B4BFF]/30 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 bg-[#2D2575] text-white rounded-xl text-base shadow-sm">🎓</span>
+                <div>
+                  <h4 className="font-extrabold text-[#2D2575] dark:text-[#7867FF] text-sm">Faculty Portal Active — Personalized Curriculum Scope</h4>
+                  <p className="text-slate-600 dark:text-slate-400 font-medium text-xs mt-0.5">
+                    Showing your assigned Courses, Branches & Subjects.
+                    {facultyLinkedItems.length > 0 ? (
+                      <span className="ml-1 text-[#00C48C] font-bold">({facultyLinkedItems.length} Linked Assignment{facultyLinkedItems.length > 1 ? 's' : ''} Active)</span>
+                    ) : (
+                      <span className="ml-1 text-[#F04438] font-bold">(No course links assigned yet. Contact Admin.)</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 bg-[#5B4BFF] text-white rounded-lg font-bold text-[11px] shadow-sm">
+                  {availableFilterCourses.length} {availableFilterCourses.length === 1 ? 'Course' : 'Courses'}
+                </span>
+                <span className="px-2.5 py-1 bg-[#F36C21] text-white rounded-lg font-bold text-[11px] shadow-sm">
+                  {availableFilterSubjects.length} {availableFilterSubjects.length === 1 ? 'Subject' : 'Subjects'}
+                </span>
+              </div>
             </div>
           )}
 
@@ -2878,7 +3656,7 @@ export default function AdminMasterPage() {
 
               {/* 2. Course Selector */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>🎓</span> Course:</span>
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>🎓</span> {isFaculty ? 'My Course:' : 'Course:'}</span>
                 <select
                   value={selectedCourseFilter}
                   onChange={(e) => {
@@ -2889,7 +3667,7 @@ export default function AdminMasterPage() {
                   }}
                   className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[170px] truncate"
                 >
-                  <option value="all">All Courses ({availableFilterCourses.length})</option>
+                  <option value="all">{isFaculty ? `All My Courses (${availableFilterCourses.length})` : `All Courses (${availableFilterCourses.length})`}</option>
                   {availableFilterCourses.map((crs: any) => (
                     <option key={crs.id || crs.code} value={crs.course_cd || crs.code}>[#{crs.course_cd || crs.code}] {crs.name}</option>
                   ))}
@@ -2898,7 +3676,7 @@ export default function AdminMasterPage() {
 
               {/* 3. Branch / Department Selector */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>🏢</span> Branch:</span>
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>🏢</span> {isFaculty ? 'My Branch:' : 'Branch:'}</span>
                 <select
                   value={selectedBranchFilter}
                   onChange={(e) => {
@@ -2908,7 +3686,7 @@ export default function AdminMasterPage() {
                   }}
                   className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[170px] truncate"
                 >
-                  <option value="all">All Branches ({availableFilterBranches.length})</option>
+                  <option value="all">{isFaculty ? `All My Branches (${availableFilterBranches.length})` : `All Branches (${availableFilterBranches.length})`}</option>
                   {availableFilterBranches.map((br: any) => (
                     <option key={br.id} value={br.branch_cd || br.code}>[#{br.branch_cd || br.code}] {br.name}</option>
                   ))}
@@ -2986,7 +3764,7 @@ export default function AdminMasterPage() {
 
               {/* 6. Subject Selector */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>📚</span> Subject:</span>
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>📚</span> {isFaculty ? 'My Subject:' : 'Subject:'}</span>
                 <select
                   value={selectedSubjectFilter}
                   onChange={(e) => {
@@ -2996,16 +3774,16 @@ export default function AdminMasterPage() {
                   }}
                   className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[200px] truncate"
                 >
-                  <option value="all">All Subjects ({availableFilterSubjects.length})</option>
+                  <option value="all">{isFaculty ? `All My Subjects (${availableFilterSubjects.length})` : `All Subjects (${availableFilterSubjects.length})`}</option>
                   {availableFilterSubjects.map((sub: any) => (
                     <option key={sub.id} value={sub.code || sub.id}>[#{sub.code || 'N/A'}] {sub.name}</option>
                   ))}
                 </select>
               </div>
 
-              {/* 7. Unit Selector */}
+              {/* 7. CO Selector */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-inner">
-                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>📑</span> Unit:</span>
+                <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1"><span>📑</span> COs:</span>
                 <select
                   value={selectedUnitFilter}
                   onChange={(e) => {
@@ -3015,7 +3793,7 @@ export default function AdminMasterPage() {
                   }}
                   className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
                 >
-                  <option value="all">All Units ({availableFilterUnits.length})</option>
+                  <option value="all">All COs ({availableFilterUnits.length})</option>
                   {availableFilterUnits.map((u: any) => (
                     <option key={u.id} value={u.code || u.id}>[#{u.code}] {u.name && u.name !== u.code ? u.name : (u.description ? u.description.slice(0, 20) : u.code)}</option>
                   ))}
@@ -3074,6 +3852,28 @@ export default function AdminMasterPage() {
                   >
                     <span className={syncing || loadingSrmsSubjects ? 'animate-spin' : ''}>⚡</span>
                     <span>{syncing ? 'Syncing...' : loadingSrmsSubjects ? 'Fetching...' : activeTab === 'subject-offerings' ? 'Sync SRMS Offerings' : 'Sync SRMS Subjects'}</span>
+                  </button>
+                )}
+                {activeTab === 'pos' && (
+                  <button
+                    onClick={handleSeedPos}
+                    disabled={isSeeding}
+                    title="Seed standard 12 NBA Program Outcomes (PO1–PO12) + 2 Program Specific Outcomes (PSO1–PSO2)"
+                    className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95"
+                  >
+                    <span className={isSeeding ? 'animate-spin' : ''}>🌱</span>
+                    <span>{isSeeding ? 'Seeding...' : 'Seed NBA POs & PSOs'}</span>
+                  </button>
+                )}
+                {activeTab === 'peos' && (
+                  <button
+                    onClick={handleSeedPeos}
+                    disabled={isSeeding}
+                    title="Seed standard 5 Program Educational Objectives (PEO1–PEO5)"
+                    className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95"
+                  >
+                    <span className={isSeeding ? 'animate-spin' : ''}>🏆</span>
+                    <span>{isSeeding ? 'Seeding...' : 'Seed Standard PEOs'}</span>
                   </button>
                 )}
                 <button onClick={handleAddNew} className="px-4 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5 active:scale-95">
@@ -3485,8 +4285,8 @@ export default function AdminMasterPage() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">
                       <tr>
-                        <th className="p-4 pl-5">Unit Code & Order</th>
-                        <th className="p-4">Unit Description / Title</th>
+                        <th className="p-4 pl-5">CO Code & Order</th>
+                        <th className="p-4">CO Description / Title</th>
                         <th className="p-4">Bloom&apos;s Knowledge Level (KL)</th>
                         <th className="p-4">Hours</th>
                         <th className="p-4">Status</th>
@@ -3495,7 +4295,7 @@ export default function AdminMasterPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium">
                       {paginatedList.length === 0 ? (
-                        <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">No units registered matching the selected filter. Click &apos;Add New&apos; to create one.</td></tr>
+                        <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">No COs registered matching the selected filter. Click &apos;Add New&apos; to create one.</td></tr>
                       ) : (
                         paginatedList.map((u: any) => (
                           <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -3558,7 +4358,7 @@ export default function AdminMasterPage() {
                       <tr>
                         <th className="p-4 pl-5">Topic Code</th>
                         <th className="p-4">Topic Title / Description</th>
-                        <th className="p-4">Mapped Unit</th>
+                        <th className="p-4">Mapped CO</th>
                         <th className="p-4">Bloom&apos;s Knowledge Level (KL)</th>
                         <th className="p-4">Hours</th>
                         <th className="p-4">Status</th>
@@ -3624,7 +4424,7 @@ export default function AdminMasterPage() {
                           <th className="py-3.5 px-4 pl-5 w-32">Sub-Topic Code</th>
                           <th className="py-3.5 px-4 min-w-[340px]">Sub-Topic Title & Statement</th>
                           <th className="py-3.5 px-4 w-44">Subject</th>
-                          <th className="py-3.5 px-4 w-36">Unit</th>
+                          <th className="py-3.5 px-4 w-36">CO</th>
                           <th className="py-3.5 px-4 w-48">Topic</th>
                           <th className="py-3.5 px-4 w-44">Pedagogy & Assessment</th>
                           <th className="py-3.5 px-4 w-36">Domain & Mastery</th>
@@ -3777,6 +4577,163 @@ export default function AdminMasterPage() {
                       </tbody>
                     </table>
                   </div>
+                )}
+
+                {/* ─── 9. PROGRAM OUTCOMES (POs) TABLE ─── */}
+                {activeTab === 'pos' && (
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="p-4 pl-5">Code & Type</th>
+                        <th className="p-4">Title</th>
+                        <th className="p-4 min-w-[280px]">Graduate Attribute / Outcome Statement</th>
+                        <th className="p-4">Course & Branch</th>
+                        <th className="p-4 text-center">Target Level</th>
+                        <th className="p-4 text-center">Status</th>
+                        <th className="p-4 pr-5 text-right min-w-[100px]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium">
+                      {paginatedList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-10 text-center text-slate-500 font-semibold">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <span className="text-2xl">🎯</span>
+                              <p>No Program Outcomes found. Click &apos;Seed NBA POs & PSOs&apos; or &apos;Add New&apos;.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedList.map((po: any) => {
+                          const col = colleges.find(c => c.id === po.college_id || c.slug === po.college_slug || c.code === po.college_id);
+                          return (
+                            <tr key={po.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="p-4 pl-5 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold font-mono text-[#5B4BFF] dark:text-indigo-400 px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
+                                    {po.code}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${po.type === 'PSO' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20'}`}>
+                                    {po.type || 'PO'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="p-4 font-bold text-slate-900 dark:text-white">
+                                {po.title}
+                              </td>
+                              <td className="p-4 text-slate-600 dark:text-slate-300 leading-relaxed text-[11px] max-w-md">
+                                {po.description || <span className="text-slate-400 italic">No description provided</span>}
+                              </td>
+                              <td className="p-4 whitespace-nowrap">
+                                <div className="space-y-0.5">
+                                  {po.course_name ? (
+                                    <span className="text-purple-600 dark:text-purple-400 font-bold block text-[11px]">
+                                      🎓 {po.course_name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 text-[10px]">All Courses</span>
+                                  )}
+                                  {col && (
+                                    <span className="text-slate-500 text-[10px] block">
+                                      🏛️ {col.name}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-4 text-center whitespace-nowrap">
+                                <span className="px-2 py-0.5 rounded font-mono font-bold text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                  {po.target_level ?? '2.5'} / 3.0
+                                </span>
+                              </td>
+                              <td className="p-4 text-center whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${po.is_active !== false ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20'}`}>
+                                  {po.is_active !== false ? 'ACTIVE' : 'INACTIVE'}
+                                </span>
+                              </td>
+                              <td className="p-4 pr-5 text-right whitespace-nowrap">
+                                <ActionButtons onEdit={() => handleEdit(po)} onDelete={() => handleDelete(po.id, po.college_slug)} />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* ─── 10. PROGRAM EDUCATIONAL OBJECTIVES (PEOs) TABLE ─── */}
+                {activeTab === 'peos' && (
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="p-4 pl-5">Code</th>
+                        <th className="p-4">Title</th>
+                        <th className="p-4 min-w-[320px]">Educational Objective Statement</th>
+                        <th className="p-4">Course & Branch</th>
+                        <th className="p-4 text-center">Order</th>
+                        <th className="p-4 text-center">Status</th>
+                        <th className="p-4 pr-5 text-right min-w-[100px]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium">
+                      {paginatedList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-10 text-center text-slate-500 font-semibold">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <span className="text-2xl">🏆</span>
+                              <p>No Program Educational Objectives found. Click &apos;Seed Standard PEOs&apos; or &apos;Add New&apos;.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedList.map((peo: any) => {
+                          const col = colleges.find(c => c.id === peo.college_id || c.slug === peo.college_slug || c.code === peo.college_id);
+                          return (
+                            <tr key={peo.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="p-4 pl-5 whitespace-nowrap">
+                                <span className="font-extrabold font-mono text-[#F36C21] px-2 py-0.5 rounded bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800">
+                                  {peo.code}
+                                </span>
+                              </td>
+                              <td className="p-4 font-bold text-slate-900 dark:text-white">
+                                {peo.title}
+                              </td>
+                              <td className="p-4 text-slate-600 dark:text-slate-300 leading-relaxed text-[11px] max-w-lg">
+                                {peo.description || <span className="text-slate-400 italic">No description provided</span>}
+                              </td>
+                              <td className="p-4 whitespace-nowrap">
+                                <div className="space-y-0.5">
+                                  {peo.course_name ? (
+                                    <span className="text-purple-600 dark:text-purple-400 font-bold block text-[11px]">
+                                      🎓 {peo.course_name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 text-[10px]">All Courses</span>
+                                  )}
+                                  {col && (
+                                    <span className="text-slate-500 text-[10px] block">
+                                      🏛️ {col.name}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-4 text-center whitespace-nowrap font-mono font-bold text-slate-600 dark:text-slate-400">
+                                #{peo.peo_order || 1}
+                              </td>
+                              <td className="p-4 text-center whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${peo.is_active !== false ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20'}`}>
+                                  {peo.is_active !== false ? 'ACTIVE' : 'INACTIVE'}
+                                </span>
+                              </td>
+                              <td className="p-4 pr-5 text-right whitespace-nowrap">
+                                <ActionButtons onEdit={() => handleEdit(peo)} onDelete={() => handleDelete(peo.id, peo.college_slug)} />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 )}
 
                 {totalItems > 0 && (
@@ -5215,7 +6172,7 @@ export default function AdminMasterPage() {
                                             </span>
                                           )}
                                           <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-800 font-mono">
-                                            Auto Unit: {formData.code}
+                                            Auto CO: {formData.code}
                                           </span>
                                         </div>
                                         <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
@@ -5320,7 +6277,7 @@ export default function AdminMasterPage() {
                                                     subject_code: subNumericCode || paperCode || subCodeOrId,
                                                     subject_name: fullTitle,
                                                     code: nextUnit.code,
-                                                    name: (!formData.name || formData.name === formData.code || formData.name.startsWith('UNIT') || formData.name.includes('-UNIT')) ? nextUnit.code : formData.name,
+                                                    name: (!formData.name || formData.name === formData.code || formData.name.startsWith('UNIT') || formData.name.includes('-UNIT') || /^CO\d+$/i.test(formData.name)) ? nextUnit.code : formData.name,
                                                     unit_order: nextUnit.order,
                                                   });
                                                   setUnitSubjectSearch(displayLabel);
@@ -5391,9 +6348,9 @@ export default function AdminMasterPage() {
                             <div className="grid grid-cols-2 gap-3">
                               <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                                  <span>Unit Code *</span>
+                                  <span>CO Code *</span>
                                   <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold bg-purple-50 dark:bg-purple-950/50 px-1.5 py-0.5 rounded">
-                                    Dynamic: {formData.code || (currentNumericCode ? `${currentNumericCode}-UNIT1-CO1` : 'UNIT1-CO1')}
+                                    Auto: {formData.code || 'CO1'}
                                   </span>
                                 </label>
                                 <input
@@ -5401,16 +6358,16 @@ export default function AdminMasterPage() {
                                   required
                                   value={formData.code || ''}
                                   onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                                  placeholder={currentNumericCode ? `e.g. ${currentNumericCode}-UNIT1-CO1, ${currentNumericCode}-UNIT2-CO2` : "e.g. 88623-UNIT1-CO1, 88623-UNIT2-CO2"}
+                                  placeholder="e.g. CO1, CO2, CO3"
                                   className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold uppercase focus:outline-none focus:border-[#5B4BFF]"
                                 />
                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">
-                                  Dynamic numeric subject code + Unit (e.g. {currentNumericCode ? `${currentNumericCode}-UNIT1-CO1, ${currentNumericCode}-UNIT2-CO2...` : '88623-UNIT1-CO1, 88623-UNIT2-CO2...'})
+                                  Auto Course Outcome code (e.g. CO1, CO2, CO3...)
                                 </span>
                               </div>
                               <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  {isMedicalUnit ? 'Enter No of Competencies Under This Unit *' : "Bloom's Knowledge Level (KL) *"}
+                                  {isMedicalUnit ? 'Enter No of Competencies Under This CO *' : "Bloom's Knowledge Level (KL) *"}
                                 </label>
                                 {isMedicalUnit ? (
                                   <input
@@ -5452,20 +6409,20 @@ export default function AdminMasterPage() {
                         })()}
 
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Unit Description / Syllabus Content *</label>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">CO Description / Syllabus Content *</label>
                           <textarea
                             rows={3}
                             required
                             value={formData.description || ''}
                             onChange={e => setFormData({ ...formData, description: e.target.value })}
-                            placeholder="Provide comprehensive topics and unit syllabus content..."
+                            placeholder="Provide comprehensive topics and CO syllabus content..."
                             className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#5B4BFF] resize-none"
                           />
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Unit Sequence Order</label>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">CO Sequence Order</label>
                             <input
                               type="number"
                               min="1"
@@ -6143,13 +7100,13 @@ export default function AdminMasterPage() {
                           })()}
                         </div>
 
-                        {/* Step 8: Select Unit (Cascading from Selected Subject), Topic Code (Auto) & Bloom's Level */}
+                        {/* Step 8: Select CO (Cascading from Selected Subject), Topic Code (Auto) & Bloom's Level */}
                         <div className="grid grid-cols-3 gap-2.5">
                           <div>
                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                              <span>Step 8: Select Unit *</span>
+                              <span>Step 8: Select CO *</span>
                               <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
-                                {availableUnits.length} units
+                                {availableUnits.length} COs
                               </span>
                             </label>
                             <select
@@ -6173,7 +7130,7 @@ export default function AdminMasterPage() {
                               }}
                               className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              <option value="">-- Choose Unit --</option>
+                              <option value="">-- Choose CO --</option>
                               {availableUnits.map(u => (
                                 <option key={u.id} value={u.code || u.id}>
                                   📑 {u.code} — {u.name && u.name !== u.code ? u.name : (u.description ? u.description.slice(0, 25) : u.code)}
@@ -6182,7 +7139,7 @@ export default function AdminMasterPage() {
                             </select>
                             {availableUnits.length === 0 && formData.subject_id && (
                               <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-1">
-                                ⚠️ No units found for this subject yet. You can still create the topic or add a Unit first.
+                                ⚠️ No COs found for this subject yet. You can still create the topic or add a CO first.
                               </p>
                             )}
                           </div>
@@ -7114,11 +8071,11 @@ export default function AdminMasterPage() {
                           })()}
                         </div>
 
-                        {/* Step 8: Select Unit, Step 9: Select Topic & Step 10: Linked Guideline */}
+                        {/* Step 8: Select CO, Step 9: Select Topic & Step 10: Linked Guideline */}
                         <div className="grid grid-cols-3 gap-2.5">
                           <div>
                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                              <span>Step 8: Select Unit *</span>
+                              <span>Step 8: Select CO *</span>
                               <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
                                 {availableUnits.length} in subject
                               </span>
@@ -7159,7 +8116,7 @@ export default function AdminMasterPage() {
                               }}
                               className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
                             >
-                              <option value="">-- Choose Unit --</option>
+                              <option value="">-- Choose CO --</option>
                               {availableUnits.map(u => (
                                 <option key={u.id} value={u.code || u.id}>
                                   📑 {u.code} — {u.name && u.name !== u.code ? u.name : (u.description ? u.description.slice(0, 20) : u.code)}
@@ -7480,6 +8437,332 @@ export default function AdminMasterPage() {
                             </div>
                           </div>
                         )}
+                      </>
+                    );
+                  })()}
+
+                  {/* Form fields for Program Outcomes (POs / PSOs) */}
+                  {activeTab === 'pos' && (() => {
+                    const currentCol = colleges.find(c => c.code === formData.college_id || c.id === formData.college_id || c.slug === formData.college_slug) || colleges[0];
+                    const colCourses = getCoursesForCollege(currentCol?.id || currentCol?.slug);
+                    const colDepts = departments.filter(d => (d.college_id === currentCol?.id || d.college_slug === currentCol?.slug || String(d.colg_cd) === String(currentCol?.code)));
+
+                    return (
+                      <>
+                        <div className="space-y-1 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                          <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
+                            <span>Step 1: Select College *</span>
+                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">
+                              colgcd: #{currentCol?.code || '1'}
+                            </span>
+                          </label>
+                          <select
+                            required
+                            value={currentCol?.code || currentCol?.id}
+                            onChange={(e) => {
+                              const newColCd = e.target.value;
+                              const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
+                              const newCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
+                              setFormData({
+                                ...formData,
+                                college_id: newColCd,
+                                college_slug: newCol?.slug || '',
+                                course_cd: newCourses[0]?.course_cd || newCourses[0]?.code || '',
+                              });
+                            }}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          >
+                            {colleges.map(c => (
+                              <option key={c.id} value={c.code || c.id}>
+                                🏛️ {c.name} ({c.slug}) — [#{c.code || '1'}]
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                            <label className="text-slate-700 dark:text-slate-300 font-extrabold block">
+                              Step 2: Course / Program
+                            </label>
+                            <select
+                              value={formData.course_cd || ''}
+                              onChange={(e) => setFormData({ ...formData, course_cd: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">-- All / General Program Outcomes --</option>
+                              {colCourses.map((crs: any) => (
+                                <option key={crs.id || crs.code} value={crs.course_cd || crs.code}>
+                                  🎓 {crs.name} (Code: #{crs.course_cd || crs.code})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                            <label className="text-slate-700 dark:text-slate-300 font-extrabold block">
+                              Step 3: Branch / Department
+                            </label>
+                            <select
+                              value={formData.branch_cd || ''}
+                              onChange={(e) => setFormData({ ...formData, branch_cd: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">-- All Branches --</option>
+                              {colDepts.map((d: any) => (
+                                <option key={d.id} value={d.branch_cd || d.code}>
+                                  🏢 {d.name} (Code: #{d.branch_cd || d.code})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Outcome Type *
+                            </label>
+                            <select
+                              required
+                              value={formData.type || 'PO'}
+                              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="PO">PO (Program Outcome)</option>
+                              <option value="PSO">PSO (Program Specific Outcome)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Code *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={formData.code || ''}
+                              onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                              placeholder="e.g. PO1, PSO1"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Sequence Order
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={formData.po_order || 1}
+                              onChange={(e) => setFormData({ ...formData, po_order: parseInt(e.target.value) || 1 })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Target Level (Max 3.0)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="3"
+                              value={formData.target_level ?? 2.5}
+                              onChange={(e) => setFormData({ ...formData, target_level: parseFloat(e.target.value) || 2.5 })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Title / Attribute Name *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={formData.title || ''}
+                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                            placeholder="e.g. Engineering Knowledge, Problem Analysis, Design/Development of Solutions"
+                            className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Graduate Attribute / Detailed Statement *
+                          </label>
+                          <textarea
+                            rows={4}
+                            required
+                            value={formData.description || ''}
+                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            placeholder="Apply the knowledge of mathematics, science, engineering fundamentals, and an engineering specialization to the solution of complex engineering problems..."
+                            className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#5B4BFF]"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            type="checkbox"
+                            id="po_is_active"
+                            checked={formData.is_active !== false}
+                            onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                            className="rounded text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                          />
+                          <label htmlFor="po_is_active" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                            Active in Curriculum & Matrix Calculations
+                          </label>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  {/* Form fields for Program Educational Objectives (PEOs) */}
+                  {activeTab === 'peos' && (() => {
+                    const currentCol = colleges.find(c => c.code === formData.college_id || c.id === formData.college_id || c.slug === formData.college_slug) || colleges[0];
+                    const colCourses = getCoursesForCollege(currentCol?.id || currentCol?.slug);
+                    const colDepts = departments.filter(d => (d.college_id === currentCol?.id || d.college_slug === currentCol?.slug || String(d.colg_cd) === String(currentCol?.code)));
+
+                    return (
+                      <>
+                        <div className="space-y-1 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                          <label className="text-indigo-900 dark:text-indigo-300 font-extrabold flex items-center justify-between">
+                            <span>Step 1: Select College *</span>
+                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">
+                              colgcd: #{currentCol?.code || '1'}
+                            </span>
+                          </label>
+                          <select
+                            required
+                            value={currentCol?.code || currentCol?.id}
+                            onChange={(e) => {
+                              const newColCd = e.target.value;
+                              const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
+                              const newCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
+                              setFormData({
+                                ...formData,
+                                college_id: newColCd,
+                                college_slug: newCol?.slug || '',
+                                course_cd: newCourses[0]?.course_cd || newCourses[0]?.code || '',
+                              });
+                            }}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          >
+                            {colleges.map(c => (
+                              <option key={c.id} value={c.code || c.id}>
+                                🏛️ {c.name} ({c.slug}) — [#{c.code || '1'}]
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                            <label className="text-slate-700 dark:text-slate-300 font-extrabold block">
+                              Step 2: Course / Program
+                            </label>
+                            <select
+                              value={formData.course_cd || ''}
+                              onChange={(e) => setFormData({ ...formData, course_cd: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">-- All / General PEOs --</option>
+                              {colCourses.map((crs: any) => (
+                                <option key={crs.id || crs.code} value={crs.course_cd || crs.code}>
+                                  🎓 {crs.name} (Code: #{crs.course_cd || crs.code})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                            <label className="text-slate-700 dark:text-slate-300 font-extrabold block">
+                              Step 3: Branch / Department
+                            </label>
+                            <select
+                              value={formData.branch_cd || ''}
+                              onChange={(e) => setFormData({ ...formData, branch_cd: e.target.value })}
+                              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            >
+                              <option value="">-- All Branches --</option>
+                              {colDepts.map((d: any) => (
+                                <option key={d.id} value={d.branch_cd || d.code}>
+                                  🏢 {d.name} (Code: #{d.branch_cd || d.code})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              PEO Code *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={formData.code || ''}
+                              onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                              placeholder="e.g. PEO1, PEO2"
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Sequence Order
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={formData.peo_order || 1}
+                              onChange={(e) => setFormData({ ...formData, peo_order: parseInt(e.target.value) || 1 })}
+                              className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Title / Objective Theme *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={formData.title || ''}
+                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                            placeholder="e.g. Core Professional Competence, Continuous Learning & Innovation"
+                            className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Educational Objective Statement *
+                          </label>
+                          <textarea
+                            rows={4}
+                            required
+                            value={formData.description || ''}
+                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            placeholder="Graduates will establish successful professional careers in computing and allied sectors, demonstrating strong technical and analytical acumen..."
+                            className="w-full px-3 py-2 text-xs bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-[#5B4BFF]"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            type="checkbox"
+                            id="peo_is_active"
+                            checked={formData.is_active !== false}
+                            onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                            className="rounded text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                          />
+                          <label htmlFor="peo_is_active" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                            Active in Program & PO-PEO Matrix Calculations
+                          </label>
+                        </div>
                       </>
                     );
                   })()}

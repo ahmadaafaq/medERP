@@ -13,6 +13,9 @@ import {
   CreateSubjectOfferingDto, UpdateSubjectOfferingDto,
   LinkFacultySubjectDto,
   CreateUnitMasterDto, UpdateUnitMasterDto,
+  CreateProgramOutcomeDto, UpdateProgramOutcomeDto,
+  CreateProgramEducationalObjectiveDto, UpdateProgramEducationalObjectiveDto,
+  SaveCoPoMatrixDto, SavePoPeoMatrixDto,
 } from './dto/admin-master.dto';
 import { TenantSlug } from '../common/decorators/tenant.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -337,8 +340,10 @@ export class AdminMasterController {
     @Query('facultyId') facultyId?: string,
     @Query('subjectId') subjectId?: string,
     @Query('departmentId') departmentId?: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
   ) {
-    const data = await this.adminMasterService.listFacultySubjects({ facultyId, subjectId, departmentId }, tenant);
+    const data = await this.adminMasterService.listFacultySubjects({ facultyId, subjectId, departmentId, courseCd, branchCd }, tenant);
     return { success: true, data };
   }
 
@@ -394,4 +399,159 @@ export class AdminMasterController {
   async deleteUnit(@Param('id') id: string, @TenantSlug() tenant: string) {
     return this.adminMasterService.deleteUnit(id, tenant);
   }
+
+  // ─── 10. PROGRAM OUTCOMES (POs / PSOs) ───────────────────────────────────────
+  @Get('pos')
+  @ApiOperation({ summary: 'List Program Outcomes (POs/PSOs) — tenant read' })
+  async listProgramOutcomes(
+    @TenantSlug() tenant: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+  ) {
+    const data = await this.adminMasterService.listProgramOutcomes(tenant, courseCd, branchCd);
+    return { success: true, data };
+  }
+
+  @Post('pos')
+  @ApiOperation({ summary: 'Create Program Outcome (PO/PSO)' })
+  async createProgramOutcome(@Body() dto: CreateProgramOutcomeDto, @TenantSlug() tenant: string) {
+    const data = await this.adminMasterService.createProgramOutcome(dto, tenant);
+    return { success: true, data, message: 'Program Outcome created successfully' };
+  }
+
+  @Post('pos/seed')
+  @ApiOperation({ summary: 'Seed standard NBA Program Outcomes (PO1-PO12, PSO1-PSO2) (POST)' })
+  async seedProgramOutcomesPost(
+    @TenantSlug() tenant: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+  ) {
+    return this.adminMasterService.seedProgramOutcomes(tenant, courseCd, branchCd);
+  }
+
+  @Get('pos/seed')
+  @ApiOperation({ summary: 'Seed standard NBA Program Outcomes (PO1-PO12, PSO1-PSO2) (GET trigger)' })
+  async seedProgramOutcomesGet(
+    @TenantSlug() tenant: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+  ) {
+    return this.adminMasterService.seedProgramOutcomes(tenant, courseCd, branchCd);
+  }
+
+  @Put('pos/:id')
+  @ApiOperation({ summary: 'Update Program Outcome' })
+  async updateProgramOutcome(@Param('id') id: string, @Body() dto: UpdateProgramOutcomeDto, @TenantSlug() tenant: string) {
+    const data = await this.adminMasterService.updateProgramOutcome(id, dto, tenant);
+    return { success: true, data, message: 'Program Outcome updated successfully' };
+  }
+
+  @Delete('pos/:id')
+  @ApiOperation({ summary: 'Delete Program Outcome' })
+  async deleteProgramOutcome(@Param('id') id: string, @TenantSlug() tenant: string) {
+    return this.adminMasterService.deleteProgramOutcome(id, tenant);
+  }
+
+  // ─── 11. PROGRAM EDUCATIONAL OBJECTIVES (PEOs) ──────────────────────────────
+  @Get('peos')
+  @ApiOperation({ summary: 'List Program Educational Objectives (PEOs) — tenant read' })
+  async listProgramEducationalObjectives(
+    @TenantSlug() tenant: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+  ) {
+    const data = await this.adminMasterService.listProgramEducationalObjectives(tenant, courseCd, branchCd);
+    return { success: true, data };
+  }
+
+  @Post('peos')
+  @ApiOperation({ summary: 'Create Program Educational Objective (PEO)' })
+  async createProgramEducationalObjective(@Body() dto: CreateProgramEducationalObjectiveDto, @TenantSlug() tenant: string) {
+    const data = await this.adminMasterService.createProgramEducationalObjective(dto, tenant);
+    return { success: true, data, message: 'Program Educational Objective created successfully' };
+  }
+
+  @Post('peos/seed')
+  @ApiOperation({ summary: 'Seed standard Program Educational Objectives (PEO1-PEO5) (POST)' })
+  async seedProgramEducationalObjectivesPost(
+    @TenantSlug() tenant: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+  ) {
+    return this.adminMasterService.seedProgramEducationalObjectives(tenant, courseCd, branchCd);
+  }
+
+  @Get('peos/seed')
+  @ApiOperation({ summary: 'Seed standard Program Educational Objectives (PEO1-PEO5) (GET trigger)' })
+  async seedProgramEducationalObjectivesGet(
+    @TenantSlug() tenant: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+  ) {
+    return this.adminMasterService.seedProgramEducationalObjectives(tenant, courseCd, branchCd);
+  }
+
+  @Put('peos/:id')
+  @ApiOperation({ summary: 'Update Program Educational Objective' })
+  async updateProgramEducationalObjective(@Param('id') id: string, @Body() dto: UpdateProgramEducationalObjectiveDto, @TenantSlug() tenant: string) {
+    const data = await this.adminMasterService.updateProgramEducationalObjective(id, dto, tenant);
+    return { success: true, data, message: 'Program Educational Objective updated successfully' };
+  }
+
+  @Delete('peos/:id')
+  @ApiOperation({ summary: 'Delete Program Educational Objective' })
+  async deleteProgramEducationalObjective(@Param('id') id: string, @TenantSlug() tenant: string) {
+    return this.adminMasterService.deleteProgramEducationalObjective(id, tenant);
+  }
+
+  // ─── 12. CO - PO MATRIX ─────────────────────────────────────────────────────
+  @Get('co-po-matrix')
+  @ApiOperation({ summary: 'Get CO - PO Matrix for Subject' })
+  async getCoPoMatrix(
+    @TenantSlug() tenant: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('subjectCode') subjectCode?: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+    @Query('batchYear') batchYear?: string,
+    @Query('semCd') semCd?: string,
+  ) {
+    return this.adminMasterService.getCoPoMatrix(tenant, {
+      subjectId,
+      subjectCode,
+      courseCd,
+      branchCd,
+      batchYear: batchYear ? parseInt(batchYear, 10) : undefined,
+      semCd,
+    });
+  }
+
+  @Post('co-po-matrix')
+  @ApiOperation({ summary: 'Save CO - PO Matrix for Subject' })
+  async saveCoPoMatrix(@Body() dto: SaveCoPoMatrixDto, @TenantSlug() tenant: string) {
+    return this.adminMasterService.saveCoPoMatrix(dto, tenant);
+  }
+
+  // ─── 13. PO - PEO MATRIX ────────────────────────────────────────────────────
+  @Get('po-peo-matrix')
+  @ApiOperation({ summary: 'Get PO - PEO Matrix for Program' })
+  async getPoPeoMatrix(
+    @TenantSlug() tenant: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+    @Query('batchYear') batchYear?: string,
+  ) {
+    return this.adminMasterService.getPoPeoMatrix(tenant, {
+      courseCd,
+      branchCd,
+      batchYear: batchYear ? parseInt(batchYear, 10) : undefined,
+    });
+  }
+
+  @Post('po-peo-matrix')
+  @ApiOperation({ summary: 'Save PO - PEO Matrix for Program' })
+  async savePoPeoMatrix(@Body() dto: SavePoPeoMatrixDto, @TenantSlug() tenant: string) {
+    return this.adminMasterService.savePoPeoMatrix(dto, tenant);
+  }
 }
+

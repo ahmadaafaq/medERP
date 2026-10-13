@@ -551,10 +551,11 @@ export async function GET(request: NextRequest) {
 
       // Also include any date-specific event manually saved in srms_timetable_events
       // that falls strictly within this queried week (start >= startTimestamp && end <= endTimestamp)
+      // and is linked to SRMS (has a valid srms_id from HOD approval or add-event sync).
       for (const dbItem of activeDbEvents) {
         if (dbItem.source === 'POSTGRESQL') {
           const dbStart = Number(dbItem.start || 0);
-          if (dbStart >= startTimestamp && dbStart <= endTimestamp) {
+          if (dbItem.srms_id && dbStart >= startTimestamp && dbStart <= endTimestamp) {
             const key = getSlotKey(dbItem);
             if (!seenSlots.has(key)) {
               seenSlots.add(key);

@@ -19,6 +19,10 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   '/dashboard/admin/admin-master': [
     { role: 'ADMIN', menuKey: 'admin_admin_master', label: 'Admin Master (Units, Topics, Depts)' },
   ],
+  '/dashboard/admin/matrix-mapping': [
+    { role: 'ADMIN', menuKey: 'admin_matrix_mapping', label: 'Matrix Mapping (CO-PO & PO-PEO)' },
+    { role: 'ADMIN', menuKey: 'admin_admin_master', label: 'Matrix Mapping' },
+  ],
   '/dashboard/admin/assessment': [
     { role: 'ADMIN', menuKey: 'admin_assessment', label: 'Assessment & Question Bank' },
   ],
@@ -254,6 +258,16 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/faculty/schedule': [
     { role: 'FACULTY', menuKey: 'faculty_schedule', label: 'Schedule & Timetable' },
+  ],
+  '/dashboard/faculty/schedule-planner': [
+    { role: 'FACULTY', menuKey: 'faculty_schedule', label: 'Schedule Planner' },
+  ],
+  '/dashboard/faculty/curriculum-subjects': [
+    { role: 'FACULTY', menuKey: 'faculty_curriculum_subjects', label: 'Curriculum & Subjects' },
+  ],
+  '/dashboard/faculty/matrix-mapping': [
+    { role: 'FACULTY', menuKey: 'faculty_matrix_mapping', label: 'Matrix Mapping (CO-PO & PO-PEO)' },
+    { role: 'FACULTY', menuKey: 'faculty_curriculum_subjects', label: 'Matrix Mapping' },
   ],
   '/dashboard/faculty/students': [
     { role: 'FACULTY', menuKey: 'faculty_students', label: 'Student Info & Roster' },
@@ -507,12 +521,16 @@ export async function getRolePermissionsForTenant(
     const rolesToFetch = targetRole === 'HOD' ? ['HOD', 'FACULTY'] : [targetRole];
     const responses = await Promise.all(
       rolesToFetch.map(r =>
-        fetch(`/api/firms/${cleanSlug}/role-permissions?role=${r}&_t=${Date.now()}`, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            Pragma: 'no-cache',
-          },
+        fetch(`/api/firms/${cleanSlug}/role-permissions?role=${r}${forceRefresh ? `&_t=${Date.now()}` : ''}`, {
+          cache: forceRefresh ? 'no-store' : 'default',
+          ...(forceRefresh
+            ? {
+                headers: {
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  Pragma: 'no-cache',
+                },
+              }
+            : {}),
         }).then(res => (res.ok ? res.json() : null)).catch(() => null)
       )
     );

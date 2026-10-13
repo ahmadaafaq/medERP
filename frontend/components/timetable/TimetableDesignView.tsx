@@ -536,6 +536,63 @@ export default function TimetableDesignView({
     notes: '',
   });
 
+  const getWeekBounds = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d.getFullYear(), d.getMonth(), diff);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const mondayStr = `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`;
+    const sundayStr = `${sunday.getFullYear()}-${pad(sunday.getMonth() + 1)}-${pad(sunday.getDate())}`;
+    return { monday, sunday, mondayStr, sundayStr };
+  };
+
+  const getDraftWeekBounds = (draft: any): { mondayStr: string; sundayStr: string } | null => {
+    if (!draft) return null;
+    let start = draft.week_start || draft.weekStart;
+    let end = draft.week_end || draft.weekEnd;
+
+    if (!start) {
+      const rawSlots: any[] = typeof draft.slots === 'string'
+        ? (() => { try { return JSON.parse(draft.slots || '[]'); } catch { return []; } })()
+        : (Array.isArray(draft.slots) ? draft.slots : []);
+      if (rawSlots.length > 0) {
+        const first = rawSlots[0];
+        start = first.effectiveFrom || first.effective_from;
+        end = first.effectiveUntil || first.effective_until;
+        if (!start && first.srmsPayload?.improperEvent?.start) {
+          start = String(first.srmsPayload.improperEvent.start).slice(0, 10);
+        }
+      }
+    }
+
+    if (!start && draft.title && draft.title.includes('Week of ')) {
+      const m = draft.title.match(/Week of (\d{4}-\d{2}-\d{2})\s*[–-]\s*(\d{4}-\d{2}-\d{2})/);
+      if (m) {
+        start = m[1];
+        end = m[2];
+      }
+    }
+
+    if (!start && draft.created_at) {
+      start = String(draft.created_at).slice(0, 10);
+    }
+
+    if (!start) return null;
+    const cleanStr = String(start).slice(0, 10);
+    const parts = cleanStr.split('-').map(Number);
+    let d: Date;
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      d = new Date(parts[0], parts[1] - 1, parts[2]);
+    } else {
+      d = new Date(start);
+    }
+    if (isNaN(d.getTime())) return null;
+    return getWeekBounds(d);
+  };
+
   const loadDraftIntoGrid = (draft: any) => {
     if (!draft) return;
     setActiveDraft(draft);
@@ -581,6 +638,7 @@ export default function TimetableDesignView({
     forceTargetId?: string,
     isSilent: boolean = false,
     filterOverrides?: { course?: string; branch?: string; batch?: string; semester?: string; section?: string },
+    targetDateOverride?: Date,
   ) => {
     if (!isSilent && clerkDrafts.length === 0) {
       setLoadingClerkDrafts(true);
@@ -598,12 +656,23 @@ export default function TimetableDesignView({
       const rawList = Array.isArray(d) ? d : (d.data || []);
       setClerkDrafts(rawList);
 
+      const activeDate = targetDateOverride || currentDate;
+      const { mondayStr: currentWeekMonStr } = getWeekBounds(activeDate);
+
       // Resolve the active filters: explicit overrides take priority, then state
       const targetCourse   = filterOverrides?.course   ?? selectedCourse;
       const targetBranch   = filterOverrides?.branch   ?? selectedBranch;
       const targetBatch    = filterOverrides?.batch    ?? selectedBatch;
       const targetSemester = filterOverrides?.semester ?? selectedSemester;
       const targetSection  = filterOverrides?.section  ?? selectedSection;
+
+      // For Admin mode, clerk drafts must NEVER be loaded into grid slots;
+      // Admin displays live schedules strictly from fetchTimetableSlots / /api/srms/timetable-schedule.
+      if (mode === 'admin') {
+        setActiveDraft(null);
+        activeDraftRef.current = null;
+        return;
+      }
 
       let target: any = null;
 
@@ -612,7 +681,7 @@ export default function TimetableDesignView({
         target = rawList.find((x: any) => String(x.id) === String(forceTargetId)) || null;
       }
 
-      // Priority 2: match by full academic hierarchy (only in clerk mode when filters are complete)
+      // Priority 2: match by full academic hierarchy AND active calendar week
       if (!target && mode === 'clerk' &&
           targetCourse && targetCourse !== '0' &&
           targetBranch && targetBranch !== '0' &&
@@ -630,13 +699,43 @@ export default function TimetableDesignView({
           );
         });
 
-        target = matchingDrafts.find((x: any) => !x.status || x.status === 'DRAFT') ||
-                 matchingDrafts.find((x: any) => x.status === 'HOD_REJECTED') ||
-                 matchingDrafts.find((x: any) => x.status === 'PENDING_HOD_APPROVAL') ||
-                 matchingDrafts.find((x: any) => x.status === 'HOD_APPROVED') ||
-                 matchingDrafts[0] || null;
+        // Filter matching drafts strictly by active calendar week
+        const weekMatchingDrafts = matchingDrafts.filter((x: any) => {
+          const wb = getDraftWeekBounds(x);
+          if (!wb) return false;
+          return wb.mondayStr === currentWeekMonStr;
+        });
 
-        // If NO matching draft found for this specific course/branch/batch/sem/sec: clear the grid
+        // 1. If currently active draft is in weekMatchingDrafts, retain it!
+        const currentActiveId = activeDraftRef.current?.id || (typeof window !== 'undefined' ? localStorage.getItem('activeClerkDraftId') : null);
+        const currentActiveMatch = currentActiveId
+          ? weekMatchingDrafts.find((x: any) => String(x.id) === String(currentActiveId))
+          : null;
+
+        if (currentActiveMatch) {
+          target = currentActiveMatch;
+        } else {
+          // 2. Sort matching drafts so drafts with actual slots (> 0) ALWAYS take precedence over empty (0 slots) drafts
+          const sorted = [...weekMatchingDrafts].sort((a: any, b: any) => {
+            const getCount = (item: any) => {
+              const sl = typeof item.slots === 'string' ? JSON.parse(item.slots || '[]') : (item.slots || []);
+              return Array.isArray(sl) ? sl.length : 0;
+            };
+            const aCount = getCount(a);
+            const bCount = getCount(b);
+            if (aCount > 0 && bCount === 0) return -1;
+            if (bCount > 0 && aCount === 0) return 1;
+            return (new Date(b.updated_at || 0).getTime()) - (new Date(a.updated_at || 0).getTime());
+          });
+
+          target = sorted.find((x: any) => !x.status || x.status === 'DRAFT') ||
+                   sorted.find((x: any) => x.status === 'PENDING_HOD_APPROVAL') ||
+                   sorted.find((x: any) => x.status === 'HOD_APPROVED') ||
+                   sorted.find((x: any) => x.status === 'HOD_REJECTED') ||
+                   sorted[0] || null;
+        }
+
+        // If NO matching draft found for this specific week: clear the grid
         if (!target) {
           setActiveDraft(null);
           activeDraftRef.current = null;
@@ -646,28 +745,25 @@ export default function TimetableDesignView({
         }
       }
 
-      // Priority 3 (non-clerk or partial filters): fall back to cached active draft
+      // Priority 3 (non-clerk or partial filters): fall back to cached active draft strictly matching active week
       if (!target && !filterOverrides) {
         const cachedId = activeDraftRef.current?.id || activeDraft?.id || (typeof window !== 'undefined' ? localStorage.getItem('activeClerkDraftId') : null);
         if (cachedId) {
-          target = rawList.find((x: any) => String(x.id) === String(cachedId)) || null;
+          const cand = rawList.find((x: any) => String(x.id) === String(cachedId)) || null;
+          if (cand) {
+            const candWb = getDraftWeekBounds(cand);
+            if (candWb && candWb.mondayStr === currentWeekMonStr) {
+              target = cand;
+            }
+          }
         }
-      }
-
-      // Priority 4: course-level fallback for admin
-      if (!target && mode === 'admin' && targetCourse && targetCourse !== '0') {
-        const courseDrafts = rawList.filter((x: any) => String(x.course_cd || '') === String(targetCourse));
-        target = courseDrafts.find((x: any) => x.status === 'HOD_APPROVED') || null;
       }
 
       if (target) {
-        const isCurrentActive = activeDraftRef.current?.id === target.id;
         setActiveDraft(target);
         activeDraftRef.current = target;
         if (typeof window !== 'undefined') localStorage.setItem('activeClerkDraftId', target.id);
-        if (!isCurrentActive) {
-          loadDraftIntoGrid(target);
-        }
+        loadDraftIntoGrid(target);
       } else {
         setActiveDraft(null);
         activeDraftRef.current = null;
@@ -692,6 +788,13 @@ export default function TimetableDesignView({
     setActiveDraft(d);
     activeDraftRef.current = d;
     if (typeof window !== 'undefined') localStorage.setItem('activeClerkDraftId', d.id);
+    const draftWb = getDraftWeekBounds(d);
+    if (draftWb) {
+      const [y, m, day] = draftWb.mondayStr.split('-').map(Number);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
+        setCurrentDate(new Date(y, m - 1, day, 12, 0, 0));
+      }
+    }
     const colgVal = d.colg_cd || selectedCollege || '1';
     const courseVal = d.course_cd || selectedCourse;
     const branchVal = d.branch_cd || selectedBranch;
@@ -728,6 +831,7 @@ export default function TimetableDesignView({
     }
 
     loadDraftIntoGrid(d);
+    await loadClerkDrafts(d.id, true);
     showAlert('info', `Loaded timetable draft: ${d.title}`);
   };
 
@@ -747,6 +851,7 @@ export default function TimetableDesignView({
         'x-tenant-slug': slug,
         'Content-Type': 'application/json',
       };
+      const { mondayStr: draftMonStr, sundayStr: draftSunStr } = getWeekBounds(currentDate);
       const res = await fetch(`/api/v1/exams/timetable-drafts?tenant=${slug}`, {
         method: 'POST',
         headers,
@@ -761,6 +866,10 @@ export default function TimetableDesignView({
           section: selectedSection || '1',
           academicYear: clerkDraftForm.academicYear,
           notes: clerkDraftForm.notes,
+          weekStart: draftMonStr,
+          weekEnd: draftSunStr,
+          week_start: draftMonStr,
+          week_end: draftSunStr,
           slots: [],
         }),
       });
@@ -862,8 +971,11 @@ export default function TimetableDesignView({
       if (!res.ok) {
         throw new Error(d?.message || 'Failed to copy timetable');
       }
-      showAlert('success', 'Copied timetable to next week! Slot mapping status reset to PENDING.');
-      await loadClerkDrafts();
+      showAlert('success', 'Copied timetable to next week! Slot schedule preserved and curriculum topics cleared for faculty planning.');
+      const nextDate = new Date(currentDate);
+      nextDate.setDate(nextDate.getDate() + 7);
+      setCurrentDate(nextDate);
+      await loadClerkDrafts(d?.id, true, undefined, nextDate);
       if (d?.id) {
         setActiveDraft(d);
         loadDraftIntoGrid(d);
@@ -1025,7 +1137,12 @@ export default function TimetableDesignView({
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() - 7);
     setCurrentDate(newDate);
-    if (mode !== 'clerk') {
+    if (mode === 'clerk') {
+      loadClerkDrafts(undefined, false, undefined, newDate);
+    } else {
+      setActiveDraft(null);
+      activeDraftRef.current = null;
+      setSlots([]);
       fetchTimetableSlots(newDate);
     }
   };
@@ -1034,7 +1151,12 @@ export default function TimetableDesignView({
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() + 7);
     setCurrentDate(newDate);
-    if (mode !== 'clerk') {
+    if (mode === 'clerk') {
+      loadClerkDrafts(undefined, false, undefined, newDate);
+    } else {
+      setActiveDraft(null);
+      activeDraftRef.current = null;
+      setSlots([]);
       fetchTimetableSlots(newDate);
     }
   };
@@ -1042,7 +1164,12 @@ export default function TimetableDesignView({
   const handleToday = () => {
     const newDate = new Date();
     setCurrentDate(newDate);
-    if (mode !== 'clerk') {
+    if (mode === 'clerk') {
+      loadClerkDrafts(undefined, false, undefined, newDate);
+    } else {
+      setActiveDraft(null);
+      activeDraftRef.current = null;
+      setSlots([]);
       fetchTimetableSlots(newDate);
     }
   };
@@ -1308,10 +1435,27 @@ export default function TimetableDesignView({
         candidateSlotsMap.set(String(s.id), s);
       }
     }
-    // Also check clerk drafts for other courses (pending/draft) that haven't been pushed to DB yet
+    const { mondayStr: currentWeekMonStr } = getWeekBounds(currentDate);
+
+    // Also check clerk drafts for other courses/sections (pending/draft) scheduled for the CURRENT week
     for (const draft of (clerkDrafts || [])) {
-      // Skip the currently active draft — we already have those slots in `slots`
+      // Skip the currently active draft — we already have those slots
       if (activeDraft && String(draft.id) === String(activeDraft.id)) continue;
+
+      // Skip drafts for the exact same class/section to avoid false self-clash against duplicate drafts
+      const isSameSection = (
+        String(draft.course_cd || '') === String(selectedCourse) &&
+        String(draft.branch_cd || '') === String(selectedBranch) &&
+        String(draft.batch_cd  || '') === String(selectedBatch) &&
+        String(draft.semester  || '') === String(selectedSemester) &&
+        (!draft.section || String(draft.section) === String(selectedSection))
+      );
+      if (isSameSection) continue;
+
+      // Strictly scope to current calendar week to prevent cross-week false conflicts
+      const draftWb = getDraftWeekBounds(draft);
+      if (draftWb && draftWb.mondayStr !== currentWeekMonStr) continue;
+
       const draftSlotList: any[] = typeof draft.slots === 'string'
         ? JSON.parse(draft.slots || '[]')
         : (Array.isArray(draft.slots) ? draft.slots : []);
@@ -2299,8 +2443,8 @@ export default function TimetableDesignView({
               if (item.Cancel_flg === '1') return false;
               if (['679267', '679268', '679303'].includes(String(item.id))) return false;
 
-              // Only remote single-day events are strictly bounded; recurring weekly slots persist across all upcoming months
-              if (item.source !== 'POSTGRESQL_SLOT' && item.source !== 'POSTGRESQL' && !item.postgres_id && item.start) {
+              // Strictly bound all slots to the active week so slots NEVER bleed into other weeks
+              if (item.start) {
                 const dStart = parseItemDate(item.start);
                 const startTimeMs = dStart.getTime();
                 if (!isNaN(startTimeMs)) {
@@ -2359,9 +2503,20 @@ export default function TimetableDesignView({
           setSlots(dedupedSlots);
           return dedupedSlots;
         } else {
+          if (mode === 'admin') {
+            setActiveDraft(null);
+            activeDraftRef.current = null;
+            setSlots([]);
+            return [];
+          }
           const currentDraft = activeDraftRef.current || activeDraft;
-          const draftSlotsCount = currentDraft && (typeof currentDraft.slots === 'string' ? JSON.parse(currentDraft.slots || '[]').length : (currentDraft.slots || []).length);
-          if (draftSlotsCount > 0) return [];
+          const currentWb = getDraftWeekBounds(currentDraft);
+          const activeMonStr = getWeekBounds(targetDate).mondayStr;
+          if (currentDraft && currentWb && currentWb.mondayStr === activeMonStr) {
+            return [];
+          }
+          setActiveDraft(null);
+          activeDraftRef.current = null;
           setSlots([]);
           return [];
         }
@@ -2369,9 +2524,20 @@ export default function TimetableDesignView({
     } catch (err) {
       console.warn('Failed to fetch SRMS timetable schedule:', err);
     }
+    if (mode === 'admin') {
+      setActiveDraft(null);
+      activeDraftRef.current = null;
+      setSlots([]);
+      return [];
+    }
     const currentDraft = activeDraftRef.current || activeDraft;
-    const draftSlotsCount = currentDraft && (typeof currentDraft.slots === 'string' ? JSON.parse(currentDraft.slots || '[]').length : (currentDraft.slots || []).length);
-    if (draftSlotsCount > 0) return [];
+    const currentWb = getDraftWeekBounds(currentDraft);
+    const activeMonStr = getWeekBounds(targetDate).mondayStr;
+    if (currentDraft && currentWb && currentWb.mondayStr === activeMonStr) {
+      return [];
+    }
+    setActiveDraft(null);
+    activeDraftRef.current = null;
     setSlots([]);
     return [];
   };
@@ -2618,8 +2784,6 @@ export default function TimetableDesignView({
           semester: selectedSemester,
           section:  secCd,
         });
-      } else {
-        loadClerkDrafts();
       }
     }
   };
@@ -2801,9 +2965,7 @@ export default function TimetableDesignView({
     const pad = (n: number) => String(n).padStart(2, '0');
     const ymdDateStr = `${slotDate.getFullYear()}-${pad(slotDate.getMonth() + 1)}-${pad(slotDate.getDate())}`;
     const effFromStr = `${mondayDate.getFullYear()}-${pad(mondayDate.getMonth() + 1)}-${pad(mondayDate.getDate())}`;
-    const oneYearLater = new Date(mondayDate);
-    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
-    const effUntilStr = `${oneYearLater.getFullYear()}-${pad(oneYearLater.getMonth() + 1)}-${pad(oneYearLater.getDate())}`;
+    const effUntilStr = `${sundayDate.getFullYear()}-${pad(sundayDate.getMonth() + 1)}-${pad(sundayDate.getDate())}`;
 
     // 1. PostgreSQL Save Payload with all academic hierarchy, effective duration & unit/topic/subtopic parameters
     const pgPayload = {
@@ -2818,7 +2980,7 @@ export default function TimetableDesignView({
       slotType: formData.slotType,
       groupName: formData.groupName || 'All Group',
       topic: formData.topic || subTitle,
-      unitName: formData.unitName || 'Unit 1',
+      unitName: formData.unitName || undefined,
       unitId: formData.unitId || undefined,
       subTopics: subTopicsStr || undefined,
       competencyCodes: selectedCompetencies.join(',') || subTopicsStr || undefined,
@@ -2951,7 +3113,31 @@ export default function TimetableDesignView({
           pgPayload,
         };
 
+        const { mondayStr: currentWeekMonStr } = getWeekBounds(currentDate);
+
+        // 1. Resolve target draft: use activeDraft if on current week, or find existing draft for current week & section
         let currentDraft = activeDraft;
+        const currentDraftWb = currentDraft ? getDraftWeekBounds(currentDraft) : null;
+        const isCurrentDraftSameWeek = currentDraftWb ? currentDraftWb.mondayStr === currentWeekMonStr : true;
+
+        if (!currentDraft || !isCurrentDraftSameWeek || currentDraft.status === 'HOD_APPROVED') {
+          const existingDraftForWeek = (clerkDrafts || []).find((d: any) => {
+            if (d.status === 'HOD_APPROVED') return false;
+            const wb = getDraftWeekBounds(d);
+            if (!wb || wb.mondayStr !== currentWeekMonStr) return false;
+            const matchCourse = !selectedCourse || selectedCourse === '0' || String(d.course_cd || '') === String(selectedCourse);
+            const matchBranch = !selectedBranch || selectedBranch === '0' || String(d.branch_cd || '') === String(selectedBranch);
+            const matchBatch = !selectedBatch || selectedBatch === '0' || String(d.batch_cd || '') === String(selectedBatch);
+            const matchSem = !selectedSemester || selectedSemester === '0' || String(d.semester || '') === String(selectedSemester);
+            const matchSec = !selectedSection || selectedSection === '0' || (!d.section || String(d.section) === String(selectedSection));
+            return matchCourse && matchBranch && matchBatch && matchSem && matchSec;
+          });
+
+          if (existingDraftForWeek) {
+            currentDraft = existingDraftForWeek;
+          }
+        }
+
         let draftIdToUse = currentDraft?.id;
         if (currentDraft?.status === 'HOD_APPROVED') {
           draftIdToUse = undefined;
@@ -2964,11 +3150,50 @@ export default function TimetableDesignView({
             : (Array.isArray(currentDraft.slots) ? currentDraft.slots : []);
         }
 
+        // Merge any slots from duplicate drafts in clerkDrafts for this same class and week to prevent slot loss
+        const duplicateDrafts = (clerkDrafts || []).filter((d: any) => {
+          if (!currentDraft || String(d.id) === String(currentDraft.id)) return false;
+          if (d.status === 'HOD_APPROVED') return false;
+          const wb = getDraftWeekBounds(d);
+          if (!wb || wb.mondayStr !== currentWeekMonStr) return false;
+          return String(d.course_cd || '') === String(currentDraft.course_cd || selectedCourse) &&
+                 String(d.branch_cd || '') === String(currentDraft.branch_cd || selectedBranch) &&
+                 String(d.batch_cd || '') === String(currentDraft.batch_cd || selectedBatch) &&
+                 String(d.semester || '') === String(currentDraft.semester || selectedSemester) &&
+                 (!d.section || String(d.section) === String(currentDraft.section || selectedSection));
+        });
+
+        for (const dup of duplicateDrafts) {
+          const dupSlots = typeof dup.slots === 'string'
+            ? JSON.parse(dup.slots || '[]')
+            : (Array.isArray(dup.slots) ? dup.slots : []);
+          for (const ds of dupSlots) {
+            const alreadyHas = existingSlots.some(es => 
+              (es.id && String(es.id) === String(ds.id)) ||
+              (Number(es.dayOfWeek ?? es.day_of_week) === Number(ds.dayOfWeek ?? ds.day_of_week) &&
+               String(es.startTime || es.start_time).slice(0, 5) === String(ds.startTime || ds.start_time).slice(0, 5))
+            );
+            if (!alreadyHas) {
+              existingSlots.push(ds);
+            }
+          }
+          fetch(`/api/v1/exams/timetable-drafts/${dup.id}?tenant=${tenantSlug}`, { method: 'DELETE', headers }).catch(() => {});
+        }
+
         let updatedSlots: any[];
         if (isEdit) {
           updatedSlots = existingSlots.map(s => String(s.id) === String(editingSlot.id) ? draftSlotItem : s);
         } else {
-          updatedSlots = [...existingSlots, draftSlotItem];
+          // If a slot already exists at the same day and start time, update/replace it instead of adding a duplicate
+          const existingSlotIdx = existingSlots.findIndex(s => 
+            Number(s.dayOfWeek ?? s.day_of_week) === Number(draftSlotItem.dayOfWeek) &&
+            String(s.startTime || s.start_time).slice(0, 5) === String(draftSlotItem.startTime).slice(0, 5)
+          );
+          if (existingSlotIdx >= 0) {
+            updatedSlots = existingSlots.map((s, idx) => idx === existingSlotIdx ? draftSlotItem : s);
+          } else {
+            updatedSlots = [...existingSlots, draftSlotItem];
+          }
         }
 
         const draftPayload = {
@@ -3616,7 +3841,15 @@ export default function TimetableDesignView({
     setIsModalOpen(true);
   };
 
-  const rawActiveSlots: any[] = activeDraft
+  const isDraftForCurrentWeek = useMemo(() => {
+    if (!activeDraft) return false;
+    const wb = getDraftWeekBounds(activeDraft);
+    if (!wb) return true;
+    const { mondayStr } = getWeekBounds(currentDate);
+    return wb.mondayStr === mondayStr;
+  }, [activeDraft, currentDate]);
+
+  const rawActiveSlots: any[] = (activeDraft && isDraftForCurrentWeek)
     ? (typeof activeDraft.slots === 'string' ? JSON.parse(activeDraft.slots || '[]') : (Array.isArray(activeDraft.slots) ? activeDraft.slots : []))
     : [];
   const activeDraftSlots: any[] = rawActiveSlots.map((s: any) => ({
@@ -4312,11 +4545,16 @@ export default function TimetableDesignView({
                         >
                           {clerkDrafts
                             .filter((d: any) => selectedCourse === '0' || String(d.course_cd || '') === String(selectedCourse))
-                            .map((d) => (
-                              <option key={d.id} value={d.id}>
-                                {d.title} ({d.status || 'DRAFT'})
-                              </option>
-                            ))}
+                            .map((d) => {
+                              const dSlots: any[] = typeof d.slots === 'string' ? JSON.parse(d.slots || '[]') : (d.slots || []);
+                              const wb = getDraftWeekBounds(d);
+                              const weekLabel = wb ? ` • ${wb.mondayStr.slice(5)} to ${wb.sundayStr.slice(5)}` : '';
+                              return (
+                                <option key={d.id} value={d.id}>
+                                  {d.title} ({dSlots.length} lec{weekLabel}) [{d.status || 'DRAFT'}]
+                                </option>
+                              );
+                            })}
                         </select>
                       )}
 
@@ -4396,7 +4634,7 @@ export default function TimetableDesignView({
                           onClick={() => handleCopyToNextWeek(activeDraft.id)}
                           disabled={!activeDraft?.id || activeDraftSlots.length === 0}
                           className="shrink-0 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-black transition-all border border-slate-300 dark:border-slate-600 cursor-pointer flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
-                          title="Copy this timetable to next week (resets slot mapping status to PENDING)"
+                          title="Copy this timetable to next week (preserves slot schedule, clears curriculum topics for faculty planning)"
                         >
                           <span>📋</span>
                           <span>Copy to Next Week</span>
@@ -4748,9 +4986,9 @@ export default function TimetableDesignView({
                                   isDraft: true,
                                 }));
 
-                                const safeSlots = (mode === 'clerk' && activeDraft)
-                                  ? draftMapped
-                                  : (activeDraftSlots.length > 0
+                                const safeSlots = (mode === 'clerk')
+                                  ? (isDraftForCurrentWeek && draftMapped.length > 0 ? draftMapped : (Array.isArray(slots) ? slots : []))
+                                  : (isDraftForCurrentWeek && activeDraftSlots.length > 0
                                       ? [
                                           ...draftMapped,
                                           ...(Array.isArray(slots) ? slots.filter(sl => !draftMapped.some(dm => Number(dm.day_of_week) === Number(sl.day_of_week) && dm.start_time?.slice(0, 5) === sl.start_time?.slice(0, 5))) : [])
@@ -4854,40 +5092,45 @@ export default function TimetableDesignView({
                                                 ✕
                                               </button>
 
+                                              {/* Slot Time & Linked Badge Header */}
+                                              <div className="flex items-center justify-between text-[8px] font-mono font-bold text-slate-500 dark:text-slate-400 mb-0.5">
+                                                <span>⏰ {String(slot.start_time || '').slice(0, 5)} - {String(slot.end_time || '').slice(0, 5)}</span>
+                                                {Boolean((slot as any).mappingStatus || (slot as any).mapping_status || slot.topic) && (
+                                                  <span className={`text-[7px] font-black px-1 py-0.2 rounded shrink-0 border uppercase tracking-wider ${
+                                                    (slot as any).mappingStatus === 'LINKED' || (slot as any).mapping_status === 'LINKED' || slot.topic
+                                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700'
+                                                      : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700'
+                                                  }`}>
+                                                    {(slot as any).mappingStatus === 'LINKED' || (slot as any).mapping_status === 'LINKED' || slot.topic ? '✓ Linked' : '⏳ Pending'}
+                                                  </span>
+                                                )}
+                                              </div>
+
                                               {/* Subject Name Header */}
                                               <div className="flex items-center justify-between gap-1">
                                                 <div className="slot-subject font-black text-slate-900 dark:text-white leading-snug text-[11px] truncate pr-1" title={cleanSubName}>
                                                   {cleanSubName}
                                                 </div>
-                                                {Boolean((slot as any).mappingStatus || (slot as any).mapping_status) && (
-                                                  <span className={`text-[7px] font-black px-1 py-0.2 rounded shrink-0 border uppercase tracking-wider ${
-                                                    (slot as any).mappingStatus === 'LINKED' || (slot as any).mapping_status === 'LINKED'
-                                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700'
-                                                      : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700'
-                                                  }`}>
-                                                    {(slot as any).mappingStatus === 'LINKED' || (slot as any).mapping_status === 'LINKED' ? '✓ Linked' : '⏳ Pending'}
-                                                  </span>
-                                                )}
                                               </div>
 
                                               {/* Unit Name Badge/Line */}
-                                              {slot.unit_name && (
-                                                <div className="slot-unit text-[8.5px] font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded-md truncate max-w-full" title={slot.unit_name}>
-                                                  📦 {slot.unit_name}
+                                              {(slot.unit_name || (slot as any).unitName) && (
+                                                <div className="slot-unit text-[8.5px] font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded-md truncate max-w-full" title={slot.unit_name || (slot as any).unitName}>
+                                                  📦 {slot.unit_name || (slot as any).unitName}
                                                 </div>
                                               )}
 
                                               {/* Topic Line */}
-                                              {cleanTopic && (
-                                                <div className="slot-topic text-[9px] text-slate-700 dark:text-slate-200 font-bold leading-tight line-clamp-1" title={cleanTopic}>
-                                                  📖 <span className="text-slate-500 font-medium">Topic:</span> {cleanTopic}
+                                              {(cleanTopic || slot.topic) && (
+                                                <div className="slot-topic text-[9px] text-slate-700 dark:text-slate-200 font-bold leading-tight line-clamp-1" title={cleanTopic || slot.topic}>
+                                                  📖 <span className="text-slate-500 font-medium">Topic:</span> {cleanTopic || slot.topic}
                                                 </div>
                                               )}
 
                                               {/* Sub-topics Line */}
-                                              {slot.sub_topics && (
-                                                <div className="slot-topic text-[8.5px] text-slate-500 dark:text-slate-400 font-medium leading-tight line-clamp-1" title={slot.sub_topics}>
-                                                  📝 <span className="font-semibold text-slate-600 dark:text-slate-300">Sub:</span> {slot.sub_topics}
+                                              {(slot.sub_topics || (slot as any).subTopics) && (
+                                                <div className="slot-topic text-[8.5px] text-slate-500 dark:text-slate-400 font-medium leading-tight line-clamp-1" title={slot.sub_topics || (slot as any).subTopics}>
+                                                  📝 <span className="font-semibold text-slate-600 dark:text-slate-300">Sub:</span> {slot.sub_topics || (slot as any).subTopics}
                                                 </div>
                                               )}
 
@@ -5205,14 +5448,32 @@ export default function TimetableDesignView({
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${badge.cls}`}>
                                       {badge.label}
                                     </span>
+                                    {(() => {
+                                      const wb = getDraftWeekBounds(d);
+                                      if (!wb) return null;
+                                      const activeMonStr = getWeekBounds(currentDate).mondayStr;
+                                      const isThisWeek = wb.mondayStr === activeMonStr;
+                                      return (
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                          isThisWeek
+                                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                                        }`}>
+                                          📅 {wb.mondayStr} — {wb.sundayStr} {isThisWeek ? '(Active Week)' : ''}
+                                        </span>
+                                      );
+                                    })()}
                                     {isActive && (
                                       <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#5B4BFF] text-white">
-                                        Active
+                                        Current Active
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                    {d.semester ? `Semester ${d.semester}` : ''} {d.section ? `• Sec ${d.section}` : ''} {d.academic_year ? `• ${d.academic_year}` : ''} • {dSlots.length} lecture{dSlots.length === 1 ? '' : 's'}
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                                    <span>{d.semester ? `Semester ${d.semester}` : ''} {d.section ? `• Sec ${d.section}` : ''} {d.academic_year ? `• ${d.academic_year}` : ''}</span>
+                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold ${dSlots.length > 0 ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800'}`}>
+                                      {dSlots.length} lecture{dSlots.length === 1 ? '' : 's'} {dSlots.length === 0 ? '(Empty)' : ''}
+                                    </span>
                                   </p>
                                 </div>
                               </div>
@@ -5245,7 +5506,7 @@ export default function TimetableDesignView({
                                     type="button"
                                     onClick={() => handleCopyToNextWeek(d.id)}
                                     className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
-                                    title="Copy this draft to next week (resets slot mapping status to PENDING)"
+                                    title="Copy this draft to next week (preserves slot schedule, clears curriculum topics for faculty planning)"
                                   >
                                     <span>📋</span>
                                     <span>Copy Next Week</span>
@@ -5798,12 +6059,20 @@ export default function TimetableDesignView({
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5">
             <div ref={modalScrollRef} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-5xl xl:max-w-6xl w-full p-6 sm:p-7 space-y-4 max-h-[92vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                   <span>{editingSlot ? '✏️' : '➕'}</span>
                   <span>{editingSlot ? (mode === 'clerk' ? 'Edit Draft Lecture' : 'Edit Scheduled Session') : (mode === 'clerk' ? 'Add Draft Lecture' : 'Schedule Timetable Session')}</span>
                   <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] font-bold border border-indigo-200 dark:border-indigo-800">
                     {selectedCourseObj?.name || 'Academic'} › Sem {selectedSemester} › Sec {selectedSection === '1' ? 'A' : selectedSection === '2' ? 'B' : selectedSection === '3' ? 'C' : 'D'}
                   </span>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-300 dark:border-slate-700">
+                    ⏰ {String(formData.startTime || '08:30').slice(0, 5)} - {String(formData.endTime || '09:30').slice(0, 5)}
+                  </span>
+                  {Boolean(formData.topic || (editingSlot as any)?.mappingStatus === 'LINKED') && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                      ✓ Linked: {formData.topic || 'Curriculum Linked'}
+                    </span>
+                  )}
                 </h3>
                 <button
                   type="button"
@@ -6080,8 +6349,11 @@ export default function TimetableDesignView({
 
                     {/* Cascading Curriculum Structure Card */}
                     <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 space-y-3.5">
-                      <div className="text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
-                        <span>📚 Subject Code Based Curriculum Structure</span>
+                      <div className="text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center justify-between flex-wrap gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <span>📚 Subject Code Based Curriculum Structure</span>
+                          <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 normal-case">(Optional • Faculty Can Link Later)</span>
+                        </div>
                         <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-indigo-200 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-200 font-bold">
                           {formData.subjectCode || 'SYLLABUS'}
                         </span>
@@ -6090,7 +6362,10 @@ export default function TimetableDesignView({
                       {/* 1. Unit (Searchable Autocomplete with subject-based dynamic units) */}
                       <div>
                         <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                          <span>1. Unit *</span>
+                          <span className="flex items-center gap-1.5">
+                            <span>1. Unit</span>
+                            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 normal-case">(Optional)</span>
+                          </span>
                           <span className={`text-[10px] font-semibold ${availableSubjectUnits.length > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
                             {availableSubjectUnits.length > 0 ? `${availableSubjectUnits.length} units from Admin Master` : 'No units in Admin Master'}
                           </span>
@@ -6114,17 +6389,19 @@ export default function TimetableDesignView({
                             }));
                             setSelectedCompetencies([]);
                           }}
-                          placeholder={availableSubjectUnits.length > 0 ? "-- Search or select Unit from Admin Master --" : "-- No units defined in Admin Master (type or select) --"}
+                          placeholder={availableSubjectUnits.length > 0 ? "-- Search or select Unit (Optional) --" : "-- No units defined in Admin Master (Optional) --"}
                           searchPlaceholder="Search unit by code or title..."
                           allowCustom={true}
-                          required
                         />
                       </div>
 
                       {/* 2. Topic (Cascaded by Unit Selection with Searchable Autocomplete + custom input) */}
                       <div>
                         <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                          <span>2. Topic (Filtered by Unit) *</span>
+                          <span className="flex items-center gap-1.5">
+                            <span>2. Topic (Filtered by Unit)</span>
+                            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 normal-case">(Optional)</span>
+                          </span>
                           <span className={`text-[10px] font-semibold ${availableSubjectTopics.length > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
                             {availableSubjectTopics.length > 0 ? `${availableSubjectTopics.length} topics from Admin Master` : 'No topics in Admin Master'}
                           </span>
@@ -6144,7 +6421,7 @@ export default function TimetableDesignView({
                             }));
                             setSelectedCompetencies([]);
                           }}
-                          placeholder={availableSubjectTopics.length > 0 ? "-- Search or select Topic from Admin Master --" : "-- No topics defined in Admin Master (type below) --"}
+                          placeholder={availableSubjectTopics.length > 0 ? "-- Search or select Topic (Optional) --" : "-- No topics defined in Admin Master (Optional) --"}
                           searchPlaceholder="Search topic for this unit..."
                           allowCustom={true}
                         />
@@ -6152,7 +6429,7 @@ export default function TimetableDesignView({
                           type="text"
                           value={formData.topic}
                           onChange={(e) => setFormData(prev => ({ ...prev, topic: e.target.value }))}
-                          placeholder="Or type custom topic directly..."
+                          placeholder="Or type custom topic directly (optional)..."
                           className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold text-xs mt-1.5"
                         />
                       </div>
@@ -6160,7 +6437,10 @@ export default function TimetableDesignView({
                       {/* 3. Sub Topics (Cascaded by Topic Selection with Clickable Badges + Custom Text Input) */}
                       <div>
                         <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                          <span>3. Sub Topics / Learning Objectives</span>
+                          <span className="flex items-center gap-1.5">
+                            <span>3. Sub Topics / Learning Objectives</span>
+                            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 normal-case">(Optional)</span>
+                          </span>
                           <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
                             Click tags to add / remove
                           </span>
@@ -6205,7 +6485,7 @@ export default function TimetableDesignView({
                             setSelectedCompetencies(items);
                             setFormData(prev => ({ ...prev, subTopics: val }));
                           }}
-                          placeholder="e.g. Classes, Objects, Inheritance, Virtual Functions"
+                          placeholder="e.g. Classes, Objects, Inheritance, Virtual Functions (optional)"
                           className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
                         />
                         <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-medium">

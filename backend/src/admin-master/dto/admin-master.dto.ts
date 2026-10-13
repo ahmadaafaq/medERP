@@ -1108,6 +1108,41 @@ export class LinkFacultySubjectDto {
   @IsString()
   subjectId: string;
 
+  @ApiPropertyOptional({ example: 'BTech' })
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
+
+  @ApiPropertyOptional({ example: 'Bachelor of Technology' })
+  @IsOptional()
+  @IsString()
+  courseName?: string;
+
+  @ApiPropertyOptional({ example: 'CSE' })
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional({ example: 'Computer Science and Engineering' })
+  @IsOptional()
+  @IsString()
+  branchName?: string;
+
+  @ApiPropertyOptional({ example: '2024' })
+  @IsOptional()
+  @IsString()
+  batchCd?: string;
+
+  @ApiPropertyOptional({ example: '3' })
+  @IsOptional()
+  @IsString()
+  semCd?: string;
+
+  @ApiPropertyOptional({ example: 'Section A' })
+  @IsOptional()
+  @IsString()
+  section?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -1316,4 +1351,312 @@ export class UpdateUnitMasterDto extends PartialType(CreateUnitMasterDto) {
   @IsBoolean()
   isActive?: boolean;
 }
+
+// ─── 10. PROGRAM OUTCOMES (POs / PSOs) ───────────────────────────────────────
+export class CreateProgramOutcomeDto {
+  @ApiProperty({ example: 'PO1' })
+  @IsString()
+  @MaxLength(50)
+  code: string;
+
+  @ApiProperty({ example: 'Engineering Knowledge' })
+  @IsString()
+  @MaxLength(255)
+  title: string;
+
+  @ApiPropertyOptional({ example: 'Apply the knowledge of mathematics, science, engineering fundamentals...' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ example: 'PO' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  type?: string; // 'PO' | 'PSO'
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseName?: string;
+
+  @ApiPropertyOptional({ example: '10' })
+  @IsOptional()
+  @IsString()
+  branch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional({ example: 2024 })
+  @IsOptional()
+  @IsNumber()
+  batch_year?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  batchYear?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsNumber()
+  po_order?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  poOrder?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class UpdateProgramOutcomeDto extends PartialType(CreateProgramOutcomeDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+// ─── 11. PROGRAM EDUCATIONAL OBJECTIVES (PEOs) ──────────────────────────────
+export class CreateProgramEducationalObjectiveDto {
+  @ApiProperty({ example: 'PEO1' })
+  @IsString()
+  @MaxLength(50)
+  code: string;
+
+  @ApiProperty({ example: 'Core Professional Competence' })
+  @IsString()
+  @MaxLength(255)
+  title: string;
+
+  @ApiPropertyOptional({ example: 'Graduates will establish successful professional careers in computing and allied sectors...' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseName?: string;
+
+  @ApiPropertyOptional({ example: '10' })
+  @IsOptional()
+  @IsString()
+  branch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional({ example: 2024 })
+  @IsOptional()
+  @IsNumber()
+  batch_year?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  batchYear?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsNumber()
+  peo_order?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  peoOrder?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeSlug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class UpdateProgramEducationalObjectiveDto extends PartialType(CreateProgramEducationalObjectiveDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+// ─── 12. CO - PO MATRIX ─────────────────────────────────────────────────────
+export class SaveCoPoMatrixDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  batch_year?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sem_cd?: string;
+
+  @ApiProperty({ example: 'SUBJ-123' })
+  @IsString()
+  subject_id: string;
+
+  @ApiPropertyOptional({ example: 'CS301' })
+  @IsOptional()
+  @IsString()
+  subject_code?: string;
+
+  @ApiPropertyOptional({ example: 'Data Structures' })
+  @IsOptional()
+  @IsString()
+  subject_name?: string;
+
+  @ApiProperty({ example: { 'CO1': { 'PO1': 3, 'PO2': 2 }, 'averages': {} } })
+  matrix_data: Record<string, any>;
+}
+
+// ─── 13. PO - PEO MATRIX ────────────────────────────────────────────────────
+export class SavePoPeoMatrixDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  college_slug?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  batch_year?: number;
+
+  @ApiProperty({ example: { 'PO1': { 'PEO1': 3, 'PEO2': 2 }, 'averages': {} } })
+  matrix_data: Record<string, any>;
+}
+
 

@@ -327,7 +327,7 @@ export async function POST(req: NextRequest) {
               effective_from, effective_until, created_at, updated_at)
            SELECT day_of_week, start_time, end_time, room, slot_type, faculty_id, subject_id,
               department_id, batch_id, colg_cd, course_cd, branch_cd, batch_cd, semester, section,
-              description, topic, unit_id, unit_name, sub_topics, competency_codes,
+              description, NULL, NULL, NULL, NULL, NULL,
               $1::date, $2::date, NOW(), NOW()
            FROM "${schema}".timetable_slots WHERE id = $3`,
           [FromDate1new, ToDate1new, row.id]
@@ -339,7 +339,7 @@ export async function POST(req: NextRequest) {
         success: true,
         count: inserted,
         synced: inserted,
-        message: `Copied ${inserted} slot(s) from ${FromDate}–${ToDate} → ${FromDate1new}–${ToDate1new} in PostgreSQL.`,
+        message: `Copied ${inserted} slot(s) from ${FromDate}–${ToDate} → ${FromDate1new}–${ToDate1new} in PostgreSQL. Schedule preserved and curriculum topics cleared for faculty planning.`,
       });
     } catch (pgErr: any) {
       return NextResponse.json(

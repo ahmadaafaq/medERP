@@ -1387,12 +1387,19 @@ export class AuthService {
 
         if (profile) {
           const subRows = await this.ds.query(
-            `SELECT s.id, s.code, s.name, s.credits, s.type, s.department_id
+            `SELECT s.id, s.code, s.name, s.credits, s.type, s.department_id,
+                    COALESCE(fs.course_cd, s.course_cd) AS course_cd,
+                    COALESCE(fs.course_name, s.course_name) AS course_name,
+                    COALESCE(fs.branch_cd, s.branch_cd) AS branch_cd,
+                    fs.branch_name,
+                    COALESCE(fs.batch_cd, s.batch_cd) AS batch_cd,
+                    COALESCE(fs.sem_cd, s.sem_cd, s.semester) AS sem_cd,
+                    fs.section
              FROM "${schema}".faculty_subjects fs
-             JOIN "${schema}".subjects s ON s.id::text = fs.subject_id::text
-             WHERE fs.faculty_id::text = $1::text AND fs.is_active = true`,
-            [String(profile.id)],
-          );
+             JOIN "${schema}".subjects s ON (s.id::text = fs.subject_id::text OR s.code::text = fs.subject_id::text)
+             WHERE (fs.faculty_id::text = $1::text OR fs.faculty_id::text = $2::text) AND fs.is_active = true`,
+            [String(profile.id), String(profile.emp_id || '')],
+          ).catch(() => []);
           profile.subjects = subRows.length > 0 ? subRows : (profile.primary_subject_name ? [{ id: profile.subject_id, code: profile.primary_subject_code, name: profile.primary_subject_name }] : []);
         }
       }

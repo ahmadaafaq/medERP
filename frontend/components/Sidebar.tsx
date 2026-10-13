@@ -4,6 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+// Global in-memory cache preserved across mounts, route transitions, and re-renders
+const sidebarPermissionsCache = new Map<string, { keys: string[]; timestamp: number }>();
+const PERMS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
 interface SidebarProps {
   role?: 'student' | 'faculty' | 'admin' | 'warden' | 'clerk' | 'superadmin' | 'owner' | 'hod';
 }
@@ -63,10 +67,73 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
     }
     return '';
   });
-  const [collegeLogoUrl, setCollegeLogoUrl] = useState<string | null>(null);
-  const [enabledKeys, setEnabledKeys] = useState<string[] | null>(null);
+  const [collegeLogoUrl, setCollegeLogoUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const directLogo =
+        localStorage.getItem('college_logo') ||
+        localStorage.getItem('collegeLogo') ||
+        localStorage.getItem('colg_logo') ||
+        localStorage.getItem('logo_url') ||
+        localStorage.getItem('tenant_logo');
+      if (directLogo) return directLogo;
+      try {
+        const rawColg = localStorage.getItem('college') || localStorage.getItem('selectedTenantData');
+        if (rawColg) {
+          const colgObj = JSON.parse(rawColg);
+          if (colgObj.logo_url) return colgObj.logo_url;
+          if (colgObj.theme_config?.logo_url) return colgObj.theme_config.logo_url;
+        }
+      } catch {}
+      const rawSlug = (localStorage.getItem('tenantSlug') || '').toLowerCase();
+      if (rawSlug.includes('srms')) return '/srms-logo.png';
+    }
+    return null;
+  });
+  const [enabledKeys, setEnabledKeys] = useState<string[] | null>(() => {
+    if (typeof window !== 'undefined') {
+      const rawSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '';
+      const cleanSlug = rawSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '') || 'srms-cet-bareilly';
+      const targetRole = (propRole || localStorage.getItem('role') || 'student').toUpperCase();
+      const cacheKey = `${cleanSlug}:${targetRole}`;
+
+      const cached = sidebarPermissionsCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < PERMS_CACHE_TTL_MS) {
+        return cached.keys;
+      }
+
+      try {
+        const stored = sessionStorage.getItem(`med_sidebar_perms_${cacheKey}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Date.now() - parsed.timestamp < PERMS_CACHE_TTL_MS) {
+            sidebarPermissionsCache.set(cacheKey, parsed);
+            return parsed.keys;
+          }
+        }
+      } catch {}
+    }
+    return null;
+  });
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
-  const [isMedicalModule, setIsMedicalModule] = useState<boolean>(false);
+  const [isMedicalModule, setIsMedicalModule] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const rawSlug = (localStorage.getItem('tenantSlug') || '').toLowerCase();
+      const storedModuleType = localStorage.getItem('timetable_module_type');
+      const storedFirmMode = localStorage.getItem('firm_mode');
+      return (
+        storedModuleType === 'MEDICAL' ||
+        storedFirmMode === 'MED' ||
+        rawSlug.includes('ims') ||
+        rawSlug.includes('med') ||
+        rawSlug.includes('iahs') ||
+        rawSlug.includes('nursing') ||
+        rawSlug.includes('ayush') ||
+        rawSlug === 'rmribar' ||
+        rawSlug === 'rmch-bareilly'
+      );
+    }
+    return false;
+  });
   const [currentTenantSlug, setCurrentTenantSlug] = useState<string>('srms');
 
   const loadPermissionsAndBranding = () => {
@@ -272,14 +339,20 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       setCurrentTenantSlug(cleanSlug || tenantSlug || 'srms');
 
       const targetRole = (role || 'student').toUpperCase();
+      const cacheKey = `${tenantSlug}:${targetRole}`;
+
+      // 0. If already cached and fresh, use cache and skip network request
+      const cached = sidebarPermissionsCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < PERMS_CACHE_TTL_MS) {
+        if (!enabledKeys || enabledKeys.length === 0) {
+          setEnabledKeys(cached.keys);
+        }
+        return;
+      }
 
       // Fetch enabled keys for this firm + role from PostgreSQL database
-      fetch(`/api/firms/${tenantSlug}/role-permissions?role=${targetRole}&_t=${Date.now()}`, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-        },
+      fetch(`/api/firms/${tenantSlug}/role-permissions?role=${targetRole}`, {
+        cache: 'default',
       })
         .then(async (res) => {
           if (res.ok) {
@@ -342,7 +415,13 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
               }
             });
 
-            setEnabledKeys(Array.from(keySet));
+            const keysArray = Array.from(keySet);
+            sidebarPermissionsCache.set(cacheKey, { keys: keysArray, timestamp: Date.now() });
+            try {
+              sessionStorage.setItem(`med_sidebar_perms_${cacheKey}`, JSON.stringify({ keys: keysArray, timestamp: Date.now() }));
+            } catch {}
+
+            setEnabledKeys(keysArray);
           } else {
             setEnabledKeys([]);
           }
@@ -356,7 +435,10 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
   useEffect(() => {
     loadPermissionsAndBranding();
 
-    const handleStorage = () => loadPermissionsAndBranding();
+    const handleStorage = () => {
+      sidebarPermissionsCache.clear();
+      loadPermissionsAndBranding();
+    };
     const handleToggleMobile = () => {
       setIsMobileOpen((prev) => {
         const next = !prev;
@@ -396,7 +478,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
         document.body.style.overflow = '';
       }
     };
-  }, [role, pathname]);
+  }, [role]);
 
   // Auto-close mobile sidebar drawer when navigating to a new path
   useEffect(() => {
@@ -421,8 +503,26 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       routePath?.startsWith('/dashboard/hod')
     )) return true;
 
-    // While permissions are still loading (null), hold off rendering to avoid flicker
-    if (enabledKeys === null) return false;
+    // Faculty curriculum & subjects management (respects SuperAdmin firm rights when configured)
+    if (role === 'faculty' && (
+      menuKey === 'faculty_curriculum_subjects' ||
+      menuKey === 'faculty_curriculum' ||
+      menuKey === 'faculty_matrix_mapping' ||
+      routePath === '/dashboard/faculty/curriculum-subjects' ||
+      routePath === '/dashboard/faculty/matrix-mapping'
+    )) {
+      if (enabledKeys && enabledKeys.length > 0) {
+        return enabledKeys.includes('faculty_curriculum_subjects') ||
+               enabledKeys.includes('faculty_curriculum') ||
+               enabledKeys.includes('faculty_matrix_mapping') ||
+               enabledKeys.includes('admin_matrix_mapping') ||
+               enabledKeys.includes('admin_admin_master');
+      }
+      return true;
+    }
+
+    // While permissions are still loading (null), optimistically allow rendering so menus NEVER disappear/flicker
+    if (enabledKeys === null) return true;
 
     // If permissions loaded and 0 modules are assigned by superadmin, allow none
     if (enabledKeys.length === 0) return false;
@@ -712,6 +812,15 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
+              {(isAllowed('admin_matrix_mapping') || isAllowed('admin_admin_master')) && (
+                <Link href="/dashboard/admin/matrix-mapping" data-active={isLinkActive('/dashboard/admin/matrix-mapping') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/matrix-mapping')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                  </svg>
+                  <span>Matrix Mapping</span>
+                </Link>
+              )}
+
               {isAllowed('admin_student_master') && (
                 <Link href="/dashboard/admin/student-master" data-active={isLinkActive('/dashboard/admin/student-master') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/student-master')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -746,7 +855,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
-                  <span>Subject Linker</span>
+                  <span>Course & Subject Linker</span>
                 </Link>
               )}
 
@@ -1084,6 +1193,25 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                   </svg>
                   <span>Schedule Planner</span>
+                </Link>
+              )}
+
+              {(isAllowed('faculty_curriculum_subjects', '/dashboard/faculty/curriculum-subjects') || isAllowed('faculty_curriculum') || isAllowed('admin_admin_master')) && (
+                <Link href="/dashboard/faculty/curriculum-subjects" data-active={isLinkActive('/dashboard/faculty/curriculum-subjects') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/curriculum-subjects')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>Curriculum & Subjects</span>
+                </Link>
+              )}
+
+              {(isAllowed('faculty_matrix_mapping', '/dashboard/faculty/matrix-mapping') || isAllowed('faculty_curriculum_subjects') || isAllowed('admin_admin_master')) && (
+                <Link href="/dashboard/faculty/matrix-mapping" data-active={isLinkActive('/dashboard/faculty/matrix-mapping') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/matrix-mapping')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                  </svg>
+                  <span>Matrix Mapping</span>
                 </Link>
               )}
 

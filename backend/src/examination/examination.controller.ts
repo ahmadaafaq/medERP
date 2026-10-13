@@ -186,8 +186,29 @@ export class ExaminationController {
     @Tenant() tenantSlug: string,
     @Query('facultyId') facultyId?: string,
     @Query('facultyEmpId') facultyEmpId?: string,
+    @Query('facultyName') facultyName?: string,
   ) {
-    return this.examinationService.getDraftsByWeekForFaculty(tenantSlug, facultyId || '', facultyEmpId);
+    return this.examinationService.getDraftsByWeekForFaculty(tenantSlug, facultyId || '', facultyEmpId, facultyName);
+  }
+
+  /** HOD: Get tracking compliance of all faculties across timetable drafts */
+  @Public()
+  @Get('timetable-drafts/faculty-compliance')
+  async getFacultyCompliance(
+    @Tenant() tenantSlug: string,
+    @Query('draftId') draftId?: string,
+  ) {
+    return this.examinationService.getFacultyTimetableCompliance(tenantSlug, draftId);
+  }
+
+  /** HOD: Send urgent notification reminder to faculty for schedule planning */
+  @Public()
+  @Post('timetable-drafts/remind-faculty')
+  async remindFaculty(
+    @Tenant() tenantSlug: string,
+    @Body() body: { draftId: string; facultyId?: string; facultyEmpId?: string; facultyName?: string; customMessage?: string },
+  ) {
+    return this.examinationService.remindFacultyForPlanning(tenantSlug, body);
   }
 
   /** Clerk / Admin: Get a single timetable draft by ID */

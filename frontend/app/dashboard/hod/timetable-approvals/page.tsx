@@ -29,6 +29,40 @@ export default function HODTimetableApprovalsPage() {
   const [slotRemarks, setSlotRemarks] = useState<Record<string, string>>({});
   const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
   const [tempSlotRemark, setTempSlotRemark] = useState('');
+  const [remindingKey, setRemindingKey] = useState<string | null>(null);
+  const [remindedKeys, setRemindedKeys] = useState<Record<string, boolean>>({});
+
+  const sendFacultyReminder = async (draftId: string, fac: any) => {
+    const key = `${draftId}_${fac.facultyEmpId || fac.facultyId || fac.facultyName}`;
+    setRemindingKey(key);
+    try {
+      const { slug, headers } = getH();
+      await fetch(`${API_BASE}/exams/timetable-drafts/remind-faculty?tenant=${slug}`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId,
+          facultyId: fac.facultyId,
+          facultyEmpId: fac.facultyEmpId,
+          facultyName: fac.facultyName,
+        }),
+      });
+      setRemindedKeys(prev => ({ ...prev, [key]: true }));
+      setTimeout(() => {
+        setRemindedKeys(prev => ({ ...prev, [key]: false }));
+      }, 5000);
+    } catch (err: any) {
+      alert('Failed to send reminder alert: ' + (err?.message || 'Error'));
+    } finally {
+      setRemindingKey(null);
+    }
+  };
+
+  const sendRemindAllLagging = async (draftId: string, laggingFaculties: any[]) => {
+    for (const fac of laggingFaculties) {
+      await sendFacultyReminder(draftId, fac);
+    }
+  };
 
   const load = async (targetFilter?: string) => {
     const activeFilter = targetFilter || filter;
@@ -360,6 +394,56 @@ export default function HODTimetableApprovalsPage() {
             <div className="space-y-5">
               {drafts.map((d) => {
                 const slots: any[] = typeof d.slots === 'string' ? JSON.parse(d.slots || '[]') : (d.slots || []);
+
+                // Compute faculty compliance breakdown for this draft
+                const facultyComplianceMap: Record<string, {
+                  facultyName: string;
+                  facultyEmpId: string;
+                  facultyId: string;
+                  totalSlots: number;
+                  linkedSlots: number;
+                  pendingSlots: number;
+                  subjects: string[];
+                  compliancePct: number;
+                }> = {};
+
+                slots.forEach((s: any) => {
+                  const fName = String(s.facultyName || s.faculty_name || s.faculty || 'Unassigned').trim();
+                  const fEmp = String(s.facultyEmpId || s.faculty_code || s.facultyId || '').trim();
+                  const fId = String(s.facultyId || s.faculty_id || '').trim();
+                  const key = fEmp || fId || fName;
+                  if (!facultyComplianceMap[key]) {
+                    facultyComplianceMap[key] = {
+                      facultyName: fName,
+                      facultyEmpId: fEmp,
+                      facultyId: fId,
+                      totalSlots: 0,
+                      linkedSlots: 0,
+                      pendingSlots: 0,
+                      subjects: [],
+                      compliancePct: 0,
+                    };
+                  }
+                  facultyComplianceMap[key].totalSlots++;
+                  const isLinked = s.mappingStatus === 'LINKED';
+                  if (isLinked) {
+                    facultyComplianceMap[key].linkedSlots++;
+                  } else {
+                    facultyComplianceMap[key].pendingSlots++;
+                  }
+                  const sub = s.subjectName || s.subject_name || s.subject;
+                  if (sub && !facultyComplianceMap[key].subjects.includes(sub)) {
+                    facultyComplianceMap[key].subjects.push(sub);
+                  }
+                });
+
+                const facultyList = Object.values(facultyComplianceMap).map(f => ({
+                  ...f,
+                  compliancePct: f.totalSlots > 0 ? Math.round((f.linkedSlots / f.totalSlots) * 100) : 0,
+                })).sort((a, b) => a.compliancePct - b.compliancePct);
+
+                const laggingFaculties = facultyList.filter(f => f.pendingSlots > 0);
+
                 return (
                   <div key={d.id} className="bg-white dark:bg-slate-900 rounded-[22px] border border-[#E7EAF3] dark:border-slate-800 shadow-sm overflow-hidden">
                     <div className="p-5 flex items-start justify-between gap-4">
@@ -378,7 +462,7 @@ export default function HODTimetableApprovalsPage() {
                           </div>
                         )}
                       </div>
-                      {filter === 'PENDING_HOD_APPROVAL' && (() => {
+                      {(filter === 'PENDING_HOD_APPROVAL' || filter === 'DRAFT') && (() => {
                           const rawSlotsForCheck = typeof d.slots === 'string' ? JSON.parse(d.slots || '[]') : (d.slots || []);
                           const pendingCnt = rawSlotsForCheck.filter((s: any) => !s.mappingStatus || s.mappingStatus === 'PENDING').length;
                           const linkedCnt = rawSlotsForCheck.filter((s: any) => s.mappingStatus === 'LINKED').length;
@@ -437,6 +521,122 @@ export default function HODTimetableApprovalsPage() {
                         </span>
                       )}
                     </div>
+
+                    {/* Faculty Schedule Planning & Compliance Tracker for this Draft */}
+                    {facultyList.length > 0 && (
+                      <div className="mx-5 mb-4 p-4 rounded-2xl bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800/40 dark:to-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">👨‍🏫</span>
+                            <div>
+                              <h3 className="text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider">
+                                Faculty Schedule Planning Tracker
+                              </h3>
+                              <p className="text-[11px] text-slate-500">
+                                {laggingFaculties.length > 0 
+                                  ? `${laggingFaculties.length} of ${facultyList.length} faculty members have not linked their schedule planner` 
+                                  : `All ${facultyList.length} assigned faculty members have completed syllabus linking`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                              laggingFaculties.length > 0 
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' 
+                                : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            }`}>
+                              {laggingFaculties.length > 0 ? `${laggingFaculties.length} Lagging` : '✓ 100% Ready'}
+                            </span>
+                            {laggingFaculties.length > 1 && (filter === 'PENDING_HOD_APPROVAL' || filter === 'DRAFT') && (
+                              <button
+                                type="button"
+                                onClick={() => sendRemindAllLagging(d.id, laggingFaculties)}
+                                className="px-2.5 py-1 rounded-lg bg-[#5B4BFF] hover:bg-[#4a39e8] text-white text-[10px] font-extrabold shadow-sm flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>🔔</span>
+                                <span>Remind All Lagging</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Faculty Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                          {facultyList.map((fac) => {
+                            const itemKey = `${d.id}_${fac.facultyEmpId || fac.facultyId || fac.facultyName}`;
+                            const isDone = fac.pendingSlots === 0;
+                            const isReminding = remindingKey === itemKey;
+                            const wasReminded = Boolean(remindedKeys[itemKey]);
+
+                            return (
+                              <div
+                                key={itemKey}
+                                className={`p-3 rounded-xl border flex flex-col justify-between gap-2 transition-all ${
+                                  isDone 
+                                    ? 'bg-white/80 dark:bg-slate-900/80 border-emerald-200 dark:border-emerald-900/50' 
+                                    : 'bg-white/90 dark:bg-slate-900/90 border-amber-200 dark:border-amber-900/50 shadow-xs'
+                                }`}
+                              >
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <span className="font-extrabold text-xs text-[#1B1E28] dark:text-white truncate" title={fac.facultyName}>
+                                      {fac.facultyName}
+                                    </span>
+                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                                      isDone 
+                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' 
+                                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                                    }`}>
+                                      {isDone ? '✓ Ready' : `${fac.pendingSlots} Unlinked`}
+                                    </span>
+                                  </div>
+                                  {fac.facultyEmpId && (
+                                    <div className="text-[10px] font-mono text-slate-400">
+                                      EMP ID: {fac.facultyEmpId}
+                                    </div>
+                                  )}
+                                  {fac.subjects.length > 0 && (
+                                    <div className="text-[10px] text-slate-500 truncate" title={fac.subjects.join(', ')}>
+                                      📚 {fac.subjects.join(', ')}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Progress Bar + Action */}
+                                <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                                  <div className="flex items-center justify-between text-[10px] font-bold">
+                                    <span className="text-slate-500">{fac.linkedSlots}/{fac.totalSlots} linked</span>
+                                    <span className={isDone ? 'text-emerald-600' : 'text-amber-600'}>{fac.compliancePct}%</span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className={`h-full transition-all ${isDone ? 'bg-emerald-500' : 'bg-amber-500'}`} 
+                                      style={{ width: `${fac.compliancePct}%` }} 
+                                    />
+                                  </div>
+
+                                  {!isDone && (filter === 'PENDING_HOD_APPROVAL' || filter === 'DRAFT') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => sendFacultyReminder(d.id, fac)}
+                                      disabled={isReminding || wasReminded}
+                                      className={`w-full mt-1 py-1 px-2 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all ${
+                                        wasReminded
+                                          ? 'bg-emerald-600 text-white'
+                                          : 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs cursor-pointer'
+                                      } disabled:opacity-60`}
+                                    >
+                                      <span>{wasReminded ? '✓' : '🔔'}</span>
+                                      <span>{isReminding ? 'Sending Alert...' : wasReminded ? 'Alert Sent to Faculty!' : 'Remind Faculty'}</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {slots.length > 0 && (
                       <div className="px-5 pb-5">
                         <div className="overflow-x-auto rounded-xl border border-[#E7EAF3] dark:border-slate-800">
@@ -466,9 +666,48 @@ export default function HODTimetableApprovalsPage() {
                                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400 font-mono whitespace-nowrap">{(s.startTime || s.start_time || '').slice(0, 5)} – {(s.endTime || s.end_time || '').slice(0, 5)}</td>
                                     <td className="px-3 py-2 font-semibold text-[#1B1E28] dark:text-white">{s.subjectName || s.subject_name || s.subject || '—'}</td>
                                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400 font-semibold">{s.facultyName || s.faculty_name || s.faculty || '—'}</td>
-                                    <td className="px-3 py-2 text-indigo-600 dark:text-indigo-400 font-medium">{s.unitName || s.unit_name || '—'}</td>
-                                    <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{s.topic || '—'}</td>
-                                    <td className="px-3 py-2 text-slate-500 max-w-[150px] truncate" title={s.subTopics || s.sub_topics || ''}>{s.subTopics || s.sub_topics || '—'}</td>
+                                    <td className="px-3 py-2 text-indigo-600 dark:text-indigo-400 font-medium max-w-[130px]">
+                                      {(s.unitName || s.unit_name) ? (
+                                        <div className="flex flex-wrap gap-1">
+                                          {(s.unitName || s.unit_name).split(',').map((u: string, uIdx: number) => (
+                                            <span key={uIdx} className="inline-block px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-[10px] font-bold text-[#5B4BFF] dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 truncate max-w-[120px]" title={u.trim()}>
+                                              {u.trim()}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-slate-400 italic">—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold max-w-[150px]">
+                                      {s.topic ? (
+                                        <div className="space-y-0.5">
+                                          <div className="leading-tight line-clamp-2" title={s.topic}>
+                                            {s.topic}
+                                          </div>
+                                          <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                            ✓ Linked
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40">
+                                          ⏳ Pending Planner
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400 max-w-[180px]">
+                                      {(s.subTopics || s.sub_topics) ? (
+                                        <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto pr-0.5">
+                                          {(s.subTopics || s.sub_topics).split(',').map((st: string, stIdx: number) => (
+                                            <span key={stIdx} className="inline-block px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[9.5px] font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 truncate max-w-[160px]" title={st.trim()}>
+                                              {st.trim()}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-slate-400 italic">—</span>
+                                      )}
+                                    </td>
                                     <td className="px-3 py-2 text-slate-500 font-mono">{s.room || s.location || '—'}</td>
                                     <td className="px-3 py-2 min-w-[200px]">
                                       {isEditingThis ? (
@@ -505,7 +744,7 @@ export default function HODTimetableApprovalsPage() {
                                           <span className="text-[11px] font-extrabold text-rose-700 dark:text-rose-300">
                                             💬 {activeRemark}
                                           </span>
-                                          {filter === 'PENDING_HOD_APPROVAL' && (
+                                          {(filter === 'PENDING_HOD_APPROVAL' || filter === 'DRAFT') && (
                                             <button
                                               type="button"
                                               onClick={() => {
@@ -518,7 +757,7 @@ export default function HODTimetableApprovalsPage() {
                                             </button>
                                           )}
                                         </div>
-                                      ) : filter === 'PENDING_HOD_APPROVAL' ? (
+                                      ) : (filter === 'PENDING_HOD_APPROVAL' || filter === 'DRAFT') ? (
                                         <button
                                           type="button"
                                           onClick={() => {

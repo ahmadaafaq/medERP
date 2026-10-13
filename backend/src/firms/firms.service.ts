@@ -16,6 +16,7 @@ import { UpdateRolePermissionsDto } from './dto/role-permission.dto';
 @Injectable()
 export class FirmsService {
   private readonly logger = new Logger(FirmsService.name);
+  private permissionsCache = new Map<string, { data: any; expiresAt: number }>();
 
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
@@ -384,6 +385,12 @@ export class FirmsService {
    * Get role permissions for firm (supports UUID, slug, numeric colg_cd, or title)
    */
   async getFirmPermissions(firmIdOrSlug: string, role?: string) {
+    const cacheKey = `${firmIdOrSlug}:${role || 'ALL'}`.toLowerCase();
+    const cached = this.permissionsCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
+    }
+
     let firmId = firmIdOrSlug;
     const clean = firmIdOrSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
 
@@ -559,6 +566,11 @@ export class FirmsService {
       }
     }
 
+    this.permissionsCache.set(cacheKey, {
+      data: uniquePerms,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    });
+
     return uniquePerms;
   }
 
@@ -566,6 +578,7 @@ export class FirmsService {
    * Save selected menu keys for a firm role
    */
   async updateFirmPermissions(firmIdOrSlug: string, dto: UpdateRolePermissionsDto) {
+    this.permissionsCache.clear();
     let firmId = firmIdOrSlug;
     if (!firmIdOrSlug.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
       const clean = firmIdOrSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
