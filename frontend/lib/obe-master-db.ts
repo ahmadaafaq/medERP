@@ -66,6 +66,13 @@ export async function ensureObeTables(schema: string): Promise<void> {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
+      ALTER TABLE "${schema}".co_po_matrices ADD COLUMN IF NOT EXISTS matrix_data JSONB DEFAULT '{}'::jsonb;
+      ALTER TABLE "${schema}".co_po_matrices ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+      ALTER TABLE "${schema}".co_po_matrices ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+      ALTER TABLE "${schema}".co_po_matrices ADD COLUMN IF NOT EXISTS batch_year INT;
+      ALTER TABLE "${schema}".co_po_matrices ADD COLUMN IF NOT EXISTS sem_cd VARCHAR(50);
+      ALTER TABLE "${schema}".co_po_matrices ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+      ALTER TABLE "${schema}".co_po_matrices ADD COLUMN IF NOT EXISTS subject_name VARCHAR(255);
 
       CREATE TABLE IF NOT EXISTS "${schema}".po_peo_matrices (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -80,6 +87,18 @@ export async function ensureObeTables(schema: string): Promise<void> {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
+      ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS matrix_data JSONB DEFAULT '{}'::jsonb;
+      ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS batch_year INT;
+      ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS sem_cd VARCHAR(50);
+      ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+      ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS po_code VARCHAR(50);
+      ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS peo_code VARCHAR(50);
+      ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS correlation_level INT DEFAULT 0;
+      ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE "${schema}".co_po_matrices ALTER COLUMN subject_id TYPE VARCHAR(255) USING subject_id::varchar;
+      ALTER TABLE "${schema}".co_po_matrices ALTER COLUMN po_code DROP NOT NULL;
+      ALTER TABLE "${schema}".po_peo_matrices ALTER COLUMN po_code DROP NOT NULL;
+      ALTER TABLE "${schema}".po_peo_matrices ALTER COLUMN peo_code DROP NOT NULL;
     `);
   } catch (err: any) {
     console.warn(`[ensureObeTables] ${schema} check note:`, err.message);
@@ -377,7 +396,18 @@ export async function seedProgramEducationalObjectivesDb(tenantSlug?: string) {
   };
 }
 
-export async function getCoPoMatrixDb(tenantSlug: string, filters: { subjectId?: string; subjectCode?: string; semester?: string; academicYear?: string }) {
+export async function getCoPoMatrixDb(
+  tenantSlug: string,
+  filters: {
+    subjectId?: string;
+    subjectCode?: string;
+    courseCd?: string;
+    branchCd?: string;
+    semester?: string;
+    section?: string;
+    academicYear?: string;
+  }
+) {
   const schema = resolveTenantSchema(tenantSlug);
   await ensureObeTables(schema);
 
@@ -385,54 +415,161 @@ export async function getCoPoMatrixDb(tenantSlug: string, filters: { subjectId?:
   const params: any[] = [];
   if (filters.subjectId) {
     params.push(filters.subjectId);
-    sql += ` AND (subject_id = $${params.length}::uuid OR subject_code = $${params.length})`;
+    sql += ` AND (subject_id = $${params.length} OR subject_code = $${params.length})`;
   } else if (filters.subjectCode) {
     params.push(filters.subjectCode);
     sql += ` AND subject_code = $${params.length}`;
   }
+  if (filters.courseCd && filters.courseCd !== 'all') {
+    params.push(filters.courseCd);
+    sql += ` AND (course_cd = $${params.length} OR course_cd IS NULL)`;
+  }
+  if (filters.branchCd && filters.branchCd !== 'all') {
+    params.push(filters.branchCd);
+    sql += ` AND (branch_cd = $${params.length} OR branch_cd IS NULL)`;
+  }
   if (filters.semester && filters.semester !== 'all') {
     params.push(filters.semester);
-    sql += ` AND semester = $${params.length}`;
+    sql += ` AND (sem_cd = $${params.length} OR sem_cd IS NULL)`;
+  }
+  if (filters.section && filters.section !== 'all') {
+    params.push(filters.section);
+    sql += ` AND (section = $${params.length} OR section IS NULL)`;
   }
   if (filters.academicYear && filters.academicYear !== 'all') {
-    params.push(filters.academicYear);
-    sql += ` AND academic_year = $${params.length}`;
+    params.push(parseInt(filters.academicYear, 10));
+    sql += ` AND (batch_year = $${params.length} OR batch_year IS NULL)`;
   }
-  sql += ` ORDER BY unit_code ASC, po_code ASC`;
+  sql += ` ORDER BY updated_at DESC NULLS LAST, created_at DESC`;
 
-  return await queryDb(sql, params).catch(() => []);
+  const rows = await queryDb(sql, params).catch(() => []);
+  const matrix_data: Record<string, Record<string, number>> = {};
+  rows.forEach((r: any) => {
+    if (r.matrix_data && typeof r.matrix_data === 'object' && Object.keys(r.matrix_data).length > 0) {
+      Object.entries(r.matrix_data).forEach(([key, val]: [string, any]) => {
+        if (key !== 'averages' && typeof val === 'object' && val) {
+          if (!matrix_data[key]) matrix_data[key] = {};
+          Object.assign(matrix_data[key], val);
+        }
+      });
+    } else if (r.unit_code && r.po_code) {
+      if (!matrix_data[r.unit_code]) matrix_data[r.unit_code] = {};
+      matrix_data[r.unit_code][r.po_code] = Number(r.correlation_level) || 0;
+    }
+  });
+
+  return { rows, matrix_data };
 }
 
-export async function saveCoPoMatrixDb(tenantSlug: string, dto: { subject_id?: string; subject_code?: string; semester?: string; academic_year?: string; mappings: Array<{ unit_id?: string; unit_code: string; po_id?: string; po_code: string; correlation_level: number; notes?: string }> }) {
+export async function saveCoPoMatrixDb(
+  tenantSlug: string,
+  dto: {
+    subject_id?: string;
+    subject_code?: string;
+    subject_name?: string;
+    course_cd?: string;
+    branch_cd?: string;
+    semester?: string;
+    sem_cd?: string;
+    section?: string;
+    academic_year?: string;
+    batch_year?: number;
+    matrix_data?: Record<string, any>;
+    mappings?: Array<{
+      unit_id?: string;
+      unit_code: string;
+      po_id?: string;
+      po_code: string;
+      correlation_level: number;
+      notes?: string;
+    }>;
+  }
+) {
   const schema = resolveTenantSchema(tenantSlug);
   await ensureObeTables(schema);
 
-  const { subject_id, subject_code, semester, academic_year, mappings } = dto;
-  let savedCount = 0;
+  const {
+    subject_id,
+    subject_code,
+    subject_name,
+    course_cd,
+    branch_cd,
+    section,
+    matrix_data,
+  } = dto;
+  const sem = dto.sem_cd || dto.semester || null;
+  const batchYr = dto.batch_year ? Number(dto.batch_year) : (dto.academic_year ? parseInt(dto.academic_year, 10) : null);
 
-  for (const m of mappings || []) {
+  let mappings = dto.mappings || [];
+  if (mappings.length === 0 && matrix_data) {
+    Object.entries(matrix_data).forEach(([unitCode, poMap]: [string, any]) => {
+      if (unitCode === 'averages' || typeof poMap !== 'object' || !poMap) return;
+      Object.entries(poMap).forEach(([poCode, level]: [string, any]) => {
+        mappings.push({
+          unit_code: unitCode,
+          po_code: poCode,
+          correlation_level: Number(level) || 0,
+        });
+      });
+    });
+  }
+
+  // Also store / update in co_po_matrices as jsonb row if supported
+  const existingMaster = await queryDb(
+    `SELECT id FROM "${schema}".co_po_matrices
+     WHERE (subject_id = $1 OR subject_code = $2)
+       AND (course_cd = $3 OR ($3 IS NULL AND course_cd IS NULL) OR course_cd IS NULL)
+       AND (sem_cd = $4 OR ($4 IS NULL AND sem_cd IS NULL) OR sem_cd IS NULL)
+       AND (section = $5 OR ($5 IS NULL AND section IS NULL) OR section IS NULL)
+     LIMIT 1`,
+    [subject_id || null, subject_code || '', course_cd || null, sem, section || null]
+  ).catch(() => []);
+
+  if (existingMaster.length > 0) {
+    await queryDb(
+      `UPDATE "${schema}".co_po_matrices
+       SET matrix_data = $1, subject_name = COALESCE($2, subject_name),
+           course_cd = COALESCE($3, course_cd), branch_cd = COALESCE($4, branch_cd),
+           batch_year = COALESCE($5, batch_year), sem_cd = COALESCE($6, sem_cd),
+           section = COALESCE($7, section), updated_at = NOW()
+       WHERE id = $8`,
+      [matrix_data || {}, subject_name || null, course_cd || null, branch_cd || null, batchYr, sem, section || null, existingMaster[0].id]
+    ).catch(() => {});
+  } else {
+    await queryDb(
+      `INSERT INTO "${schema}".co_po_matrices (
+         subject_id, subject_code, subject_name, course_cd, branch_cd, batch_year, sem_cd, section, po_code, matrix_data
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ALL', $9)`,
+      [subject_id || null, subject_code || null, subject_name || null, course_cd || null, branch_cd || null, batchYr, sem, section || null, matrix_data || {}]
+    ).catch((e) => console.error('[saveCoPoMatrixDb] Master insert error:', e));
+  }
+
+  let savedCount = 0;
+  for (const m of mappings) {
     const existing = await queryDb(
       `SELECT id FROM "${schema}".co_po_matrices
-       WHERE (subject_id = $1::uuid OR subject_code = $2)
+       WHERE (subject_id = $1 OR subject_code = $2)
          AND unit_code = $3 AND po_code = $4
        LIMIT 1`,
       [subject_id || null, subject_code || '', m.unit_code, m.po_code]
-    );
+    ).catch(() => []);
 
-    if (existing.length === 0) {
-      await queryDb(
-        `INSERT INTO "${schema}".co_po_matrices (
-           subject_id, subject_code, unit_id, unit_code, po_id, po_code, correlation_level, semester, academic_year, notes
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [subject_id || null, subject_code || null, m.unit_id || null, m.unit_code, m.po_id || null, m.po_code, Number(m.correlation_level) || 0, semester || null, academic_year || null, m.notes || null]
-      );
-    } else {
+    if (existing && existing.length > 0) {
       await queryDb(
         `UPDATE "${schema}".co_po_matrices
-         SET correlation_level = $1, notes = $2, updated_at = NOW()
-         WHERE id = $3`,
-        [Number(m.correlation_level) || 0, m.notes || null, existing[0].id]
-      );
+         SET correlation_level = $1, notes = $2, course_cd = COALESCE($3, course_cd),
+             branch_cd = COALESCE($4, branch_cd), batch_year = COALESCE($5, batch_year),
+             sem_cd = COALESCE($6, sem_cd), section = COALESCE($7, section), updated_at = NOW()
+         WHERE id = $8`,
+        [Number(m.correlation_level) || 0, m.notes || null, course_cd || null, branch_cd || null, batchYr, sem, section || null, existing[0].id]
+      ).catch(() => {});
+    } else {
+      await queryDb(
+        `INSERT INTO "${schema}".co_po_matrices (
+           subject_id, subject_code, subject_name, course_cd, branch_cd, batch_year, sem_cd, section, unit_code, po_code, correlation_level
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [subject_id || null, subject_code || '', subject_name || null, course_cd || null, branch_cd || null, batchYr, sem, section || null, m.unit_code, m.po_code, Number(m.correlation_level) || 0]
+      ).catch((e) => console.error('[saveCoPoMatrixDb] Row insert error:', e));
     }
     savedCount++;
   }
@@ -440,7 +577,16 @@ export async function saveCoPoMatrixDb(tenantSlug: string, dto: { subject_id?: s
   return { success: true, message: `Saved ${savedCount} CO-PO matrix correlations`, count: savedCount };
 }
 
-export async function getPoPeoMatrixDb(tenantSlug: string, filters: { courseCd?: string; branchCd?: string }) {
+export async function getPoPeoMatrixDb(
+  tenantSlug: string,
+  filters: {
+    courseCd?: string;
+    branchCd?: string;
+    semCd?: string;
+    section?: string;
+    batchYear?: string;
+  }
+) {
   const schema = resolveTenantSchema(tenantSlug);
   await ensureObeTables(schema);
 
@@ -454,41 +600,129 @@ export async function getPoPeoMatrixDb(tenantSlug: string, filters: { courseCd?:
     params.push(filters.branchCd);
     sql += ` AND (branch_cd = $${params.length} OR branch_cd IS NULL)`;
   }
-  sql += ` ORDER BY po_code ASC, peo_code ASC`;
+  if (filters.semCd && filters.semCd !== 'all') {
+    params.push(filters.semCd);
+    sql += ` AND (sem_cd = $${params.length} OR sem_cd IS NULL)`;
+  }
+  if (filters.section && filters.section !== 'all') {
+    params.push(filters.section);
+    sql += ` AND (section = $${params.length} OR section IS NULL)`;
+  }
+  if (filters.batchYear && filters.batchYear !== 'all') {
+    params.push(parseInt(filters.batchYear, 10));
+    sql += ` AND (batch_year = $${params.length} OR batch_year IS NULL)`;
+  }
+  sql += ` ORDER BY updated_at DESC NULLS LAST, created_at DESC`;
 
-  return await queryDb(sql, params).catch(() => []);
+  const rows = await queryDb(sql, params).catch(() => []);
+  const matrix_data: Record<string, Record<string, number>> = {};
+  rows.forEach((r: any) => {
+    if (r.matrix_data && typeof r.matrix_data === 'object' && Object.keys(r.matrix_data).length > 0) {
+      Object.entries(r.matrix_data).forEach(([key, val]: [string, any]) => {
+        if (key !== 'averages' && typeof val === 'object' && val) {
+          if (!matrix_data[key]) matrix_data[key] = {};
+          Object.assign(matrix_data[key], val);
+        }
+      });
+    } else if (r.po_code && r.peo_code) {
+      if (!matrix_data[r.po_code]) matrix_data[r.po_code] = {};
+      matrix_data[r.po_code][r.peo_code] = Number(r.correlation_level) || 0;
+    }
+  });
+
+  return { rows, matrix_data };
 }
 
-export async function savePoPeoMatrixDb(tenantSlug: string, dto: { course_cd?: string; branch_cd?: string; mappings: Array<{ po_id?: string; po_code: string; peo_id?: string; peo_code: string; correlation_level: number; notes?: string }> }) {
+export async function savePoPeoMatrixDb(
+  tenantSlug: string,
+  dto: {
+    course_cd?: string;
+    branch_cd?: string;
+    sem_cd?: string;
+    section?: string;
+    batch_year?: number;
+    matrix_data?: Record<string, any>;
+    mappings?: Array<{
+      po_id?: string;
+      po_code: string;
+      peo_id?: string;
+      peo_code: string;
+      correlation_level: number;
+      notes?: string;
+    }>;
+  }
+) {
   const schema = resolveTenantSchema(tenantSlug);
   await ensureObeTables(schema);
 
-  const { course_cd, branch_cd, mappings } = dto;
-  let savedCount = 0;
+  const { course_cd, branch_cd, sem_cd, section, batch_year, matrix_data } = dto;
+  let mappings = dto.mappings || [];
+  if (mappings.length === 0 && matrix_data) {
+    Object.entries(matrix_data).forEach(([poCode, peoMap]: [string, any]) => {
+      if (poCode === 'averages' || typeof peoMap !== 'object' || !peoMap) return;
+      Object.entries(peoMap).forEach(([peoCode, level]: [string, any]) => {
+        mappings.push({
+          po_code: poCode,
+          peo_code: peoCode,
+          correlation_level: Number(level) || 0,
+        });
+      });
+    });
+  }
 
-  for (const m of mappings || []) {
+  // Also store / update in po_peo_matrices as jsonb row
+  const existingMaster = await queryDb(
+    `SELECT id FROM "${schema}".po_peo_matrices
+     WHERE (course_cd = $1 OR ($1 IS NULL AND course_cd IS NULL))
+       AND (branch_cd = $2 OR ($2 IS NULL AND branch_cd IS NULL))
+       AND (sem_cd = $3 OR ($3 IS NULL AND sem_cd IS NULL) OR sem_cd IS NULL)
+       AND (section = $4 OR ($4 IS NULL AND section IS NULL) OR section IS NULL)
+     LIMIT 1`,
+    [course_cd || null, branch_cd || null, sem_cd || null, section || null]
+  ).catch(() => []);
+
+  if (existingMaster.length > 0) {
+    await queryDb(
+      `UPDATE "${schema}".po_peo_matrices
+       SET matrix_data = $1, batch_year = COALESCE($2, batch_year),
+           sem_cd = COALESCE($3, sem_cd), section = COALESCE($4, section), updated_at = NOW()
+       WHERE id = $5`,
+      [matrix_data || {}, batch_year || null, sem_cd || null, section || null, existingMaster[0].id]
+    ).catch(() => {});
+  } else {
+    await queryDb(
+      `INSERT INTO "${schema}".po_peo_matrices (
+         course_cd, branch_cd, batch_year, sem_cd, section, po_code, peo_code, matrix_data
+       ) VALUES ($1, $2, $3, $4, $5, 'ALL', 'ALL', $6)`,
+      [course_cd || null, branch_cd || null, batch_year || null, sem_cd || null, section || null, matrix_data || {}]
+    ).catch((e) => console.error('[savePoPeoMatrixDb] Master insert error:', e));
+  }
+
+  let savedCount = 0;
+  for (const m of mappings) {
     const existing = await queryDb(
       `SELECT id FROM "${schema}".po_peo_matrices
        WHERE po_code = $1 AND peo_code = $2
          AND (course_cd = $3 OR (course_cd IS NULL AND $3 IS NULL))
        LIMIT 1`,
       [m.po_code, m.peo_code, course_cd || null]
-    );
+    ).catch(() => []);
 
-    if (existing.length === 0) {
-      await queryDb(
-        `INSERT INTO "${schema}".po_peo_matrices (
-           po_id, po_code, peo_id, peo_code, correlation_level, course_cd, branch_cd, notes
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [m.po_id || null, m.po_code, m.peo_id || null, m.peo_code, Number(m.correlation_level) || 0, course_cd || null, branch_cd || null, m.notes || null]
-      );
-    } else {
+    if (existing && existing.length > 0) {
       await queryDb(
         `UPDATE "${schema}".po_peo_matrices
-         SET correlation_level = $1, notes = $2, updated_at = NOW()
-         WHERE id = $3`,
-        [Number(m.correlation_level) || 0, m.notes || null, existing[0].id]
-      );
+         SET correlation_level = $1, notes = $2, batch_year = COALESCE($3, batch_year),
+             sem_cd = COALESCE($4, sem_cd), section = COALESCE($5, section), updated_at = NOW()
+         WHERE id = $6`,
+        [Number(m.correlation_level) || 0, m.notes || null, batch_year || null, sem_cd || null, section || null, existing[0].id]
+      ).catch(() => {});
+    } else {
+      await queryDb(
+        `INSERT INTO "${schema}".po_peo_matrices (
+           course_cd, branch_cd, batch_year, sem_cd, section, po_code, peo_code, correlation_level
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [course_cd || null, branch_cd || null, batch_year || null, sem_cd || null, section || null, m.po_code, m.peo_code, Number(m.correlation_level) || 0]
+      ).catch((e) => console.error('[savePoPeoMatrixDb] Row insert error:', e));
     }
     savedCount++;
   }

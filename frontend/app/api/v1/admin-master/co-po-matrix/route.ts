@@ -24,12 +24,24 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const subjectId = url.searchParams.get('subjectId') || undefined;
   const subjectCode = url.searchParams.get('subjectCode') || undefined;
-  const semester = url.searchParams.get('semester') || undefined;
-  const academicYear = url.searchParams.get('academicYear') || undefined;
+  const courseCd = url.searchParams.get('courseCd') || undefined;
+  const branchCd = url.searchParams.get('branchCd') || undefined;
+  const semester = url.searchParams.get('semCd') || url.searchParams.get('semester') || undefined;
+  const section = url.searchParams.get('section') || undefined;
+  const academicYear = url.searchParams.get('batchYear') || url.searchParams.get('academicYear') || undefined;
 
   try {
-    const data = await getCoPoMatrixDb(tenantSlug, { subjectId, subjectCode, semester, academicYear });
-    return NextResponse.json({ success: true, data }, { headers: noCacheHeaders });
+    const data = await getCoPoMatrixDb(tenantSlug, { subjectId, subjectCode, courseCd, branchCd, semester, section, academicYear });
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          matrix_data: data.matrix_data || {},
+          rows: data.rows || [],
+        },
+      },
+      { headers: noCacheHeaders }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { success: false, message: err?.message || 'Failed to fetch CO-PO matrix' },

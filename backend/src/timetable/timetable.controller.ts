@@ -34,6 +34,8 @@ export class TimetableController {
   @ApiQuery({ name: 'section', required: false })
   @ApiQuery({ name: 'sessionId', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'effectiveFrom', required: false })
+  @ApiQuery({ name: 'effectiveUntil', required: false })
   async listSlots(
     @TenantSlug() tenantSlug: string,
     @Query('departmentId') departmentId?: string,
@@ -50,6 +52,8 @@ export class TimetableController {
     @Query('section') section?: string,
     @Query('sessionId') sessionId?: string,
     @Query('status') status?: string,
+    @Query('effectiveFrom') effectiveFrom?: string,
+    @Query('effectiveUntil') effectiveUntil?: string,
   ) {
     const day = dayOfWeek !== undefined && dayOfWeek !== '' ? parseInt(dayOfWeek, 10) : undefined;
     const data = await this.timetableService.listSlots(tenantSlug, {
@@ -67,6 +71,8 @@ export class TimetableController {
       section,
       sessionId,
       status,
+      effectiveFrom,
+      effectiveUntil,
     });
     return { success: true, data };
   }

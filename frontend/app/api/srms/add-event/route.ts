@@ -101,6 +101,18 @@ export async function POST(req: NextRequest) {
     const startMeta = formatToSrmsTimetblDate(rawStart, '08:30');
     const endMeta = formatToSrmsTimetblDate(rawEnd, '09:40');
 
+    // Compute the exact date and week bounds for this event to avoid cross-week false conflicts
+    const evDate = startMeta.date;
+    const dow = startMeta.dayOfWeek; // 1 = Monday ... 7 = Sunday
+    const diffToMon = evDate.getDate() - (dow === 7 ? 7 : dow) + 1;
+    const monDate = new Date(evDate.getFullYear(), evDate.getMonth(), diffToMon);
+    const sunDate = new Date(monDate);
+    sunDate.setDate(monDate.getDate() + 6);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const weekMonStr = `${monDate.getFullYear()}-${pad(monDate.getMonth() + 1)}-${pad(monDate.getDate())}`;
+    const weekSunStr = `${sunDate.getFullYear()}-${pad(sunDate.getMonth() + 1)}-${pad(sunDate.getDate())}`;
+    const exactDateStr = `${evDate.getFullYear()}-${pad(evDate.getMonth() + 1)}-${pad(evDate.getDate())}`;
+
     // 1. Resolve target PostgreSQL schema first
     const tenantParam = req.nextUrl?.searchParams?.get('tenant') || improperEvent.tenant || improperEvent.tenantSlug || '';
     const tenantHeader = req.headers.get('x-tenant-id') || req.headers.get('x-tenant') || req.headers.get('x-tenant-slug') || '';
@@ -205,6 +217,10 @@ export async function POST(req: NextRequest) {
            LEFT JOIN "${schema}".batches b ON b.id = ts.batch_id
            WHERE ts.day_of_week = $1
              AND (ts.start_time::TIME < $3::TIME AND ts.end_time::TIME > $2::TIME)
+             AND (
+               (ts.effective_from IS NULL OR ts.effective_from::text = '' OR SUBSTRING(ts.effective_from::text FROM 1 FOR 10) <= $9::text)
+               AND (ts.effective_until IS NULL OR ts.effective_until::text = '' OR SUBSTRING(ts.effective_until::text FROM 1 FOR 10) >= $10::text)
+             )
              AND ($7::text = '' OR ts.id::text <> $7::text)
              AND ($8::text = '' OR ts.draft_id IS NULL OR ts.draft_id::text <> $8::text)
              AND (
@@ -222,7 +238,9 @@ export async function POST(req: NextRequest) {
             targetEmpId || '',
             `%${targetFacName}%`,
             excludeId,
-            excludeDraftId
+            excludeDraftId,
+            weekSunStr,
+            weekMonStr
           ]
         ).catch(() => []),
 
@@ -245,6 +263,11 @@ export async function POST(req: NextRequest) {
                  OR (te.start_time::TIME < $5::TIME AND te.end_time::TIME > $4::TIME)
                )
              )
+             AND (
+               (te.start_time >= $10::timestamptz AND te.start_time < ($11::date + 1)::timestamptz)
+               OR te.start_str LIKE '%' || $12 || '%'
+               OR (te.start_time IS NULL AND te.start_str IS NULL)
+             )
              AND ($9::text = '' OR (te.id::text <> $9::text AND te.srms_id::text <> $9::text))
              AND (
                te.empid = $6
@@ -263,7 +286,10 @@ export async function POST(req: NextRequest) {
             targetEmpId || '',
             targetFacId || '00000000-0000-0000-0000-000000000000',
             `%${targetFacName}%`,
-            excludeId
+            excludeId,
+            weekMonStr,
+            weekSunStr,
+            exactDateStr
           ]
         ).catch(() => []),
 
@@ -279,6 +305,10 @@ export async function POST(req: NextRequest) {
                 jsonb_array_elements(td.slots) slot
            WHERE (slot->>'dayOfWeek' = $1::text OR slot->>'day_of_week' = $1::text)
              AND ((slot->>'startTime')::time < $3::time AND (slot->>'endTime')::time > $2::time)
+             AND (
+               (td.week_start IS NULL OR td.week_start <= $10::date)
+               AND (td.week_end IS NULL OR td.week_end >= $9::date)
+             )
              AND ($7::text = '' OR (slot->>'id' <> $7::text AND td.id::text <> $7::text))
              AND ($8::text = '' OR td.id::text <> $8::text)
              AND (
@@ -299,7 +329,9 @@ export async function POST(req: NextRequest) {
             targetEmpId || '',
             `%${targetFacName}%`,
             excludeId,
-            excludeDraftId
+            excludeDraftId,
+            weekMonStr,
+            weekSunStr
           ]
         ).catch(() => [])
       ]);
@@ -493,9 +525,14 @@ export async function POST(req: NextRequest) {
              LEFT JOIN "${schema}".courses cr ON (cr.code = te.course_cd OR cr.id::text = te.course_cd)
              WHERE te.day_of_week = $1
                AND (te.empid = $2 OR f.emp_id = $2)
+               AND (
+                 (te.start_time >= $3::timestamptz AND te.start_time < ($4::date + 1)::timestamptz)
+                 OR te.start_str LIKE '%' || $5 || '%'
+                 OR (te.start_time IS NULL AND te.start_str IS NULL)
+               )
              ORDER BY te.created_at DESC
              LIMIT 5`,
-            [startMeta.dayOfWeek, targetEmpId]
+            [startMeta.dayOfWeek, targetEmpId, weekMonStr, weekSunStr, exactDateStr]
           ).catch(() => []);
 
           // Also search timetable_slots — JOIN courses table for dynamic name resolution
@@ -513,9 +550,13 @@ export async function POST(req: NextRequest) {
              LEFT JOIN "${schema}".courses cr ON (cr.code = ts.course_cd OR cr.id::text = ts.course_cd)
              WHERE ts.day_of_week = $1
                AND (f.emp_id = $2 OR ts.description ILIKE $3)
+               AND (
+                 (ts.effective_from IS NULL OR ts.effective_from::text = '' OR SUBSTRING(ts.effective_from::text FROM 1 FOR 10) <= $5::text)
+                 AND (ts.effective_until IS NULL OR ts.effective_until::text = '' OR SUBSTRING(ts.effective_until::text FROM 1 FOR 10) >= $4::text)
+               )
              ORDER BY ts.start_time
              LIMIT 5`,
-            [startMeta.dayOfWeek, targetEmpId, `%${description}%`]
+            [startMeta.dayOfWeek, targetEmpId, `%${description}%`, weekMonStr, weekSunStr]
           ).catch(() => []);
 
           // Build detailed conflict message

@@ -137,6 +137,8 @@ export class TimetableService implements OnModuleInit {
       section?: string;
       sessionId?: string;
       status?: string;
+      effectiveFrom?: string;
+      effectiveUntil?: string;
       isStudent?: boolean;
     },
   ) {
@@ -304,6 +306,15 @@ export class TimetableService implements OnModuleInit {
       sql += ` AND (ts.status = $${params.length})`;
     } else if (query.isStudent) {
       sql += ` AND (ts.status = 'APPROVED' OR ts.status IS NULL)`;
+    }
+
+    if (query.effectiveFrom && query.effectiveUntil) {
+      params.push(String(query.effectiveUntil).slice(0, 10));
+      const effUntilIdx = params.length;
+      params.push(String(query.effectiveFrom).slice(0, 10));
+      const effFromIdx = params.length;
+      sql += ` AND (ts.effective_from IS NULL OR ts.effective_from::text = '' OR SUBSTRING(ts.effective_from::text FROM 1 FOR 10) <= $${effUntilIdx})
+               AND (ts.effective_until IS NULL OR ts.effective_until::text = '' OR SUBSTRING(ts.effective_until::text FROM 1 FOR 10) >= $${effFromIdx})`;
     }
 
     sql += ` ORDER BY ts.day_of_week ASC, ts.start_time ASC`;

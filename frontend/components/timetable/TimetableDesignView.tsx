@@ -1390,7 +1390,8 @@ export default function TimetableDesignView({
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
         const activeSlug = getActiveTenantSlug();
-        const res = await fetch(`${API_BASE}/timetable?tenant=${activeSlug}&facultyId=${encodeURIComponent(targetFacId)}`, {
+        const { mondayStr: currentWeekMonStr, sundayStr: currentWeekSunStr } = getWeekBounds(currentDate);
+        const res = await fetch(`${API_BASE}/timetable?tenant=${activeSlug}&facultyId=${encodeURIComponent(targetFacId)}&effectiveFrom=${encodeURIComponent(currentWeekMonStr)}&effectiveUntil=${encodeURIComponent(currentWeekSunStr)}`, {
           headers: {
             'x-tenant-slug': activeSlug,
             'x-tenant-id': activeSlug,
@@ -1411,7 +1412,7 @@ export default function TimetableDesignView({
 
     loadFacultySlots();
     return () => { isSubscribed = false; };
-  }, [isModalOpen, formData.facultyId, formData.facultyEmpId]);
+  }, [isModalOpen, formData.facultyId, formData.facultyEmpId, currentDate]);
 
   // Live Clash Detection: Check if selected faculty is already engaged in another course/batch/slot on the same day & time
   const liveClash = useMemo(() => {
@@ -1435,7 +1436,14 @@ export default function TimetableDesignView({
         candidateSlotsMap.set(String(s.id), s);
       }
     }
-    const { mondayStr: currentWeekMonStr } = getWeekBounds(currentDate);
+    const { mondayStr: currentWeekMonStr, sundayStr: currentWeekSunStr } = getWeekBounds(currentDate);
+
+    // Compute exact date for the active slot being assigned in this week
+    const activeMonDate = getWeekBounds(currentDate).monday;
+    const targetSlotDate = new Date(activeMonDate);
+    targetSlotDate.setDate(activeMonDate.getDate() + (Number(day || 1) - 1));
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const targetSlotDateStr = `${targetSlotDate.getFullYear()}-${pad(targetSlotDate.getMonth() + 1)}-${pad(targetSlotDate.getDate())}`;
 
     // Also check clerk drafts for other courses/sections (pending/draft) scheduled for the CURRENT week
     for (const draft of (clerkDrafts || [])) {
@@ -1478,6 +1486,8 @@ export default function TimetableDesignView({
             semester:    s.semester   || draft.semester || '',
             section:     s.section    || draft.section  || '',
             subject_name: s.subjectName || s.subject_name || s.topic || '',
+            effective_from: s.effectiveFrom || s.effective_from || draftWb?.mondayStr,
+            effective_until: s.effectiveUntil || s.effective_until || draftWb?.sundayStr,
             _fromDraft: draft.id,
           });
         }
@@ -1494,14 +1504,53 @@ export default function TimetableDesignView({
       const sPgId = s.postgres_id ? String(s.postgres_id) : '';
       if (editingSlotId && (sId === editingSlotId || (sPgId && sPgId === editingSlotId))) return false;
       if (editingPgId && (sId === editingPgId || (sPgId && sPgId === editingPgId))) return false;
+
+      // 1. DATE / WEEK BOUNDS VALIDATION:
+      // If candidate slot has weekly effective date bounds, ensure it overlaps with the active scheduled week
+      const sEffFrom = String(s.effective_from || s.effectiveFrom || '').slice(0, 10);
+      const sEffUntil = String(s.effective_until || s.effectiveUntil || '').slice(0, 10);
+      if (sEffUntil && sEffUntil < currentWeekMonStr) {
+        // Slot ended in a previous week (different date) — allow!
+        return false;
+      }
+      if (sEffFrom && sEffFrom > currentWeekSunStr) {
+        // Slot begins in a future week (different date) — allow!
+        return false;
+      }
+
+      // If candidate slot has an explicit slot date or event date, it must match the active target slot date
+      const sDate = String(s.date || s.slot_date || s.day_date || '').slice(0, 10);
+      if (sDate && sDate !== targetSlotDateStr) {
+        // Scheduled on a different date — allow!
+        return false;
+      }
+
+      // If candidate slot has start_str containing an embedded calendar date
+      if (s.start_str) {
+        const dmy = String(s.start_str).match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+        const ymd = String(s.start_str).match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+        let sStartStrDate = '';
+        if (dmy) {
+          sStartStrDate = `${dmy[3]}-${pad(Number(dmy[2]))}-${pad(Number(dmy[1]))}`;
+        } else if (ymd) {
+          sStartStrDate = `${ymd[1]}-${pad(Number(ymd[2]))}-${pad(Number(ymd[3]))}`;
+        }
+        if (sStartStrDate && sStartStrDate !== targetSlotDateStr) {
+          // Scheduled on a different date — allow!
+          return false;
+        }
+      }
+
+      // 2. DAY OF WEEK VALIDATION:
       if (Number(s.day_of_week) !== Number(day)) return false;
 
+      // 3. TIME SLOT OVERLAP VALIDATION:
       const sStart = String(s.start_time || '').slice(0, 5);
       const sEnd = String(s.end_time || '').slice(0, 5);
       const timesOverlap = (start < sEnd && end > sStart);
       if (!timesOverlap) return false;
 
-      // Check faculty match (must not match generic empty or default values)
+      // 4. FACULTY MATCH VALIDATION (must not match generic empty or default values)
       const validFacId = targetFacId && targetFacId !== '0' && targetFacId !== 'undefined';
       const validFacName = targetFacName && targetFacName.length > 2 && targetFacName !== 'faculty' && targetFacName !== 'faculty member';
 
@@ -1560,7 +1609,7 @@ export default function TimetableDesignView({
       };
     }
     return null;
-  }, [isModalOpen, formData.facultyId, formData.facultyEmpId, formData.facultyName, formData.dayOfWeek, formData.startTime, formData.endTime, slots, facultyCrossSlots, clerkDrafts, activeDraft, editingSlot, selectedCourseObj, selectedBatchObj, selectedSemester, selectedSection, coursesList, batchesList]);
+  }, [isModalOpen, formData.facultyId, formData.facultyEmpId, formData.facultyName, formData.dayOfWeek, formData.startTime, formData.endTime, slots, facultyCrossSlots, clerkDrafts, activeDraft, editingSlot, selectedCourseObj, selectedBatchObj, selectedSemester, selectedSection, coursesList, batchesList, currentDate]);
 
   // Dynamically Filter Form Subjects based on Active College, Course, and Live SRMS Loadsubject
   const availableFormSubjects = useMemo(() => {

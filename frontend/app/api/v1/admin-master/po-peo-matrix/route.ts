@@ -24,10 +24,22 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const courseCd = url.searchParams.get('courseCd') || undefined;
   const branchCd = url.searchParams.get('branchCd') || undefined;
+  const semCd = url.searchParams.get('semCd') || url.searchParams.get('semester') || undefined;
+  const section = url.searchParams.get('section') || undefined;
+  const batchYear = url.searchParams.get('batchYear') || undefined;
 
   try {
-    const data = await getPoPeoMatrixDb(tenantSlug, { courseCd, branchCd });
-    return NextResponse.json({ success: true, data }, { headers: noCacheHeaders });
+    const data = await getPoPeoMatrixDb(tenantSlug, { courseCd, branchCd, semCd, section, batchYear });
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          matrix_data: data.matrix_data || {},
+          rows: data.rows || [],
+        },
+      },
+      { headers: noCacheHeaders }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { success: false, message: err?.message || 'Failed to fetch PO-PEO matrix' },

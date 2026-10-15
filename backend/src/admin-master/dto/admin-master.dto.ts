@@ -1610,6 +1610,16 @@ export class SaveCoPoMatrixDto {
   @IsString()
   sem_cd?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  section?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batch_cd?: string;
+
   @ApiProperty({ example: 'SUBJ-123' })
   @IsString()
   subject_id: string;
@@ -1655,8 +1665,24 @@ export class SavePoPeoMatrixDto {
   @IsNumber()
   batch_year?: number;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  batch_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sem_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  section?: string;
+
   @ApiProperty({ example: { 'PO1': { 'PEO1': 3, 'PEO2': 2 }, 'averages': {} } })
   matrix_data: Record<string, any>;
 }
+
 
 

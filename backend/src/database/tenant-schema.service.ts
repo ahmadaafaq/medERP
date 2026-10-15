@@ -3370,8 +3370,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       } else {
         // Engineering / Management schemas (SRMS CET, CETR, IBS, Law, etc.)
         await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_sub_code" ON "${schema}".subjects (code);`).catch(() => { });
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_unt_code" ON "${schema}".units (code);`).catch(() => { });
-        await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_top_code" ON "${schema}".topics (code);`).catch(() => { });
+        await runner.query(`CREATE INDEX IF NOT EXISTS "idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_unt_code" ON "${schema}".units (code);`).catch(() => { });
+        await runner.query(`CREATE INDEX IF NOT EXISTS "idx_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_top_code" ON "${schema}".topics (code);`).catch(() => { });
         await runner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_${schema.replace(/[^a-zA-Z0-9]/g, '_')}_cmp_code" ON "${schema}".competencies (code);`).catch(() => { });
 
         // Purge any accidental medical Anatomy/Physiology records from engineering schemas

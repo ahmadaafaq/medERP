@@ -363,6 +363,7 @@ export class AdminMasterService {
           branch_cd VARCHAR(50),
           batch_year INT,
           sem_cd VARCHAR(50),
+          section VARCHAR(50),
           subject_id VARCHAR(100) NOT NULL,
           subject_code VARCHAR(100),
           subject_name VARCHAR(255),
@@ -371,6 +372,8 @@ export class AdminMasterService {
           updated_at TIMESTAMPTZ
         );
         CREATE INDEX IF NOT EXISTS idx_co_po_subj ON "${schema}".co_po_matrices (subject_id);
+        ALTER TABLE "${schema}".co_po_matrices ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+        ALTER TABLE "${schema}".co_po_matrices ADD COLUMN IF NOT EXISTS sem_cd VARCHAR(50);
       `);
 
       // 10. po_peo_matrices
@@ -381,10 +384,14 @@ export class AdminMasterService {
           course_cd VARCHAR(50),
           branch_cd VARCHAR(50),
           batch_year INT,
+          sem_cd VARCHAR(50),
+          section VARCHAR(50),
           matrix_data JSONB NOT NULL DEFAULT '{}'::jsonb,
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ
         );
+        ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+        ALTER TABLE "${schema}".po_peo_matrices ADD COLUMN IF NOT EXISTS sem_cd VARCHAR(50);
       `);
     } catch (e: any) {
       this.logger.error(`Failed to ensure admin master tables for schema ${schema}: ${e.message}`);
@@ -4008,6 +4015,7 @@ export class AdminMasterService {
       branchCd?: string;
       batchYear?: number;
       semCd?: string;
+      section?: string;
     },
   ) {
     const slug = await this.resolveTenantSlug(tenantSlug);
@@ -4027,6 +4035,18 @@ export class AdminMasterService {
       qParams.push(params.courseCd);
       query += ` AND (course_cd = $${qParams.length} OR course_cd IS NULL)`;
     }
+    if (params.branchCd && params.branchCd !== 'all') {
+      qParams.push(params.branchCd);
+      query += ` AND (branch_cd = $${qParams.length} OR branch_cd IS NULL)`;
+    }
+    if (params.semCd && params.semCd !== 'all') {
+      qParams.push(params.semCd);
+      query += ` AND (sem_cd = $${qParams.length} OR sem_cd IS NULL)`;
+    }
+    if (params.section && params.section !== 'all') {
+      qParams.push(params.section);
+      query += ` AND (section = $${qParams.length} OR section IS NULL)`;
+    }
 
     query += ` ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`;
 
@@ -4042,9 +4062,11 @@ export class AdminMasterService {
       slug,
       `SELECT id FROM co_po_matrices 
        WHERE (subject_id = $1 OR subject_code = $2) 
-         AND (course_cd = $3 OR $3 IS NULL)
-       LIMIT 1`,
-      [dto.subject_id, dto.subject_code || dto.subject_id, dto.course_cd || null],
+         AND (course_cd = $3 OR ($3 IS NULL AND course_cd IS NULL) OR course_cd IS NULL)
+         AND (sem_cd = $4 OR ($4 IS NULL AND sem_cd IS NULL) OR sem_cd IS NULL)
+         AND (section = $5 OR ($5 IS NULL AND section IS NULL) OR section IS NULL)
+       ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
+      [dto.subject_id, dto.subject_code || dto.subject_id, dto.course_cd || null, dto.sem_cd || null, (dto as any).section || null],
     ).catch(() => []);
 
     let savedRow: any;
@@ -4059,8 +4081,9 @@ export class AdminMasterService {
              branch_cd = COALESCE($5, branch_cd),
              batch_year = COALESCE($6, batch_year),
              sem_cd = COALESCE($7, sem_cd),
+             section = COALESCE($8, section),
              updated_at = NOW()
-         WHERE id = $8
+         WHERE id = $9
          RETURNING *`,
         [
           dto.matrix_data || {},
@@ -4070,6 +4093,7 @@ export class AdminMasterService {
           dto.branch_cd || null,
           dto.batch_year || null,
           dto.sem_cd || null,
+          (dto as any).section || null,
           existing[0].id,
         ],
       );
@@ -4078,8 +4102,8 @@ export class AdminMasterService {
       const rows = await this.tenantSchemaService.queryInTenant(
         slug,
         `INSERT INTO co_po_matrices (
-           college_id, course_cd, branch_cd, batch_year, sem_cd, subject_id, subject_code, subject_name, matrix_data
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           college_id, course_cd, branch_cd, batch_year, sem_cd, section, subject_id, subject_code, subject_name, matrix_data
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [
           dto.college_id || null,
@@ -4087,6 +4111,7 @@ export class AdminMasterService {
           dto.branch_cd || null,
           dto.batch_year || null,
           dto.sem_cd || null,
+          (dto as any).section || null,
           dto.subject_id,
           dto.subject_code || null,
           dto.subject_name || null,
@@ -4110,6 +4135,8 @@ export class AdminMasterService {
       courseCd?: string;
       branchCd?: string;
       batchYear?: number;
+      semCd?: string;
+      section?: string;
     },
   ) {
     const slug = await this.resolveTenantSlug(tenantSlug);
@@ -4125,6 +4152,14 @@ export class AdminMasterService {
     if (params?.branchCd && params.branchCd !== 'all') {
       qParams.push(params.branchCd);
       query += ` AND (branch_cd = $${qParams.length} OR branch_cd IS NULL)`;
+    }
+    if (params?.semCd && params.semCd !== 'all') {
+      qParams.push(params.semCd);
+      query += ` AND (sem_cd = $${qParams.length} OR sem_cd IS NULL)`;
+    }
+    if (params?.section && params.section !== 'all') {
+      qParams.push(params.section);
+      query += ` AND (section = $${qParams.length} OR section IS NULL)`;
     }
 
     query += ` ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`;
@@ -4142,8 +4177,10 @@ export class AdminMasterService {
       `SELECT id FROM po_peo_matrices 
        WHERE (course_cd = $1 OR ($1 IS NULL AND course_cd IS NULL))
          AND (branch_cd = $2 OR ($2 IS NULL AND branch_cd IS NULL))
-       LIMIT 1`,
-      [dto.course_cd || null, dto.branch_cd || null],
+         AND (sem_cd = $3 OR ($3 IS NULL AND sem_cd IS NULL) OR sem_cd IS NULL)
+         AND (section = $4 OR ($4 IS NULL AND section IS NULL) OR section IS NULL)
+       ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
+      [dto.course_cd || null, dto.branch_cd || null, (dto as any).sem_cd || null, (dto as any).section || null],
     ).catch(() => []);
 
     let savedRow: any;
@@ -4153,24 +4190,28 @@ export class AdminMasterService {
         `UPDATE po_peo_matrices
          SET matrix_data = $1,
              batch_year = COALESCE($2, batch_year),
+             sem_cd = COALESCE($3, sem_cd),
+             section = COALESCE($4, section),
              updated_at = NOW()
-         WHERE id = $3
+         WHERE id = $5
          RETURNING *`,
-        [dto.matrix_data || {}, dto.batch_year || null, existing[0].id],
+        [dto.matrix_data || {}, dto.batch_year || null, (dto as any).sem_cd || null, (dto as any).section || null, existing[0].id],
       );
       savedRow = rows[0];
     } else {
       const rows = await this.tenantSchemaService.queryInTenant(
         slug,
         `INSERT INTO po_peo_matrices (
-           college_id, course_cd, branch_cd, batch_year, matrix_data
-         ) VALUES ($1, $2, $3, $4, $5)
+           college_id, course_cd, branch_cd, batch_year, sem_cd, section, matrix_data
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
         [
           dto.college_id || null,
           dto.course_cd || null,
           dto.branch_cd || null,
           dto.batch_year || null,
+          (dto as any).sem_cd || null,
+          (dto as any).section || null,
           dto.matrix_data || {},
         ],
       );

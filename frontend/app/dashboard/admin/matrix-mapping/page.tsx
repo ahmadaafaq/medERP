@@ -1,9 +1,20 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import {
+  fetchCourses,
+  fetchBranches,
+  fetchBatches,
+  fetchColleges,
+  isSrmsTenant,
+  AcademicCollege,
+  AcademicCourse,
+  AcademicBranch,
+  AcademicBatch,
+} from '@/hooks/useTenantAcademicData';
 import {
   Grid,
   FileSpreadsheet,
@@ -23,35 +34,8 @@ import {
   Info,
   ChevronRight,
   TrendingUp,
+  Loader2,
 } from 'lucide-react';
-
-interface College {
-  id: string;
-  code?: string;
-  name: string;
-  slug: string;
-  domain?: string;
-  is_active?: boolean;
-}
-
-interface Course {
-  course_cd: string;
-  course_name: string;
-  college_id?: string;
-}
-
-interface Branch {
-  branch_cd: string;
-  branch_name: string;
-  course_cd?: string;
-}
-
-interface Batch {
-  id?: string;
-  year: number;
-  batch_cd?: string;
-  batch_name?: string;
-}
 
 interface Subject {
   id: string;
@@ -119,19 +103,20 @@ export default function MatrixMappingPage() {
   // Active Tab: 1. CO - PO Mapping(Matrix) | 2. PO - PEO Mapping(Matrix)
   const [activeTab, setActiveTab] = useState<'co-po' | 'po-peo'>('co-po');
 
-  // Filter States
-  const [selectedCollege, setSelectedCollege] = useState<string>('all');
+  // Filter States — All numeric codes conforming with RestrictAPI.md
+  const [selectedCollege, setSelectedCollege] = useState<string>('1');
   const [selectedCourse, setSelectedCourse] = useState<string>('all');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
-  const [selectedBatch, setSelectedBatch] = useState<string>('2024');
+  const [selectedBatch, setSelectedBatch] = useState<string>('all');
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
+  const [selectedSection, setSelectedSection] = useState<string>('all');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
 
   // Data Collections
-  const [colleges, setColleges] = useState<College[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
+  const [colleges, setColleges] = useState<AcademicCollege[]>([]);
+  const [courses, setCourses] = useState<AcademicCourse[]>([]);
+  const [branches, setBranches] = useState<AcademicBranch[]>([]);
+  const [batches, setBatches] = useState<AcademicBatch[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
 
   // OBE Outcomes & Units
@@ -145,6 +130,7 @@ export default function MatrixMappingPage() {
 
   // Loading & Action States
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
   const [loadingMatrix, setLoadingMatrix] = useState<boolean>(false);
   const [savingMatrix, setSavingMatrix] = useState<boolean>(false);
   const [isSeeding, setIsSeeding] = useState<boolean>(false);
@@ -152,14 +138,16 @@ export default function MatrixMappingPage() {
 
   // Active Tenant Helper
   const getActiveTenantSlug = useCallback((): string => {
-    if (selectedCollege !== 'all') {
-      const match = colleges.find(
-        (c) => c.id === selectedCollege || c.slug === selectedCollege || c.code === selectedCollege
-      );
+    if (selectedCollege && selectedCollege !== 'all') {
+      const match = colleges.find((c) => String(c.colg_cd) === String(selectedCollege));
       if (match?.slug) return match.slug;
     }
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('tenantSlug') || 'srms-cet-bareilly';
+      return (
+        localStorage.getItem('tenantSlug') ||
+        localStorage.getItem('selectedTenant') ||
+        'srms-cet-bareilly'
+      ).replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
     }
     return 'srms-cet-bareilly';
   }, [selectedCollege, colleges]);
@@ -171,71 +159,291 @@ export default function MatrixMappingPage() {
     }, 4500);
   };
 
-  // 1. Initial Load: Colleges, Courses, Batches, Subjects, POs, PEOs
+  // 1. Initial Load: Colleges -> Courses -> Branches -> Batches -> Subjects
   useEffect(() => {
-    const fetchInitialData = async () => {
+    let isMounted = true;
+
+    const initCascadingData = async () => {
       setLoading(true);
-      const tenant = getActiveTenantSlug();
       try {
-        // Load Colleges
-        const colgRes = await fetch(`${COLLEGE_API_BASE}/colleges`, { headers: getAuthHeaders() });
-        if (colgRes.ok) {
-          const colgJson = await colgRes.json();
-          const colgData: College[] = colgJson.data || colgJson || [];
-          setColleges(colgData);
-          if (colgData.length > 0 && selectedCollege === 'all') {
-            const stored = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') : null;
-            const found = colgData.find((c) => c.slug === stored);
-            if (found) setSelectedCollege(found.id || found.slug);
-          }
+        const slug = typeof window !== 'undefined'
+          ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly')
+              .replace(/^tenant_/, '').replace(/^tenant-/, '').trim()
+          : 'srms-cet-bareilly';
+
+        const colgList = await fetchColleges(slug);
+        if (!isMounted) return;
+
+        let activeColgCd = '1';
+        if (typeof window !== 'undefined') {
+          activeColgCd = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
+        }
+        if (colgList.length > 0 && !colgList.some((c) => String(c.colg_cd) === String(activeColgCd))) {
+          activeColgCd = String(colgList[0].colg_cd || '1');
         }
 
-        // Load Courses
-        const courseRes = await fetch(`${COLLEGE_API_BASE}/courses?tenant=${tenant}`, { headers: getAuthHeaders() });
-        if (courseRes.ok) {
-          const cJson = await courseRes.json();
-          const cData = cJson.data || cJson || [];
-          setCourses(cData);
-          if (cData.length > 0 && selectedCourse === 'all') {
-            setSelectedCourse(cData[0].course_cd || 'all');
-          }
-        }
+        setColleges(colgList);
+        setSelectedCollege(activeColgCd);
 
-        // Load Batches
-        const batchRes = await fetch(`${COLLEGE_API_BASE}/batches?tenant=${tenant}`, { headers: getAuthHeaders() });
-        if (batchRes.ok) {
-          const bJson = await batchRes.json();
-          setBatches(bJson.data || bJson || []);
-        }
+        // Fetch courses for this college
+        const courseList = await fetchCourses(slug, activeColgCd);
+        if (!isMounted) return;
+        setCourses(courseList);
 
-        // Load Branches
-        const branchRes = await fetch(`${COLLEGE_API_BASE}/branches?tenant=${tenant}`, { headers: getAuthHeaders() });
-        if (branchRes.ok) {
-          const brJson = await branchRes.json();
-          setBranches(brJson.data || brJson || []);
-        }
+        const initialCourse = courseList.length > 0 ? courseList[0].course_cd : 'all';
+        setSelectedCourse(initialCourse);
 
-        // Load All Subjects
-        const subRes = await fetch(`${API_BASE}/subjects?tenant=${tenant}`, { headers: getAuthHeaders() });
-        if (subRes.ok) {
-          const subJson = await subRes.json();
-          const sData: Subject[] = subJson.data || subJson || [];
-          setSubjects(sData);
-          if (sData.length > 0 && !selectedSubject) {
-            setSelectedSubject(sData[0].id || sData[0].code);
-          }
+        // Fetch branches and batches for this course
+        if (initialCourse !== 'all') {
+          const [branchList, batchList] = await Promise.all([
+            fetchBranches(slug, initialCourse, activeColgCd),
+            fetchBatches(slug, initialCourse, activeColgCd),
+          ]);
+          if (!isMounted) return;
+          setBranches(branchList);
+          setBatches(batchList);
+
+          const initialBatch = batchList.length > 0 ? String(batchList[0].year || batchList[0].batch_cd) : 'all';
+          setSelectedBatch(initialBatch);
+
+          // Load subjects for initial cascading selection
+          await executeLoadSubjects(activeColgCd, initialCourse, 'all', initialBatch, 'all', 'all', slug);
         }
       } catch (err) {
-        console.error('[MatrixMapping] Failed to load initial metadata:', err);
+        console.error('[MatrixMapping] Initial cascading load error:', err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
-    fetchInitialData();
-  }, [getActiveTenantSlug]);
+    initCascadingData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-  // 2. Fetch POs & PEOs whenever tenant or filters change
+  // 2. Fetch Subjects based on cascading filters
+  const executeLoadSubjects = async (
+    colgCd: string,
+    courseCd: string,
+    branchCd: string,
+    batchVal: string,
+    semVal: string,
+    secVal: string,
+    customSlug?: string
+  ) => {
+    setLoadingSubjects(true);
+    const slug = customSlug || getActiveTenantSlug();
+    try {
+      let loadedSubs: Subject[] = [];
+
+      // A. Try live SRMS timetable-subjects if SRMS tenant and course selected
+      if (isSrmsTenant(slug) && courseCd !== 'all') {
+        try {
+          const secNum = secVal === 'all' ? 1 : Number(secVal) || 1;
+          const semNum = semVal === 'all' ? 1 : Number(semVal) || 1;
+          const brNum = branchCd === 'all' ? 1 : Number(branchCd) || 1;
+          const batNum = batchVal === 'all' ? 2 : Number(batchVal) || 2;
+          const colgNum = Number(colgCd) || 1;
+
+          const res = await fetch(
+            `/api/srms/timetable-subjects?course=${encodeURIComponent(courseCd)}&branch=${brNum}&batch=${batNum}&semester=${semNum}&section=${secNum}&colgcd=${colgNum}&tenant=${encodeURIComponent(slug)}`
+          );
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+              loadedSubs = json.data.map((item: any) => ({
+                id: String(item.sub_cd || item.code || item.id),
+                code: String(item.sub_cd || item.code || item.id),
+                name: String(item.sub_name || item.name || item.sub_cd || 'Subject'),
+                course_cd: courseCd,
+                branch_cd: branchCd !== 'all' ? branchCd : undefined,
+                sem_cd: semVal !== 'all' ? semVal : undefined,
+              }));
+            }
+          }
+        } catch (e) {
+          console.warn('[MatrixMapping] Live timetable subjects fetch note:', e);
+        }
+      }
+
+      // B. Fetch from DB (admin-master subjects)
+      let dbSubs: Subject[] = [];
+      try {
+        const res = await fetch(`${API_BASE}/subjects?tenant=${encodeURIComponent(slug)}`, {
+          headers: getAuthHeaders(),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const list: any[] = json.data || json || [];
+          dbSubs = list.map((s: any) => ({
+            id: String(s.code || s.id),
+            code: String(s.code || s.id),
+            name: String(s.name || s.sub_name || s.code || 'Subject'),
+            course_cd: s.course_cd ? String(s.course_cd) : undefined,
+            branch_cd: s.branch_cd ? String(s.branch_cd) : undefined,
+            sem_cd: s.sem_cd ? String(s.sem_cd) : undefined,
+            category: s.category || s.sub_addinfo,
+          }));
+        }
+      } catch (e) {
+        console.warn('[MatrixMapping] DB subjects fetch note:', e);
+      }
+
+      // C. Filter DB subjects by the active scope
+      let filteredDb = dbSubs;
+      if (courseCd !== 'all') {
+        filteredDb = filteredDb.filter(
+          (s) => !s.course_cd || String(s.course_cd) === String(courseCd)
+        );
+      }
+      if (branchCd !== 'all') {
+        filteredDb = filteredDb.filter(
+          (s) => !s.branch_cd || String(s.branch_cd) === String(branchCd)
+        );
+      }
+      if (semVal !== 'all') {
+        filteredDb = filteredDb.filter(
+          (s) => !s.sem_cd || String(s.sem_cd) === String(semVal)
+        );
+      }
+
+      // D. Deduplicate and merge
+      const merged: Subject[] = [...loadedSubs];
+      filteredDb.forEach((s) => {
+        if (!merged.some((m) => m.code === s.code)) {
+          merged.push(s);
+        }
+      });
+
+      const finalSubjects = merged.length > 0 ? merged : (courseCd !== 'all' ? dbSubs.filter(s => !s.course_cd || String(s.course_cd) === String(courseCd)) : dbSubs);
+      setSubjects(finalSubjects);
+
+      if (finalSubjects.length > 0) {
+        setSelectedSubject((prev) => {
+          const found = finalSubjects.find((s) => s.code === prev || s.id === prev);
+          return found ? found.code || found.id : finalSubjects[0].code || finalSubjects[0].id;
+        });
+      } else {
+        setSelectedSubject('');
+      }
+
+      return finalSubjects;
+    } catch (err) {
+      console.error('[MatrixMapping] executeLoadSubjects Error:', err);
+      return [];
+    } finally {
+      setLoadingSubjects(false);
+    }
+  };
+
+  const handleManualLoadSubjects = async () => {
+    const list = await executeLoadSubjects(
+      selectedCollege,
+      selectedCourse,
+      selectedBranch,
+      selectedBatch,
+      selectedSemester,
+      selectedSection
+    );
+    showToast(`Loaded ${list.length} subjects for the active curriculum cascade.`, 'info');
+  };
+  const loadSubjects = handleManualLoadSubjects;
+
+  // Cascading Select Handlers
+  const handleCollegeChange = async (colgCd: string) => {
+    setSelectedCollege(colgCd);
+    setSelectedCourse('all');
+    setSelectedBranch('all');
+    setSelectedBatch('all');
+    setSelectedSemester('all');
+    setSelectedSection('all');
+    setSelectedSubject('');
+
+    const match = colleges.find((c) => String(c.colg_cd) === String(colgCd));
+    const slug = match?.slug || getActiveTenantSlug();
+
+    try {
+      const courseList = await fetchCourses(slug, colgCd);
+      setCourses(courseList);
+      const firstCourse = courseList.length > 0 ? courseList[0].course_cd : 'all';
+      setSelectedCourse(firstCourse);
+
+      if (firstCourse !== 'all') {
+        const [branchList, batchList] = await Promise.all([
+          fetchBranches(slug, firstCourse, colgCd),
+          fetchBatches(slug, firstCourse, colgCd),
+        ]);
+        setBranches(branchList);
+        setBatches(batchList);
+        const firstBatch = batchList.length > 0 ? String(batchList[0].year || batchList[0].batch_cd) : 'all';
+        setSelectedBatch(firstBatch);
+        await executeLoadSubjects(colgCd, firstCourse, 'all', firstBatch, 'all', 'all', slug);
+      } else {
+        setBranches([]);
+        setBatches([]);
+        await executeLoadSubjects(colgCd, 'all', 'all', 'all', 'all', 'all', slug);
+      }
+    } catch (err) {
+      console.error('[MatrixMapping] handleCollegeChange Error:', err);
+    }
+  };
+
+  const handleCourseChange = async (courseCd: string) => {
+    setSelectedCourse(courseCd);
+    setSelectedBranch('all');
+    setSelectedBatch('all');
+    setSelectedSemester('all');
+    setSelectedSection('all');
+    setSelectedSubject('');
+
+    const slug = getActiveTenantSlug();
+    if (courseCd !== 'all') {
+      try {
+        const [branchList, batchList] = await Promise.all([
+          fetchBranches(slug, courseCd, selectedCollege),
+          fetchBatches(slug, courseCd, selectedCollege),
+        ]);
+        setBranches(branchList);
+        setBatches(batchList);
+        const firstBatch = batchList.length > 0 ? String(batchList[0].year || batchList[0].batch_cd) : 'all';
+        setSelectedBatch(firstBatch);
+        await executeLoadSubjects(selectedCollege, courseCd, 'all', firstBatch, 'all', 'all', slug);
+      } catch (err) {
+        console.error('[MatrixMapping] handleCourseChange Error:', err);
+      }
+    } else {
+      setBranches([]);
+      setBatches([]);
+      await executeLoadSubjects(selectedCollege, 'all', 'all', 'all', 'all', 'all', slug);
+    }
+  };
+
+  const handleBranchChange = (branchCd: string) => {
+    setSelectedBranch(branchCd);
+    executeLoadSubjects(selectedCollege, selectedCourse, branchCd, selectedBatch, selectedSemester, selectedSection);
+  };
+
+  const handleBatchChange = (batchVal: string) => {
+    setSelectedBatch(batchVal);
+    executeLoadSubjects(selectedCollege, selectedCourse, selectedBranch, batchVal, selectedSemester, selectedSection);
+  };
+
+  const handleSemesterChange = (semVal: string) => {
+    setSelectedSemester(semVal);
+    executeLoadSubjects(selectedCollege, selectedCourse, selectedBranch, selectedBatch, semVal, selectedSection);
+  };
+
+  const handleSectionChange = (secVal: string) => {
+    setSelectedSection(secVal);
+    executeLoadSubjects(selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, secVal);
+  };
+
+  const handleSubjectChange = (subjVal: string) => {
+    setSelectedSubject(subjVal);
+  };
+
+  // 3. Fetch POs & PEOs for Program
   const fetchPosAndPeos = useCallback(async () => {
     const tenant = getActiveTenantSlug();
     try {
@@ -272,7 +480,7 @@ export default function MatrixMappingPage() {
     fetchPosAndPeos();
   }, [fetchPosAndPeos]);
 
-  // 3. Load Units (COs) for Selected Subject
+  // 4. Load Units (COs) for Selected Subject
   useEffect(() => {
     if (!selectedSubject) {
       setUnits([]);
@@ -302,16 +510,41 @@ export default function MatrixMappingPage() {
     loadUnits();
   }, [selectedSubject, subjects, getActiveTenantSlug]);
 
-  // 4. Load Saved CO-PO Matrix for Selected Subject
+  // Local draft cache keys to guarantee numbers stay fixed & never disappear
+  const getCoPoDraftKey = useCallback(
+    (subjCode: string) => {
+      const slug = getActiveTenantSlug();
+      return `copo_draft_${slug}_${selectedCourse}_${selectedBranch}_${selectedSemester}_${selectedSection}_${subjCode}`;
+    },
+    [getActiveTenantSlug, selectedCourse, selectedBranch, selectedSemester, selectedSection]
+  );
+
+  const getPoPeoDraftKey = useCallback(() => {
+    const slug = getActiveTenantSlug();
+    return `popeo_draft_${slug}_${selectedCourse}_${selectedBranch}_${selectedBatch}`;
+  }, [getActiveTenantSlug, selectedCourse, selectedBranch, selectedBatch]);
+
+  // 5. Load Saved CO-PO Matrix for Selected Subject
   useEffect(() => {
     if (activeTab !== 'co-po' || !selectedSubject) return;
 
+    let isMounted = true;
     const loadCoPoMatrix = async () => {
       setLoadingMatrix(true);
       const tenant = getActiveTenantSlug();
       const currentSub = subjects.find((s) => s.id === selectedSubject || s.code === selectedSubject);
       const subId = currentSub?.id || selectedSubject;
       const subCode = currentSub?.code || selectedSubject;
+
+      // Check local storage draft first
+      const draftKey = getCoPoDraftKey(subCode);
+      let draftData: Record<string, Record<string, number>> | null = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem(draftKey);
+          if (raw) draftData = JSON.parse(raw);
+        } catch {}
+      }
 
       try {
         const q = new URLSearchParams({
@@ -323,36 +556,68 @@ export default function MatrixMappingPage() {
         if (selectedBranch !== 'all') q.append('branchCd', selectedBranch);
         if (selectedBatch !== 'all') q.append('batchYear', selectedBatch);
         if (selectedSemester !== 'all') q.append('semCd', selectedSemester);
+        if (selectedSection !== 'all') q.append('section', selectedSection);
 
         let res = await fetch(`${API_BASE}/co-po-matrix?${q.toString()}`, { headers: getAuthHeaders() });
         if (!res.ok) {
           res = await fetch(`/api/v1/admin-master/co-po-matrix?${q.toString()}`, { headers: getAuthHeaders() });
         }
-        if (res.ok) {
+        if (res.ok && isMounted) {
           const json = await res.json();
-          if (json.data?.matrix_data) {
-            setCoPoMatrix(json.data.matrix_data);
+          let serverMatrix: Record<string, Record<string, number>> = {};
+          if (json.data?.matrix_data && typeof json.data.matrix_data === 'object') {
+            Object.entries(json.data.matrix_data).forEach(([key, val]: [string, any]) => {
+              if (key !== 'averages' && typeof val === 'object' && val) {
+                serverMatrix[key] = { ...val };
+              }
+            });
+          }
+
+          if (Object.keys(serverMatrix).length > 0) {
+            setCoPoMatrix(serverMatrix);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(draftKey, JSON.stringify(serverMatrix));
+            }
+          } else if (draftData && Object.keys(draftData).length > 0) {
+            setCoPoMatrix(draftData);
           } else {
             setCoPoMatrix({});
           }
+        } else if (draftData && isMounted) {
+          setCoPoMatrix(draftData);
         }
       } catch (err) {
         console.error('[MatrixMapping] Error loading CO-PO matrix:', err);
+        if (draftData && isMounted) setCoPoMatrix(draftData);
       } finally {
-        setLoadingMatrix(false);
+        if (isMounted) setLoadingMatrix(false);
       }
     };
 
     loadCoPoMatrix();
-  }, [activeTab, selectedSubject, selectedCourse, selectedBranch, selectedBatch, selectedSemester, subjects, getActiveTenantSlug]);
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab, selectedSubject, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, getActiveTenantSlug, getCoPoDraftKey, subjects]);
 
-  // 5. Load Saved PO-PEO Matrix for Selected Program / Branch
+  // 6. Load Saved PO-PEO Matrix for Selected Program / Branch
   useEffect(() => {
     if (activeTab !== 'po-peo') return;
 
+    let isMounted = true;
     const loadPoPeoMatrix = async () => {
       setLoadingMatrix(true);
       const tenant = getActiveTenantSlug();
+
+      const draftKey = getPoPeoDraftKey();
+      let draftData: Record<string, Record<string, number>> | null = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem(draftKey);
+          if (raw) draftData = JSON.parse(raw);
+        } catch {}
+      }
+
       try {
         const q = new URLSearchParams({ tenant });
         if (selectedCourse !== 'all') q.append('courseCd', selectedCourse);
@@ -363,23 +628,43 @@ export default function MatrixMappingPage() {
         if (!res.ok) {
           res = await fetch(`/api/v1/admin-master/po-peo-matrix?${q.toString()}`, { headers: getAuthHeaders() });
         }
-        if (res.ok) {
+        if (res.ok && isMounted) {
           const json = await res.json();
-          if (json.data?.matrix_data) {
-            setPoPeoMatrix(json.data.matrix_data);
+          let serverMatrix: Record<string, Record<string, number>> = {};
+          if (json.data?.matrix_data && typeof json.data.matrix_data === 'object') {
+            Object.entries(json.data.matrix_data).forEach(([key, val]: [string, any]) => {
+              if (key !== 'averages' && typeof val === 'object' && val) {
+                serverMatrix[key] = { ...val };
+              }
+            });
+          }
+
+          if (Object.keys(serverMatrix).length > 0) {
+            setPoPeoMatrix(serverMatrix);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(draftKey, JSON.stringify(serverMatrix));
+            }
+          } else if (draftData && Object.keys(draftData).length > 0) {
+            setPoPeoMatrix(draftData);
           } else {
             setPoPeoMatrix({});
           }
+        } else if (draftData && isMounted) {
+          setPoPeoMatrix(draftData);
         }
       } catch (err) {
         console.error('[MatrixMapping] Error loading PO-PEO matrix:', err);
+        if (draftData && isMounted) setPoPeoMatrix(draftData);
       } finally {
-        setLoadingMatrix(false);
+        if (isMounted) setLoadingMatrix(false);
       }
     };
 
     loadPoPeoMatrix();
-  }, [activeTab, selectedCourse, selectedBranch, selectedBatch, getActiveTenantSlug]);
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab, selectedCourse, selectedBranch, selectedBatch, getActiveTenantSlug, getPoPeoDraftKey]);
 
   // Seeding Handlers
   const handleSeedPos = async () => {
@@ -454,21 +739,42 @@ export default function MatrixMappingPage() {
     return 0;
   };
 
-  const handleUpdateCoPoCell = (coCode: string, poCode: string) => {
+  const handleUpdateCoPoCell = (coCode: string, poCode: string, specificVal?: number) => {
     setCoPoMatrix((prev) => {
       const row = { ...(prev[coCode] || {}) };
       const current = row[poCode] || 0;
-      row[poCode] = cycleCellValue(current);
-      return { ...prev, [coCode]: row };
+      const nextVal = specificVal !== undefined ? specificVal : cycleCellValue(current);
+      row[poCode] = nextVal;
+      const next = { ...prev, [coCode]: row };
+
+      // Immediately cache to localStorage draft so chosen numbers never disappear
+      const currentSub = subjects.find((s) => s.id === selectedSubject || s.code === selectedSubject);
+      const subCode = currentSub?.code || selectedSubject;
+      if (subCode && typeof window !== 'undefined') {
+        const draftKey = getCoPoDraftKey(subCode);
+        try {
+          localStorage.setItem(draftKey, JSON.stringify(next));
+        } catch {}
+      }
+      return next;
     });
   };
 
-  const handleUpdatePoPeoCell = (poCode: string, peoCode: string) => {
+  const handleUpdatePoPeoCell = (poCode: string, peoCode: string, specificVal?: number) => {
     setPoPeoMatrix((prev) => {
       const row = { ...(prev[poCode] || {}) };
       const current = row[peoCode] || 0;
-      row[peoCode] = cycleCellValue(current);
-      return { ...prev, [poCode]: row };
+      const nextVal = specificVal !== undefined ? specificVal : cycleCellValue(current);
+      row[peoCode] = nextVal;
+      const next = { ...prev, [poCode]: row };
+
+      if (typeof window !== 'undefined') {
+        const draftKey = getPoPeoDraftKey();
+        try {
+          localStorage.setItem(draftKey, JSON.stringify(next));
+        } catch {}
+      }
+      return next;
     });
   };
 
@@ -483,6 +789,14 @@ export default function MatrixMappingPage() {
       });
     });
     setCoPoMatrix(updated);
+    const currentSub = subjects.find((s) => s.id === selectedSubject || s.code === selectedSubject);
+    const subCode = currentSub?.code || selectedSubject;
+    if (subCode && typeof window !== 'undefined') {
+      const draftKey = getCoPoDraftKey(subCode);
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(updated));
+      } catch {}
+    }
     showToast(`Set all CO-PO correlations to ${level === 0 ? 'No correlation (-)' : `Level ${level}`}`, 'info');
   };
 
@@ -495,12 +809,25 @@ export default function MatrixMappingPage() {
       });
     });
     setPoPeoMatrix(updated);
+    if (typeof window !== 'undefined') {
+      const draftKey = getPoPeoDraftKey();
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(updated));
+      } catch {}
+    }
     showToast(`Set all PO-PEO correlations to ${level === 0 ? 'No correlation (-)' : `Level ${level}`}`, 'info');
   };
 
   // Effective List of Units / Fallback COs if subject has no units yet
   const effectiveUnits = useMemo(() => {
-    if (units.length > 0) return units;
+    if (units.length > 0) {
+      return units.map((u, idx) => ({
+        ...u,
+        code: u.code && u.code.startsWith('CO') ? u.code : `CO${idx + 1}`,
+        name: u.name || `Course Outcome ${idx + 1}`,
+        bloom_level: u.bloom_level || (idx === 0 ? 'K2 - Understand' : idx === 1 ? 'K3 - Apply' : idx === 2 ? 'K4 - Analyze' : idx === 3 ? 'K5 - Evaluate' : 'K6 - Create'),
+      }));
+    }
     // Provide standard CO1-CO5 fallback templates if subject has no units configured
     return [
       { id: 'co-1', code: 'CO1', name: 'Course Outcome 1', bloom_level: 'K2 - Understand', description: 'Fundamental principles and foundational concepts' },
@@ -603,6 +930,18 @@ export default function MatrixMappingPage() {
     setSavingMatrix(true);
     const tenant = getActiveTenantSlug();
     const currentSub = subjects.find((s) => s.id === selectedSubject || s.code === selectedSubject);
+    const subCode = currentSub?.code || selectedSubject;
+    const subId = currentSub?.id || selectedSubject;
+
+    const mappings: Array<{ co_code: string; po_code: string; correlation_level: number }> = [];
+    effectiveUnits.forEach((u) => {
+      const coCode = u.code || u.id;
+      const row = coPoMatrix[coCode] || {};
+      pos.forEach((p) => {
+        const val = row[p.code] || 0;
+        mappings.push({ co_code: coCode, po_code: p.code, correlation_level: val });
+      });
+    });
 
     try {
       const payload = {
@@ -611,8 +950,9 @@ export default function MatrixMappingPage() {
         branch_cd: selectedBranch !== 'all' ? selectedBranch : currentSub?.branch_cd || undefined,
         batch_year: selectedBatch !== 'all' ? parseInt(selectedBatch, 10) : 2024,
         sem_cd: selectedSemester !== 'all' ? selectedSemester : currentSub?.sem_cd || undefined,
-        subject_id: currentSub?.id || selectedSubject,
-        subject_code: currentSub?.code || selectedSubject,
+        section: selectedSection !== 'all' ? selectedSection : undefined,
+        subject_id: subId,
+        subject_code: subCode,
         subject_name: currentSub?.name || 'Subject',
         matrix_data: {
           ...coPoMatrix,
@@ -622,6 +962,7 @@ export default function MatrixMappingPage() {
             overall_average: coPoCalculations.overallAverage,
           },
         },
+        mappings,
       };
 
       let res = await fetch(`${API_BASE}/co-po-matrix?tenant=${tenant}`, {
@@ -639,7 +980,13 @@ export default function MatrixMappingPage() {
       }
 
       if (res.ok) {
-        showToast('CO - PO Correlation Matrix saved successfully to PostgreSQL!', 'success');
+        if (typeof window !== 'undefined') {
+          const draftKey = getCoPoDraftKey(subCode);
+          try {
+            localStorage.setItem(draftKey, JSON.stringify(coPoMatrix));
+          } catch {}
+        }
+        showToast(`CO - PO Correlation Matrix for [${subCode}] saved successfully!`, 'success');
       } else {
         showToast('Failed to save matrix. Server returned an error.', 'error');
       }
@@ -654,12 +1001,23 @@ export default function MatrixMappingPage() {
     setSavingMatrix(true);
     const tenant = getActiveTenantSlug();
 
+    const mappings: Array<{ po_code: string; peo_code: string; correlation_level: number }> = [];
+    pos.forEach((p) => {
+      const row = poPeoMatrix[p.code] || {};
+      peos.forEach((peo) => {
+        const val = row[peo.code] || 0;
+        mappings.push({ po_code: p.code, peo_code: peo.code, correlation_level: val });
+      });
+    });
+
     try {
       const payload = {
         college_slug: tenant,
         course_cd: selectedCourse !== 'all' ? selectedCourse : undefined,
         branch_cd: selectedBranch !== 'all' ? selectedBranch : undefined,
         batch_year: selectedBatch !== 'all' ? parseInt(selectedBatch, 10) : 2024,
+        sem_cd: selectedSemester !== 'all' ? selectedSemester : undefined,
+        section: selectedSection !== 'all' ? selectedSection : undefined,
         matrix_data: {
           ...poPeoMatrix,
           averages: {
@@ -668,6 +1026,7 @@ export default function MatrixMappingPage() {
             overall_average: poPeoCalculations.overallAverage,
           },
         },
+        mappings,
       };
 
       let res = await fetch(`${API_BASE}/po-peo-matrix?tenant=${tenant}`, {
@@ -685,7 +1044,13 @@ export default function MatrixMappingPage() {
       }
 
       if (res.ok) {
-        showToast('PO - PEO Correlation Matrix saved successfully to PostgreSQL!', 'success');
+        if (typeof window !== 'undefined') {
+          const draftKey = getPoPeoDraftKey();
+          try {
+            localStorage.setItem(draftKey, JSON.stringify(poPeoMatrix));
+          } catch {}
+        }
+        showToast('PO - PEO Correlation Matrix saved successfully!', 'success');
       } else {
         showToast('Failed to save PO-PEO matrix. Server returned an error.', 'error');
       }
@@ -866,97 +1231,104 @@ export default function MatrixMappingPage() {
             </div>
           </div>
 
-          {/* CASCADING FILTER BAR adhering to Theme.md */}
+          {/* CASCADING FILTER BAR adhering to Theme.md & RestrictAPI.md */}
           <div className="p-5 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4 print:hidden">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2 text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                <Filter className="w-3.5 h-3.5 text-[#5B4BFF]" />
+            <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 gap-2">
+              <div className="flex items-center gap-2 text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider">
+                <Filter className="w-4 h-4 text-[#5B4BFF]" />
                 <span>Curriculum & Program Scope Filters</span>
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 normal-case hidden sm:inline">
+                  (College → Course → Branch → Batch → Semester → Section → Load Subjects)
+                </span>
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
-                <span>Active Institution:</span>
-                <span className="font-bold text-[#5B4BFF] bg-[#5B4BFF]/10 px-2.5 py-0.5 rounded-md">
-                  {colleges.find((c) => c.id === selectedCollege || c.slug === selectedCollege)?.name ||
-                    getActiveTenantSlug()}
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-500 font-medium text-[11px]">Active Institution:</span>
+                <span className="font-bold text-[#5B4BFF] bg-[#5B4BFF]/10 px-3 py-1 rounded-lg border border-[#5B4BFF]/20 text-xs">
+                  {colleges.find((c) => String(c.colg_cd) === String(selectedCollege))?.colg_name ||
+                   colleges.find((c) => c.slug === selectedCollege)?.colg_name ||
+                   getActiveTenantSlug()}
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {/* College Filter */}
+            {/* 7-Step Cascading Controls Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
+              {/* 1. College */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  College / Campus
+                  1. College / Campus
                 </label>
                 <select
                   value={selectedCollege}
-                  onChange={(e) => setSelectedCollege(e.target.value)}
+                  onChange={(e) => handleCollegeChange(e.target.value)}
                   className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
                 >
-                  <option value="all">Default Campus</option>
                   {colleges.map((c) => (
-                    <option key={c.id || c.slug} value={c.id || c.slug}>
-                      {c.name} {c.code ? `(${c.code})` : ''}
+                    <option key={c.colg_cd} value={String(c.colg_cd)}>
+                      {c.colg_name} {c.colg_cd ? `(${c.colg_cd})` : ''}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Course Filter */}
+              {/* 2. Course */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Program / Course
+                  2. Program / Course
                 </label>
                 <select
                   value={selectedCourse}
-                  onChange={(e) => setSelectedCourse(e.target.value)}
+                  onChange={(e) => handleCourseChange(e.target.value)}
                   className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
                 >
                   <option value="all">All Courses</option>
                   {courses.map((c, idx) => (
-                    <option key={c.course_cd || idx} value={c.course_cd}>
+                    <option key={c.course_cd || idx} value={String(c.course_cd)}>
                       {c.course_name || c.course_cd}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Branch Filter */}
+              {/* 3. Branch */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Branch / Department
+                  3. Branch / Department
                 </label>
                 <select
                   value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  onChange={(e) => handleBranchChange(e.target.value)}
                   className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
                 >
                   <option value="all">All Branches</option>
                   {branches.map((b, idx) => (
-                    <option key={b.branch_cd || idx} value={b.branch_cd}>
+                    <option key={b.branch_cd || idx} value={String(b.branch_cd)}>
                       {b.branch_name || b.branch_cd}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Batch Year Filter */}
+              {/* 4. Batch */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Batch Year
+                  4. Batch Year
                 </label>
                 <select
                   value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
+                  onChange={(e) => handleBatchChange(e.target.value)}
                   className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
                 >
                   <option value="all">All Batches</option>
                   {batches.length > 0 ? (
-                    batches.map((b, idx) => (
-                      <option key={b.id || idx} value={String(b.year)}>
-                        Batch {b.year} {b.batch_name ? `(${b.batch_name})` : ''}
-                      </option>
-                    ))
+                    batches.map((b, idx) => {
+                      const yr = String(b.year || b.batch_cd || '');
+                      return (
+                        <option key={String(b.batch_cd || idx)} value={yr}>
+                          Batch {yr}
+                        </option>
+                      );
+                    })
                   ) : (
                     <>
                       <option value="2024">Batch 2024</option>
@@ -968,14 +1340,14 @@ export default function MatrixMappingPage() {
                 </select>
               </div>
 
-              {/* Semester Filter */}
+              {/* 5. Semester */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Semester / Phase
+                  5. Semester / Phase
                 </label>
                 <select
                   value={selectedSemester}
-                  onChange={(e) => setSelectedSemester(e.target.value)}
+                  onChange={(e) => handleSemesterChange(e.target.value)}
                   className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
                 >
                   <option value="all">All Semesters</option>
@@ -987,32 +1359,87 @@ export default function MatrixMappingPage() {
                 </select>
               </div>
 
-              {/* Subject Selector (Important for CO-PO) */}
+              {/* 6. Section */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Subject / Course Code
+                  6. Section
+                </label>
+                <select
+                  value={selectedSection}
+                  onChange={(e) => handleSectionChange(e.target.value)}
+                  className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
+                >
+                  <option value="all">All Sections</option>
+                  <option value="1">Section 1 (A)</option>
+                  <option value="2">Section 2 (B)</option>
+                  <option value="3">Section 3 (C)</option>
+                  <option value="4">Section 4 (D)</option>
+                </select>
+              </div>
+
+              {/* 7. Load Subjects Button */}
+              <div>
+                <button
+                  type="button"
+                  onClick={handleManualLoadSubjects}
+                  disabled={loadingSubjects}
+                  className="w-full h-10 px-3 text-xs font-bold text-white bg-[#5B4BFF] hover:bg-[#4E3FE6] active:scale-[0.98] rounded-xl shadow-md shadow-[#5B4BFF]/25 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                  title="Query and load curriculum subjects matching cascading filters"
+                >
+                  {loadingSubjects ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Loading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Load Subjects</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Subject Selector Row */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex-1">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Active Subject / Course Code ({subjects.length} loaded)
                 </label>
                 <select
                   value={selectedSubject}
-                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  onChange={(e) => handleSubjectChange(e.target.value)}
                   disabled={activeTab === 'po-peo'}
                   className={`w-full h-10 px-3 text-xs border rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium transition-all ${
                     activeTab === 'po-peo'
                       ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-dashed border-slate-300 dark:border-slate-700 cursor-not-allowed'
-                      : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 text-slate-900 dark:text-slate-100'
+                      : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 text-slate-900 dark:text-slate-100 font-bold'
                   }`}
                 >
                   {subjects.length === 0 ? (
-                    <option value="">No subjects found</option>
+                    <option value="">No subjects found for selection. Click "Load Subjects"</option>
                   ) : (
                     subjects.map((s) => (
-                      <option key={s.id || s.code} value={s.id || s.code}>
+                      <option key={s.id || s.code} value={s.code || s.id}>
                         [{s.code}] {s.name}
                       </option>
                     ))
                   )}
                 </select>
               </div>
+
+              {currentSubjectObj && activeTab === 'co-po' && (
+                <div className="flex items-center gap-2 self-end md:self-auto bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900 px-3 py-2 rounded-xl text-xs">
+                  <BookOpen className="w-4 h-4 text-[#5B4BFF]" />
+                  <span className="font-extrabold text-[#1B1E28] dark:text-white">
+                    {currentSubjectObj.name}
+                  </span>
+                  <span className="font-black text-[#5B4BFF] bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 text-[11px]">
+                    {currentSubjectObj.code}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1035,7 +1462,7 @@ export default function MatrixMappingPage() {
                       </span>
                     </h3>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Click any matrix cell to cycle: <span className="font-bold text-slate-700 dark:text-slate-300">- (None) → 1 (Low) → 2 (Medium) → 3 (High)</span>
+                      Choose correlation level: <span className="font-bold text-slate-700 dark:text-slate-300">- (None) | 1 (Low) | 2 (Medium) | 3 (High)</span>. Numbers stay fixed and saved per subject cascade.
                     </p>
                   </div>
                 </div>
@@ -1232,22 +1659,27 @@ export default function MatrixMappingPage() {
                                   key={p.code}
                                   className="p-1.5 text-center border-r border-slate-100 dark:border-slate-800"
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateCoPoCell(coCode, p.code)}
-                                    className={`w-10 h-9 rounded-xl font-black text-xs transition-all flex items-center justify-center mx-auto shadow-sm ${
-                                      val === 3
-                                        ? 'bg-[#5B4BFF] text-white hover:bg-[#4E3FE6] ring-2 ring-[#5B4BFF]/30'
-                                        : val === 2
-                                        ? 'bg-sky-500 text-white hover:bg-sky-600 ring-2 ring-sky-500/30'
-                                        : val === 1
-                                        ? 'bg-amber-500 text-white hover:bg-amber-600 ring-2 ring-amber-500/30'
-                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium'
-                                    }`}
-                                    title={`Click to change: ${coCode} - ${p.code} (Current: ${val || 'None'})`}
-                                  >
-                                    {val === 0 ? '-' : val}
-                                  </button>
+                                  <div className="flex items-center justify-center">
+                                    <select
+                                      value={val}
+                                      onChange={(e) => handleUpdateCoPoCell(coCode, p.code, Number(e.target.value))}
+                                      className={`w-12 h-9 rounded-xl font-black text-xs text-center cursor-pointer transition-all shadow-sm outline-none border focus:ring-2 focus:ring-[#5B4BFF] ${
+                                        val === 3
+                                          ? 'bg-[#5B4BFF] text-white border-[#5B4BFF] shadow-[#5B4BFF]/30'
+                                          : val === 2
+                                          ? 'bg-sky-500 text-white border-sky-500 shadow-sky-500/30'
+                                          : val === 1
+                                          ? 'bg-amber-500 text-white border-amber-500 shadow-amber-500/30'
+                                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                                      }`}
+                                      title={`${coCode} - ${p.code}: ${val === 0 ? 'None (-)' : `Level ${val}`}`}
+                                    >
+                                      <option value={0} className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">-</option>
+                                      <option value={1} className="bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 font-bold">1</option>
+                                      <option value={2} className="bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 font-bold">2</option>
+                                      <option value={3} className="bg-white dark:bg-slate-900 text-[#5B4BFF] dark:text-[#7867FF] font-bold">3</option>
+                                    </select>
+                                  </div>
                                 </td>
                               );
                             })}
@@ -1571,22 +2003,27 @@ export default function MatrixMappingPage() {
                                   key={peo.code}
                                   className="p-1.5 text-center border-r border-slate-100 dark:border-slate-800"
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdatePoPeoCell(p.code, peo.code)}
-                                    className={`w-12 h-9 rounded-xl font-black text-xs transition-all flex items-center justify-center mx-auto shadow-sm ${
-                                      val === 3
-                                        ? 'bg-[#5B4BFF] text-white hover:bg-[#4E3FE6] ring-2 ring-[#5B4BFF]/30'
-                                        : val === 2
-                                        ? 'bg-sky-500 text-white hover:bg-sky-600 ring-2 ring-sky-500/30'
-                                        : val === 1
-                                        ? 'bg-amber-500 text-white hover:bg-amber-600 ring-2 ring-amber-500/30'
-                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium'
-                                    }`}
-                                    title={`Click to change: ${p.code} - ${peo.code} (Current: ${val || 'None'})`}
-                                  >
-                                    {val === 0 ? '-' : val}
-                                  </button>
+                                  <div className="flex items-center justify-center">
+                                    <select
+                                      value={val}
+                                      onChange={(e) => handleUpdatePoPeoCell(p.code, peo.code, Number(e.target.value))}
+                                      className={`w-12 h-9 rounded-xl font-black text-xs text-center cursor-pointer transition-all shadow-sm outline-none border focus:ring-2 focus:ring-[#5B4BFF] ${
+                                        val === 3
+                                          ? 'bg-[#5B4BFF] text-white border-[#5B4BFF] shadow-[#5B4BFF]/30'
+                                          : val === 2
+                                          ? 'bg-sky-500 text-white border-sky-500 shadow-sky-500/30'
+                                          : val === 1
+                                          ? 'bg-amber-500 text-white border-amber-500 shadow-amber-500/30'
+                                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                                      }`}
+                                      title={`${p.code} - ${peo.code}: ${val === 0 ? 'None (-)' : `Level ${val}`}`}
+                                    >
+                                      <option value={0} className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">-</option>
+                                      <option value={1} className="bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 font-bold">1</option>
+                                      <option value={2} className="bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 font-bold">2</option>
+                                      <option value={3} className="bg-white dark:bg-slate-900 text-[#5B4BFF] dark:text-[#7867FF] font-bold">3</option>
+                                    </select>
+                                  </div>
                                 </td>
                               );
                             })}

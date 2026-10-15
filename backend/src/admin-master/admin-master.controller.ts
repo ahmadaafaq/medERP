@@ -515,6 +515,7 @@ export class AdminMasterController {
     @Query('branchCd') branchCd?: string,
     @Query('batchYear') batchYear?: string,
     @Query('semCd') semCd?: string,
+    @Query('section') section?: string,
   ) {
     return this.adminMasterService.getCoPoMatrix(tenant, {
       subjectId,
@@ -523,6 +524,7 @@ export class AdminMasterController {
       branchCd,
       batchYear: batchYear ? parseInt(batchYear, 10) : undefined,
       semCd,
+      section,
     });
   }
 
@@ -540,11 +542,15 @@ export class AdminMasterController {
     @Query('courseCd') courseCd?: string,
     @Query('branchCd') branchCd?: string,
     @Query('batchYear') batchYear?: string,
+    @Query('semCd') semCd?: string,
+    @Query('section') section?: string,
   ) {
     return this.adminMasterService.getPoPeoMatrix(tenant, {
       courseCd,
       branchCd,
       batchYear: batchYear ? parseInt(batchYear, 10) : undefined,
+      semCd,
+      section,
     });
   }
 
