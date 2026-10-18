@@ -401,12 +401,26 @@ export class AdminMasterService {
   private async listColleges(): Promise<any[]> {
     try {
       const rows = await this.ds.query(`
-        SELECT DISTINCT ON (code) id, code, name, slug, domain, plan, primary_color, is_active
-        FROM public.tenants
-        WHERE is_active = true
-        ORDER BY code, CAST(NULLIF(regexp_replace(code, '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, name ASC
+        SELECT DISTINCT ON (slug) id, COALESCE(code, slug) AS code, name, slug, domain, plan, primary_color, is_active
+        FROM (
+          SELECT t.id, COALESCE(t.code, t.slug) AS code, t.name, t.slug, t.domain, t.plan, t.primary_color, t.is_active
+          FROM public.tenants t
+          WHERE t.is_active = true
+          UNION ALL
+          SELECT f.id, f.slug AS code, f.title AS name, f.slug, f.domain, 'enterprise' AS plan, f.theme_color AS primary_color, true AS is_active
+          FROM public.firms f
+          WHERE f.status IN ('ACTIVE', 'TRIAL')
+        ) combined
+        ORDER BY slug
       `);
-      return (rows || []).sort((a: any, b: any) => (parseInt(a.code, 10) || 0) - (parseInt(b.code, 10) || 0));
+      return (rows || []).sort((a: any, b: any) => {
+        const aNum = parseInt(a.code, 10);
+        const bNum = parseInt(b.code, 10);
+        if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+        if (!isNaN(aNum)) return -1;
+        if (!isNaN(bNum)) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+      });
     } catch (err: any) {
       this.logger.warn(`Failed to list colleges from public.tenants: ${err.message}`);
       return [{ id: 'srms-ims', code: '11', name: 'SRMS Institute of Medical Sciences', slug: 'srms-ims', is_active: true }];
@@ -421,7 +435,7 @@ export class AdminMasterService {
       const slug = await this.resolveTenantSlug(tenantSlug);
       const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
       const collegeId = targetCollege?.id || slug;
-      const collegeName = targetCollege?.name || 'SRMS Institution';
+      const collegeName = targetCollege?.name || (slug.toLowerCase().includes('srms') ? 'SRMS Institution' : slug.toUpperCase());
       const collegeCode = targetCollege?.code || '';
 
       const linkersQuery = `
@@ -574,7 +588,7 @@ export class AdminMasterService {
       const slug = await this.resolveTenantSlug(tenantSlug);
       const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
       const collegeId = targetCollege?.id || slug;
-      const collegeName = targetCollege?.name || 'SRMS Institution';
+      const collegeName = targetCollege?.name || (slug.toLowerCase().includes('srms') ? 'SRMS Institution' : slug.toUpperCase());
       const collegeCode = targetCollege?.code || '';
       const schema = `tenant_${slug}`;
 
@@ -946,7 +960,7 @@ export class AdminMasterService {
       const slug = await this.resolveTenantSlug(tenantSlug);
       const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
       const collegeId = targetCollege?.id || slug;
-      const collegeName = targetCollege?.name || 'SRMS Institution';
+      const collegeName = targetCollege?.name || (slug.toLowerCase().includes('srms') ? 'SRMS Institution' : slug.toUpperCase());
       const collegeCode = targetCollege?.code || '';
       const schema = `tenant_${slug}`;
 
@@ -2169,7 +2183,7 @@ export class AdminMasterService {
       const slug = await this.resolveTenantSlug(tenantSlug);
       const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
       const collegeId = targetCollege?.id || slug;
-      const collegeName = targetCollege?.name || 'SRMS Institution';
+      const collegeName = targetCollege?.name || (slug.toLowerCase().includes('srms') ? 'SRMS Institution' : slug.toUpperCase());
       const collegeCode = targetCollege?.code || '';
 
       let rows = await this.tenantSchemaService.queryInTenant(
@@ -2334,7 +2348,7 @@ export class AdminMasterService {
       await this.ensureAdminMasterTables(slug);
       const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
       const collegeId = targetCollege?.id || slug;
-      const collegeName = targetCollege?.name || 'SRMS Institution';
+      const collegeName = targetCollege?.name || (slug.toLowerCase().includes('srms') ? 'SRMS Institution' : slug.toUpperCase());
       const collegeCode = targetCollege?.code || '';
 
       const offeringQuery = `
@@ -3238,7 +3252,7 @@ export class AdminMasterService {
       await this.ensureAdminMasterTables(slug);
       const targetCollege = colleges.find((c: any) => c.slug === slug || c.code === slug || c.id === slug);
       const collegeId = targetCollege?.id || slug;
-      const collegeName = targetCollege?.name || 'SRMS Institution';
+      const collegeName = targetCollege?.name || (slug.toLowerCase().includes('srms') ? 'SRMS Institution' : slug.toUpperCase());
       const collegeCode = targetCollege?.code || '';
 
       const whereConditions: string[] = [];

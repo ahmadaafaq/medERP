@@ -37,10 +37,11 @@ export class CollegeMasterController {
     @CurrentUser() user?: JwtPayload,
     @Query('include_inactive') includeInactive?: string,
     @Query('tenantId') tenantIdQuery?: string,
+    @Query('tenant') tenantQuery?: string,
     @Headers('x-tenant-id') tenantIdHeader?: string,
     @Headers('x-tenant-slug') tenantSlugHeader?: string,
   ) {
-    const targetTenant = (tenantIdQuery || tenantIdHeader || tenant || tenantSlugHeader || user?.tenantId || user?.tenantSlug || undefined);
+    const targetTenant = (tenantQuery || tenantIdQuery || tenantIdHeader || tenant || tenantSlugHeader || user?.tenantId || user?.tenantSlug || undefined);
     const data = await this.collegeMasterService.listColleges(user, targetTenant, includeInactive === 'true');
     return { success: true, data };
   }

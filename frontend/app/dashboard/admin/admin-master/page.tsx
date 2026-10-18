@@ -496,6 +496,36 @@ const getAuthHeaders = (): Record<string, string> => {
   };
 };
 
+const getLoggedInTenantSlug = (): string => {
+  if (typeof window === 'undefined') return '';
+  const userObj = (() => {
+    try {
+      const rawUser = localStorage.getItem('user');
+      return rawUser ? JSON.parse(rawUser) : {};
+    } catch {
+      return {};
+    }
+  })();
+  const raw =
+    localStorage.getItem('tenantSlug') ||
+    localStorage.getItem('selectedTenant') ||
+    userObj.tenantSlug ||
+    userObj.tenant_slug ||
+    userObj.tenant ||
+    '';
+  return String(raw).toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
+};
+
+const isCurrentTenantSrms = (): boolean => {
+  const slug = getLoggedInTenantSlug();
+  return slug.includes('srms');
+};
+
+const getFallbackTenantSlug = (): string => {
+  const logged = getLoggedInTenantSlug();
+  return logged || 'srms-cet-bareilly';
+};
+
 export default function AdminMasterPage() {
   const pathname = usePathname();
   const isFaculty = pathname?.includes('/dashboard/faculty');
@@ -506,7 +536,11 @@ export default function AdminMasterPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
-  const [selectedCollegeFilter, setSelectedCollegeFilter] = useState<string>('all');
+  const [selectedCollegeFilter, setSelectedCollegeFilter] = useState<string>(() => {
+    const slug = getLoggedInTenantSlug();
+    const isSrms = isCurrentTenantSrms();
+    return (!isSrms && slug) ? slug : 'all';
+  });
   const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>('all');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('all');
   const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('all');
@@ -625,7 +659,7 @@ export default function AdminMasterPage() {
     if (!isFaculty) return;
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-      const storedSlug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly') : 'srms-cet-bareilly';
+      const storedSlug = getFallbackTenantSlug();
       const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
       let facId = '';
       let empId = '';
@@ -721,53 +755,71 @@ export default function AdminMasterPage() {
   };
 
   const getActiveTenantSlug = (): string => {
+    const loggedInSlug = getLoggedInTenantSlug();
+    const isSrms = isCurrentTenantSrms();
+
     if (selectedCollegeFilter !== 'all') {
       const col = colleges.find((c) => c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter || c.code === selectedCollegeFilter);
       return col?.slug || selectedCollegeFilter;
     }
-    return 'all';
+    if (!isSrms && loggedInSlug) {
+      return loggedInSlug;
+    }
+    return colleges[0]?.slug || loggedInSlug || 'all';
   };
 
   const getFormCollegeSlug = (collegeIdOrSlug?: string): string => {
     const target = collegeIdOrSlug || formData.college_id || formData.college_slug;
     return colleges.find((c) => c.id === target || c.slug === target || c.code === target)?.slug
       || colleges[0]?.slug
-      || 'srms-cet-bareilly';
+      || getFallbackTenantSlug();
   };
 
   const fetchColleges = async () => {
     try {
-      const res = await fetch(`${COLLEGE_API_BASE}/colleges`);
+      const loggedInSlug = getLoggedInTenantSlug();
+      const queryParam = loggedInSlug ? `?tenant=${encodeURIComponent(loggedInSlug)}` : '';
+      const res = await fetch(`${COLLEGE_API_BASE}/colleges${queryParam}`, {
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         const json = await res.json();
-        const list: College[] = json.data || json || [];
+        let list: College[] = json.data || json || [];
+        const isSrms = isCurrentTenantSrms();
+        if (!isSrms && loggedInSlug) {
+          list = list.filter(c => !c.slug.includes('srms') && !c.name.toLowerCase().includes('srms'));
+        }
         setColleges(list);
+        return list;
       }
     } catch (err) {
       console.error('[AdminMaster] Error loading colleges:', err);
     }
+    return [];
   };
 
   const fetchCategoryData = async (cat?: SubCategory, collegeFilter?: string) => {
     const targetCat = cat || activeTab;
     const filter = collegeFilter !== undefined ? collegeFilter : selectedCollegeFilter;
+    const loggedInSlug = getLoggedInTenantSlug();
+    const isSrms = isCurrentTenantSrms();
+
     let targetTenant = 'all';
     if (filter !== 'all') {
       const matched = colleges.find(c => c.id === filter || c.slug === filter || c.code === filter);
       targetTenant = matched?.slug || filter;
-    } else if (typeof window !== 'undefined') {
-      const storedSlug = localStorage.getItem('tenantSlug');
-      if (storedSlug) targetTenant = storedSlug;
+    } else {
+      targetTenant = (!isSrms && loggedInSlug) ? loggedInSlug : 'all';
     }
 
     setLoading(true);
     try {
-      let res = await fetch(`${API_BASE}/${targetCat}?tenant=${targetTenant}`, {
+      let res = await fetch(`${API_BASE}/${targetCat}?tenant=${encodeURIComponent(targetTenant)}`, {
         headers: getAuthHeaders(),
       });
       // Resilient fallback: If remote backend returns 404 or fails, call local Next.js route handler
       if (!res.ok) {
-        res = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${targetTenant}`, {
+        res = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${encodeURIComponent(targetTenant)}`, {
           headers: getAuthHeaders(),
         });
       }
@@ -788,7 +840,7 @@ export default function AdminMasterPage() {
     } catch (err) {
       console.error(`[AdminMaster] Error loading ${targetCat}:`, err);
       try {
-        const fallbackRes = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${targetTenant}`, {
+        const fallbackRes = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${encodeURIComponent(targetTenant)}`, {
           headers: getAuthHeaders(),
         });
         if (fallbackRes.ok) {
@@ -806,7 +858,7 @@ export default function AdminMasterPage() {
   const handleSeedPos = async () => {
     try {
       setIsSeeding(true);
-      const targetSlug = getActiveTenantSlug() === 'all' ? (colleges[0]?.slug || 'srms-cet-bareilly') : getActiveTenantSlug();
+      const targetSlug = getActiveTenantSlug() === 'all' ? (colleges[0]?.slug || getFallbackTenantSlug()) : getActiveTenantSlug();
       let res = await fetch(`${API_BASE}/pos/seed?tenant=${targetSlug}`, {
         method: 'POST',
         headers: getAuthHeaders(),
@@ -835,7 +887,7 @@ export default function AdminMasterPage() {
   const handleSeedPeos = async () => {
     try {
       setIsSeeding(true);
-      const targetSlug = getActiveTenantSlug() === 'all' ? (colleges[0]?.slug || 'srms-cet-bareilly') : getActiveTenantSlug();
+      const targetSlug = getActiveTenantSlug() === 'all' ? (colleges[0]?.slug || getFallbackTenantSlug()) : getActiveTenantSlug();
       let res = await fetch(`${API_BASE}/peos/seed?tenant=${targetSlug}`, {
         method: 'POST',
         headers: getAuthHeaders(),
@@ -861,9 +913,21 @@ export default function AdminMasterPage() {
     }
   };
 
-  const fetchCourses = async () => {
+  const fetchCourses = async (collegeFilter?: string) => {
     try {
-      const res = await fetch(`${COLLEGE_API_BASE}/courses?tenant=all`);
+      const filter = collegeFilter !== undefined ? collegeFilter : selectedCollegeFilter;
+      const loggedInSlug = getLoggedInTenantSlug();
+      const isSrms = isCurrentTenantSrms();
+      let targetTenant = 'all';
+      if (filter !== 'all') {
+        const matched = colleges.find(c => c.id === filter || c.slug === filter || c.code === filter);
+        targetTenant = matched?.slug || filter;
+      } else if (!isSrms && loggedInSlug) {
+        targetTenant = loggedInSlug;
+      }
+      const res = await fetch(`${COLLEGE_API_BASE}/courses?tenant=${encodeURIComponent(targetTenant)}`, {
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         const json = await res.json();
         setCourses(json.data || json || []);
@@ -892,12 +956,18 @@ export default function AdminMasterPage() {
   const fetchProfessionals = async (collegeFilter?: string) => {
     try {
       const filter = collegeFilter !== undefined ? collegeFilter : selectedCollegeFilter;
+      const loggedInSlug = getLoggedInTenantSlug();
+      const isSrms = isCurrentTenantSrms();
       let targetTenant = 'all';
       if (filter !== 'all') {
         const matched = colleges.find(c => c.id === filter || c.slug === filter || c.code === filter);
         targetTenant = matched?.slug || filter;
+      } else if (!isSrms && loggedInSlug) {
+        targetTenant = loggedInSlug;
       }
-      const res = await fetch(`${COLLEGE_API_BASE}/professionals?tenant=${targetTenant}`);
+      const res = await fetch(`${COLLEGE_API_BASE}/professionals?tenant=${encodeURIComponent(targetTenant)}`, {
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         const json = await res.json();
         setProfPhases(json.data || json || []);
@@ -910,12 +980,18 @@ export default function AdminMasterPage() {
   const fetchBatches = async (collegeFilter?: string) => {
     try {
       const filter = collegeFilter !== undefined ? collegeFilter : selectedCollegeFilter;
+      const loggedInSlug = getLoggedInTenantSlug();
+      const isSrms = isCurrentTenantSrms();
       let targetTenant = 'all';
       if (filter !== 'all') {
         const matched = colleges.find(c => c.id === filter || c.slug === filter || c.code === filter);
         targetTenant = matched?.slug || filter;
+      } else if (!isSrms && loggedInSlug) {
+        targetTenant = loggedInSlug;
       }
-      const res = await fetch(`${COLLEGE_API_BASE}/batches?tenant=${targetTenant}`);
+      const res = await fetch(`${COLLEGE_API_BASE}/batches?tenant=${encodeURIComponent(targetTenant)}`, {
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         const json = await res.json();
         setBatches(json.data || json || []);
@@ -1972,27 +2048,50 @@ export default function AdminMasterPage() {
 
   useEffect(() => {
     const loadAll = async () => {
-      let initialCollegeCode = '1';
+      const loggedInSlug = getLoggedInTenantSlug();
+      const isSrms = isCurrentTenantSrms();
+      let initialCollegeCode = (!isSrms && loggedInSlug) ? loggedInSlug : 'all';
+
       try {
-        const res = await fetch(`${COLLEGE_API_BASE}/colleges`);
+        const queryParam = loggedInSlug ? `?tenant=${encodeURIComponent(loggedInSlug)}` : '';
+        const res = await fetch(`${COLLEGE_API_BASE}/colleges${queryParam}`, {
+          headers: getAuthHeaders(),
+        });
         if (res.ok) {
           const json = await res.json();
-          const list: College[] = json.data || json || [];
+          let list: College[] = json.data || json || [];
+          if (!isSrms && loggedInSlug) {
+            // Strictly exclude SRMS colleges for non-SRMS tenants
+            list = list.filter(c => !c.slug.includes('srms') && !c.name.toLowerCase().includes('srms'));
+          }
           setColleges(list);
 
-          const savedSlug = typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant')) : null;
+          const savedSlug = loggedInSlug || (typeof window !== 'undefined' ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant')) : null);
           const savedColgCd = typeof window !== 'undefined' ? localStorage.getItem('colg_cd') : null;
 
-          const defaultCol = list.find(c =>
-            (savedSlug && (c.slug === savedSlug || c.id === savedSlug)) ||
-            (savedColgCd && (String((c as any).colg_cd) === savedColgCd || String(c.id) === savedColgCd || String(c.code) === savedColgCd)) ||
-            c.slug === 'srms-cet-bareilly' ||
-            String(c.code) === '1'
-          ) || list[0];
+          let defaultCol: College | undefined;
+          if (isSrms) {
+            // For SRMS tenants: Match savedColgCd / savedSlug or SRMS CET (#1)
+            defaultCol = list.find(c =>
+              (savedColgCd && (String((c as any).colg_cd) === savedColgCd || String(c.code) === savedColgCd)) ||
+              (savedSlug && (c.slug === savedSlug || c.id === savedSlug)) ||
+              c.slug === 'srms-cet-bareilly' ||
+              String(c.code) === '1'
+            ) || list[0];
+          } else {
+            // For non-SRMS tenants: STRICTLY load and match their own college!
+            defaultCol = list.find(c =>
+              (savedSlug && (c.slug === savedSlug || c.id === savedSlug || c.code === savedSlug)) ||
+              (c.slug && !c.slug.includes('srms'))
+            ) || list[0];
+          }
 
           if (defaultCol) {
-            initialCollegeCode = defaultCol.code || defaultCol.id || defaultCol.slug;
+            initialCollegeCode = defaultCol.code || defaultCol.slug || defaultCol.id;
             setSelectedCollegeFilter(initialCollegeCode);
+          } else if (savedSlug && !isSrms) {
+            initialCollegeCode = savedSlug;
+            setSelectedCollegeFilter(savedSlug);
           }
         }
       } catch (err) {
@@ -2000,7 +2099,7 @@ export default function AdminMasterPage() {
       }
 
       await Promise.all([
-        fetchCourses(),
+        fetchCourses(initialCollegeCode),
         fetchCategoryData('departments', initialCollegeCode),
         fetchCategoryData('subjects', initialCollegeCode),
         fetchCategoryData('professional-linkers', initialCollegeCode),
@@ -2032,7 +2131,7 @@ export default function AdminMasterPage() {
     setSelectedTopicFilter('all');
     setCurrentPage(1);
     await Promise.all([
-      fetchCourses(),
+      fetchCourses(newColgFilter),
       fetchCategoryData(activeTab, newColgFilter),
       fetchCategoryData('departments', newColgFilter),
       fetchCategoryData('subjects', newColgFilter),
@@ -2111,8 +2210,8 @@ export default function AdminMasterPage() {
       ? colleges.find(c => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter) || colleges[0]
       : colleges[0];
 
-    const defaultCollegeId = defaultCol?.code || defaultCol?.id || '1';
-    const defaultCollegeSlug = defaultCol?.slug || 'srms-cet-bareilly';
+    const defaultCollegeId = defaultCol?.code || defaultCol?.id || (isCurrentTenantSrms() ? '1' : getLoggedInTenantSlug());
+    const defaultCollegeSlug = defaultCol?.slug || getFallbackTenantSlug();
 
     if (activeTab === 'departments') {
       const colCourses = getCoursesForCollege(defaultCollegeId || defaultCollegeSlug);
@@ -2500,8 +2599,8 @@ export default function AdminMasterPage() {
   const handleEdit = (item: any) => {
     setEditingItem(item);
     const matchedCol = colleges.find(c => c.id === item.college_id || c.code === item.college_id || c.slug === item.college_slug || c.code === item.college_code) || colleges[0];
-    const collegeCodeOrId = matchedCol?.code || matchedCol?.id || item.college_id || '1';
-    const collegeSlug = matchedCol?.slug || item.college_slug || 'srms-cet-bareilly';
+    const collegeCodeOrId = matchedCol?.code || matchedCol?.id || item.college_id || (isCurrentTenantSrms() ? '1' : getLoggedInTenantSlug());
+    const collegeSlug = matchedCol?.slug || item.college_slug || getFallbackTenantSlug();
 
     if (activeTab === 'departments') {
       setFormData({
@@ -3645,12 +3744,23 @@ export default function AdminMasterPage() {
                 <select
                   value={selectedCollegeFilter}
                   onChange={(e) => handleCollegeFilterChange(e.target.value)}
-                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[200px] truncate"
+                  disabled={!isCurrentTenantSrms() && colleges.length <= 1}
+                  className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer text-xs max-w-[200px] truncate disabled:cursor-default"
                 >
-                  <option value="all">All Colleges ({colleges.length})</option>
-                  {colleges.map((col) => (
-                    <option key={col.id} value={col.code || col.id}>[#{col.code || '1'}] {col.name}</option>
-                  ))}
+                  {isCurrentTenantSrms() ? (
+                    <>
+                      <option value="all">All SRMS Colleges ({colleges.length})</option>
+                      {colleges.map((col) => (
+                        <option key={col.id} value={col.code || col.id}>[#{col.code || '1'}] {col.name}</option>
+                      ))}
+                    </>
+                  ) : (
+                    colleges.map((col) => (
+                      <option key={col.id} value={col.code || col.slug || col.id}>
+                        {col.code && col.code !== col.slug && !isNaN(Number(col.code)) ? `[#${col.code}] ` : ''}{col.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -3927,8 +4037,8 @@ export default function AdminMasterPage() {
                         </tr>
                       ) : (
                         paginatedList.map((d: any) => {
-                          const col = colleges.find(c => c.id === d.college_id || c.slug === d.college_slug);
-                          const colName = col?.name || d.college_name || 'SRMS Institution';
+                          const col = colleges.find(c => c.id === d.college_id || c.slug === d.college_slug || c.code === d.college_code);
+                          const colName = col?.name || d.college_name || (isCurrentTenantSrms() ? 'SRMS Institution' : (getLoggedInTenantSlug().toUpperCase() || 'Institution'));
                           const colCode = col?.code || d.college_code || '';
 
                           return (
@@ -3941,7 +4051,7 @@ export default function AdminMasterPage() {
                               <td className="p-4 whitespace-nowrap">
                                 <div className="flex items-center gap-1.5">
                                   <span>🏛️</span>
-                                  {colCode && (
+                                  {colCode && !isNaN(Number(colCode)) && (
                                     <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-bold text-[10px] border border-indigo-500/20">
                                       #{colCode}
                                     </span>
@@ -4013,8 +4123,8 @@ export default function AdminMasterPage() {
                         </tr>
                       ) : (
                         paginatedList.map((s: any) => {
-                          const col = colleges.find(c => c.id === s.college_id || c.slug === s.college_slug);
-                          const colName = col?.name || s.college_name || 'SRMS Institution';
+                          const col = colleges.find(c => c.id === s.college_id || c.slug === s.college_slug || c.code === s.college_code);
+                          const colName = col?.name || s.college_name || (isCurrentTenantSrms() ? 'SRMS Institution' : (getLoggedInTenantSlug().toUpperCase() || 'Institution'));
                           const colCode = col?.code || s.college_code || '';
                           const isMedicalSub = Boolean(
                             s.professional_phase ||
@@ -4121,7 +4231,7 @@ export default function AdminMasterPage() {
                       ) : (
                         paginatedList.map((l: any, idx: number) => {
                           const col = colleges.find(c => c.id === l.college_id || c.slug === l.college_slug || c.code === l.college_code);
-                          const colName = col?.name || l.college_name || 'SRMS Institution';
+                          const colName = col?.name || l.college_name || (isCurrentTenantSrms() ? 'SRMS Institution' : (getLoggedInTenantSlug().toUpperCase() || 'Institution'));
                           const colCode = col?.code || l.college_code || '';
 
                           return (
@@ -4181,7 +4291,7 @@ export default function AdminMasterPage() {
                       ) : (
                         paginatedList.map((o: any) => {
                           const col = colleges.find(c => c.id === o.college_id || c.slug === o.college_slug || c.code === o.college_code);
-                          const colName = col?.name || o.college_name || 'SRMS Institution';
+                          const colName = col?.name || o.college_name || (isCurrentTenantSrms() ? 'SRMS Institution' : (getLoggedInTenantSlug().toUpperCase() || 'Institution'));
                           const colCode = col?.code || o.college_code || '';
 
                           return (
@@ -4907,8 +5017,8 @@ export default function AdminMasterPage() {
                   {/* Form fields for Subjects (With College, Course, Branch, Batch, Semester & Live SRMS ERP Dynamic Feed) */}
                   {activeTab === 'subjects' && (() => {
                     const currentCol = colleges.find(c => c.code === formData.college_id || c.id === formData.college_id || c.slug === formData.college_slug) || colleges[0];
-                    const targetColCd = currentCol?.code || currentCol?.id || '1';
-                    const targetColSlug = currentCol?.slug || 'srms-cet-bareilly';
+                    const targetColCd = currentCol?.code || currentCol?.id || (isCurrentTenantSrms() ? '1' : getLoggedInTenantSlug());
+                    const targetColSlug = currentCol?.slug || getFallbackTenantSlug();
                     const colCourses = getCoursesForCollege(currentCol?.id || currentCol?.slug);
                     const selectedCourseCd = formData.course_cd || colCourses[0]?.course_cd || colCourses[0]?.code || '13';
                     const colDepts = departments.filter(d => {
