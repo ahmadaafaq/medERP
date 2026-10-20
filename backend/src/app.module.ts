@@ -29,6 +29,7 @@ import { FirmsModule } from './firms/firms.module';
 import { InternshipsModule } from './internships/internships.module';
 import { IncubationCellModule } from './incubation-cell/incubation-cell.module';
 import { StudentCredentialsModule } from './student-credentials/student-credentials.module';
+import { ObeModule } from './obe/obe.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantIsolationGuard } from './common/guards/tenant-isolation.guard';
@@ -72,6 +73,7 @@ import { validationSchema } from './config/joi.validation';
     InternshipsModule,
     IncubationCellModule,
     StudentCredentialsModule,
+    ObeModule,
   ],
   providers: [
     {

@@ -508,13 +508,16 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       menuKey === 'faculty_curriculum_subjects' ||
       menuKey === 'faculty_curriculum' ||
       menuKey === 'faculty_matrix_mapping' ||
+      menuKey === 'faculty_obe' ||
       routePath === '/dashboard/faculty/curriculum-subjects' ||
-      routePath === '/dashboard/faculty/matrix-mapping'
+      routePath === '/dashboard/faculty/matrix-mapping' ||
+      routePath === '/dashboard/faculty/obe'
     )) {
       if (enabledKeys && enabledKeys.length > 0) {
         return enabledKeys.includes('faculty_curriculum_subjects') ||
                enabledKeys.includes('faculty_curriculum') ||
                enabledKeys.includes('faculty_matrix_mapping') ||
+               enabledKeys.includes('faculty_obe') ||
                enabledKeys.includes('admin_matrix_mapping') ||
                enabledKeys.includes('admin_admin_master');
       }
@@ -818,6 +821,15 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
                   </svg>
                   <span>Matrix Mapping</span>
+                </Link>
+              )}
+
+              {(isAllowed('admin_obe', '/dashboard/admin/obe-attainment') || isAllowed('admin_matrix_mapping') || isAllowed('admin_admin_master')) && (
+                <Link href="/dashboard/admin/obe-attainment" data-active={isLinkActive('/dashboard/admin/obe-attainment') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/obe-attainment')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>OBE Attainment & Analytics</span>
                 </Link>
               )}
 
@@ -1215,6 +1227,15 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
+              {(isAllowed('faculty_obe', '/dashboard/faculty/obe') || isAllowed('faculty_matrix_mapping') || isAllowed('faculty_curriculum_subjects') || isAllowed('admin_admin_master')) && (
+                <Link href="/dashboard/faculty/obe" data-active={isLinkActive('/dashboard/faculty/obe') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/obe')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>OBE Attainment & Target</span>
+                </Link>
+              )}
+
 
               {isAllowed('faculty_medical_schedule', '/dashboard/faculty/medical-schedule') && (
                 <Link href="/dashboard/faculty/medical-schedule" className={getLinkClass('/dashboard/faculty/medical-schedule')}>
@@ -1525,6 +1546,28 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span>Question Bank & Topics</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/curriculum-subjects" data-active={isLinkActive('/dashboard/faculty/curriculum-subjects') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/curriculum-subjects')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Curriculum & Subjects</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/matrix-mapping" data-active={isLinkActive('/dashboard/faculty/matrix-mapping') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/matrix-mapping')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                </svg>
+                <span>Matrix Mapping</span>
+              </Link>
+
+              <Link href="/dashboard/admin/obe-attainment" data-active={isLinkActive('/dashboard/admin/obe-attainment') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/obe-attainment')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>OBE Attainment & Gap Analysis</span>
               </Link>
 
               {/* ─── Faculty Features (Full Copy for HOD) ───────────── */}
